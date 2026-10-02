@@ -71,11 +71,8 @@ def distance(a: City_T, b: City_T) -> float:
 
 # Sum of edge lengths around the full tour, including the closing edge back to start.
 def tour_length(tour: Tour_T) -> float:
-    var total: float
-    for i in 1..len(tour)-1:
-        total = total + distance(tour[i], tour[i - 1])
-    total = total + distance(tour[0], tour[len(tour) - 1])
-    return total
+    let n: int = len(tour)
+    return sum(distance(tour[i], tour[(i + 1) % n]) for i in 0 ..< n)
 
 # Generate n cities uniformly at random within a width×height rectangle.
 # Same seed always produces the same city set, making results reproducible.
