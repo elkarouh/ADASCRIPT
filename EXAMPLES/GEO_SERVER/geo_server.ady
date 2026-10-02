@@ -46,6 +46,10 @@ type Distance_T is distinct float            # in the map's own units
 type Area_T     is Distance_T * Distance_T   # what two distances multiply to
 type Time_T     is distinct float
 
+# What a ship or an aircraft is called on the radio: not a plain string, so that a
+# callsign cannot be taken for a zone's name or for any other text.
+type Callsign_T is distinct str
+
 # An angle on the compass: clockwise from North, so 0 is up and 90 is East. 360 is
 # the same direction as 0 and is allowed, so that rounding at the seam cannot fail.
 type Bearing_T   is float range 0.0 .. 360.0
@@ -195,6 +199,7 @@ type NamedZone is tuple:
 
 type Ship is record:
     name:               str
+    callsign:           Callsign_T
     position:           Point
     inner_radius:       Distance_T   # engageability zone inner edge
     outer_radius:       Distance_T   # engageability zone outer edge
@@ -220,7 +225,7 @@ def get_zones_for_ship(self: Ship) -> []NamedZone:
 
 
 type Aircraft is tuple:
-    name:     str
+    callsign: Callsign_T
     position: Point
     kind:     AircraftKind
 
@@ -240,7 +245,7 @@ def run_geo_server(zones: []NamedZone, time_steps: []TimeStep) -> None:
         print f"Time {step.time}:"
         for ac in step.aircraft:
             let label: str = "commercial aircraft" if ac.kind == FRIENDLY else "hostile craft"
-            print f"{label}: ({ac.position.x},{ac.position.y})"
+            print f"{label} {ac.callsign}: ({ac.position.x},{ac.position.y})"
             # This is the heart of the geo-server: check a point against every region.
             for zone in zones:
                 if ac.position in zone.region:
@@ -261,6 +266,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
     """
     let aegis: Ship = Ship(
         "Aegis",
+        "SENTINEL",
         Point(150.0, 100.0),
         30.0,    # inner_radius
         120.0,   # outer_radius
@@ -272,6 +278,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
 
     let carrier: Ship = Ship(
         "carrier",
+        "HAVEN",
         Point(230.0, 80.0),
         10.0,    # inner_radius
         60.0,    # outer_radius
@@ -343,7 +350,7 @@ def main():
 
     print "Ships:"
     for s in ships:
-        print f"  {s.name} at ({s.position.x}, {s.position.y})"
+        print f"  {s.name} ({s.callsign}) at ({s.position.x}, {s.position.y})"
     print ""
     print "Zones:"
     for zone in all_zones:
