@@ -1,0 +1,222 @@
+#!/usr/bin/env ady2nim
+"""route_check -- a flight route checked with map_utils.
+
+    route_check
+
+A route through four airports is flown over a restricted area.  The program:
+
+  1. reads the airports' positions from DMS strings -- and shows what happens to
+     a string that is not one;
+  2. measures each leg with `GeoPoint - GeoPoint` (a GeoVector: a distance and a
+     bearing) and works out how long it takes at the cruising speed: a
+     Kilometers_T over a Speed_T is Hours_T, and the compiler knows it;
+  3. walks along each leg with `GeoPoint + GeoVector * fraction`, and asks
+     `is_point_inside_polygon` whether it is in the restricted area;
+  4. takes a plane that has strayed from a leg and finds how far to the side it is
+     and how far along: on the flat plane, with Vector and Position, where a dot
+     product and a cross product do it;
+  5. builds a holding pattern -- points on a circle round a beacon -- by turning one
+     point round the beacon with `rotate_around_point`;
+
+and checks what it printed: the legs add up, the pattern is a circle, the plane is
+the distance to the side it was put at.
+"""
+from map_utils import GeoPoint, GeoVector, Vector, Position, GeoFailure_T, LatLong_T
+from map_utils import Kilometers_T, Meters_T, Degrees_T, Bearing_T, SquareMeters_T
+from map_utils import geo_point_from_dms, human_latlong2dec, vector_xy, must
+
+# ---- the data ------------------------------------------------------------------
+
+type Airport_T is enum EBBR, LFPG, LFLL, LFML
+
+const POSITION: [Airport_T]str = [
+    EBBR: "505405N 0042904E",              # Brussels
+    LFPG: "490035N 0023252E",              # Paris Charles de Gaulle
+    LFLL: "454336N 0050500E",              # Lyon
+    LFML: "432615N 0051313E",              # Marseille
+]
+const ROUTE: []Airport_T = [EBBR, LFPG, LFLL, LFML]
+
+# A restricted area, as the corners of its outline, in order.
+const RESTRICTED: []str = [
+    "473000N 0034000E", "473000N 0044500E", "463000N 0044500E", "463000N 0034000E",
+]
+
+type Hours_T is distinct float
+type Speed_T is Kilometers_T / Hours_T                      # kilometres an hour
+let CRUISE: Speed_T = 780.0
+
+# Which side of the track: the sign of the cross product, left of where it points
+# being the counter-clockwise side.
+type Side_T is enum LEFT, RIGHT, ON_TRACK
+
+def side_of_track(cross_track: Meters_T) -> Side_T:
+    """Which side a cross-track distance is on; within half a metre of the track is on it."""
+    if cross_track > 0.5:
+        return LEFT
+    if cross_track < -0.5:
+        return RIGHT
+    return ON_TRACK
+
+def position_of(airport: Airport_T) -> GeoPoint:
+    must(geo_point_from_dms(POSITION[airport]))
+
+def outline() -> []GeoPoint:
+    return [must(geo_point_from_dms(corner)) for corner in RESTRICTED]
+
+def hours_minutes(time: Hours_T) -> str:
+    let minutes: int = int(float(time) * 60.0 + 0.5)
+    f"{minutes // 60}h{minutes % 60:02d}"
+
+# ---- 1. positions, and a string that is not one -----------------------------------
+
+def refusal(text: str) -> str:
+    let r: LatLong_T | !GeoFailure_T = human_latlong2dec(text)
+    if r is GeoFailure_T:
+        return r.detail
+    return "ok"
+
+# ---- 3. a leg against the restricted area -----------------------------------------
+
+type Crossing_T is record:
+    inside:   bool             # whether the leg goes through it at all
+    entering: Kilometers_T     # how far along it goes in
+    leaving:  Kilometers_T     # and how far along it comes out
+
+def crossing(start: GeoPoint, leg: GeoVector, area: []GeoPoint) -> Crossing_T:
+    """Where a leg goes through AREA, sampled every kilometre along it."""
+    let total: Kilometers_T = leg.magnitude()
+    let steps: int = int(float(total))
+    var entering: float = -1.0
+    var leaving: float = -1.0
+    for k in 0 .. steps:
+        let along: float = float(k)
+        let fraction: float = along / float(total) if float(total) > 0.0 else 0.0
+        let here: GeoPoint = start + leg * fraction
+        if here.is_point_inside_polygon(area):
+            if entering < 0.0:
+                entering = along
+            leaving = along
+    return Crossing_T(entering >= 0.0, Kilometers_T(entering), Kilometers_T(leaving))
+
+# ---- 4. a plane off its track ------------------------------------------------------
+
+type Fix_T is record:
+    along:  Kilometers_T       # how far along the leg, measured on the track
+    across: Kilometers_T       # how far to the side of it (unsigned)
+    side:   Side_T
+
+def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
+    """Where PLANE is, as seen from a leg that starts at START: on a flat plane, with the
+    east and north of the leg and of the way from START to the plane as the x and y.
+    Good for tens of kilometres, which is all a leg's neighbourhood is."""
+    let track: Vector = vector_xy(leg.east, leg.north)
+    let off: GeoVector = plane - start
+    let offset: Vector = vector_xy(off.east, off.north)
+    let cross: SquareMeters_T = track.cross(offset)
+    let dot: SquareMeters_T = track.dot_product(offset)
+    let length: Meters_T = track.length()
+    let across: Meters_T = cross / length                    # a square over a length: a length
+    let along: Meters_T = dot / length
+    return Fix_T(Kilometers_T(float(along) / 1000.0), Kilometers_T(abs(float(across)) / 1000.0), side_of_track(across))
+
+def main():
+    let airports: []Airport_T = ROUTE
+    let area: []GeoPoint = outline()
+
+    print "ROUTE"
+    print "-----"
+    var previous: GeoPoint = position_of(airports[0])
+    print f"  {airports[0]}  {previous.human()}"
+    var total_km: Kilometers_T = 0.0
+    var total_h: Hours_T = 0.0
+    var leg_km: []Kilometers_T = []
+    var crossings: []Crossing_T = []
+    var legs: []GeoVector = []
+    var starts: []GeoPoint = []
+    for i in 1 ..< len(airports):
+        let here: GeoPoint = position_of(airports[i])
+        let leg: GeoVector = here - previous                   # from the last airport to this
+        let hours: Hours_T = leg.magnitude() / CRUISE          # km over km/h: hours
+        print f"  {airports[i]}  {here.human()}   {leg.magnitude():7.1f} km  bearing {leg.phase():5.1f}  {hours_minutes(hours)}"
+        total_km += leg.magnitude()
+        total_h += hours
+        leg_km.append(leg.magnitude())
+        crossings.append(crossing(previous, leg, area))
+        legs.append(leg)
+        starts.append(previous)
+        previous = here
+    print f"  total {total_km:.1f} km, {hours_minutes(total_h)} at {int(float(CRUISE))} km/h"
+
+    print ""
+    print "RESTRICTED AREA"
+    print "---------------"
+    for i in 0 ..< len(crossings):
+        let c: Crossing_T = crossings[i]
+        if c.inside:
+            print f"  {airports[i]} -> {airports[i + 1]}: inside from km {int(float(c.entering))} to km {int(float(c.leaving))}"
+        else:
+            print f"  {airports[i]} -> {airports[i + 1]}: clear"
+
+    print ""
+    print "OFF TRACK"
+    print "---------"
+    # A plane 12 km to the right of the middle of the second leg, and one 7 km to the left
+    # of a point a quarter of the way along the third.
+    let second: GeoVector = legs[1]
+    let midway: GeoPoint = starts[1] + second * 0.5
+    let to_right: GeoVector = GeoVector(12.0, Degrees_T(float(second.phase()) + 90.0))
+    let strayed_right: GeoPoint = midway + to_right
+    let fix_right: Fix_T = fix_on_leg(starts[1], second, strayed_right)
+    print f"  a plane at {strayed_right.human()}: {fix_right.along:.1f} km along the leg, {fix_right.across:.1f} km to the {fix_right.side}"
+    let third: GeoVector = legs[2]
+    let quarter: GeoPoint = starts[2] + third * 0.25
+    let to_left: GeoVector = GeoVector(7.0, Degrees_T(float(third.phase()) - 90.0))
+    let strayed_left: GeoPoint = quarter + to_left
+    let fix_left: Fix_T = fix_on_leg(starts[2], third, strayed_left)
+    print f"  a plane at {strayed_left.human()}: {fix_left.along:.1f} km along the leg, {fix_left.across:.1f} km to the {fix_left.side}"
+
+    print ""
+    print "HOLDING PATTERN"
+    print "---------------"
+    # Six points on a circle of 20 km round the last beacon, made by turning one of them.
+    let beacon: GeoPoint = position_of(LFML)
+    let first: GeoPoint = beacon + GeoVector(20.0, 0.0)
+    var pattern: []GeoPoint = []
+    for k in 0 ..< 6:
+        let spot: GeoPoint = first.rotate_around_point(beacon, Degrees_T(60.0 * float(k)))
+        pattern.append(spot)
+        print f"  point {k + 1}: {spot.human()}"
+
+    # ---- what it printed is right ----------------------------------------------
+    var summed: Kilometers_T = 0.0
+    for km in leg_km:
+        summed += km
+    assert abs(float(summed - total_km)) < 1e-9
+    assert not crossings[0].inside and crossings[1].inside and not crossings[2].inside
+    assert crossings[1].entering < crossings[1].leaving
+    assert abs(float(fix_right.along) - 0.5 * float(leg_km[1])) < 1.0     # halfway, to the km
+    assert abs(float(fix_right.across) - 12.0) < 0.1
+    assert fix_right.side == RIGHT
+    assert abs(float(fix_left.along) - 0.25 * float(leg_km[2])) < 1.0
+    assert abs(float(fix_left.across) - 7.0) < 0.1
+    assert fix_left.side == LEFT
+    for spot in pattern:
+        let radius: GeoVector = spot - beacon
+        let km: float = float(radius.magnitude())
+        assert abs(km - 20.0) < 0.01                                  # all on the circle
+    let across_the_circle: GeoVector = pattern[0] - pattern[3]
+    let diameter: float = float(across_the_circle.magnitude())
+    assert abs(diameter - 40.0) < 0.1                                 # points 1 and 4 opposite
+
+    print ""
+    print "BAD INPUT"
+    print "---------"
+    for text in ["505405N", "950000N 0042904E", "505405N 0042904E 7", "50x405N 0042904E"]:
+        print f"  '{text}': {refusal(text)}"
+    assert refusal("505405N 0042904E") == "ok"
+    print ""
+    print "route_check: all checks passed"
+
+if __name__ == "__main__":
+    main()

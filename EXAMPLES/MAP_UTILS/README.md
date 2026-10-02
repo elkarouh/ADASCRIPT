@@ -26,6 +26,12 @@ out, and passes them). It also imports `human2dec_degree`, which `map_utils.py`
 does not have; `map_utils.ady` does.
 Running `map_utils` prints the original's demo, without its folium map.
 
+`route_check.ady` is a program that uses the module: a flight route over four
+airports, checked against a restricted area, with a plane's distance off its track
+and a holding pattern. It checks its own results.
+
+    ady2nim c route_check.ady && ./route_check
+
     ady2nim c map_utils.ady && ./map_utils
     ady2nim c -r test_map_utils.ady
     ady2nim c -r test_hek_map_utils.ady
