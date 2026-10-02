@@ -33,7 +33,7 @@ def decode_escape(s: str, i: int) -> ?Escape_T:
         when 'x':                                 # \xN, \xNN
             var v: int = 0
             var j: int = i + 2
-            while j < len(s) and j < i + 4 and s[j:j+1].lower() in HEX_DIGITS:
+            while j < min(len(s), i + 4) and s[j:j+1].lower() in HEX_DIGITS:
                 v = v * 16 + HEX_DIGITS.find(s[j:j+1].lower())
                 j = j + 1
             if j == i + 2:
@@ -42,7 +42,7 @@ def decode_escape(s: str, i: int) -> ?Escape_T:
         when '0'..'7':                            # \N, \NN, \NNN
             var v: int = 0
             var j: int = i + 1
-            while j < len(s) and j < i + 4 and s[j:j+1] in OCTAL_DIGITS:
+            while j < min(len(s), i + 4) and s[j:j+1] in OCTAL_DIGITS:
                 v = v * 8 + OCTAL_DIGITS.find(s[j:j+1])
                 j = j + 1
             return Escape_T(str(chr(v)), j - i)
@@ -83,9 +83,7 @@ def parse_c_str(tok: str) -> str:
 
 
 def die(message: str, line: ?int = None) -> None:
-    location: str = ""
-    if line is not None:
-        location = f" on line {line + 1}"
+    let location: str = f" on line {line + 1}" if line is not None else ""
     print(f"error{location}: {message}")
     quit(1)
 
@@ -130,6 +128,13 @@ emit: Emitter = Emitter()
 # StringPool: deduplicated pool of C string literals, placed above PAGE_SIZE.
 # ---------------------------------------------------------------------------
 
+def escaped_byte(c: char) -> str:
+    """C as a wasm data-string character: itself when printable, else \\XX."""
+    let n: int = ord(c)
+    return str(c) if 31 < n < 127 and c not in "\\\"" else \
+        "\\" + HEX_DIGITS[n // 16:n // 16 + 1] + HEX_DIGITS[n % 16:n % 16 + 1]
+
+
 class StringPool:
     base: int
     current: int
@@ -157,20 +162,9 @@ class StringPool:
         return self.strs[s]
 
     def pooled(self) -> str:
-        HEX: str = "0123456789abcdef"
-        result: str = ""
-        for b in self.order:
-            i: int = 0
-            while i < len(b):
-                n: int = ord(b[i])
-                if 31 < n < 127 and n != 92 and n != 34:
-                    result = result + b[i:i+1]
-                else:
-                    h1: str = HEX[n // 16:n // 16 + 1]
-                    h2: str = HEX[n % 16:n % 16 + 1]
-                    result = result + "\\" + h1 + h2
-                i = i + 1
-        return result
+        """The pool as a wasm data string: printable characters as they are,
+        the rest (and the quote and the backslash) as \\XX."""
+        return "".join(escaped_byte(c) for b in self.order for c in b)
 
 
 str_pool: StringPool = StringPool()
@@ -297,10 +291,8 @@ class Lexer:
 
     def next(self, kind: ?TokKind_T = None) -> Token_T:
         token: Token_T = self.peek()
-        if kind is not None:
-            if token.kind != kind:
-                msg: str = f"expected {kind}, got {token.content}"
-                die(msg, self.line)
+        if kind is not None and token.kind != kind:
+            die(f"expected {kind}, got {token.content}", self.line)
         if token.kind != TK_INVALID:
             self.loc += len(token.content)
         return token
@@ -806,10 +798,7 @@ def global_declaration(global_frame: StackFrame, lexer: Lexer) -> None:
         emit(f"i32.const {frame.frame_offset + frame.frame_size}")
         emit("i32.sub")
         emit("global.set $__stack_pointer")
-        var all_vars: []FrameVar_T = []
-        for v in frame.variables.values():
-            all_vars.append(v)
-        for v in reversed(all_vars):
+        for v in reversed([v for v in frame.variables.values()]):
             if v.is_parameter:
                 _, off = frame.get_var_and_offset(v.name)
                 emit("global.get $__stack_pointer ;; prelude: store parameter")
