@@ -1379,7 +1379,11 @@ def _is_pipe_not_bitor(operands):
     for op in operands:
         if op.startswith('"') or op.startswith('fmt"'):
             return True
-        t = _nim_type_of(op)
+        # `~a | ~b` of two Regions: a `not` leaves the operand the kind of thing it was
+        inner = op.strip()
+        while inner.startswith("not "):
+            inner = inner[4:].strip()
+        t = _nim_type_of(inner)
         if t and t not in _INT_TYPES:
             return True
     return False
@@ -1719,8 +1723,10 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 if prec is not None and my_prec is not None and my_prec < prec:
                     return f"({result})"
                 return result
-            # boolean and/or: coerce seq/string operands to bool (Nim has no implicit truthiness)
-            if nim_op in ("and", "or"):
+            # boolean and/or: coerce seq/string operands to bool (Nim has no implicit truthiness).
+            # Only the keywords: `a & b` on two Regions is their `__and__`, not "both are
+            # there", and on integers it is the bitwise and.
+            if nim_op in ("and", "or") and py_op in ("and", "or"):
                 result = _nim_truthiness(result)
                 right  = _nim_truthiness(right)
             result = f"{result} {nim_op} {right}"
@@ -5024,9 +5030,13 @@ def to_nim(self, prec=None):
             # | stays as | when operands are non-integer (e.g. string | Style pipe)
             if nim_op == "or" and py_op == "|" and _is_pipe_not_bitor([chain, right]):
                 nim_op = "|"
-            # x in (a, b, ...) — Python tuple literal → Nim array literal [a, b, ...]
+            # x in (a, b, ...) — Python tuple literal → Nim array literal [a, b, ...].
+            # Only a tuple: `x in (a | b)` is a parenthesised expression, which has
+            # no top-level comma, and is not an array of one.
             if nim_op in ("in", "notin") and right.startswith("(") and right.endswith(")"):
-                right = "[" + right[1:-1] + "]"
+                _inner = right[1:-1]
+                if _balanced(_inner) and (not _inner.strip() or len(_split_args(_inner)) > 1):
+                    right = "[" + _inner + "]"
             # `sub in s` over two strings is a substring test. Nim's bare
             # `in` is `contains`, and system only defines it for a char in
             # a string -- which is why `c in DIGITS` compiled and

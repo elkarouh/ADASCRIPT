@@ -1,0 +1,79 @@
+#!/usr/bin/env ady2nim
+"""Test: classes that define `__and__`, `__or__`, `__invert__` and `__contains__`, on both
+backends -- the shape of the Region algebra of geo_server.ady.  What is checked is how
+the operators are written and read:
+
+  * `x in (a | b)` is a membership test in the region `a | b`; the parentheses are a
+    grouping, not a tuple (`x in (1, 2, 3)` is still one);
+  * `a & b` and `~a | ~b` of two regions are the regions' own operators, not "both
+    exist" and not a pipe of booleans;
+  * `&` and `|` of two integers are still the bitwise operators.
+
+The output is compared between the backends (see the Makefile).
+"""
+
+class Region:
+    var _predicate: ?(int) -> bool
+
+    def __init__(self, predicate: ?(int) -> bool = None) -> None:
+        self._predicate = predicate
+
+    def __contains__(self, n: int) -> bool:
+        if self._predicate is None:
+            raise NotImplementedError("a Region subclass must implement __contains__")
+        return self._predicate(n)
+
+    def __and__(self, other: Region) -> Region:
+        def both(n: int) -> bool:
+            n in self and n in other
+        Region(both)
+
+    def __or__(self, other: Region) -> Region:
+        def either(n: int) -> bool:
+            n in self or n in other
+        Region(either)
+
+    def __invert__(self) -> Region:
+        def outside(n: int) -> bool:
+            n not in self
+        Region(outside)
+
+
+class Span(Region):
+    var lo: int
+    var hi: int
+
+    def __init__(self, lo: int, hi: int) -> None:
+        self.lo = lo
+        self.hi = hi
+
+    def __contains__(self, n: int) -> bool:
+        self.lo <= n <= self.hi
+
+
+let low: Region = Span(0, 10)
+let high: Region = Span(5, 20)
+
+assert 3 in low and 3 not in high
+assert 7 in (low & high) and 3 not in (low & high) and 15 not in (low & high)
+assert 3 in (low | high) and 15 in (low | high) and 30 not in (low | high)
+assert 30 in ~(low | high) and 3 not in ~(low | high)
+assert 3 in (low & ~high) and 7 not in (low & ~high)
+assert 15 in (~low & high) and 3 not in (~low & high)
+assert 15 in (~low | ~high) and 3 in (~low | ~high) and 7 not in (~low | ~high)
+assert (7 in ~(low & high)) == (7 in (~low | ~high))             # De Morgan, both ways
+assert (30 in ~(low | high)) == (30 in (~low & ~high))
+
+var both: int = 0
+for n in range(25):
+    if n in (low & high):
+        both += 1
+print "in both:", both
+
+# what is not a region keeps its meaning
+assert 2 in (1, 2, 3) and 4 not in (1, 2, 3)
+assert (6 & 3) == 2 and (4 | 1) == 5 and (6 ^ 3) == 5
+let flag: bool = True
+let other: bool = False
+assert (flag and not other) and (flag or other) and not (other and flag)
+print "test_region_operators ok"
