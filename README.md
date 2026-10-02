@@ -3300,7 +3300,7 @@ ADASCRIPT/
 ├── HPARSEC/                   Parser combinator engine and tokenizer
 │                              (see HPARSEC/README.md)
 │
-├── ADASCRIPT_GRAMMAR/         Language-neutral grammar definitions
+├── GRAMMAR/                   Language-neutral grammar definitions
 │   ├── ady_expr.py            Expression grammar (precedence, all operators)
 │   ├── ady_stmt.py            Simple statements (assignment, import, raise, …)
 │   ├── ady_compound_stmt.py   Compound statements (if/while/for/def/class/shell/…)
@@ -3351,7 +3351,7 @@ ADASCRIPT/
    syntax for — the `'` of a tick attribute, `$` variables, ranges, regex
    literals, bash tests — and keeps inline comments attached so they survive
    into the output.
-2. The grammar in `ADASCRIPT_GRAMMAR/` defines the language, one rule per
+2. The grammar in `GRAMMAR/` defines the language, one rule per
    construct, independently of either target.
 3. Each grammar rule gets a `to_py()` and a `to_nim()` method, in
    `TO_PYTHON/` and `TO_NIM/` respectively. Every method carries a docstring

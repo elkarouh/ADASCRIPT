@@ -497,7 +497,7 @@ test: compile
 	@echo "=== a changed stdlib.nim rebuilds what uses it ==="
 	@printf '  %-42s' "stdlib.nim edited after a build"; \
 	    d=$$(mktemp -d); \
-	    cp -r $(CURDIR)/TO_NIM $(CURDIR)/TO_PYTHON $(CURDIR)/ADASCRIPT_GRAMMAR $(CURDIR)/HPARSEC $$d/ && \
+	    cp -r $(CURDIR)/TO_NIM $(CURDIR)/TO_PYTHON $(CURDIR)/GRAMMAR $(CURDIR)/HPARSEC $$d/ && \
 	    mkdir $$d/src && \
 	    printf 'from stdlib import Counter_T\nlet c: Counter_T[str] = Counter_T(["a", "b", "a"])\nprint c.total()\n' > $$d/src/cnt.ady && \
 	    XDG_CACHE_HOME=$$d/cache $(PYTHON) $$d/TO_NIM/ady2nim.py c $$d/src/cnt.ady >/dev/null 2>&1 && \

@@ -896,7 +896,7 @@ __all__ = [
 ########################################################################################################################
 ##########################################
 if __name__ == "__main__":
-    # THE ADASCRIPT_GRAMMAR
+    # THE GRAMMAR
     keyvalue = IDENTIFIER + EQUAL + NUMBER + SEMICOLON
     keyvalues = keyvalue[1:]
 

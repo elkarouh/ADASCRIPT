@@ -29,7 +29,7 @@ _root = os.path.dirname(_here)  # one level up: ADASCRIPT/
 for _p in [
     _root,
     os.path.join(_root, "HPARSEC"),
-    os.path.join(_root, "ADASCRIPT_GRAMMAR"),
+    os.path.join(_root, "GRAMMAR"),
     os.path.join(_root, "TO_PYTHON"),
 ]:
     if _p not in sys.path:

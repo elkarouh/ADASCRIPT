@@ -218,7 +218,7 @@ Limitations") and `TODO.md`.
   are the reference for pattern matching and for optional types; the standalone
   `PATTERN_MATCHING.md` and `OPTIONAL_TYPES.md` documents were merged into
   them.
-- `ADASCRIPT_GRAMMAR/`, `HPARSEC/` — the grammar and the parser-combinator
+- `GRAMMAR/`, `HPARSEC/` — the grammar and the parser-combinator
   engine, if you want to extend the language itself.
 
 ---

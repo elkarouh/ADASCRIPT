@@ -9,7 +9,7 @@ import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
-sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 from ady_compound_stmt import *  # noqa: F403 — grammar definitions
 from hek_tokenize import RichNL

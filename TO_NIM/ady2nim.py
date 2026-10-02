@@ -14,7 +14,7 @@ import sys, os
 _dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
-sys.path.insert(0, os.path.join(_dir, "..", "ADASCRIPT_GRAMMAR"))
+sys.path.insert(0, os.path.join(_dir, "..", "GRAMMAR"))
 
 
 import token as token_mod
@@ -2103,7 +2103,7 @@ def main(argv=None):
         exe_mtime = os.path.getmtime(exe_file) if os.path.exists(exe_file) else 0
 
         # Transpiler source files: if any are newer than the .nim, retranspile.
-        # Include TO_NIM/, ADASCRIPT_GRAMMAR/, and HPARSEC/ .py files.
+        # Include TO_NIM/, GRAMMAR/, and HPARSEC/ .py files.
         _root_dir_main = os.path.dirname(_dir)
         _transpiler_py_files = (
             [os.path.join(_dir, f) for f in os.listdir(_dir) if f.endswith(".py")] +
@@ -2113,7 +2113,7 @@ def main(argv=None):
         # TO_PYTHON is in here because the Nim shell emitter borrows its
         # grammar-neutral helpers (_parse_shell_stmt, _apply_shell_quoting);
         # without it, editing those leaves a stale .nim behind.
-        for _extra_dir in ("HPARSEC", "ADASCRIPT_GRAMMAR", "TO_PYTHON"):
+        for _extra_dir in ("HPARSEC", "GRAMMAR", "TO_PYTHON"):
             _ed = os.path.join(_root_dir_main, _extra_dir)
             if os.path.isdir(_ed):
                 _transpiler_py_files += [
