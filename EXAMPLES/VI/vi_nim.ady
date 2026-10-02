@@ -36,16 +36,17 @@ def read_code() -> int:
     decode() takes them as OTHER."""
     while True:
         let key: Key = getKeyWithTimeout(200)
-        if key == Key.Up: return KEY_UP
-        if key == Key.Down: return KEY_DOWN
-        if key == Key.Left: return KEY_LEFT
-        if key == Key.Right: return KEY_RIGHT
-        if key == Key.Home: return KEY_HOME
-        if key == Key.End: return KEY_END
-        if key == Key.PageUp: return KEY_PPAGE
-        if key == Key.PageDown: return KEY_NPAGE
-        if key != Key.None:
-            return ord(key)
+        case key:
+            when Key.Up: return KEY_UP
+            when Key.Down: return KEY_DOWN
+            when Key.Left: return KEY_LEFT
+            when Key.Right: return KEY_RIGHT
+            when Key.Home: return KEY_HOME
+            when Key.End: return KEY_END
+            when Key.PageUp: return KEY_PPAGE
+            when Key.PageDown: return KEY_NPAGE
+            when Key.None: pass
+            when others: return ord(key)
 
 def draw(ed: Editor):
     ed.scroll()
