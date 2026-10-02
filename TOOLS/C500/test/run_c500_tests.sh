@@ -8,6 +8,8 @@
 # status, are compared with NAME.wat. escapes.c has every escape form a C
 # literal may use, pointers.c every mix of pointer and int in + and -, and
 # pointer_levels.c the error for subtracting pointers of different levels.
+# comments.c has every place a comment may sit, and unterminated_comment.c the error
+# for one that is never closed.
 HERE=$(cd "$(dirname "$0")" && pwd)
 fail=0
 for c in "$HERE"/*.c; do

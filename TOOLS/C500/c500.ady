@@ -239,27 +239,27 @@ class Lexer:
         return Lexer(self.src, self.types, self.loc, self.line)
 
     def _skip_comment_ws(self) -> bool:
-        if self.src[self.loc:].startswith("//"):
-            while self.loc < len(self.src) and self.src[self.loc:self.loc+1] != "\n":
-                self.loc += 1
-            return True
-        elif self.src[self.loc:].startswith("/*"):
-            var start_line: int = self.line
-            self.loc += 2
-            while not self.src[self.loc:].startswith("*/"):
-                if self.loc >= len(self.src):
-                    die("unterminated multi-line comment", start_line)
-                elif self.src[self.loc:self.loc+1] == "\n":
-                    self.line += 1
-                self.loc += 1
-            self.loc += 2
-            return True
-        elif self.src[self.loc:self.loc+1] in " \t\n":
-            if self.src[self.loc:self.loc+1] == "\n":
-                self.line += 1
-            self.loc += 1
-            return True
-        return False
+        """Skip one comment or run of white space at the cursor, counting the
+        lines it spans; False when there is nothing to skip."""
+        case self.src[self.loc:]:
+            when /^\/\/[^\n]*/:                   # to the end of the line
+                self.loc += len($+0)
+                True
+            when /^\/\*[\s\S]*?\*\//:             # a block comment, closed
+                let text: str = $+0
+                self.line += text.count("\n")
+                self.loc += len(text)
+                True
+            when /^\/\*/:
+                die("unterminated multi-line comment", self.line)
+                False
+            when /^[ \t\n]+/:
+                let text: str = $+0
+                self.line += text.count("\n")
+                self.loc += len(text)
+                True
+            when others:
+                False
 
     def peek(self) -> Token_T:
         while self.loc < len(self.src) and self._skip_comment_ws():
