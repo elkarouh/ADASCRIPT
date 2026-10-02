@@ -1,0 +1,52 @@
+#!/usr/bin/env ady2nim
+"""Test: `not` in front of a comparison, a chained comparison, a membership test or an
+arithmetic expression, on both backends. Python's `not` is below the comparison: `not a < b`
+is `not (a < b)`. Nim's is a prefix operator above every binary one, so `not a < b` there
+is `(not a) < b` -- a bitwise not on an int, and a silent wrong answer. The Nim backend left
+the operand bare; it now parenthesises whatever is looser than a unary operand. Every case
+is compared with the same thing spelt with the parentheses written out. The output is
+compared between the backends.
+"""
+def small(o: int) -> bool:
+    not o < 5
+
+def digit(o: int) -> bool:
+    not 48 <= o <= 57
+
+def listed(x: int) -> bool:
+    not x in [1, 2, 3]
+
+def sum_is(a: int, b: int) -> bool:
+    not a + b == 10
+
+def both(a: int, o: int) -> bool:
+    not a > 0 and not 5 <= o <= 9
+
+def either(a: int, o: int) -> bool:
+    not a > 0 or not 5 <= o <= 9
+
+def twice(o: int) -> bool:
+    not not o < 5
+
+def on_bool(flag: bool, o: int) -> bool:
+    not flag and o > 0
+
+def yes_no(b: bool) -> str:
+    "yes" if b else "no"
+
+var checked: int = 0
+for o in [0, 4, 5, 9, 10, 47, 48, 57, 58]:
+    assert small(o) == (o >= 5)
+    assert digit(o) == (o < 48 or o > 57)
+    assert twice(o) == (o < 5)
+    for a in [-1, 0, 3]:
+        assert both(a, o) == ((not (a > 0)) and (not (5 <= o <= 9)))
+        assert either(a, o) == ((not (a > 0)) or (not (5 <= o <= 9)))
+        assert sum_is(a, o) == (a + o != 10)
+        checked += 1
+    assert on_bool(True, o) == False and on_bool(False, o) == (o > 0)
+for x in [0, 1, 2, 3, 4]:
+    assert listed(x) == (x < 1 or x > 3)
+assert checked == 27
+print yes_no(small(3)), yes_no(digit(50)), yes_no(listed(2)), yes_no(sum_is(4, 6)), yes_no(twice(3))
+print "test_not_operand OK"

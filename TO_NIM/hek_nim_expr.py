@@ -5023,7 +5023,11 @@ def to_nim(self, prec=None):
 @method(not_prefix)
 def to_nim(self, prec=None):
     """not_prefix: 'not' inversion -> Nim: 'not inversion'"""
-    operand = self.nodes[0].to_nim(PREC_NOT)
+    # Nim's `not` is a prefix operator that binds tighter than any binary one: `not a < b` is
+    # `(not a) < b` there, a bitwise not on an int and a silent wrong answer, where Python's `not`
+    # is below the comparison. So anything looser than a unary operand -- a comparison, `in`, an
+    # arithmetic expression -- is parenthesised, and a name, a call, a field stays as it is.
+    operand = self.nodes[0].to_nim(PREC_UNARY)
     # Check if operand is a string/seq variable — Nim has no truthiness for these
     truthy = _nim_truthiness(operand)
     if truthy != operand:
