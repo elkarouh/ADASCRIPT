@@ -1563,7 +1563,7 @@ def run_tests():
     # member its type names, and a case over it narrows each branch.
     tests.append((
         'def f(n: int) -> int | float:\n    if n > 0:\n        return n\n    return 0.5\n\nlet x: int | float = f(1)\ncase x:\n    when int:\n        print x + 1\n    when float:\n        print x\n',
-        'import stdlib\nproc f(n: int): OneOf2[int, float] =\n    if n > 0:\n        return OneOf2[int, float].of0(n)\n    return OneOf2[int, float].of1(0.5)\n\nlet x: OneOf2[int, float] = f(1)\nif x.is_m0:\n    echo(x.m0 + 1)\nelif x.is_m1:\n    echo(x.m1)\n',
+        'import stdlib\nproc f(n: int): OneOf2[int, float] =\n    if n > 0:\n        return OneOf2[int, float].of0(n)\n    return OneOf2[int, float].of1(0.5)\n\nlet x: OneOf2[int, float] = f(1)\nif x.is_m0:\n    echo(x.m0 + 1)\nelse:\n    echo(x.m1)\n',
     ))
 
     passed = failed = 0
