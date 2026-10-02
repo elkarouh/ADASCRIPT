@@ -114,10 +114,11 @@ def splice(line: str, start: int, stop: int, text: str) -> str:
 # ---- colouring --------------------------------------------------------
 def language_of(name: str) -> Lang_T:
     """The language a file is coloured as, from the end of its name."""
-    if name.endswith(".ady") or name.endswith(".py"): return PYTHON
-    if name.endswith(".nim"): return NIM
-    if name.endswith(".sh"): return SHELL
-    NO_LANG
+    case name:
+        when /\.(ady|py)$/: PYTHON
+        when /\.nim$/: NIM
+        when /\.sh$/: SHELL
+        when others: NO_LANG
 
 def is_keyword(lang: Lang_T, word: str) -> bool:
     case lang:
