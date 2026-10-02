@@ -1,0 +1,754 @@
+#!/usr/bin/env ady2nim
+"""
+map_utils -- geospatial geometry primitives
+===========================================
+A translation of map_utils.py (beside it, as the reference) into Adascript.
+
+Three layers of abstraction:
+
+  1. Coordinate conversion helpers
+       dms2dec / dd2dms / human_latlong2dec / dec2human_latlong
+       Between human-readable DMS strings and decimal degrees.
+
+  2. Flat-plane geometry  (Vector, Position)
+       2-D vector arithmetic.  Distances are in metres, angles in degrees.
+
+  3. Geodetic geometry  (GeoVector, GeoPoint)
+       The Vincenty direct and inverse formulae, so that arithmetic on
+       geographic coordinates works with the same operators as the flat plane:
+           GeoPoint + GeoVector -> GeoPoint
+           GeoPoint - GeoPoint  -> GeoVector
+       Distances are in kilometres, bearings clockwise from true north.
+
+What changed in the translation
+-------------------------------
+* No bare floats.  The original mixes metres (the flat plane, the Vincenty
+  internals) and kilometres (the geodetic interface); here a distance is
+  `Meters_T` or `Kilometers_T`, an angle of any size is `Degrees_T`, a compass
+  direction is a `Bearing_T`, and a position is a `Latitude_T` / `Longitude_T`
+  (two types, so that the two cannot be swapped).
+  `Meters_T * Meters_T` is a `SquareMeters_T`, which is what a dot product is.
+* A DMS string that does not parse is a failure value (`!GeoFailure_T`), not a
+  ValueError.
+* `Vector` and `GeoVector` keep their parts as two numbers; the original kept a
+  Python complex number.
+* The original's `normal()` raised TypeError (`unit() * 1j`); this one rotates
+  the unit vector 90 degrees counter-clockwise, which is what it says it does.
+  `projection()` returned a plain complex; this one returns a Vector.
+  The docstring of `dms2dec` promised 43.55 for "043304N"; that string is
+  04 degrees 33' 04", which is 4.55, and the example here says so.
+* `x % 360` is `modulo(x, 360.0)` here: Nim's `mod` keeps the sign of the
+  dividend, Python's keeps the divisor's, and a bearing needs the latter.
+* Not translated: `GeoPoint.construct_from_name`, which looks an aerodrome up
+  in a Python module of the author's (my_aerodromes), and the folium map of the
+  demo.  The demo's assertions and the flat-plane prints are kept.
+"""
+
+nimport math
+
+# ---------------------------------------------------------------------------
+# Units
+# ---------------------------------------------------------------------------
+
+type Meters_T       is distinct float
+type Kilometers_T   is distinct float
+type SquareMeters_T is Meters_T * Meters_T       # a dot or cross product, a triangle's area
+type Degrees_T      is distinct float            # an angle of any size and sign
+
+# A direction clockwise from true north.  360 is the same direction as 0 and is
+# allowed, so that rounding at the seam cannot fail.
+type Bearing_T   is float range 0.0 .. 360.0
+
+# Latitude and longitude are different types, so that GeoPoint(lon, lat) is a
+# compile error; what each may be (90 and 180 either way) is checked where a
+# GeoPoint is made.
+type Latitude_T  is distinct float
+type Longitude_T is distinct float
+
+# Which of the two a coordinate is: it decides the width of a DMS string.
+type Axis_T is enum LATITUDE, LONGITUDE
+
+const DIRECTIONS: [Axis_T]str = [LATITUDE: "NS", LONGITUDE: "EW"]   # positive, negative
+const DEGREE_DIGITS: [Axis_T]int = [LATITUDE: 2, LONGITUDE: 3]
+
+# Why a coordinate was refused.
+type GeoErr_T is enum BAD_DMS, BAD_COORDINATE_PAIR, OUT_OF_RANGE
+
+type GeoFailure_T is record:
+    kind:   GeoErr_T
+    detail: str
+
+def geo_fail(kind: GeoErr_T, detail: str) -> GeoFailure_T:
+    GeoFailure_T(kind=kind, detail=detail)
+
+
+def modulo(x: float, period: float) -> float:
+    """Python's x % period: the result has the sign of PERIOD."""
+    x - period * floor(x / period)
+
+def slice_of(text: str, start: int, stop: int) -> str:
+    """text[start:stop] as Python has it: a slice that runs past the end is
+    shorter, or empty.  On Nim it raises."""
+    let n: int = len(text)
+    if start >= n:
+        return ""
+    text[start:min(n, stop)]
+
+def to_km(m: Meters_T) -> Kilometers_T:
+    Kilometers_T(float(m) / 1000.0)
+
+def to_m(km: Kilometers_T) -> Meters_T:
+    Meters_T(float(km) * 1000.0)
+
+
+# ---------------------------------------------------------------------------
+# WGS-84 ellipsoid parameters
+# ---------------------------------------------------------------------------
+
+const WGS84_A: Meters_T = 6378137.0                  # semi-major axis
+const WGS84_F: float = 1.0 / 298.257223563           # flattening
+const WGS84_B: Meters_T = Meters_T(6378137.0 * (1.0 - 1.0 / 298.257223563))   # semi-minor axis
+
+
+# ---------------------------------------------------------------------------
+# Vincenty direct formula
+# ---------------------------------------------------------------------------
+
+type Direct_T is record:
+    latitude:  Latitude_T
+    longitude: Degrees_T         # not wrapped: lon1 + L can leave (-180, 180]
+    azimuth:   Bearing_T         # the reverse azimuth
+
+def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: Meters_T) -> Direct_T:
+    """Given a start point, an azimuth and a distance, the end point and the
+    reverse azimuth."""
+    let a: float = float(WGS84_A)
+    let b: float = float(WGS84_B)
+    let f: float = WGS84_F
+    let dist_m: float = float(dist)
+    let lat1_rad: float = degToRad(float(lat1))
+    let lon1_rad: float = degToRad(float(lon1))
+    let az1_rad: float = degToRad(float(az1))
+
+    let tan_u1: float = (1 - f) * tan(lat1_rad)
+    let cos_u1: float = 1 / sqrt(1 + tan_u1 ** 2)
+    let sin_u1: float = tan_u1 * cos_u1
+
+    let sin_az1: float = sin(az1_rad)
+    let cos_az1: float = cos(az1_rad)
+    let sigma1: float = arctan2(tan_u1, cos_az1)
+    let sin_alpha: float = cos_u1 * sin_az1
+    let cos2_alpha: float = 1 - sin_alpha ** 2
+    let u2: float = cos2_alpha * (a ** 2 - b ** 2) / b ** 2
+    let big_a: float = 1 + u2 / 16384 * (4096 + u2 * (-768 + u2 * (320 - 175 * u2)))
+    let big_b: float = u2 / 1024 * (256 + u2 * (-128 + u2 * (74 - 47 * u2)))
+
+    var sigma: float = dist_m / (b * big_a)
+    for _ in range(100):
+        let cos2sm: float = cos(2 * sigma1 + sigma)
+        let sin_sigma: float = sin(sigma)
+        let cos_sigma: float = cos(sigma)
+        let d_sigma: float = big_b * sin_sigma * (
+            cos2sm + big_b / 4 * (
+                cos_sigma * (-1 + 2 * cos2sm ** 2)
+                - big_b / 6 * cos2sm * (-3 + 4 * sin_sigma ** 2) * (-3 + 4 * cos2sm ** 2)
+            )
+        )
+        let sigma_new: float = dist_m / (b * big_a) + d_sigma
+        if abs(sigma_new - sigma) < 1e-12:
+            sigma = sigma_new
+            break
+        sigma = sigma_new
+
+    let cos2sm: float = cos(2 * sigma1 + sigma)
+    let sin_sigma: float = sin(sigma)
+    let cos_sigma: float = cos(sigma)
+
+    let lat2: float = arctan2(
+        sin_u1 * cos_sigma + cos_u1 * sin_sigma * cos_az1,
+        (1 - f) * sqrt(sin_alpha ** 2 + (sin_u1 * sin_sigma - cos_u1 * cos_sigma * cos_az1) ** 2),
+    )
+    let lam: float = arctan2(
+        sin_sigma * sin_az1,
+        cos_u1 * cos_sigma - sin_u1 * sin_sigma * cos_az1,
+    )
+    let c: float = f / 16 * cos2_alpha * (4 + f * (4 - 3 * cos2_alpha))
+    let big_l: float = lam - (1 - c) * f * sin_alpha * (
+        sigma + c * sin_sigma * (cos2sm + c * cos_sigma * (-1 + 2 * cos2sm ** 2))
+    )
+    let lon2: float = lon1_rad + big_l
+    let az2: float = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
+
+    Direct_T(Latitude_T(radToDeg(lat2)), Degrees_T(radToDeg(lon2)), modulo(radToDeg(az2) + 360.0, 360.0))
+
+
+# ---------------------------------------------------------------------------
+# Vincenty inverse formula
+# ---------------------------------------------------------------------------
+
+type Inverse_T is record:
+    distance: Meters_T
+    forward:  Bearing_T
+    reverse:  Bearing_T
+
+def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2: Longitude_T) -> Inverse_T:
+    """Given two points, the geodetic distance and the forward and reverse
+    azimuths."""
+    let a: float = float(WGS84_A)
+    let b: float = float(WGS84_B)
+    let f: float = WGS84_F
+
+    if abs(float(lat1 - lat2)) < 1e-10 and abs(float(lon1 - lon2)) < 1e-10:
+        return Inverse_T(0.0, 0.0, 0.0)               # coincident points
+
+    let u1: float = arctan((1 - f) * tan(degToRad(float(lat1))))
+    let u2: float = arctan((1 - f) * tan(degToRad(float(lat2))))
+
+    let omega: float = degToRad(float(lon2 - lon1))
+    var lon: float = omega
+
+    var alpha: float = 0.0
+    var sigma: float = 0.0
+    var cos2sm: float = 0.0
+    for _ in range(1000):
+        let sin_sigma: float = sqrt(
+            (cos(u2) * sin(lon)) ** 2
+            + (cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)) ** 2
+        )
+        let cos_sigma: float = sin(u1) * sin(u2) + cos(u1) * cos(u2) * cos(lon)
+        sigma = arctan2(sin_sigma, cos_sigma)
+        # asin clamps to the principal value, preventing sign-flip oscillation
+        # near antipodal equatorial points
+        alpha = arcsin((cos(u1) * cos(u2) * sin(lon)) / sin_sigma)
+        cos2sm = cos(sigma) - 2 * sin(u1) * sin(u2) / cos(alpha) ** 2
+        let c: float = f / 16 * cos(alpha) ** 2 * (4 + f * (4 - 3 * cos(alpha) ** 2))
+        let new_lon: float = omega + (1 - c) * f * sin(alpha) * (
+            sigma + c * sin(sigma) * (
+                cos2sm + c * cos(sigma) * (-1 + 2 * cos2sm ** 2)
+            )
+        )
+        if abs(new_lon - lon) < 1e-12:
+            lon = new_lon
+            break
+        lon = new_lon
+
+    let u2_sq: float = cos(alpha) ** 2 * (a ** 2 - b ** 2) / b ** 2
+    let big_a: float = 1 + u2_sq / 16384 * (4096 + u2_sq * (-768 + u2_sq * (320 - 175 * u2_sq)))
+    let big_b: float = u2_sq / 1024 * (256 + u2_sq * (-128 + u2_sq * (74 - 47 * u2_sq)))
+    let d_sigma: float = big_b * sin(sigma) * (
+        cos2sm + big_b / 4 * (
+            cos(sigma) * (-1 + 2 * cos2sm ** 2)
+            - big_b / 6 * cos2sm * (-3 + 4 * sin(sigma) ** 2) * (-3 + 4 * cos2sm ** 2)
+        )
+    )
+    let dist_m: float = b * big_a * (sigma - d_sigma)
+
+    var az1: float = radToDeg(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))
+    if az1 < 0:
+        az1 += 360
+    let az2: float = radToDeg(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
+
+    Inverse_T(Meters_T(dist_m), az1, az2)
+
+
+# ---------------------------------------------------------------------------
+# Coordinate conversion helpers
+# ---------------------------------------------------------------------------
+
+def digits_of(text: str, what: str, whole: str) -> int | !GeoFailure_T:
+    let n: int | !ParseFailure_T = parse_int(text)
+    if n is ParseFailure_T:
+        return geo_fail(BAD_DMS, f"{what} '{text}' in '{whole}'")
+    return n
+
+def seconds_of(text: str, whole: str) -> float | !GeoFailure_T:
+    let s: float | !ParseFailure_T = parse_float(text)
+    if s is ParseFailure_T:
+        return geo_fail(BAD_DMS, f"seconds '{text}' in '{whole}'")
+    return s
+
+def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
+    """A DMS string as decimal degrees.
+
+    The direction letter (N/S/E/W) must be the *last* character.  A latitude has
+    2 digits of degrees, a longitude 3, then 2 of minutes, then the seconds, with
+    or without a decimal point:
+
+        dms2dec("043304N", LATITUDE)     ->   4.551111...   (04 degrees 33' 04")
+        dms2dec("0395649E", LONGITUDE)   ->  39.946944...
+    """
+    if len(pos_in_dms) == 0:
+        return geo_fail(BAD_DMS, "empty")
+    let pos: str = pos_in_dms[:len(pos_in_dms) - 1]
+    let direction: str = pos_in_dms[len(pos_in_dms) - 1:]
+    let width: int = DEGREE_DIGITS[axis]
+    let degrees_part: str = slice_of(pos, 0, width)
+    let minutes_part: str = slice_of(pos, width, width + 2)
+    var seconds_part: str = slice_of(pos, width + 2, len(pos))
+
+    # Normalise the seconds: put a decimal point in, with at least one digit on
+    # each side, so the parse never sees a bare '.'.
+    if "." not in seconds_part:
+        let whole_s: str = seconds_part[:2] if len(seconds_part) >= 2 else seconds_part.zfill(2)
+        let frac_s: str = seconds_part[2:] if len(seconds_part) > 2 else "0"
+        seconds_part = whole_s + "." + frac_s
+
+    do:
+        deg <- digits_of(degrees_part, "degrees", pos_in_dms)
+        mins <- digits_of(minutes_part, "minutes", pos_in_dms)
+        secs <- seconds_of(seconds_part, pos_in_dms)
+    let dd: float = float(deg) + float(mins) / 60.0 + secs / 3600.0
+    return Degrees_T(-dd if direction in "SW-" else dd)
+
+def dms2lat(text: str) -> Latitude_T | !GeoFailure_T:
+    """A DMS latitude, which has to be on the globe."""
+    do:
+        dd <- dms2dec(text, LATITUDE)
+    if not -90.0 <= float(dd) <= 90.0:
+        return geo_fail(OUT_OF_RANGE, f"latitude '{text}' is not between 90S and 90N")
+    return Latitude_T(float(dd))
+
+def dms2lon(text: str) -> Longitude_T | !GeoFailure_T:
+    """A DMS longitude, which has to be on the globe."""
+    do:
+        dd <- dms2dec(text, LONGITUDE)
+    if not -180.0 <= float(dd) <= 180.0:
+        return geo_fail(OUT_OF_RANGE, f"longitude '{text}' is not between 180W and 180E")
+    return Longitude_T(float(dd))
+
+
+def dd2dms(deg: Degrees_T, axis: Axis_T) -> str:
+    """Decimal degrees as a DMS string with a cardinal-direction suffix.
+
+    DEG is positive for N or E and negative for S or W.  The string is
+    zero-padded: dd2dms(50.9013889, LATITUDE) is "505405N", and
+    dd2dms(4.4844444, LONGITUDE) is "0042904E".
+    """
+    let value: float = float(deg)
+    var d: int = int(value)
+    let md: float = abs(value - float(d)) * 60.0
+    var m: int = int(md)
+    var sd: int = int(round((md - float(m)) * 60.0))
+
+    # Carry over when rounding pushes the seconds to 60
+    if sd == 60:
+        sd = 0
+        m += 1
+        if m == 60:
+            m = 0
+            d += 1
+
+    let pair: str = DIRECTIONS[axis]
+    let suffix: str = pair[0:1] if value >= 0 else pair[1:2]
+    case axis:
+        when LATITUDE: f"{abs(d):02d}{m:02d}{sd:02d}{suffix}"
+        when LONGITUDE: f"{abs(d):03d}{m:02d}{sd:02d}{suffix}"
+
+
+type LatLong_T is tuple:
+    latitude:  Latitude_T
+    longitude: Longitude_T
+
+def human_latlong2dec(latlong: str) -> LatLong_T | !GeoFailure_T:
+    """A space-separated 'DDMMSSN DDDMMSSE' string as (latitude, longitude) in decimal degrees."""
+    let fields: []str = latlong.split()
+    if len(fields) != 2:
+        return geo_fail(BAD_COORDINATE_PAIR, f"'{latlong}' is not 'DDMMSSN DDDMMSSE'")
+    do:
+        lat <- dms2lat(fields[0])
+        lon <- dms2lon(fields[1])
+    return LatLong_T(lat, lon)
+
+def dec2human_latlong(lat: Latitude_T, lon: Longitude_T) -> str:
+    """Decimal (latitude, longitude) as a human-readable DMS string."""
+    f"{dd2dms(Degrees_T(float(lat)), LATITUDE)} {dd2dms(Degrees_T(float(lon)), LONGITUDE)}"
+
+
+# ---------------------------------------------------------------------------
+# Flat-plane geometry -- Vector
+# ---------------------------------------------------------------------------
+
+class Vector:
+    """A 2-D vector.
+
+    Made, as in the original, from a length in metres and an angle in degrees
+    counter-clockwise from the positive x axis (the usual convention); the parts
+    are kept as x and y.  vector_xy makes one from its parts.
+    """
+    var x: Meters_T
+    var y: Meters_T
+
+    def __init__(self, length: Meters_T, angle: Degrees_T) -> None:
+        let radians: float = degToRad(float(angle))
+        self.x = Meters_T(float(length) * cos(radians))
+        self.y = Meters_T(float(length) * sin(radians))
+
+    # -- components ----------------------------------------------------------
+
+    def length(self) -> Meters_T:
+        """Magnitude of the vector."""
+        Meters_T(hypot(float(self.x), float(self.y)))
+
+    def angle(self) -> Degrees_T:
+        """Direction of the vector."""
+        Degrees_T(radToDeg(arctan2(float(self.y), float(self.x))))
+
+    # -- transformations -----------------------------------------------------
+
+    def rotated_by(self, relative_angle: Degrees_T) -> Vector:
+        """A new vector rotated counter-clockwise by the given angle."""
+        Vector(self.length(), self.angle() + relative_angle)
+
+    def shortened_by(self, delta: Meters_T) -> Vector:
+        """A new vector with its length reduced by DELTA."""
+        Vector(self.length() - delta, self.angle())
+
+    def unit(self) -> Vector:
+        """The unit vector (length 1 metre) in the same direction."""
+        self / float(self.length())
+
+    def normal(self) -> Vector:
+        """The unit normal: the unit vector turned 90 degrees counter-clockwise."""
+        self.unit().rotated_by(Degrees_T(90.0))
+
+    # -- products / projections ----------------------------------------------
+
+    def dot_product(self, other: Vector) -> SquareMeters_T:
+        self.x * other.x + self.y * other.y
+
+    def cross(self, other: Vector) -> SquareMeters_T:
+        """Z-component of the 3-D cross product: the signed area of the parallelogram."""
+        self.x * other.y - self.y * other.x
+
+    def cos_theta(self, other: Vector) -> float:
+        """Cosine of the angle between SELF and OTHER."""
+        self.dot_product(other) / (self.length() * other.length())
+
+    def projection(self, onto: Vector) -> Vector:
+        """SELF projected onto ONTO."""
+        let u: Vector = onto.unit()
+        u * float(self.dot_product(u))          # u is 1 m long: the dot product, in metres
+
+    def triangle_area(self, other: Vector) -> SquareMeters_T:
+        """Signed area of the triangle formed by SELF and OTHER."""
+        self.cross(other) / 2.0
+
+    # -- arithmetic operators ------------------------------------------------
+
+    def __add__(self, other: Vector) -> Vector:
+        vector_xy(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Vector) -> Vector:
+        vector_xy(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, scale: float) -> Vector:
+        Vector(self.length() * scale, self.angle())
+
+    def __truediv__(self, scale: float) -> Vector:
+        Vector(self.length() / scale, self.angle())
+
+    def __str__(self) -> str:
+        f"{self.length():.2f} m, {self.angle():.2f}°"
+
+
+def vector_xy(x: Meters_T, y: Meters_T) -> Vector:
+    """The vector with these parts."""
+    Vector(Meters_T(hypot(float(x), float(y))), Degrees_T(radToDeg(arctan2(float(y), float(x)))))
+
+
+# ---------------------------------------------------------------------------
+# Flat-plane geometry -- Position
+# ---------------------------------------------------------------------------
+
+class Position:
+    """A point in a 2-D orthonormal coordinate system.
+
+    A Position plus a Vector is a Position; one Position minus another is the
+    Vector between them.
+    """
+    var x: Meters_T
+    var y: Meters_T
+
+    def __init__(self, x: Meters_T, y: Meters_T) -> None:
+        self.x = x
+        self.y = y
+
+    def __add__(self, other: Vector) -> Position:
+        Position(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Position) -> Vector:
+        """The displacement vector from OTHER to SELF."""
+        vector_xy(self.x - other.x, self.y - other.y)
+
+    def rotate_around_point(self, pivot: Position, angle: Degrees_T) -> Position:
+        """This position rotated counter-clockwise around PIVOT."""
+        let vec: Vector = (self - pivot).rotated_by(angle)
+        pivot + vec
+
+    def __str__(self) -> str:
+        f"Position(x={self.x}, y={self.y})"
+
+
+# ---------------------------------------------------------------------------
+# Geodetic geometry -- GeoVector
+# ---------------------------------------------------------------------------
+
+class GeoVector:
+    """A displacement vector on the Earth's surface.
+
+    Kept in metres, as north and east parts; the interface is **kilometres** and
+    **degrees**.
+
+    Bearing convention (clockwise from true north):
+        0 -> north,  90 -> east,  180 -> south,  -90 -> west.
+
+    Made from a distance and a bearing, `GeoVector(100.0, 45.0)`, or from its
+    parts, `geo_vector_from_components(east=70.0, north=70.0)`.
+    """
+    var north: Meters_T
+    var east:  Meters_T
+
+    def __init__(self, distance: Kilometers_T, bearing: Degrees_T) -> None:
+        """A displacement of DISTANCE along BEARING (clockwise from true north)."""
+        let radians: float = degToRad(float(bearing))
+        let metres: float = float(distance) * 1000.0
+        self.north = Meters_T(metres * cos(radians))
+        self.east  = Meters_T(metres * sin(radians))
+
+    def length(self) -> Meters_T:
+        Meters_T(hypot(float(self.north), float(self.east)))
+
+    def magnitude(self) -> Kilometers_T:
+        """Length of the vector in kilometres."""
+        to_km(self.length())
+
+    def heading(self) -> Degrees_T:
+        """The bearing as the arctangent gives it: between -180 and 180."""
+        Degrees_T(radToDeg(arctan2(float(self.east), float(self.north))))
+
+    def phase(self) -> Bearing_T:
+        """Bearing, clockwise from north, in [0, 360)."""
+        let around: Degrees_T = self.heading()
+        modulo(float(around), 360.0)
+
+    def east_km(self) -> Kilometers_T:
+        to_km(self.east)
+
+    def north_km(self) -> Kilometers_T:
+        to_km(self.north)
+
+    def turn(self, angle: Degrees_T) -> GeoVector:
+        """A new vector turned by ANGLE."""
+        let km: Kilometers_T = self.magnitude()
+        let bearing: Bearing_T = self.phase()
+        GeoVector(km, Degrees_T(float(bearing)) + angle)
+
+    def dot_product(self, other: GeoVector) -> SquareMeters_T:
+        self.north * other.north + self.east * other.east
+
+    def cross_product(self, other: GeoVector) -> SquareMeters_T:
+        """Z-component of the 3-D cross product."""
+        self.north * other.east - self.east * other.north
+
+    def __truediv__(self, scale: float) -> GeoVector:
+        let km: Kilometers_T = self.magnitude()
+        let bearing: Bearing_T = self.phase()
+        GeoVector(km / scale, Degrees_T(float(bearing)))
+
+    def __mul__(self, scale: float) -> GeoVector:
+        let km: Kilometers_T = self.magnitude()
+        let bearing: Bearing_T = self.phase()
+        GeoVector(km * scale, Degrees_T(float(bearing)))
+
+    def __str__(self) -> str:
+        let km: Kilometers_T = self.magnitude()
+        let bearing: Bearing_T = self.phase()
+        f"{km:.2f} km @ {bearing:.2f}°"
+
+
+def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVector:
+    """A GeoVector from its east and north parts (negative: west and south).
+
+    They are named, and in this order, so that east and north cannot be taken
+    for each other.
+    """
+    let n: float = float(north) * 1000.0
+    let e: float = float(east) * 1000.0
+    let distance: float = hypot(n, e) / 1000.0
+    let bearing: float = modulo(radToDeg(arctan2(e, n)), 360.0)
+    GeoVector(Kilometers_T(distance), Degrees_T(bearing))
+
+
+# ---------------------------------------------------------------------------
+# Geodetic geometry -- GeoPoint
+# ---------------------------------------------------------------------------
+
+class GeoPoint:
+    """A point on the Earth's surface: latitude and longitude, in decimal degrees.
+
+    The arithmetic has the structure of Position's:
+
+        GeoPoint + GeoVector -> GeoPoint     (Vincenty direct formula)
+        GeoPoint - GeoPoint  -> GeoVector    (Vincenty inverse formula)
+    """
+    var latitude:  Latitude_T
+    var longitude: Longitude_T
+
+    def __init__(self, latitude: Latitude_T, longitude: Longitude_T) -> None:
+        assert -90.0 <= float(latitude) <= 90.0, f"latitude {latitude} is not on the globe"
+        assert -180.0 <= float(longitude) <= 180.0, f"longitude {longitude} is not on the globe"
+        self.latitude  = latitude
+        self.longitude = longitude
+
+    def __add__(self, vector: GeoVector) -> GeoPoint:
+        """This point displaced along VECTOR (Vincenty direct formula)."""
+        let end: Direct_T = vincenty_direct(self.latitude, self.longitude, vector.heading(), vector.length())
+        # Wrap the longitude to (-180, 180]
+        var wrapped: float = modulo(float(end.longitude) + 180.0, 360.0) - 180.0
+        if wrapped == -180.0:
+            wrapped = 180.0
+        GeoPoint(end.latitude, Longitude_T(wrapped))
+
+    def __sub__(self, other: GeoPoint) -> GeoVector:
+        """The geodetic displacement from OTHER to SELF (Vincenty inverse formula)."""
+        let way: Inverse_T = vincenty_inverse(self.latitude, self.longitude, other.latitude, other.longitude)
+        GeoVector(to_km(way.distance), Degrees_T(float(way.reverse)))
+
+    def rotate_around_point(self, pivot: GeoPoint, angle: Degrees_T) -> GeoPoint:
+        """This point turned by ANGLE around PIVOT."""
+        let vec: GeoVector = self - pivot
+        pivot + vec.turn(angle)
+
+    # -- point-in-region tests -----------------------------------------------
+
+    def is_point_inside_triangle(self, a: GeoPoint, b: GeoPoint, c: GeoPoint) -> bool:
+        """Whether this point lies inside the triangle ABC.
+
+        Barycentric coordinates, from Vincenty-derived vectors, so that it stays
+        accurate over medium distances on the Earth's surface.  The weights are
+        ratios of products of lengths: unitless, so the arithmetic is on plain
+        numbers (the metres).
+        """
+        let v0: GeoVector = c - a
+        let v1: GeoVector = b - a
+        let v2: GeoVector = self - a
+        let n0: float = float(v0.north)
+        let e0: float = float(v0.east)
+        let n1: float = float(v1.north)
+        let e1: float = float(v1.east)
+        let n2: float = float(v2.north)
+        let e2: float = float(v2.east)
+
+        let dot00: float = n0 * n0 + e0 * e0           # |v0| squared
+        let dot01: float = n0 * n1 + e0 * e1
+        let dot02: float = n0 * n2 + e0 * e2
+        let dot11: float = n1 * n1 + e1 * e1           # |v1| squared
+        let dot12: float = n1 * n2 + e1 * e2
+
+        let denominator: float = dot00 * dot11 - dot01 ** 2
+        if denominator == 0:                           # a degenerate triangle
+            return False
+
+        let inv_denom: float = 1.0 / denominator
+        let alpha: float = (dot11 * dot02 - dot01 * dot12) * inv_denom
+        let beta: float = (dot00 * dot12 - dot01 * dot02) * inv_denom
+        let gamma: float = 1.0 - alpha - beta
+
+        return 0 <= alpha <= 1 and 0 <= beta <= 1 and 0 <= gamma <= 1
+
+    def is_point_inside_polygon(self, polygon: []GeoPoint) -> bool:
+        """Whether this point lies inside POLYGON (ray casting).
+
+        The vertices are in order, clockwise or counter-clockwise.  A ray goes
+        east (increasing longitude) from the point; its crossings with the edges
+        are counted.
+        """
+        let n: int = len(polygon)
+        var inside: bool = False
+        var j: int = n - 1
+        for i in range(n):
+            let lat_i: float = float(polygon[i].latitude)
+            let lon_i: float = float(polygon[i].longitude)
+            let lat_j: float = float(polygon[j].latitude)
+            let lon_j: float = float(polygon[j].longitude)
+            let here_lon: float = float(self.longitude)
+
+            let crosses_latitude_band: bool = (lon_i < here_lon <= lon_j) or (lon_j < here_lon <= lon_i)
+            if crosses_latitude_band and lon_i != lon_j:
+                let intersect_lat: float = lat_i + (here_lon - lon_i) / (lon_j - lon_i) * (lat_j - lat_i)
+                if float(self.latitude) < intersect_lat:
+                    inside = not inside
+            j = i
+
+        return inside
+
+    # -- display -------------------------------------------------------------
+
+    def human(self) -> str:
+        """Human-readable DMS."""
+        dec2human_latlong(self.latitude, self.longitude)
+
+    def decimal(self) -> str:
+        """Decimal degrees."""
+        f"[{self.latitude:.2f}, {self.longitude:.2f}]"
+
+    def __str__(self) -> str:
+        f"{self.human()} {self.decimal()}"
+
+
+def geo_point_from_dms(human_latlong: str) -> GeoPoint | !GeoFailure_T:
+    """The GeoPoint of a 'DDMMSSN DDDMMSSE' string.
+
+        geo_point_from_dms("505405N 0042904E")      # Brussels airport
+    """
+    do:
+        where <- human_latlong2dec(human_latlong)
+    return GeoPoint(where.latitude, where.longitude)
+
+
+# ---------------------------------------------------------------------------
+# Smoke tests / demo
+# ---------------------------------------------------------------------------
+
+def must(point: GeoPoint | !GeoFailure_T) -> GeoPoint:
+    """The point, or the program stops saying why."""
+    if point is GeoFailure_T:
+        print f"error: {point.detail}"
+        quit(1)
+    point
+
+def demo():
+    # -- GeoPoint arithmetic demo --------------------------------------------
+    let p1: GeoPoint = must(geo_point_from_dms("505405N 0042904E"))     # Brussels airport
+    let p2: GeoPoint = must(geo_point_from_dms("490035N 0023252E"))     # Paris Charles-de-Gaulle
+
+    print f"EBBR: {p1}"
+    print f"LFPG: {p2}"
+
+    let vec: GeoVector = p2 - p1
+    print f"Displacement EBBR->LFPG: {vec}"
+
+    let middle: GeoPoint = p1 + (p2 - p1) / 2.0
+    let p3: GeoPoint = p1 + GeoVector(100.0, -90.0)          # 100 km due west of EBBR
+
+    let point_within: GeoPoint = middle + GeoVector(25.0, -90.0)
+    let point_outside: GeoPoint = middle + GeoVector(60.0, -90.0)
+
+    assert point_within.is_point_inside_triangle(p1, p2, p3), "Expected inside triangle"
+    assert not point_outside.is_point_inside_triangle(p1, p2, p3), "Expected outside triangle"
+    assert point_within.is_point_inside_polygon([p1, p2, p3]), "Expected inside polygon"
+    assert not point_outside.is_point_inside_polygon([p1, p2, p3]), "Expected outside polygon"
+    print "All point-in-region assertions passed."
+
+    # -- flat-plane Vector demo ----------------------------------------------
+    let v1: Vector = Vector(1.0, 30.0) * 5.0
+    let v2: Vector = Vector(2.0, 40.0) * 5.0
+    print ""
+    print f"v1 = {v1}"
+    print f"v2 = {v2}"
+    print f"v1 + v2 = {v1 + v2}"
+    print f"v1 - v2 = {v1 - v2}"
+    print f"v1 rotated 20° = {v1.rotated_by(20.0)}"
+
+if __name__ == "__main__":
+    demo()

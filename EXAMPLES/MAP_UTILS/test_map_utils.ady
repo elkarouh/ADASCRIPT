@@ -1,0 +1,217 @@
+#!/usr/bin/env ady2nim
+"""Test: map_utils.ady against map_utils.py.
+
+The expected numbers are what the Python original (the file beside it) printed for
+the same inputs, so a value here is a value the original agrees with; they are
+checked within a tolerance, because the translation keeps a vector as two parts
+where the original went through polar form on every operation.
+
+Also here: what the translation does that the original could not -- a DMS string
+that does not parse is a failure value -- and the two methods the original got
+wrong (Vector.normal raised TypeError; Vector.projection returned a plain
+complex).
+"""
+from map_utils import Axis_T, LATITUDE, LONGITUDE, GeoErr_T, BAD_DMS, BAD_COORDINATE_PAIR, OUT_OF_RANGE
+from map_utils import Meters_T, Kilometers_T, Degrees_T, Bearing_T, Latitude_T, Longitude_T, SquareMeters_T
+from map_utils import GeoFailure_T, LatLong_T, GeoVector, GeoPoint, Vector, Position
+from map_utils import dms2dec, dd2dms, human_latlong2dec, dec2human_latlong, geo_point_from_dms
+from map_utils import vector_xy, geo_vector_from_components, modulo
+
+def close(actual: float, expected: float, tol: float = 1e-9) -> bool:
+    abs(actual - expected) <= tol
+
+def decimal(text: str, axis: Axis_T) -> float:
+    """dms2dec as a plain number; the tests of a failure are further down."""
+    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    if r is GeoFailure_T:
+        return -999.0
+    return float(r)
+
+def point(text: str) -> GeoPoint:
+    let r: GeoPoint | !GeoFailure_T = geo_point_from_dms(text)
+    if r is GeoFailure_T:
+        print f"cannot read {text}: {r.detail}"
+        quit(1)
+    return r
+
+# ---- coordinate conversion ---------------------------------------------------
+
+assert close(decimal("043304N", LATITUDE), 4.551111111111111)            # not 43.55: 04 degrees
+assert close(decimal("0395649E", LONGITUDE), 39.94694444444444)
+assert close(decimal("505405N", LATITUDE), 50.90138888888889)
+assert close(decimal("0042904E", LONGITUDE), 4.484444444444445)
+assert close(decimal("043304S", LATITUDE), -4.551111111111111)           # S and W are negative
+assert close(decimal("0395649W", LONGITUDE), -39.94694444444444)
+assert close(decimal("0395649.5E", LONGITUDE), 39.94708333333333)        # seconds with a point
+assert close(decimal("5054.5N", LATITUDE), 50.90013888888889)
+assert close(decimal("000000N", LATITUDE), 0.0)
+
+assert dd2dms(50.9013889, LATITUDE) == "505405N"
+assert dd2dms(4.4844444, LONGITUDE) == "0042904E"
+assert dd2dms(-43.551111, LATITUDE) == "433304S"
+assert dd2dms(-39.947, LONGITUDE) == "0395649W"
+assert dd2dms(10.99999999, LATITUDE) == "110000N"                       # 60 seconds carry
+assert dd2dms(0.0, LATITUDE) == "000000N"
+assert dd2dms(179.9999999, LONGITUDE) == "1800000E"
+assert dd2dms(59.9999, LATITUDE) == "600000N"
+assert dd2dms(-0.5, LATITUDE) == "003000S"
+
+def latlong(text: str) -> LatLong_T:
+    let r: LatLong_T | !GeoFailure_T = human_latlong2dec(text)
+    if r is GeoFailure_T:
+        print f"cannot read {text}: {r.detail}"
+        quit(1)
+    return r
+
+let ll: LatLong_T = latlong("505405N 0042904E")
+assert close(float(ll.latitude), 50.90138888888889) and close(float(ll.longitude), 4.484444444444445)
+assert dec2human_latlong(50.9013889, 4.4844444) == "505405N 0042904E"
+
+# ---- a string that does not parse is a failure, not a crash -------------------
+
+def dms_outcome(text: str, axis: Axis_T) -> str:
+    """Why dms2dec refused TEXT, or "ok"."""
+    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    if r is GeoFailure_T:
+        return f"{r.kind}"
+    return "ok"
+
+def pair_outcome(text: str) -> str:
+    """Why human_latlong2dec refused TEXT, or "ok"."""
+    let r: LatLong_T | !GeoFailure_T = human_latlong2dec(text)
+    if r is GeoFailure_T:
+        return f"{r.kind}"
+    return "ok"
+
+assert dms_outcome("043304N", LATITUDE) == "ok"
+assert dms_outcome("", LATITUDE) == "BAD_DMS"
+assert dms_outcome("04x304N", LATITUDE) == "BAD_DMS"
+assert dms_outcome("50N", LATITUDE) == "BAD_DMS"                         # no minutes
+assert pair_outcome("505405N 0042904E") == "ok"
+assert pair_outcome("505405N") == "BAD_COORDINATE_PAIR"                  # one half
+assert pair_outcome("505405N 0042904E 7") == "BAD_COORDINATE_PAIR"       # one too many
+assert pair_outcome("950000N 0042904E") == "OUT_OF_RANGE"                # north of the pole
+assert pair_outcome("505405N 1800001E") == "OUT_OF_RANGE"                # past the antimeridian
+assert pair_outcome("90x000N 0042904E") == "BAD_DMS"
+
+# ---- flat-plane geometry ------------------------------------------------------
+
+let v1: Vector = Vector(1.0, 30.0) * 5.0
+let v2: Vector = Vector(2.0, 40.0) * 5.0
+assert close(float(v1.x), 4.330127018922194) and close(float(v1.y), 2.4999999999999996)
+assert close(float(v1.length()), 5.0) and close(float(v1.angle()), 30.0)
+assert close(float(v2.x), 7.660444431189779) and close(float(v2.y), 6.427876096865392)
+
+let sum_v: Vector = v1 + v2
+assert close(float(sum_v.length()), 14.949273403788585) and close(float(sum_v.angle()), 36.67043694469768)
+let diff_v: Vector = v1 - v2
+assert close(float(diff_v.length()), 5.149681999772333) and close(float(diff_v.angle()), -130.29351909707813)
+let turned: Vector = v1.rotated_by(20.0)
+assert close(float(turned.x), 3.2139380484326976) and close(float(turned.y), 3.8302222155948895)
+assert close(float(turned.angle()), 50.0)
+let shorter: Vector = v1.shortened_by(1.5)
+assert close(float(shorter.length()), 3.5) and close(float(shorter.angle()), 30.0)
+let unit: Vector = v1.unit()
+assert close(float(unit.length()), 1.0) and close(float(unit.angle()), 30.0)
+
+assert close(float(v1.dot_product(v2)), 49.240387650610394)
+assert close(float(v1.cross(v2)), 8.682408883346518)
+assert close(v1.cos_theta(v2), 0.984807753012208)
+assert close(float(v1.triangle_area(v2)), 4.341204441673259)
+
+# the two the original got wrong: normal() raised TypeError, projection() was a complex
+let normal: Vector = v1.normal()
+assert close(float(normal.length()), 1.0) and close(float(normal.angle()), 120.0)
+assert close(float(normal.x), -0.4999999999999998) and close(float(normal.y), 0.8660254037844387)
+assert close(float(v1.dot_product(normal)), 0.0, 1e-9)                   # at a right angle
+let onto: Vector = v1.projection(v2)
+assert close(float(onto.x), 3.7720325336774443) and close(float(onto.y), 3.1651111077974443)
+assert close(float(onto.angle()), float(v2.angle()))                     # along v2
+
+let from_xy: Vector = vector_xy(3.0, 4.0)
+assert close(float(from_xy.length()), 5.0) and close(float(from_xy.angle()), 53.13010235415597)
+
+let a: Position = Position(1.0, 2.0)
+let b: Position = Position(4.0, 6.0)
+let ab: Vector = b - a
+assert close(float(ab.x), 3.0) and close(float(ab.y), 4.0)
+assert close(float(ab.length()), 5.0) and close(float(ab.angle()), 53.13010235415597)
+let moved: Position = a + Vector(10.0, 90.0)
+assert close(float(moved.x), 1.0) and close(float(moved.y), 12.0)
+let corner: Position = Position(5.0, 5.0)
+let pivot: Position = Position(1.0, 1.0)
+let spun: Position = corner.rotate_around_point(pivot, 90.0)
+assert close(float(spun.x), -3.0) and close(float(spun.y), 5.0)
+
+assert f"{v1}" == "5.00 m, 30.00°"
+
+# ---- geodetic geometry --------------------------------------------------------
+
+let p1: GeoPoint = point("505405N 0042904E")
+let p2: GeoPoint = point("490035N 0023252E")
+assert close(float(p1.latitude), 50.90138888888889) and close(float(p1.longitude), 4.484444444444445)
+assert close(float(p2.latitude), 49.00972222222222) and close(float(p2.longitude), 2.5477777777777777)
+
+let vec: GeoVector = p2 - p1
+assert close(float(vec.magnitude()), 252.14232393441256, 1e-6)
+assert close(float(vec.phase()), 214.19083294597394, 1e-6)
+assert close(float(vec.east_km()), -141.69164158508192, 1e-6)
+assert close(float(vec.north_km()), -208.56469074119644, 1e-6)
+assert f"{vec}" == "252.14 km @ 214.19°"
+
+let middle: GeoPoint = p1 + (p2 - p1) / 2.0
+assert close(float(middle.latitude), 49.959673202327686, 1e-7)
+assert close(float(middle.longitude), 3.49714007171238, 1e-7)
+let p3: GeoPoint = p1 + GeoVector(100.0, -90.0)                          # 100 km due west
+assert close(float(p3.latitude), 50.89273587908185, 1e-7)
+assert close(float(p3.longitude), 3.063082636877283, 1e-7)
+
+let within: GeoPoint = middle + GeoVector(25.0, -90.0)
+let outside: GeoPoint = middle + GeoVector(60.0, -90.0)
+assert close(float(within.latitude), 49.95915002357352, 1e-7) and close(float(within.longitude), 3.1487382448935364, 1e-7)
+assert close(float(outside.latitude), 49.95665978811013, 1e-7) and close(float(outside.longitude), 2.661004438135734, 1e-7)
+assert within.is_point_inside_triangle(p1, p2, p3)
+assert not outside.is_point_inside_triangle(p1, p2, p3)
+assert within.is_point_inside_polygon([p1, p2, p3])
+assert not outside.is_point_inside_polygon([p1, p2, p3])
+assert not p1.is_point_inside_triangle(p1, p1, p1)                       # a degenerate triangle
+
+let both: GeoVector = geo_vector_from_components(70.0, 70.0)             # east, north
+assert close(float(both.magnitude()), 98.99494936611664) and close(float(both.phase()), 45.0, 1e-9)
+assert close(float(both.east_km()), 70.0) and close(float(both.north_km()), 70.0)
+let west: GeoVector = geo_vector_from_components(-100.0, 0.0)
+assert close(float(west.magnitude()), 100.0) and close(float(west.phase()), 270.0)
+let hundred: GeoVector = GeoVector(100.0, 45.0)
+let turn30: GeoVector = hundred.turn(30.0)
+assert close(float(turn30.magnitude()), 100.0) and close(float(turn30.phase()), 75.0)
+
+let g10: GeoVector = GeoVector(10.0, 30.0)
+let g20: GeoVector = GeoVector(20.0, 80.0)
+assert close(float(g10.dot_product(g20)), 128557521.93730786, 1e-3)
+assert close(float(g10.cross_product(g20)), 153208888.6237956, 1e-3)
+
+let spun_geo: GeoPoint = p2.rotate_around_point(p1, 90.0)
+assert close(float(spun_geo.latitude), 52.13601295640818, 1e-6)
+assert close(float(spun_geo.longitude), 1.437711206129535, 1e-6)
+
+# across the antimeridian the longitude wraps into (-180, 180]
+let across: GeoPoint = GeoPoint(10.0, 179.0) + GeoVector(300.0, 90.0)
+assert close(float(across.latitude), 9.988756019237982, 1e-6)
+assert close(float(across.longitude), -178.26381916928767, 1e-6)
+let south: GeoVector = GeoPoint(-33.9, -70.7) - GeoPoint(-34.6, -58.4)
+assert close(float(south.magnitude()), 1134.944407954695, 1e-6) and close(float(south.phase()), 270.4350391040481, 1e-6)
+let same: GeoVector = p1 - p1
+assert float(same.magnitude()) == 0.0 and float(same.phase()) == 0.0
+
+assert p1.human() == "505405N 0042904E"
+assert p1.decimal() == "[50.90, 4.48]"
+assert f"{p1}" == "505405N 0042904E [50.90, 4.48]"
+
+# ---- the modulo that a bearing needs ------------------------------------------
+
+assert close(modulo(-30.0, 360.0), 330.0)                                # Python's -30 % 360
+assert close(modulo(725.5, 360.0), 5.5)
+assert close(modulo(-725.5, 360.0), 354.5)
+assert close(modulo(360.0, 360.0), 0.0)
+
+print "test_map_utils OK"
