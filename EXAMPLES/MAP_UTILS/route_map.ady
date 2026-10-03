@@ -20,6 +20,10 @@ The map is written to FILE.html (route_map.html when none is given); `show` open
 browser too, as the original did.  What was written is read back and counted, so that a
 layer lost on the way is an error.
 
+The background is Esri's street map, not folium's default OpenStreetMap: OSM's tile servers
+refuse a page opened from a file, which sends no Referer, and answer every tile with 403;
+CartoDB wants an API key.
+
 It needs the folium package for the Python that nimpy embeds (`pip install folium`).
 """
 pyimport folium
@@ -29,6 +33,8 @@ from regions import Region, HalfAngle_T
 from route_check import Airport_T, ROUTE, R2_CENTRE, R2_RADIUS, FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE
 from route_check import HOLD_RADIUS, HOLD_POINTS, CRUISE, Hours_T, Fix_T, Airspace_T
 from route_check import position_of, outline, airspace, plane_beside, holding_pattern, fix_on_leg, hours_minutes
+
+const BASEMAP: str = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
 
 # ---- how a stretch of the route is drawn -----------------------------------------------------
 
@@ -130,7 +136,7 @@ def main():
     for a in airports:
         points.append(position_of(a))
 
-    let m: PyObject = folium.Map(location=latlon(points[1]), zoom_start=6, control_scale=True)
+    let m: PyObject = folium.Map(location=latlon(points[1]), zoom_start=6, control_scale=True, tiles=BASEMAP, attr="Tiles &copy; Esri")
 
     # the route, leg by leg
     let route: PyObject = group(m, "Route")
