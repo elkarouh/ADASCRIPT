@@ -126,7 +126,29 @@ def draw_airspace(on: PyObject, apex: GeoPoint) -> int:
 
 # ---- the program ----------------------------------------------------------------------
 
+const USAGE: str = """usage: route_map [FILE.html [show]]
+       route_map -h | --help
+
+Draws route_check on a folium map and writes it to FILE.html (route_map.html when none is
+given), then checks that the page has every layer.
+
+  FILE.html   where to write the map
+  show        open the map in the browser as well, once it is written
+              (it must come second, after the file name: route_map route_map.html show)
+
+folium has to be importable by the Python that nimpy loads: pip install folium, or
+set PYTHONPATH to a directory it was installed into with pip install --target."""
+
 def main():
+    if $# >= 1 and $1 in ("-h", "--help"):
+        print USAGE
+        quit(0)
+    if $# >= 1 and $1.startswith("-"):
+        print f"route_map: unknown option {$1}\n\n{USAGE}"
+        quit(2)
+    if $# >= 2 and $2 != "show":
+        print f"route_map: unknown argument {$2}\n\n{USAGE}"
+        quit(2)
     let out: Path = Path($1 if $# >= 1 else "route_map.html")
     let air: Airspace_T = airspace()
     let airports: []Airport_T = ROUTE
