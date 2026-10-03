@@ -44,6 +44,16 @@ nimport strutils
 nimport os
 nimport time
 
+# Terminal styling comes from the Adascript standard library rather than
+# maintaining a second set of ANSI escape sequences in this example.
+from ansi import bold, fg_green, fg_red, fg_yellow, fg_magenta
+
+# Reusable combined styles.  Keep these as Style values so call sites can
+# simply write `text | success_style` rather than rebuilding the combination.
+let error_style:   Style = bold + fg_red
+let success_style: Style = bold + fg_green
+let bold_warning_style: Style = bold + fg_yellow
+
 # ---------------------------------------------------------------------------
 # Global state
 # ---------------------------------------------------------------------------
@@ -75,7 +85,6 @@ type ResolvedPaths is tuple:
     ssh:  ?SSH   # set when either side turned out to be remote
 
 type LogLevel_T is enum INFO, WARNING, ERROR
-type Color_T    is enum green, magenta, yellow, red, orange, no_color
 
 # Why a run stopped. A step that can fail returns `T | !Failure_T`; main()
 # is the one place that reports a Failure_T and picks the exit status.
@@ -93,34 +102,28 @@ def failure(kind: ErrKind_T, detail: str, stderr: str = "", fix: str = "") -> Fa
 # ---------------------------------------------------------------------------
 # ANSI styling
 # ---------------------------------------------------------------------------
-
-var ANSI: [Color_T]str = [
-    green:   "\x1b[92m",
-    magenta: "\x1b[95m",
-    yellow:  "\x1b[93m",
-    red:     "\x1b[91m",
-    orange:  "\x1b[33m",
-    no_color:   "",          # style()'s default -- avoids indexing ANSI with
-                           # an Optional, which isn't supported the way
-                           # `.field` access on a `?T` is
-]
-
-def style(text: str, color: Color_T = no_color, bold: bool = False) -> str:
-    let color_code: str = ANSI[color]
-    let bold_code:  str = "\x1b[1m" if bold else ""
-    return bold_code + color_code + text + "\x1b[0m"
+#
+# Use the styles from STDLIB/ansi.ady directly.  There is deliberately no
+# local colour enum or style adapter here: `text | fg_green`,
+# `text | bold`, and `text | error_style` use the stdlib interface.
+#
+# Reusable combinations such as `bold + fg_green` are named above and then
+# applied with the same pipe syntax as ordinary styles.
+#
+# `ansi.ady` has no separate classic ANSI orange, so the places that used
+# the old `orange` colour use `fg_yellow` directly.
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 
 def log(message: str, level: LogLevel_T = INFO) -> None:
-    let prefix: str = style(APPNAME, bold=True)
+    let prefix: str = APPNAME | bold
     case level:
         when WARNING:
-            print f"{prefix}: [WARNING] {style(message, orange)}"
+            print f"{prefix}: [WARNING] {message | fg_yellow}"
         when ERROR:
-            print f"{prefix}: [ERROR] {style(message, red, bold=True)}"
+            print f"{prefix}: [ERROR] {message | error_style}"
         when INFO:
             print f"{prefix}: {message}"
 
@@ -144,10 +147,10 @@ def run_cmd(cmd: str, ssh: ?SSH = None) -> CmdResult:
         full_cmd = f"{ssh.cmd} '{cmd}'"
     if VERBOSE:
         let target: str = "remote" if ssh is not None else "local"
-        log(f"Running {target} command: {style(full_cmd, green, bold=True)}", INFO)
+        log(f"Running {target} command: {full_cmd | success_style}", INFO)
     let r = shell: {full_cmd}
     if VERBOSE and r.code != 0:
-        log(f"Command exit code: {style(str(r.code), red, bold=True)}", ERROR)
+        log(f"Command exit code: {str(r.code) | error_style}", ERROR)
     return (stdout: r.output, stderr: r.stderr, returncode: r.code)
 
 # run_cmd answers questions -- `find`, `test -e`, `ps | grep` -- whose
@@ -517,7 +520,7 @@ def get_link_dest_option(previous_dest: ?Path, ssh: ?SSH) -> str | !Failure_T:
     var full_prev: str = str(abs_prev)
     if ssh is not None:
         full_prev = f"{ssh.dest_folder_prefix}{abs_prev}"
-    log(style(f"Previous backup found - doing incremental backup from {style(full_prev, bold=True)}", yellow), INFO)
+    log(f"Previous backup found - doing incremental backup from {full_prev | bold}" | fg_yellow, INFO)
     return f"--link-dest='{abs_prev}'"
 
 def get_rsync_flags(
@@ -654,7 +657,7 @@ def check_rsync_errors(log_file: Path, auto_delete_log: bool) -> None | !Failure
     elif "rsync:" in log_data:
         log(f"Rsync reported a warning. Run this command for more details: grep -E 'rsync:|rsync error:' '{log_file}'", WARNING)
     else:
-        log(style("Backup completed without errors.", magenta), INFO)
+        log("Backup completed without errors." | fg_magenta, INFO)
         if auto_delete_log:
             do:
                 rm_file(log_file)   # log_file is always local -- reuse the local fast path directly
@@ -728,9 +731,9 @@ def start_backup(
         src = f"{ssh.src_folder_prefix}{src_folder}"
         dst = f"{ssh.dest_folder_prefix}{dest}"
 
-    log(style("Starting backup...", yellow), INFO)
-    log(f"From: {style(src, bold=True)}/", INFO)
-    log(f"To:   {style(dst, bold=True)}/", INFO)
+    log("Starting backup..." | fg_yellow, INFO)
+    log(f"From: {src | bold}/", INFO)
+    log(f"To:   {dst | bold}/", INFO)
 
     var cmd: str = "rsync"
     if ssh is not None:
@@ -755,8 +758,8 @@ def start_backup(
     cmd = f"{cmd} {link_dest_option}"
     cmd = f"{cmd} -- '{src}/' '{dst}/'"
 
-    log(style("Running command:", bold=True), INFO)
-    log(style(cmd, green), INFO)
+    log("Running command:" | bold, INFO)
+    log(cmd | fg_green, INFO)
 
     # Every attempt of one run writes the same log, and rsync appends to it:
     # the "No space left" of the attempt before was still in there, so each
@@ -828,15 +831,15 @@ def backup(
 
     if "-n" in rsync_flags or "--dry-run" in rsync_flags:
         dry_run = True
-        log(f"Dry-run detected in rsync flags - setting {style('--dry-run', green)}.", INFO)
+        log(f"Dry-run detected in rsync flags - setting {'--dry-run' | fg_green}.", INFO)
     elif dry_run:
         rsync_flags.append("--dry-run")
 
     if dry_run:
-        log(f"Dry-run mode enabled: {style('no changes will be persisted', orange)}.", INFO)
+        log(f"Dry-run mode enabled: {'no changes will be persisted' | fg_yellow}.", INFO)
 
     if rsync_get_flags:
-        log(f"Rsync flags:\n{style(' '.join(rsync_flags), yellow, bold=True)}", INFO)
+        log(f"Rsync flags:\n{' '.join(rsync_flags) | bold_warning_style}", INFO)
         return
 
     var log_file: Path = Path("")
@@ -849,7 +852,7 @@ def backup(
             var dest_prefix: str = ""
             if ssh is not None:
                 dest_prefix = ssh.cmd
-            let full_dest: str = style(f"{dest_prefix}{dest}", bold=True)
+            let full_dest: str = f"{dest_prefix}{dest}" | bold
             log(f"Creating destination {full_dest}", INFO)
             do:
                 mkdir_p(dest, ssh)
@@ -897,9 +900,9 @@ def report(f: Failure_T) -> None:
             if f.stderr:
                 log(f.stderr, ERROR)
         when NOT_A_BACKUP_DEST:
-            log(style(f"Safety check failed - {f.detail} does not appear to be a backup folder or drive (marker file not found).", yellow), INFO)
-            log(style("If it is indeed a backup folder — you may add the marker file by running the following command:", yellow), INFO)
-            log(style(f.fix, green, bold=True), INFO)
+            log(f"Safety check failed - {f.detail} does not appear to be a backup folder or drive (marker file not found)." | fg_yellow, INFO)
+            log("If it is indeed a backup folder — you may add the marker file by running the following command:" | fg_yellow, INFO)
+            log(f.fix | success_style, INFO)
         when SOURCE_MISSING:
             log(f"Source folder '{f.detail}' does not exist - aborting.", ERROR)
         when STILL_RUNNING:

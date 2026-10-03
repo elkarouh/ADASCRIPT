@@ -80,6 +80,12 @@ let fg_bright_magenta: Style = Style([95])
 let fg_bright_cyan:    Style = Style([96])
 let fg_bright_white:   Style = Style([97])
 
+# Common colour aliases
+# ANSI has no dedicated 16-colour orange; the traditional terminal
+# orange/yellow slot is SGR 33.
+let fg_orange:  Style = Style([33])
+let fg_gray:    Style = Style([90])
+
 # background colours
 let bg_black:   Style = Style([40])
 let bg_red:     Style = Style([41])
@@ -90,3 +96,16 @@ let bg_magenta: Style = Style([45])
 let bg_cyan:    Style = Style([46])
 let bg_white:   Style = Style([47])
 let bg_default: Style = Style([49])
+
+# bright background colours
+let bg_bright_black:   Style = Style([100])
+let bg_bright_red:     Style = Style([101])
+let bg_bright_green:   Style = Style([102])
+let bg_bright_yellow:  Style = Style([103])
+let bg_bright_blue:    Style = Style([104])
+let bg_bright_magenta: Style = Style([105])
+let bg_bright_cyan:    Style = Style([106])
+let bg_bright_white:   Style = Style([107])
+
+# aliases
+let bg_gray:    Style = Style([100])
