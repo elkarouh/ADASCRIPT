@@ -13,7 +13,7 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios, os
-from vi_term import Terminal, Frame_T, Look_T, Code_T
+from vi_protocol import Terminal, Frame_T, Look_T, Code_T
 
 # illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.
 # nimraw: const STYLE_REVERSE = {styleReverse}

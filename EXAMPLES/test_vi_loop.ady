@@ -7,7 +7,7 @@ saving flashes "Saved", a command that quits ends the run without a flash, and t
 the input is ^Q. A Terminal with nothing attached is one that quits at once. Both backends.
 """
 from VI/vi import Editor, edit
-from VI/vi_term import Terminal, Frame_T
+from VI/vi_protocol import Terminal, Frame_T
 
 const TYPED_ESC: str = "\x1b"
 const TYPED_SAVE: str = "\x13"                 # ^S

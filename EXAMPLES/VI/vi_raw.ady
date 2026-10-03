@@ -14,7 +14,7 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-from vi_term import Terminal, Frame_T, Look_T, Code_T
+from vi_protocol import Terminal, Frame_T, Look_T, Code_T
 
 const NOTHING: int = -1                  # a key with no meaning here: a function key
 

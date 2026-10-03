@@ -1,4 +1,4 @@
-"""vi_term -- what the editor and its terminals share: how a character looks, the codes
+"""vi_protocol -- what the editor and its terminals share: how a character looks, the codes
 a terminal sends for its keys, the Frame it is handed to draw, and the Terminal class a
 front end is a subclass of.
 

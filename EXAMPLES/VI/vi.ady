@@ -20,14 +20,14 @@ pressed: the editor never looks at a key code. Where the original reaches for an
 exception -- opening a file that is not there, counting with a number that is
 not one -- this asks for a `T | !Failure_T` and looks at it where it asked.
 
-`edit` is the loop. What it asks of a terminal is the Terminal class of vi_term.ady -- how
+`edit` is the loop. What it asks of a terminal is the Terminal class of vi_protocol.ady -- how
 big the window is, how a key is read, how a Frame is drawn, how a message is shown -- and
 a terminal (vi_curses, vi_raw) is a subclass that says how; it knows nothing of the editor.
 `edit` decodes each key, hands it to the editor (`handle`) and does the rest, so what
 happens after a key is said once, here. The switch at the end is only which terminal is
 handed to `edit`.
 """
-from vi_term import Look_T, Seg_T, Code_T, Frame_T, Terminal
+from vi_protocol import Look_T, Seg_T, Code_T, Frame_T, Terminal
 from vi_curses import IllwillTerminal
 from vi_raw import RawTerminal
 

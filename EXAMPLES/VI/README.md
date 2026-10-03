@@ -1,4 +1,4 @@
-# vi.ady, vi_term.ady, vi_curses.ady, vi_raw.ady
+# vi.ady, vi_protocol.ady, vi_curses.ady, vi_raw.ady
 
 A tiny vi-like editor in Adascript, for the Nim backend. It began as a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
@@ -12,7 +12,7 @@ vip does.
 
 `vi.ady` is the editor and the high layer: the `Editor`, what a key does, how the text
 looks, `edit(ed, term)`, the loop that runs it, and the choice of a terminal. It asks of
-a terminal only what the `Terminal` class of `vi_term.ady` says -- how big the window is,
+a terminal only what the `Terminal` class of `vi_protocol.ady` says -- how big the window is,
 how a key is read, how a `Frame_T` is drawn, how a message is shown -- and `edit` calls it,
 so what happens after a key is written once, here:
 
@@ -27,7 +27,7 @@ The terminals are the plumbing, each a subclass of `Terminal` that says how:
 | `vi_curses.ady` | `IllwillTerminal` | illwill, a curses-like library for Nim |
 | `vi_raw.ady` | `RawTerminal` | Nim's `terminal` and `termios`, by hand |
 
-A terminal imports `vi_term.ady` -- the types it shares with the editor (`Look_T`, `Seg_T`,
+A terminal imports `vi_protocol.ady` -- the types it shares with the editor (`Look_T`, `Seg_T`,
 `Code_T`), the `Frame_T` it is handed, and `Terminal` -- and nothing of `vi.ady`, which is
 what lets `vi.ady` import the two terminals and pick between them with the `-raw` switch.
 `Terminal` itself is a terminal with nothing attached -- 80 by 24, nothing to draw, and no
