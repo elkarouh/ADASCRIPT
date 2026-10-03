@@ -34,7 +34,6 @@ ones using Python native operators:
 Membership is tested with the natural `in` keyword.
 """
 
-nimport math
 from math nimport radToDeg, arctan2, floor
 
 # ---------------------------------------------------------------------------

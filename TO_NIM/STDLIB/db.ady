@@ -30,7 +30,6 @@ All values in result rows are str; convert with int() or float() as needed.
 params is a []str; use str() to convert numbers before passing.
 """
 
-nimport db_sqlite
 from db_sqlite nimport DbConn, open, sql, exec, getAllRows, getValue, close
 
 

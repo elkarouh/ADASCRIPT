@@ -13,7 +13,6 @@ Policy Iteration:
   2. Policy Improvement — set π(s) = argmax_a Q(s,a)
   Repeat until policy is stable.
 """
-nimport math
 from math nimport exp, pow, fac
 
 # ─── domain types ─────────────────────────────────────────────────

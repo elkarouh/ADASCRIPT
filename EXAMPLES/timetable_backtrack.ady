@@ -30,11 +30,9 @@ from timetable_engine import (
 )
 from state_search import StateSearcher, Step_T
 from db import DB
-nimport json
 nimport math
 nimport random
-nimport strutils
-nimport algorithm, sequtils, tables
+nimport sequtils, tables
 from strutils nimport parseInt
 from algorithm nimport sortedByIt
 from json nimport *

@@ -4,7 +4,6 @@
 ROI model: price data, financial calculations, and graph topology.
 """
 
-nimport js/jsffi
 from js/jsffi nimport *
 
 # ==============================================================================

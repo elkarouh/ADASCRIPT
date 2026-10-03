@@ -17,11 +17,8 @@ from timetable_engine import (
     print_timetable, sa_phase2, soft_score,
 )
 from db import DB
-nimport json
 nimport strutils
 nimport os
-nimport math
-nimport random
 from json nimport *
 from math nimport exp
 from random nimport randomize, rand

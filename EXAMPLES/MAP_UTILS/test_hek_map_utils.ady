@@ -13,7 +13,6 @@ What does not carry over, and why:
     not translated.
   * f"{p:h}" and f"{p:d}": `p.human()` and `p.decimal()`.
 """
-nimport math
 from math nimport cos, degToRad
 from map_utils import Axis_T, LATITUDE, LONGITUDE
 from map_utils import Meters_T, Kilometers_T, Degrees_T, Latitude_T, Longitude_T, SquareMeters_T

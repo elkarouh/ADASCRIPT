@@ -3,7 +3,6 @@
 test_expect — drive bc via PTY using the expect stdlib.
 """
 
-nimport expect
 from expect nimport Spawn, spawn, expect, send, close, expectEof
 
 var s: Spawn = spawn("bc")

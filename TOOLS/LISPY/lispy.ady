@@ -20,7 +20,6 @@ Reference: https://norvig.com/lispy.html -- the original, lispy.py, is
 beside this file.
 """
 
-nimport math
 from math nimport *
 # character classification and the atom scan
 from strscan import is_space_ch, skip_quoted_esc, skip_while

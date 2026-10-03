@@ -1,5 +1,5 @@
 #! /usr/bin/env ady2nim
-nimport algorithm, sequtils
+nimport sequtils
 from algorithm nimport sortedByIt
 # the colours and effects to pipe a string through
 from ansi import (

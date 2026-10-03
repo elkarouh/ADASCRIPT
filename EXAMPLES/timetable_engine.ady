@@ -8,13 +8,8 @@ No main block -- pure library.
 """
 
 from db import DB
-nimport json
-nimport math
-nimport random
-nimport strutils
 nimport sequtils
 nimport os
-nimport time
 from strutils nimport parseInt
 from math nimport exp
 from random nimport rand

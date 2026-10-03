@@ -6,7 +6,6 @@ project can depend on it without creating a cycle.  Nim compiles a module
 once per build no matter how many modules import it.
 """
 
-nimport math
 from math nimport arctan2, sqrt, PI
 
 type Point_T is tuple:

@@ -5,7 +5,6 @@ JointJS Return-on-Investment demo — rendering layer.
 Compile:  ady2nim roi_glue.ady   (or: make)
 """
 
-nimport js/jsffi
 from js/jsffi nimport *
 from jointjs import JsElem, bodyAttr, foAttr, jsElemOf, resetCells
 from roi_model import (

@@ -11,8 +11,6 @@ Key insight — SARSA is on-policy:
 where a' is the epsilon-greedy action the agent will *actually* take next.
 This makes SARSA conservative: exploration mistakes count against it.
 """
-nimport random
-nimport sequtils
 from random nimport rand, randomize
 from sequtils nimport maxIndex
 

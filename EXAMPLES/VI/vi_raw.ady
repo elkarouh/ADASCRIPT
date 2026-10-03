@@ -13,7 +13,7 @@ instead of stopping the terminal. What a terminal has to do is here: reading a k
 by waiting 25 ms), drawing the screen (one frame per key, written in one go), and
 the window size (read again at every key; there is no resize event).
 """
-nimport terminal, termios, posix, os
+nimport os
 from terminal nimport terminalSize
 from posix nimport TPollfd, POLLIN, poll, read
 from termios nimport Termios, tcsetattr, TCSAFLUSH, tcgetattr, BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME

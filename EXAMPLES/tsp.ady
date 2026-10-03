@@ -52,9 +52,6 @@ Key findings:
   - Held-Karp memory: O(2ⁿ·n) — hits ~1 GB at n=20; hard limit enforced in main.
 """
 
-nimport math
-nimport random
-nimport time
 from math nimport exp, sqrt
 from time nimport cpuTime
 from random nimport randomize, rand

@@ -11,8 +11,6 @@ Key insight — Q-Learning is off-policy:
 It always bootstraps from the BEST possible next action, not the one taken.
 This learns the optimal (cliff-edge) path, while SARSA would stay a row above.
 """
-nimport random
-nimport sequtils
 from random nimport rand, randomize
 from sequtils nimport maxIndex
 

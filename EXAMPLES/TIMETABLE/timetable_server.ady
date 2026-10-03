@@ -20,13 +20,7 @@ API (same as before):
 from timetable_engine import db_delete, db_init, db_list, db_load, db_save, validate_to_json
 from timetable_sa import solve_to_json
 from db import DB
-nimport asynchttpserver
-nimport asyncdispatch
-nimport json
 from json nimport *
-nimport strutils
-nimport os
-nimport uri
 from os nimport joinPath
 from strutils nimport parseInt
 from uri nimport decodeUrl
