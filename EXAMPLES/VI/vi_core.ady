@@ -1,6 +1,7 @@
 """vi_core -- the editor, with no terminal in it: a tiny vi-like text editor. It began as
-vip (github.com/maksimKorzh/vip) and has outgrown it. vi_py.ady (curses, Python),
-vi_nim.ady (illwill, Nim) and vi_raw.ady (Nim, by hand) are three ways of showing it.
+vip (github.com/maksimKorzh/vip) and has outgrown it. `edit` below is its loop; the
+terminals it calls are vi_py.ady (curses, Python), vi_nim.ady (illwill, Nim) and
+vi_raw.ady (Nim, by hand), and vi.ady, the Nim program, picks one with -raw.
 
   Normal    h j k l or the arrow keys   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
             Home End PageUp PageDown   /text then n and N (search, wrapping)
@@ -18,10 +19,10 @@ pressed: the editor never looks at a key code. Where the original reaches for an
 exception -- opening a file that is not there, counting with a number that is
 not one -- this asks for a `T | !Failure_T` and looks at it where it asked.
 
-What a terminal has to do: tell the editor how big the window is (`fit`), ask what
-to show (`scroll`, `row_text`, `status`, and `row` and `col` for the cursor), decode
-what was typed (`decode`) and hand it over (`handle`), and show what `save`
-answers.
+What a terminal has to do is the Terminal class at the end: a subclass says how big its
+window is (`window`), how a key is read (`key`), how the editor is drawn (`draw`, from
+`scroll`, `row_segments`, `status`, `cursor_y` and `cursor_x`) and how a message is shown
+(`flash`); `edit` decodes each key, hands it to the editor (`handle`) and does the rest.
 """
 
 type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK, COMMAND  # COMMAND: a line typed after : or /
@@ -272,6 +273,7 @@ def not_saved(failure: PathFailure_T) -> str:
     """What to tell the user when a write failed."""
     f"Not saved: {failure.reason}"
 
+@virtual
 class Editor:
     var path: Path
     var lines: []str
@@ -687,3 +689,63 @@ class Editor:
             when COMMAND: self.command(press)
         self.clamp()
         self.record()
+
+
+# ---- the terminals, and the loop that drives them ---------------------------
+# What the editor asks of a terminal. Each front end -- vi_nim (illwill), vi_raw (by hand),
+# vi_py (curses) -- is a subclass saying how; `edit` is the editor's own loop and calls them,
+# so what happens after a key is said once, here, and not once per terminal.
+#
+# This class is a terminal with nothing attached: no window to speak of, nothing to draw,
+# and no keyboard, which is the end of the input -- ^Q. A subclass overrides what it has.
+@virtual
+class Terminal:
+    def start(self):
+        """Take the terminal over: raw mode, the alternate screen."""
+        pass
+
+    def stop(self):
+        """Give it back."""
+        pass
+
+    def window(self) -> (int, int):
+        """How big the window is now, as (columns, rows)."""
+        (80, 24)
+
+    def key(self) -> int:
+        """The next key, as a code decode() knows."""
+        ord(CTRL_Q)
+
+    def draw(self, ed: Editor):
+        """The editor on the screen: its rows, the status row, the cursor."""
+        pass
+
+    def flash(self, ed: Editor, message: str):
+        """MESSAGE on the status row, for a second."""
+        pass
+
+
+def edit(ed: Editor, term: Terminal):
+    """Edit until the user quits, on TERM."""
+    term.start()
+    var going: bool = True
+    while going:
+        let (cols, rows) = term.window()     # the window may have changed since the last key
+        ed.fit(cols, rows)
+        ed.clamp()
+        term.draw(ed)
+        let press: Press_T = decode(term.key())
+        let (cols2, rows2) = term.window()   # ... or while it waited: a page is the window less a line
+        ed.fit(cols2, rows2)
+        case press.key:
+            when QUIT: going = False
+            when SAVE: term.flash(ed, ed.save())
+            when RESIZE: pass
+            when others:
+                ed.handle(press)
+                if ed.quitting:
+                    going = False
+                elif ed.message != "":
+                    term.flash(ed, ed.message)
+                    ed.message = ""
+    term.stop()

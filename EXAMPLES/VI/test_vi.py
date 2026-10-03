@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Tests for the vi editor (vi_core.ady) on each of its terminals -- vi_py.ady (curses,
-built with ady2py as vi_py.py), vi_nim.ady (illwill) and vi_raw.ady (Nim's terminal
-module and termios): the editor is run in a terminal of its own (a pty), is typed a
-script of keys, and the file it wrote is compared with what is wanted.
+built with ady2py as vi_py.py), and vi.ady (Nim) on illwill (vi_nim.ady) and, with -raw,
+on Nim's terminal module and termios (vi_raw.ady): the editor is run in a terminal of its
+own (a pty), is typed a script of keys, and the file it wrote is compared with what is
+wanted.
 
-    python3 test_vi.py PROGRAM
+    python3 test_vi.py PROGRAM [FLAG...]
+
+FLAGs go to the program before the file's name: `test_vi.py ./vi -raw` is the editor
+vi on its raw terminal.
 
 The script ends with ^S and ^Q unless the program has quit by itself (`:wq`, `:q`).
 The wanted files are what a vi writes for the same keys.
 """
 import fcntl, os, pathlib, pty, re, select, struct, subprocess, sys, tempfile, termios
+
+FLAGS = []          # what PROGRAM is given before the file's name
 
 ESC = "\x1b"
 BASE = "one\ntwo\nthree\nfour\nfive\n"
@@ -214,8 +220,8 @@ def drive(program, path, keys):
         os.chdir(os.path.dirname(path))           # where `:w NAME` writes
         os.environ["TERM"] = "xterm"
         if program.endswith(".py"):
-            os.execvp(sys.executable, [sys.executable, program, path])
-        os.execv(program, [program, path])
+            os.execvp(sys.executable, [sys.executable, program, *FLAGS, path])
+        os.execv(program, [program, *FLAGS, path])
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
     def drain(wait):
@@ -256,8 +262,8 @@ def screen(program, name, term="xterm"):
     if pid == 0:
         os.environ["TERM"] = term
         if program.endswith(".py"):
-            os.execvp(sys.executable, [sys.executable, program, str(path)])
-        os.execv(program, [program, str(path)])
+            os.execvp(sys.executable, [sys.executable, program, *FLAGS, str(path)])
+        os.execv(program, [program, *FLAGS, str(path)])
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     out = b""
 
@@ -289,7 +295,8 @@ SKIP = r"(?:\x1b\[[0-9;?]*[A-Za-z]|\x1b\(B)*"
 def screen_checks(program):
     """How the text looks on the screen: coloured by language, the cursor's character
     reversed, the line it is on marked, and plain text left alone. Returns the failures."""
-    kind = "curses" if program.endswith(".py") else "raw" if os.path.basename(program) == "vi_raw" else "illwill"
+    kind = ("curses" if program.endswith(".py")
+            else "raw" if os.path.basename(program) == "vi_raw" or "-raw" in FLAGS else "illwill")
     coloured = screen(program, "hl.ady", "xterm-256color")
     plain = screen(program, "hl.txt", "xterm-256color")
     checks = [
@@ -318,7 +325,7 @@ def main(program):
     for name, keys, want in cases:
         path = work / (name.replace(",", "_").replace("/", "_") + ".txt")
         path.write_text(BASES.get(name, BASE))
-        child = subprocess.Popen([sys.executable, __file__, "--drive", program, str(path), keys])
+        child = subprocess.Popen([sys.executable, __file__, "--drive", program, str(path), keys, *FLAGS])
         jobs.append((name, want, path, child))
     failed = 0
     for name, want, path, child in jobs:
@@ -338,6 +345,8 @@ def main(program):
 
 if __name__ == "__main__":
     if sys.argv[1] == "--drive":
+        FLAGS = sys.argv[5:]
         drive(sys.argv[2], sys.argv[3], sys.argv[4])
         sys.exit(0)
+    FLAGS = sys.argv[2:]
     sys.exit(1 if main(sys.argv[1]) else 0)

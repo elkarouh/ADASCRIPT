@@ -2,17 +2,18 @@
 """vi_nim -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend.
 
-    vi_nim [file]
+    vi [file]              this terminal, IllwillTerminal; `vi -raw [file]` is vi_raw's
 
-The editor is vi_core.ady; this file shows it on a terminal. Nim has no curses,
+The editor is vi_core.ady, and its loop calls the terminal; this file is the
+terminal, an IllwillTerminal. Nim has no curses,
 so the terminal is illwill (TO_NIM/STDLIB/illwill.nim, one file in pure Nim):
 raw keyboard input that decodes arrow keys and tells a lone ESC from one, and a
 screen buffer that writes only what changed. What is left here is small: asking
 illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
-nimport illwill, termios
-from vi_core import Editor, Press_T, Key_T, Look_T, Code_T, decode
+nimport illwill, termios, os
+from vi_core import Editor, Terminal, Look_T, Code_T
 
 # illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.
 # nimraw: const STYLE_REVERSE = {styleReverse}
@@ -45,62 +46,50 @@ def read_code() -> int:
             when Key.None: pass
             when others: return ord(key)
 
-def draw(ed: Editor):
-    ed.scroll()
-    var screen: TerminalBuffer = newTerminalBuffer(ed.cols, ed.rows + 1)
-    for i in 0 ..< ed.rows:
-        var x: int = 0
-        for seg in ed.row_segments(i):
-            screen.resetAttributes()
-            case seg.look:
-                when KEYWORD: screen.setForegroundColor(fgYellow)
-                when STRING: screen.setForegroundColor(fgGreen)
-                when COMMENT: screen.setForegroundColor(fgBlue, True)
-                when NUMBER: screen.setForegroundColor(fgMagenta)
-                when TYPE: screen.setForegroundColor(fgCyan)
-                when others: pass
-            # the cursor's character is reversed, or underlined in insert mode; the line it is on is underlined
-            if seg.look == CURSOR: screen.setStyle(STYLE_REVERSE)
-            elif seg.look == BAR: screen.setStyle(STYLE_BAR)
-            elif ed.is_current(i): screen.setStyle(STYLE_LINE)
-            screen.write(x, i, seg.text)
-            x += len(seg.text)
-    screen.resetAttributes()
-    screen.write(0, ed.rows, ed.status())
-    screen.setCursorPos(ed.cursor_x(), ed.cursor_y())
-    screen.display()
-    showCursor()
+class IllwillTerminal(Terminal):
+    def start(self):
+        illwillInit(fullScreen=True)
+        keep_flow_control_keys()
 
-def flash(ed: Editor, message: str):
-    var line: TerminalBuffer = newTerminalBuffer(ed.cols, 1)
-    line.write(0, 0, message)
-    line.display()
-    sleep(1000)
+    def stop(self):
+        illwillDeinit()
 
-def fit_window(ed: Editor):
-    """Tell the editor how big the window is now; a terminal that says 0 x 0 is not up yet."""
-    ed.fit(max(terminalWidth(), 1), max(terminalHeight(), 2))
+    def window(self) -> (int, int):
+        """How big the window is now; a terminal that says 0 x 0 is not up yet."""
+        (max(terminalWidth(), 1), max(terminalHeight(), 2))
 
-def run(ed: Editor):
-    while True:
-        fit_window(ed)                       # the window may have changed since the last key
-        ed.clamp()
-        draw(ed)
-        let press: Press_T = decode(read_code())
-        fit_window(ed)                       # ... or while it waited: a page is the window less a line
-        case press.key:
-            when QUIT: return
-            when SAVE: flash(ed, ed.save())
-            when others:
-                ed.handle(press)
-                if ed.quitting: return
-                if ed.message != "":
-                    flash(ed, ed.message)
-                    ed.message = ""
+    def key(self) -> int:
+        read_code()
 
-let path: Path = Path($1 if $# >= 1 else "noname.txt")
-illwillInit(fullScreen=True)
-keep_flow_control_keys()
-var editor: Editor = Editor(path)
-run(editor)
-illwillDeinit()
+    def draw(self, ed: Editor):
+        ed.scroll()
+        var screen: TerminalBuffer = newTerminalBuffer(ed.cols, ed.rows + 1)
+        for i in 0 ..< ed.rows:
+            var x: int = 0
+            for seg in ed.row_segments(i):
+                screen.resetAttributes()
+                case seg.look:
+                    when KEYWORD: screen.setForegroundColor(fgYellow)
+                    when STRING: screen.setForegroundColor(fgGreen)
+                    when COMMENT: screen.setForegroundColor(fgBlue, True)
+                    when NUMBER: screen.setForegroundColor(fgMagenta)
+                    when TYPE: screen.setForegroundColor(fgCyan)
+                    when others: pass
+                # the cursor's character is reversed, or underlined in insert mode; the line it is on is underlined
+                if seg.look == CURSOR: screen.setStyle(STYLE_REVERSE)
+                elif seg.look == BAR: screen.setStyle(STYLE_BAR)
+                elif ed.is_current(i): screen.setStyle(STYLE_LINE)
+                screen.write(x, i, seg.text)
+                x += len(seg.text)
+        screen.resetAttributes()
+        screen.write(0, ed.rows, ed.status())
+        screen.setCursorPos(ed.cursor_x(), ed.cursor_y())
+        screen.display()
+        showCursor()
+
+    def flash(self, ed: Editor, message: str):
+        var line: TerminalBuffer = newTerminalBuffer(ed.cols, 1)
+        line.write(0, 0, message)
+        line.display()
+        sleep(1000)
+

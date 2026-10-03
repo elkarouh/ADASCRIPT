@@ -1,0 +1,24 @@
+#!/usr/bin/env ady2nim
+"""vi -- a tiny vi-like text editor, on the terminal of your choice (Nim).
+
+    vi [file]          on illwill, a terminal library (vi_nim.ady)
+    vi -raw [file]     on the raw terminal, by hand (vi_raw.ady)
+
+The editor, and the loop that runs it, are vi_core.ady: `edit` reads a key from the
+terminal it is given, hands it to the editor and has the terminal draw what is left.
+A terminal is what says how -- its window, its keys, its screen -- and the switch is
+only which of the two is handed to `edit`. vi_core cannot make that choice itself:
+both terminals import it, for the editor and the Terminal class they are subclasses of.
+"""
+from vi_core import Editor, edit
+from vi_nim import IllwillTerminal
+from vi_raw import RawTerminal
+
+let args: []str = $@
+let raw: bool = len(args) >= 1 and args[0] == "-raw"
+let named: []str = (args[1:] if raw else args)
+let editor: Editor = Editor(Path(named[0] if len(named) >= 1 else "noname.txt"))
+if raw:
+    edit(editor, RawTerminal())
+else:
+    edit(editor, IllwillTerminal())

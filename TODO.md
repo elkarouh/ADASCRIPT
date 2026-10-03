@@ -4,6 +4,26 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] an imported function named like a builtin is read as the builtin. A
+      same-file `def run` overrides the builtin `run([...])` (the tutorial says
+      so), but `from vi_core import run` does not: the call is the builtin's, and the
+      importer is given the process runtime (`adascriptRun` and the rest) and its
+      imports -- `osproc`, `posix`, `streams`, `strtabs`, `times` -- which can
+      clash with the importer's own: illwill's `Key` against posix's, "ambiguous
+      identifier", in a file that never mentions a process. Found moving the vi
+      loop into `vi_core`, where it is called `edit` to stay clear of it. The
+      builtins (`run`, `die`, `warn`, ...) should give way to an imported name as
+      they do to a local one.
+- [ ] a method's parameter is made `var` only for a direct write to it
+      (`p.x = 1`, `p.items.add(..)`), where a plain proc's is also for a call of
+      a method that mutates its object (`p.scroll()`). So `def draw(self, ed:
+      Editor)` calling `ed.scroll()` kept a by-value `ed` and nim refused it. The
+      fix is not just to copy the proc rule: a method that overrides must have its
+      base's exact signature, and a `var` the subclass alone infers from its body
+      makes a *different* method -- the base's is called, silently. Today the way
+      out is to make the class `@virtual`, a reference, as `Editor` now is. What
+      is wanted is `var` decided from the declaration (`ed: var Editor`), the same
+      in the base and every override, and refused where they differ.
 - [ ] general function decorators on Nim. Today the Nim backend knows five
       annotations (`@contextmanager`, `@virtual`, `@proc`, `@export`,
       `@used`) and refuses any other decorator, while Python passes every

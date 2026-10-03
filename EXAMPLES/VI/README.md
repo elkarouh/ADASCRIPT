@@ -1,16 +1,40 @@
-# vi_py.ady, vi_nim.ady, vi_core.ady
+# vi.ady, vi_core.ady, vi_nim.ady, vi_raw.ady, vi_py.ady
 
 A tiny vi-like editor in Adascript. It began as a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
 Adascript, and has gone its own way since: it is held to what a vi does, not to what
-vip does. The editor is `vi_core.ady`, with no terminal in it; `vi_py.ady` shows it on
-curses (Python, built with `ady2py`) and `vi_nim.ady` on illwill, a pure-Nim terminal
-library (built with `ady2nim`). Both `import` `vi_core`: ady2nim compiles it as a module, ady2py
-brings it into the file it writes.
+vip does.
 
-    ady2py vi_py.ady > vi_py.py && python3 vi_py.py file.txt
-    ady2nim c vi_nim.ady && ./vi_nim file.txt        # on illwill
-    ady2nim c vi_raw.ady && ./vi_raw file.txt        # on the raw terminal
+    ady2nim c vi.ady && ./vi file.txt          # on illwill, a pure-Nim terminal library
+                         ./vi -raw file.txt    # on the raw terminal, by hand
+    ady2py vi_py.ady > vi_py.py && python3 vi_py.py file.txt     # on curses (Python)
+
+## How it is put together
+
+`vi_core.ady` is the editor and the high layer: the `Editor`, what a key does, how the
+text looks, and `edit(ed, term)`, the loop that runs it. It has no terminal in it. What
+it asks of one is the `Terminal` class, which says how a window, a key and a screen are
+made; `edit` calls it, so what happens after a key is written once, here:
+
+    start; then, until a quit:  window, fit, draw, key, window again, handle
+                                (^S: save and flash its answer; a message: flash it, clear it)
+    stop
+
+The terminals are the plumbing, each a subclass of `Terminal`:
+
+| file | class | built with | on |
+|------|-------|------------|----|
+| `vi_nim.ady` | `IllwillTerminal` | `ady2nim` | illwill |
+| `vi_raw.ady` | `RawTerminal` | `ady2nim` | Nim's `terminal` and `termios`, by hand |
+| `vi_py.ady` | `CursesTerminal` | `ady2py` | curses |
+
+`Terminal` itself is a terminal with nothing attached -- 80 by 24, nothing to draw, and no
+keys, which is the end of the input -- so a subclass overrides what it has.
+
+`vi.ady` is the program for Nim: it imports the two Nim terminals and hands `edit` one of
+them, by the `-raw` switch. The choice cannot be made in `vi_core` itself, because the
+terminals import it (for the `Editor` they draw and the `Terminal` they are subclasses of).
+`vi_py.ady` is its own program for Python, curses being Python's.
 
 Normal mode: `h j k l` or the arrow keys, `0 $` or Home and End, `gg G`, PageUp and
 PageDown, `x`, `r R`, `i a A o O`, `dd yy p`, `u ^R`, `/` with `n` and `N`, and counts
@@ -94,11 +118,10 @@ cursor's row -- and each terminal says what a look is made of:
 
 ## What a terminal does
 
-`vi_core` knows nothing of any terminal's key codes or of drawing. A terminal tells it the
-window size (`fit`), asks what to show (`scroll`, `row_text`, `status`, and `row` and
-`col` for the cursor), decodes what was typed (`decode`) and hands it over
-(`handle`), and shows what `save` answers. `vi_py.ady` does that with curses in 51
-lines (the editor is 312). Nim has no curses, so `vi_nim.ady` uses
+`vi_core` knows nothing of any terminal's key codes or of drawing. A terminal says how big
+its window is (`window`), reads a key (`key`), draws what the editor shows (`draw`: `scroll`,
+`row_segments`, `status`, and `cursor_y` and `cursor_x`) and flashes a message (`flash`);
+`edit` does the rest. Nim has no curses, so `vi_nim.ady` uses
 [illwill](https://github.com/johnnovak/illwill) (`TO_NIM/STDLIB/illwill.nim`, one file in
 pure Nim, `nimport illwill`), which does the two hard parts (reading the arrow keys is one of them):
 
@@ -118,8 +141,9 @@ reports no key, so the editor waits; run it on a terminal.
 
 ## vi_raw.ady: the same editor without a terminal library
 
-`vi_raw.ady` is the earlier Nim front end, kept because it shows what a terminal has to
-do when nothing does it for you, with only Nim's `terminal` module and `termios`:
+`vi_raw.ady` is the earlier Nim terminal, kept because it shows what a terminal has to
+do when nothing does it for you, with only Nim's `terminal` module and `termios`
+(`vi -raw`):
 
 - **Raw mode.** No echo, no line editing, no signals, and `^S` and `^Q` reach the
   program instead of stopping the terminal.
@@ -141,14 +165,17 @@ way round) or assigning to a slice.
 
 ## Tests
 
-`test_vi.py` runs key scripts in a pty -- 69 on curses, 72 on the Nim editors, which are
-also held to the `ESC [` forms of the arrows, Home and End -- and compares the file each
-leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
+`test_vi.py` runs key scripts in a pty -- 69 on curses, 72 on the Nim terminals (`vi` and
+`vi -raw`), which are also held to the `ESC [` forms of the arrows, Home and End -- and
+compares the file each leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
 line makes the line grow. Nine screen checks per terminal read what it writes to its
 pty: colour before a keyword, a string, a number, a type name and a comment, the
 cursor's character reversed, the cursor's line marked, and no colour in a `.txt`.
 `EXAMPLES/test_vi_highlight.ady` tests the scan itself, on both backends: one letter for
-each character, so a line and its colours read side by side.
+each character, so a line and its colours read side by side. `EXAMPLES/test_vi_loop.ady`
+tests `edit` on a `Terminal` that is a script of keys, with no pty, on both backends: the
+window asked for twice a key, a message flashed once and cleared, ^S's "Saved", a quit
+that says nothing, and the terminal with nothing attached.
 
-    python3 test_vi.py vi_py.py     # or ./vi_nim
-    make test-vi                    # from the top: builds vi_nim and vi_raw, runs all three (about 20 s)
+    python3 test_vi.py vi_py.py     # or ./vi, or ./vi -raw
+    make test-vi                    # from the top: builds vi, runs all three (about 20 s)

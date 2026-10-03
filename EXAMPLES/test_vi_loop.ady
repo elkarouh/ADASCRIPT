@@ -1,0 +1,116 @@
+#!/usr/bin/env ady2nim
+"""Test: the editor's loop, `edit` in VI/vi_core, on a terminal that is a script of keys --
+no pty. What happens after a key is said once, in `edit`, and the three front ends
+(curses, illwill, the raw terminal) only say how a window, a key and a screen are made:
+the window is read before and after each key, a message is flashed once and cleared,
+saving flashes "Saved", a command that quits ends the run without a flash, and the end of
+the input is ^Q. A Terminal with nothing attached is one that quits at once. Both backends.
+"""
+from VI/vi_core import Editor, Terminal, edit
+
+const TYPED_ESC: str = "\x1b"
+const TYPED_SAVE: str = "\x13"                 # ^S
+const TYPED_QUIT: str = "\x11"                 # ^Q
+
+# A terminal that types KEYS and remembers what it was asked to do.
+class Scripted(Terminal):
+    var codes: []int = []
+    var at: int = 0
+    var started: int = 0
+    var stopped: int = 0
+    var drawn: int = 0
+    var asked_size: int = 0
+    var flashed: []str = []
+
+    def __init__(self, keys: str):
+        for c in keys:
+            self.codes.append(ord(c))
+
+    def start(self):
+        self.started += 1
+
+    def stop(self):
+        self.stopped += 1
+
+    def window(self) -> (int, int):
+        self.asked_size += 1
+        (40, 10)
+
+    def key(self) -> int:
+        if self.at >= len(self.codes):
+            return 17                    # the end of the input is ^Q
+        self.at += 1
+        self.codes[self.at - 1]
+
+    def draw(self, ed: Editor):
+        self.drawn += 1
+
+    def flash(self, ed: Editor, message: str):
+        self.flashed.append(message)
+
+let dir: Path = Path(${TMPDIR:-"/tmp"}) / "ady_test_vi_loop"
+assert dir.mkdir() is None
+
+def started_on(text: str) -> Path:
+    """A file holding TEXT."""
+    let p: Path = dir / "work.txt"
+    assert p.write_text(text) is None
+    p
+
+def on_disk(p: Path) -> str:
+    let r: str | !PathFailure_T = p.read_text()
+    if r is PathFailure_T:
+        return "<unreadable>"
+    return r
+
+# ─── test 1: type, save, quit ──────────────────────────────────────────────
+
+var f: Path = started_on("one\ntwo\n")
+var t: Scripted = Scripted("ihello" + TYPED_ESC + TYPED_SAVE + TYPED_QUIT)
+edit(Editor(f), t)
+assert on_disk(f) == "helloone\ntwo\n"
+assert t.flashed == ["Saved"]
+assert t.started == 1 and t.stopped == 1
+assert t.drawn == 9                      # a frame before each of the nine keys
+assert t.asked_size == 18                # the window before a key and after it
+print "test1 OK"
+
+# ─── test 2: a refused :q is flashed once, :q! quits without a flash ───────
+
+f = started_on("one\ntwo\n")
+t = Scripted("x:q\r:q!\r")
+edit(Editor(f), t)
+assert on_disk(f) == "one\ntwo\n"        # not written
+assert t.flashed == ["No write since last change (add ! to override)"]
+assert t.stopped == 1
+print "test2 OK"
+
+# ─── test 3: :wq writes and quits, and says nothing ────────────────────────
+
+f = started_on("one\ntwo\n")
+t = Scripted("jdd:wq\r")
+edit(Editor(f), t)
+assert on_disk(f) == "one\n"
+assert t.flashed == []
+print "test3 OK"
+
+# ─── test 4: a message is cleared once shown ───────────────────────────────
+
+f = started_on("one\n")
+var ed: Editor = Editor(f)
+t = Scripted(":zap\r")
+edit(ed, t)                              # then the end of the input
+assert t.flashed == ["Not an editor command: zap"]
+assert ed.message == ""
+print "test4 OK"
+
+# ─── test 5: a terminal with nothing attached quits at once ────────────────
+
+f = started_on("one\ntwo\n")
+ed = Editor(f)
+edit(ed, Terminal())
+assert ed.lines == ["one", "two"]
+assert on_disk(f) == "one\ntwo\n"
+print "test5 OK"
+
+print "all vi loop tests passed"

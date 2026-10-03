@@ -3,12 +3,13 @@
 
     vi_py [file]
 
-The editor is vi_core.ady; this file shows it on a curses window. curses is
+The editor is vi_core.ady, and its loop calls the terminal; this file is the
+terminal, a CursesTerminal, on a curses window. curses is
 Python's, so this one is built for the Python backend (ady2py), which brings
 vi_core in where it is imported.
 """
 pyimport curses, os, time
-from vi_core import Editor, Press_T, Key_T, Look_T, decode
+from vi_core import Editor, Terminal, edit, Look_T
 
 # A look's colour pair is its value in Look_T, from KEYWORD (1) to TYPE (5); the pair
 # 10 more is the same on the line the cursor is on. PLAIN (0) has none, and CURSOR and
@@ -39,57 +40,52 @@ def attr_of(look: Look_T, current: bool) -> int:
     if current and curses.COLORS < 256: attr = attr | curses.A_UNDERLINE
     attr
 
-def draw(scr: curses.window, ed: Editor):
-    ed.scroll()
-    for i in 0 ..< ed.rows:
-        let current: bool = ed.is_current(i)
-        scr.move(i, 0)
-        scr.clrtoeol()
-        if current and curses.has_colors() and curses.COLORS >= 256:
-            scr.chgat(i, 0, ed.cols, curses.color_pair(10))         # the ground, to the right edge
-        var x: int = 0
-        for seg in ed.row_segments(i):
-            if x < ed.cols - 1:
-                scr.addnstr(i, x, seg.text, ed.cols - 1 - x, attr_of(seg.look, current))
-            x += len(seg.text)
-    scr.move(ed.rows, 0)
-    scr.clrtoeol()
-    scr.addnstr(ed.rows, 0, ed.status(), ed.cols - 1)
-    scr.move(ed.cursor_y(), ed.cursor_x())
-    scr.refresh()
+class CursesTerminal(Terminal):
+    var scr: curses.window
 
-def flash(scr: curses.window, ed: Editor, message: str):
-    scr.move(ed.rows, 0)
-    scr.clrtoeol()
-    scr.addnstr(ed.rows, 0, message, ed.cols - 1)
-    scr.refresh()
-    time.sleep(1)
+    def __init__(self, scr: curses.window):
+        self.scr = scr
 
-def run(scr: curses.window, ed: Editor):
-    curses.raw()
-    while True:
-        let (rows, cols) = scr.getmaxyx()      # a resize shows up here, as KEY_RESIZE
-        ed.fit(cols, rows)
-        ed.clamp()
-        draw(scr, ed)
-        let press: Press_T = decode(scr.getch())
-        let (rows2, cols2) = scr.getmaxyx()    # a page is the window less a line: the size now
-        ed.fit(cols2, rows2)
-        case press.key:
-            when QUIT: return
-            when SAVE: flash(scr, ed, ed.save())
-            when RESIZE: pass
-            when others:
-                ed.handle(press)
-                if ed.quitting: return
-                if ed.message != "":
-                    flash(scr, ed, ed.message)
-                    ed.message = ""
+    def start(self):
+        setup_colors()
+        curses.raw()
+
+    def window(self) -> (int, int):
+        let (rows, cols) = self.scr.getmaxyx()      # a resize shows up here, as KEY_RESIZE
+        (cols, rows)
+
+    def key(self) -> int:
+        self.scr.getch()
+
+    def draw(self, ed: Editor):
+        ed.scroll()
+        for i in 0 ..< ed.rows:
+            let current: bool = ed.is_current(i)
+            self.scr.move(i, 0)
+            self.scr.clrtoeol()
+            if current and curses.has_colors() and curses.COLORS >= 256:
+                self.scr.chgat(i, 0, ed.cols, curses.color_pair(10))         # the ground, to the right edge
+            var x: int = 0
+            for seg in ed.row_segments(i):
+                if x < ed.cols - 1:
+                    self.scr.addnstr(i, x, seg.text, ed.cols - 1 - x, attr_of(seg.look, current))
+                x += len(seg.text)
+        self.scr.move(ed.rows, 0)
+        self.scr.clrtoeol()
+        self.scr.addnstr(ed.rows, 0, ed.status(), ed.cols - 1)
+        self.scr.move(ed.cursor_y(), ed.cursor_x())
+        self.scr.refresh()
+
+    def flash(self, ed: Editor, message: str):
+        self.scr.move(ed.rows, 0)
+        self.scr.clrtoeol()
+        self.scr.addnstr(ed.rows, 0, message, ed.cols - 1)
+        self.scr.refresh()
+        time.sleep(1)
+
 
 def main(scr: curses.window):
-    setup_colors()
-    var ed: Editor = Editor(Path($1 if $# >= 1 else "noname.txt"))
-    run(scr, ed)
+    edit(Editor(Path($1 if $# >= 1 else "noname.txt")), CursesTerminal(scr))
 
 os.environ.setdefault("ESCDELAY", "25")
 curses.wrapper(main)
