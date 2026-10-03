@@ -1,9 +1,9 @@
 #!/usr/bin/env ady2nim
-"""Test: VI/vi when a write fails -- the directory is not there. What the user is
+"""Test: VI/vi_editor when a write fails -- the directory is not there. What the user is
 told, that the text still counts as modified, and that :wq does not quit on it, on
 both backends. (The key scripts of test_vi.py cover the writes that work.)
 """
-from VI/vi import Editor
+from VI/vi_editor import Editor
 
 let nowhere: Path = Path("/no_such_dir_for_test_vi_save")
 

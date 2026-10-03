@@ -663,5 +663,5 @@ Known, and not done:
 
 In a plain function `if n is Failure_T: return 1` then `return n` works (it is
 emitted `n.value`). In a method it is emitted `is_err(n)` and `return n`,
-and Nim refuses the Result. EXAMPLES/VI/vi.ady keeps that code in a function
+and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a function
 (`count_of`) for this.

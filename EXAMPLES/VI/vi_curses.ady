@@ -2,9 +2,9 @@
 """vi_curses -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend.
 
-    vi [file]              this terminal, IllwillTerminal; `vi -raw [file]` is vi_raw's
+    vi_curses [file]
 
-The editor is vi.ady, and its loop calls the terminal; this file is the
+The editor is vi_editor.ady, and its loop calls the terminal; this file is the
 terminal, an IllwillTerminal. Nim has no curses,
 so the terminal is illwill (TO_NIM/STDLIB/illwill.nim, one file in pure Nim):
 raw keyboard input that decodes arrow keys and tells a lone ESC from one, and a
@@ -13,7 +13,7 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios, os
-from vi_protocol import Terminal, Frame_T, Look_T, Code_T
+from vi_editor import Editor, Terminal, edit, Frame_T, Look_T, Code_T
 
 # illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.
 # nimraw: const STYLE_REVERSE = {styleReverse}
@@ -92,3 +92,5 @@ class IllwillTerminal(Terminal):
         line.display()
         sleep(1000)
 
+var editor: Editor = Editor(Path($1 if $# >= 1 else "noname.txt"))
+edit(editor, IllwillTerminal())

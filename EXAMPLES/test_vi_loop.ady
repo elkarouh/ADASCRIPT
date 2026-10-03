@@ -1,13 +1,12 @@
 #!/usr/bin/env ady2nim
-"""Test: the editor's loop, `edit` in VI/vi, on a terminal that is a script of keys --
+"""Test: the editor's loop, `edit` in VI/vi_editor, on a terminal that is a script of keys --
 no pty. What happens after a key is said once, in `edit`, and the three front ends
 (curses, illwill, the raw terminal) only say how a window, a key and a screen are made:
 the window is read before and after each key, a message is flashed once and cleared,
 saving flashes "Saved", a command that quits ends the run without a flash, and the end of
 the input is ^Q. A Terminal with nothing attached is one that quits at once. Both backends.
 """
-from VI/vi import Editor, edit
-from VI/vi_protocol import Terminal, Frame_T
+from VI/vi_editor import Editor, Terminal, Frame_T, edit
 
 const TYPED_ESC: str = "\x1b"
 const TYPED_SAVE: str = "\x13"                 # ^S

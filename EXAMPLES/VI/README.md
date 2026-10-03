@@ -1,41 +1,47 @@
-# vi.ady, vi_protocol.ady, vi_curses.ady, vi_raw.ady
+# vi_editor.ady, vi_curses.ady, vi_raw.ady, vi_py.ady
 
-A tiny vi-like editor in Adascript, for the Nim backend. It began as a translation of
+A tiny vi-like editor in Adascript. It began as a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
 Adascript, and has gone its own way since: it is held to what a vi does, not to what
-vip does.
+vip does. There are three programs, one for each terminal it runs on:
 
-    ady2nim c vi.ady && ./vi file.txt          # on illwill, a pure-Nim terminal library
-                         ./vi -raw file.txt    # on the raw terminal, by hand
+    ady2nim c vi_curses.ady && ./vi_curses file.txt     # Nim, on illwill, a terminal library
+    ady2nim c vi_raw.ady    && ./vi_raw file.txt        # Nim, on the raw terminal, by hand
+    ady2py vi_py.ady > vi_py.py && python3 vi_py.py file.txt     # Python, on curses
 
 ## How it is put together
 
-`vi.ady` is the editor and the high layer: the `Editor`, what a key does, how the text
-looks, `edit(ed, term)`, the loop that runs it, and the choice of a terminal. It asks of
-a terminal only what the `Terminal` class of `vi_protocol.ady` says -- how big the window is,
-how a key is read, how a `Frame_T` is drawn, how a message is shown -- and `edit` calls it,
-so what happens after a key is written once, here:
+`vi_editor.ady` is the editor, as a library, and imports nothing: the `Editor`, what a key
+does, how the text looks, `edit(ed, term)`, the loop that runs it, and the `Terminal` class
+it asks a terminal to be -- how big the window is, how a key is read, how a `Frame_T` is
+drawn, how a message is shown. `edit` calls it, so what happens after a key is written
+once, here:
 
     start; then, until a quit:  window, fit, draw (a Frame_T), key, window again, handle
                                 (^S: save and flash its answer; a message: flash it, clear it)
     stop
 
-The terminals are the plumbing, each a subclass of `Terminal` that says how:
+The programs are the plumbing, each a subclass of `Terminal` that says how, and a
+three-line `main` that gives `edit` an `Editor` and one of them:
 
-| file | class | on |
-|------|-------|----|
-| `vi_curses.ady` | `IllwillTerminal` | illwill, a curses-like library for Nim |
-| `vi_raw.ady` | `RawTerminal` | Nim's `terminal` and `termios`, by hand |
+| program | class | built with | on |
+|---------|-------|------------|----|
+| `vi_curses.ady` | `IllwillTerminal` | `ady2nim` | illwill, a curses-like library for Nim |
+| `vi_raw.ady` | `RawTerminal` | `ady2nim` | Nim's `terminal` and `termios`, by hand |
+| `vi_py.ady` | `CursesTerminal` | `ady2py` | curses |
 
-A terminal imports `vi_protocol.ady` -- the types it shares with the editor (`Look_T`, `Seg_T`,
-`Code_T`), the `Frame_T` it is handed, and `Terminal` -- and nothing of `vi.ady`, which is
-what lets `vi.ady` import the two terminals and pick between them with the `-raw` switch.
-`Terminal` itself is a terminal with nothing attached -- 80 by 24, nothing to draw, and no
-keys, which is the end of the input -- so a subclass overrides what it has.
+Each imports `vi_editor.ady` and nothing else of the project, and nothing imports a
+terminal: a tree, not a diamond. The editor is handed over as a `Frame_T` -- the rows as
+stretches that look alike, the current row, the status row, the cursor -- so a terminal
+never sees the `Editor`. `Terminal` itself is a terminal with nothing attached -- 80 by 24,
+nothing to draw, and no keys, which is the end of the input -- so a subclass overrides
+what it has.
 
-Both terminals are Nim (`nimport illwill`, `nimport terminal, termios`), so `vi` is a Nim
-program and the editor in it is not built for the Python backend. (It once had a curses
-terminal for Python, `vi_py.ady`; it is in git's history.)
+Nim has no curses and Python has no illwill, so the Nim terminals are built with `ady2nim`
+and the Python one with `ady2py`; ady2nim compiles `vi_editor` as a module, ady2py brings it
+into the file it writes. (An earlier version had one program with a `-raw` switch; the
+terminals then had to be imported by the editor, which needed a third module for what they
+share.)
 
 Normal mode: `h j k l` or the arrow keys, `0 $` or Home and End, `gg G`, PageUp and
 PageDown, `x`, `r R`, `i a A o O`, `dd yy p`, `u ^R`, `/` with `n` and `N`, and counts
@@ -141,7 +147,7 @@ reports no key, so the editor waits; run it on a terminal.
 
 `vi_raw.ady` is the earlier Nim terminal, kept because it shows what a terminal has to
 do when nothing does it for you, with only Nim's `terminal` module and `termios`
-(`vi -raw`):
+(`vi_raw`):
 
 - **Raw mode.** No echo, no line editing, no signals, and `^S` and `^Q` reach the
   program instead of stopping the terminal.
@@ -155,22 +161,23 @@ do when nothing does it for you, with only Nim's `terminal` module and `termios`
 
 It is longer than `vi_curses.ady` and passes the same key scripts; it reads an arrow key's escape sequence itself, as it does a lone ESC.
 
-A slice past the end of a string raises on Nim, so `tail` and `splice` are the only way
-the editor takes part of one.
+`vi_editor` is written to mean the same on both backends: a slice past the end of a string
+raises on Nim, so `tail` and `splice` are the only way the editor takes part of one.
 
 ## Tests
 
-`test_vi.py` runs 72 key scripts in a pty on each terminal (`vi` and `vi -raw`), which are
-held to the `ESC [` forms of the arrows, Home and End as well as `ESC O`, and compares the
-file each leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
+`test_vi.py` runs key scripts in a pty -- 69 on curses, 72 on the Nim terminals, which are
+also held to the `ESC [` forms of the arrows, Home and End -- and compares the file each
+leaves. Undo is one step per change, as in vi; typing in replace mode past the end of a
 line makes the line grow. Nine screen checks per terminal read what it writes to its
 pty: colour before a keyword, a string, a number, a type name and a comment, the
 cursor's character reversed, the cursor's line marked, and no colour in a `.txt`.
-`EXAMPLES/test_vi_highlight.ady` tests the scan itself: one letter for each character, so a
-line and its colours read side by side. `EXAMPLES/test_vi_loop.ady` tests `edit` on a
-`Terminal` that is a script of keys, with no pty: the window asked for twice a key, the
-`Frame_T` it is handed, a message flashed once and cleared, ^S's "Saved", a quit that says
-nothing, and the terminal with nothing attached.
+`EXAMPLES/test_vi_highlight.ady` tests the scan itself, on both backends: one letter for
+each character, so a line and its colours read side by side. `EXAMPLES/test_vi_loop.ady`
+tests `edit` on a `Terminal` that is a script of keys, with no pty, on both backends: the
+window asked for twice a key, the `Frame_T` it is handed, a message flashed once and
+cleared, ^S's "Saved", a quit that says nothing, and the terminal with nothing attached.
+`EXAMPLES/test_vi_save.ady` covers a write that fails.
 
-    python3 test_vi.py ./vi         # or: python3 test_vi.py ./vi -raw
-    make test-vi                    # from the top: builds vi, runs both (about 15 s)
+    python3 test_vi.py vi_py.py     # or ./vi_curses, or ./vi_raw
+    make test-vi                    # from the top: builds vi_curses and vi_raw, runs all three (about 20 s)

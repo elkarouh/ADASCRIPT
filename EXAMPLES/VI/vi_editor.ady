@@ -1,8 +1,10 @@
-"""vi -- a tiny vi-like text editor: it began as vip (github.com/maksimKorzh/vip) and has
-outgrown it. The editor, the loop that runs it, and the choice of a terminal, in Nim.
+"""vi_editor -- a tiny vi-like text editor, as a library: it began as vip
+(github.com/maksimKorzh/vip) and has outgrown it. The editor, and the loop that runs it.
+It has no terminal in it; the programs are the terminals, each a subclass of Terminal below:
 
-    vi [file]          on illwill, a terminal library (vi_curses.ady)
-    vi -raw [file]     on the raw terminal, by hand (vi_raw.ady)
+    vi_curses [file]   on illwill, a terminal library (Nim)
+    vi_raw [file]      on the raw terminal, by hand (Nim)
+    vi_py [file]       on curses (Python)
 
   Normal    h j k l or the arrow keys   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
             Home End PageUp PageDown   /text then n and N (search, wrapping)
@@ -20,16 +22,96 @@ pressed: the editor never looks at a key code. Where the original reaches for an
 exception -- opening a file that is not there, counting with a number that is
 not one -- this asks for a `T | !Failure_T` and looks at it where it asked.
 
-`edit` is the loop. What it asks of a terminal is the Terminal class of vi_protocol.ady -- how
-big the window is, how a key is read, how a Frame is drawn, how a message is shown -- and
-a terminal (vi_curses, vi_raw) is a subclass that says how; it knows nothing of the editor.
+`edit` is the loop. What it asks of a terminal is the Terminal class below -- how big the
+window is, how a key is read, how a Frame_T is drawn, how a message is shown -- and a
+terminal is a subclass that says how; it is handed a Frame_T and never sees the editor.
 `edit` decodes each key, hands it to the editor (`handle`) and does the rest, so what
-happens after a key is said once, here. The switch at the end is only which terminal is
-handed to `edit`.
+happens after a key is said once, here.
 """
-from vi_protocol import Look_T, Seg_T, Code_T, Frame_T, Terminal
-from vi_curses import IllwillTerminal
-from vi_raw import RawTerminal
+
+# ---- what the editor and its terminals share ---------------------------------
+
+# How a character is shown. The first six are what the text is made of; CURSOR and BAR
+# are the character the cursor is on, in normal mode and in insert or replace mode. The
+# value of KEYWORD to TYPE is the colour pair a curses terminal draws it in (PLAIN has none).
+type Look_T is enum PLAIN = 0, KEYWORD = 1, STRING = 2, COMMENT = 3, NUMBER = 4, TYPE = 5, CURSOR = 6, BAR = 7
+
+# A stretch of a row that is shown the same way.
+type Seg_T is record:
+    text: str
+    look: Look_T
+
+# The codes a terminal sends for the keys decode() knows, each with its number: the control
+# keys are the letter & 0x1f, and the KEY_ ones are curses'. A terminal that reads bytes
+# (vi_raw, vi_curses) sends curses' codes too, for the keys curses would have given a name.
+type Code_T is enum:
+    BACKSPACE_KEY = 8          # ^H
+    LINE_FEED = 10
+    CARRIAGE_RETURN = 13
+    CTRL_Q = 17
+    CTRL_R = 18
+    CTRL_S = 19
+    ESC = 27
+    DEL = 127
+    KEY_DOWN = 258             # curses.KEY_DOWN, UP, LEFT, RIGHT
+    KEY_UP = 259
+    KEY_LEFT = 260
+    KEY_RIGHT = 261
+    KEY_HOME = 262
+    KEY_BACKSPACE = 263
+    KEY_NPAGE = 338            # page down
+    KEY_PPAGE = 339            # page up
+    KEY_ENTER = 343
+    KEY_END = 360
+    KEY_RESIZE = 410
+
+
+# What the editor shows, handed to a terminal to draw: the text rows cut into stretches
+# that look alike, and the rest a terminal needs to put the status row and the cursor.
+type Frame_T is record:
+    cols: int                  # the window, in columns
+    rows: int                  # and in text rows: the status row is the one after them
+    lines: [][]Seg_T           # each text row, as stretches
+    current: int               # the row the cursor's line is on, -1 when it is not shown
+    status: str                # the status row
+    cursor_x: int              # the cursor's screen column and row; on the status row
+    cursor_y: int              # while a command is typed
+
+
+# What the editor asks of a terminal. Each front end -- vi_curses (illwill), vi_raw (by
+# hand), vi_py (curses) -- is a subclass saying how a window, a key and a screen are made;
+# the editor's loop, `edit` below, calls them, so what happens after a key is said once,
+# there.
+#
+# This class is a terminal with nothing attached: no window to speak of, nothing to draw,
+# and no keyboard, which is the end of the input -- ^Q. A subclass overrides what it has.
+@virtual
+class Terminal:
+    def start(self):
+        """Take the terminal over: raw mode, the alternate screen."""
+        pass
+
+    def stop(self):
+        """Give it back."""
+        pass
+
+    def window(self) -> (int, int):
+        """How big the window is now, as (columns, rows)."""
+        (80, 24)
+
+    def key(self) -> int:
+        """The next key, as a Code_T code."""
+        ord(CTRL_Q)
+
+    def draw(self, view: Frame_T):
+        """VIEW on the screen: its rows, the status row, the cursor."""
+        pass
+
+    def flash(self, cols: int, rows: int, message: str):
+        """MESSAGE on the status row of a window COLS by ROWS text rows, for a second."""
+        pass
+
+# ---- the editor ---------------------------------------------------------------
 
 type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK, COMMAND  # COMMAND: a line typed after : or /
 
@@ -700,13 +782,3 @@ def edit(ed: Editor, term: Terminal):
                     ed.message = ""
     term.stop()
 
-
-if __name__ == "__main__":
-    let args: []str = $@
-    let raw: bool = len(args) >= 1 and args[0] == "-raw"
-    let named: []str = (args[1:] if raw else args)
-    var editor: Editor = Editor(Path(named[0] if len(named) >= 1 else "noname.txt"))
-    if raw:
-        edit(editor, RawTerminal())
-    else:
-        edit(editor, IllwillTerminal())

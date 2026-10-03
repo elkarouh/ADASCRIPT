@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
-"""Tests for the vi editor (vi.ady) on each of its terminals -- illwill (vi_curses.ady)
-and, with -raw, Nim's terminal module and termios (vi_raw.ady): the editor is run in a
-terminal of its own (a pty), is typed a script of keys, and the file it wrote is compared
-with what is wanted.
+"""Tests for the vi editor (vi_editor.ady) on each of its terminals -- vi_py.ady (curses,
+built with ady2py as vi_py.py), vi_curses.ady (illwill) and vi_raw.ady (Nim's terminal
+module and termios): the editor is run in a terminal of its own (a pty), is typed a
+script of keys, and the file it wrote is compared with what is wanted.
 
-    python3 test_vi.py PROGRAM [FLAG...]
-
-FLAGs go to the program before the file's name: `test_vi.py ./vi -raw` is the editor
-vi on its raw terminal.
+    python3 test_vi.py PROGRAM
 
 The script ends with ^S and ^Q unless the program has quit by itself (`:wq`, `:q`).
 The wanted files are what a vi writes for the same keys.
 """
 import fcntl, os, pathlib, pty, re, select, struct, subprocess, sys, tempfile, termios
-
-FLAGS = []          # what PROGRAM is given before the file's name
 
 ESC = "\x1b"
 BASE = "one\ntwo\nthree\nfour\nfive\n"
@@ -75,9 +70,9 @@ CASES = [
 # A special key arrives as one escape sequence, written at once, which is not an ESC
 # followed by typing. A test script writes it as a marker character, so that a typed ESC
 # and the letter O can never be taken for the start of one. ESC O A on a terminal in
-# application keypad mode, and ESC [ A in the other: the terminals read the keyboard
-# themselves, so they are held to both, and to the keypad's forms of Home, End, PageUp and
-# PageDown.
+# application keypad mode, which curses puts it in, and ESC [ A in the other: the Nim
+# editors read the terminal themselves, so they are held to both; curses only knows the
+# first, and the keypad's forms of Home, End, PageUp and PageDown.
 UP, DOWN, RIGHT, LEFT, HOME, END, PGUP, PGDN = (chr(0xE000 + i) for i in range(8))
 CSI_UP, CSI_RIGHT, CTRL_LEFT, CSI_HOME, CSI_END, TILDE_HOME, TILDE_END = (chr(0xE010 + i) for i in range(7))
 SEQUENCES = {
@@ -218,7 +213,9 @@ def drive(program, path, keys):
     if pid == 0:
         os.chdir(os.path.dirname(path))           # where `:w NAME` writes
         os.environ["TERM"] = "xterm"
-        os.execv(program, [program, *FLAGS, path])
+        if program.endswith(".py"):
+            os.execvp(sys.executable, [sys.executable, program, path])
+        os.execv(program, [program, path])
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
 
     def drain(wait):
@@ -258,7 +255,9 @@ def screen(program, name, term="xterm"):
     pid, fd = pty.fork()
     if pid == 0:
         os.environ["TERM"] = term
-        os.execv(program, [program, *FLAGS, str(path)])
+        if program.endswith(".py"):
+            os.execvp(sys.executable, [sys.executable, program, str(path)])
+        os.execv(program, [program, str(path)])
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     out = b""
 
@@ -290,7 +289,7 @@ SKIP = r"(?:\x1b\[[0-9;?]*[A-Za-z]|\x1b\(B)*"
 def screen_checks(program):
     """How the text looks on the screen: coloured by language, the cursor's character
     reversed, the line it is on marked, and plain text left alone. Returns the failures."""
-    kind = "raw" if "-raw" in FLAGS else "illwill"
+    kind = "curses" if program.endswith(".py") else "raw" if os.path.basename(program) == "vi_raw" else "illwill"
     coloured = screen(program, "hl.ady", "xterm-256color")
     plain = screen(program, "hl.txt", "xterm-256color")
     checks = [
@@ -315,11 +314,11 @@ def screen_checks(program):
 def main(program):
     work = pathlib.Path(tempfile.mkdtemp())
     jobs = []
-    cases = CASES + ARROWS + KEYS + SEARCH + COMMANDS + ARROWS_CSI
+    cases = CASES + ARROWS + KEYS + SEARCH + COMMANDS + (ARROWS_CSI if not program.endswith(".py") else [])
     for name, keys, want in cases:
         path = work / (name.replace(",", "_").replace("/", "_") + ".txt")
         path.write_text(BASES.get(name, BASE))
-        child = subprocess.Popen([sys.executable, __file__, "--drive", program, str(path), keys, *FLAGS])
+        child = subprocess.Popen([sys.executable, __file__, "--drive", program, str(path), keys])
         jobs.append((name, want, path, child))
     failed = 0
     for name, want, path, child in jobs:
@@ -339,8 +338,6 @@ def main(program):
 
 if __name__ == "__main__":
     if sys.argv[1] == "--drive":
-        FLAGS = sys.argv[5:]
         drive(sys.argv[2], sys.argv[3], sys.argv[4])
         sys.exit(0)
-    FLAGS = sys.argv[2:]
     sys.exit(1 if main(sys.argv[1]) else 0)

@@ -2,9 +2,9 @@
 """vi_raw -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend, on the raw terminal.
 
-    vi -raw [file]         this terminal, RawTerminal; `vi [file]` is vi_curses's
+    vi_raw [file]
 
-The editor is vi.ady, and its loop calls the terminal; this file is the
+The editor is vi_editor.ady, and its loop calls the terminal; this file is the
 terminal, a RawTerminal. Nim has no curses,
 so the terminal is Nim's own `terminal` module plus a raw mode set up with
 `termios`: no echo, no line editing, no signals, and ^S and ^Q reach the program
@@ -14,7 +14,7 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-from vi_protocol import Terminal, Frame_T, Look_T, Code_T
+from vi_editor import Editor, Terminal, edit, Frame_T, Look_T, Code_T
 
 const NOTHING: int = -1                  # a key with no meaning here: a function key
 
@@ -158,3 +158,5 @@ class RawTerminal(Terminal):
         stdout.flushFile()
         sleep(1000)
 
+var editor: Editor = Editor(Path($1 if $# >= 1 else "noname.txt"))
+edit(editor, RawTerminal())

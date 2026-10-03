@@ -256,7 +256,8 @@ COMPILE_ONLY := \
     tsp.ady \
     MAP_UTILS/route_map.ady \
     test_input.ady \
-    VI/vi.ady \
+    VI/vi_curses.ady \
+    VI/vi_raw.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     awk_logscan.ady \
@@ -280,7 +281,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_ordered_map test_function_type test_distinct test_units test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_format_zero_decimals test_region_operators test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -407,29 +408,34 @@ compile: lint-emitters check-quotes
 	@echo "=== Compile step complete ==="
 
 # -----------------------------------------------------------------------
-# The vi tests: key scripts typed into vi.ady (Nim) on each of its terminals --
-# illwill, and the raw one with -raw -- in a pty of their own, and the files they
+# The vi tests: key scripts typed into vi_py.ady (curses, the Python backend)
+# and vi_curses.ady and vi_raw.ady (Nim) in a pty of their own, and the files they
 # save compared. Shared by `test` and by `test-vi`, which runs them alone.
 # -----------------------------------------------------------------------
 define vi_tests
-	@echo "=== vi, typed keys in a pty of its own: vi.ady (illwill) and vi.ady -raw ==="
-	@printf '  %-62s' "EXAMPLES/VI/vi.ady (72 key scripts, 9 screen checks)"; \
+	@echo "=== vi, typed keys in a pty of its own: vi_py.ady (curses, Python), vi_curses.ady (illwill) and vi_raw.ady (Nim) ==="
+	@printf '  %-62s' "EXAMPLES/VI/vi_py.ady (69 key scripts, 9 screen checks)"; \
+	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi.out || tail -n 8 $(TMPDIR)/ady_vi.out; exit 1; }; fi
+	@printf '  %-62s' "EXAMPLES/VI/vi_curses.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi > $(TMPDIR)/ady_vi_curses.out 2>&1 \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_curses > $(TMPDIR)/ady_vi_curses.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_curses.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_curses.out || tail -n 8 $(TMPDIR)/ady_vi_curses.out; exit 1; }; fi
-	@printf '  %-62s' "EXAMPLES/VI/vi.ady -raw (72 key scripts, 9 screen checks)"; \
+	@printf '  %-62s' "EXAMPLES/VI/vi_raw.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi -raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_raw.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_raw.out || tail -n 8 $(TMPDIR)/ady_vi_raw.out; exit 1; }; fi
 endef
 
 # -----------------------------------------------------------------------
-# test-vi — the vi tests alone: build vi.ady, then run them (about 15 s)
+# test-vi — the vi tests alone: build vi_curses.ady and vi_raw.ady, then run them (about 20 s)
 # -----------------------------------------------------------------------
 .PHONY: test-vi
 test-vi:
 	@mkdir -p $(TMPDIR)
-	@for v in vi; do \
+	@for v in vi_curses vi_raw; do \
 	    if ! $(ADY2NIM) c $(EXDIR)/VI/$$v.ady >/dev/null 2>&1; then \
 	        echo "  EXAMPLES/VI/$$v.ady                    FAIL (does not build)"; \
 	        $(ADY2NIM) c $(EXDIR)/VI/$$v.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
