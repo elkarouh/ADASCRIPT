@@ -1570,7 +1570,8 @@ does, so the file writes `geometry.distance(a, b)`; for a path it is the last pa
 import distance, Point_T`: the file may use `distance`, `Point_T` and what `Point_T`
 carries (an enum's members; a record's fields and a class's methods are reached
 through a value) without the prefix. `from geometry import *` is `from geometry
-import *`. A bare use of any other name of `geometry`'s is refused, on both
+import *`. As in Python, only `import geometry` binds `geometry`: after `from geometry import
+distance` alone, `geometry.distance` is refused, not accepted. A bare use of any other name of `geometry`'s is refused, on both
 backends, with the line and what to do:
 
 ```

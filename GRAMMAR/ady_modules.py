@@ -12,7 +12,8 @@ what `import M` becomes.
 form, as `from M import A, B`: the file may use A and B unqualified, and what
 they carry (an enum's members; a class's methods and a record's fields are
 reached through a value, not by name), and nothing else of M's unqualified.
-`from M nimport *` brings in everything, as `from M import *` does.
+`from M nimport *` brings in everything, as `from M import *` does. Neither form of `from`
+binds M: `M.name` needs `import M`, and without it is refused, as Python's NameError would.
 
 Both backends bring the whole module in -- ady2nim links it, ady2py merges it --
 so the rule is checked here, from the text, the same way for both: a name of M's
@@ -216,10 +217,22 @@ def _binds(text, name):
 def resolve_imports(code, module, listed, module_source):
     """CODE with `M.name` written `name`, after refusing a use of a name of
     MODULE's that is neither qualified nor in LISTED (STAR: nothing to refuse)."""
-    if listed is STAR:
-        return code
     qual = module.rsplit("/", 1)[-1]
     names = exported(module_source)
+    # `M.name` is Python's too: only `import M` binds M. `from M import A, B` (or `*`) binds
+    # A and B and not M, so `M.A` there is a name that does not exist.
+    bare = re.search(rf'^nimport[ \t]+(?:[\w./]+[ \t]*,[ \t]*)*{re.escape(module)}\b', code, re.MULTILINE)
+    if not bare:
+        text = _blank(code)
+        use = next((u for u in re.finditer(rf'(?<![\w.$]){re.escape(qual)}\.(\w+)', text)
+                    if u.group(1) in names), None)
+        if use and not _binds(text, qual):
+            line = text.count("\n", 0, use.start()) + 1
+            raise SyntaxError(
+                f"line {line}: '{use.group(0)}' needs `import {module}`: "
+                f"`from {module} import ...` does not bind '{qual}', as in Python")
+    if listed is STAR:
+        return code
     allowed = set(listed)
     for n in list(names):
         if names[n] in allowed:        # an enum member comes with its type
@@ -236,7 +249,7 @@ def resolve_imports(code, module, listed, module_source):
         what = f"'{name}'" if owner == name else f"'{name}' (a member of {owner})"
         from_list = f"`from {module} import {', '.join(sorted(set(listed) | {owner}))}`"
         # `M.name` is Python's too: it needs `import M`, which a from-import alone is not
-        if re.search(rf'^nimport[ \t]+(?:[\w./]+[ \t]*,[ \t]*)*{re.escape(module)}\b', code, re.MULTILINE):
+        if bare:
             fix = f"write {qual}.{name}, or add {owner} to {from_list}"
         else:
             fix = f"add {owner} to {from_list}, or `import {module}` and write {qual}.{name}"

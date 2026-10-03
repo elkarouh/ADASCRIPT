@@ -661,6 +661,9 @@ test: compile
 	@# a rename takes the old name away, as in Python
 	@printf 'from ady_refuse_mod import helper as h\nprint helper()\n' > $(TMPDIR)/ady_refuse_26.ady
 	@printf 'import ady_refuse_mod as m\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_27.ady
+	@# only `import M` binds M: a from-import, `*` included, gives A and B and not M.A
+	@printf 'from ady_refuse_mod import helper\nprint ady_refuse_mod.other()\n' > $(TMPDIR)/ady_refuse_35.ady
+	@printf 'from ady_refuse_mod import *\nprint ady_refuse_mod.other()\n' > $(TMPDIR)/ady_refuse_36.ady
 	@# enum values: all or none, ascending; gaps cannot index, iterate or step
 	@printf 'type K is enum A = 1, B, C = 3\nprint 1\n' > $(TMPDIR)/ady_refuse_28.ady
 	@printf 'type K is enum A = 5, B = 1\nprint 1\n' > $(TMPDIR)/ady_refuse_29.ady
@@ -697,6 +700,8 @@ test: compile
 	             "25:a rename onto the file's own name:gives 'h' a meaning of its own" \
 	             "26:the old name after from M import A as B:is imported from ady_refuse_mod as" \
 	             "27:the module after import M as N:is imported as 'm'" \
+	             "35:M.name after only from M import A:does not bind 'ady_refuse_mod'" \
+	             "36:M.name after from M import *:does not bind 'ady_refuse_mod'" \
 	             "28:a mix of valued and bare members:either every member has a value or none does" \
 	             "29:values that descend:they must ascend" \
 	             "30:a repeated value:they must ascend" \
