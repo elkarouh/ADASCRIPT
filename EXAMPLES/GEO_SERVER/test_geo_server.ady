@@ -3,7 +3,7 @@
 a callsign from being taken for other text but cannot say which strings are callsigns;
 `callsign` does, and returns a failure for what is not one.
 """
-from geo_server import Callsign_T, CallsignFailure_T, callsign
+from geo_server import Callsign_T, CallsignFailure_T, callsign, angular_gap
 
 def accepted(text: str) -> bool:
     let made: Callsign_T | !CallsignFailure_T = callsign(text)
@@ -21,6 +21,12 @@ def reason(text: str) -> str:
     if made is CallsignFailure_T:
         return made.reason
     return ""
+
+# the angle between two bearings: the smaller way round, never more than half a circle
+assert angular_gap(0.0, 0.0) == 0.0
+assert angular_gap(10.0, 350.0) == 20.0 and angular_gap(350.0, 10.0) == 20.0      # across the north seam
+assert angular_gap(0.0, 180.0) == 180.0 and angular_gap(90.0, 270.0) == 180.0
+assert angular_gap(45.0, 200.0) == 155.0 and angular_gap(0.0, 360.0) == 0.0
 
 # what the radio calls ships and aircraft
 assert accepted("SENTINEL") and accepted("HAVEN")

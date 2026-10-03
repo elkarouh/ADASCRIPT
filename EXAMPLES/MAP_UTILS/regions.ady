@@ -24,7 +24,8 @@ What changed from geo_server.ady: a point is a `GeoPoint`, a distance is
 of `GeoPoint - GeoPoint`, the Vincenty inverse formula, where geo_server's flat plane
 used Pythagoras and `arctan2`.
 """
-from map_utils import GeoPoint, GeoVector, Kilometers_T, Bearing_T, modulo
+nimport math                                # a float `%` is math's `mod`
+from map_utils import GeoPoint, GeoVector, Kilometers_T, Bearing_T
 
 # How far a wedge reaches to each side of the bearing it is aimed along: at most half
 # a circle.
@@ -32,8 +33,8 @@ type HalfAngle_T is float range 0.0 .. 180.0
 
 def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:
     """The smaller angle between two bearings: never more than half a circle."""
-    let around: float = modulo(abs(a - b), 360.0)
-    around if around <= 180 else 360 - around
+    let diff: float = abs(a - b) % 360              # not negative, so `%` is the same on both backends
+    180 - abs(180 - diff)                           # 0 .. 180: diff itself up to 180, then 360 - diff
 
 
 class Region:

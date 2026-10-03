@@ -3,7 +3,7 @@
 the algebra of `&`, `|`, `~` and `in` that composes them.
 """
 from map_utils import GeoPoint, GeoVector, Kilometers_T, Degrees_T
-from regions import Region, Circle, Sector, Polygon, Annulus
+from regions import Region, Circle, Sector, Polygon, Annulus, angular_gap
 
 let centre: GeoPoint = GeoPoint(50.0, 4.0)
 
@@ -13,6 +13,23 @@ def at(distance: float, bearing: float) -> GeoPoint:
 
 def east_of_centre(distance: float) -> GeoPoint:
     at(distance, 90.0)
+
+# ---- the angle between two bearings ---------------------------------------------------
+
+assert angular_gap(0.0, 0.0) == 0.0 and angular_gap(90.0, 90.0) == 0.0
+assert angular_gap(10.0, 350.0) == 20.0 and angular_gap(350.0, 10.0) == 20.0      # across the north seam
+assert angular_gap(359.0, 1.0) == 2.0
+assert angular_gap(0.0, 180.0) == 180.0 and angular_gap(90.0, 270.0) == 180.0     # opposite: half a circle
+assert angular_gap(0.0, 360.0) == 0.0                                             # 360 is north too
+assert angular_gap(0.0, 90.0) == 90.0 and angular_gap(0.0, 270.0) == 90.0
+assert angular_gap(45.0, 200.0) == 155.0 and angular_gap(200.0, 45.0) == 155.0
+var widest: float = 0.0
+for tenth in range(0, 3601, 7):
+    for other in range(0, 3601, 13):
+        let gap: float = angular_gap(float(tenth) / 10.0, float(other) / 10.0)
+        assert 0.0 <= gap <= 180.0
+        widest = max(widest, gap)
+assert widest > 179.0 and widest <= 180.0
 
 # ---- Circle -------------------------------------------------------------------------
 

@@ -90,8 +90,8 @@ def bearing_to(dx: Distance_T, dy: Distance_T) -> Bearing_T:
 
 def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:
     """The smaller angle between two bearings: never more than half a circle."""
-    let around: float = abs(a - b) % 360
-    around if around <= 180 else 360 - around
+    let diff: float = abs(a - b) % 360              # not negative, so `%` is the same on both backends
+    180 - abs(180 - diff)                           # 0 .. 180: diff itself up to 180, then 360 - diff
 
 
 class Region:
