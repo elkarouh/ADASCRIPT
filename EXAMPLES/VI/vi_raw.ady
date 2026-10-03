@@ -4,7 +4,7 @@ the Nim backend, on the raw terminal.
 
     vi -raw [file]         this terminal, RawTerminal; `vi [file]` is vi_curses's
 
-The editor is vi_core.ady, and its loop calls the terminal; this file is the
+The editor is vi.ady, and its loop calls the terminal; this file is the
 terminal, a RawTerminal. Nim has no curses,
 so the terminal is Nim's own `terminal` module plus a raw mode set up with
 `termios`: no echo, no line editing, no signals, and ^S and ^Q reach the program
@@ -14,7 +14,7 @@ by waiting 25 ms), drawing the screen (one frame per key, written in one go), an
 the window size (read again at every key; there is no resize event).
 """
 nimport terminal, termios, posix, os
-from vi_core import Editor, Terminal, Look_T, Code_T
+from vi_term import Terminal, Frame_T, Look_T, Code_T
 
 const NOTHING: int = -1                  # a key with no meaning here: a function key
 
@@ -137,25 +137,24 @@ class RawTerminal(Terminal):
     def key(self) -> int:
         read_code()
 
-    def draw(self, ed: Editor):
-        ed.scroll()
+    def draw(self, view: Frame_T):
         var frame: str = "\x1b[?25l\x1b[H"                  # hide the cursor, go home
-        for i in 0 ..< ed.rows:
+        for i in 0 ..< view.rows:
             # the line the cursor is on has a dark grey ground (256 colours), to the right edge
-            let ground: str = ("\x1b[48;5;236m" if ed.is_current(i) else "")
-            var room: int = ed.cols - 1
-            for seg in ed.row_segments(i):
+            let ground: str = ("\x1b[48;5;236m" if i == view.current else "")
+            var room: int = view.cols - 1
+            for seg in view.lines[i]:
                 if room > 0:
                     frame += "\x1b[0m" + ground + sgr(seg.look) + clip(seg.text, 0, room)
                 room -= len(seg.text)
             frame += "\x1b[0m" + ground + "\x1b[K\x1b[0m\r\n"     # to the end of the line, then down
-        frame += clip(ed.status(), 0, ed.cols - 1) + "\x1b[K"
-        frame += f"\x1b[{ed.cursor_y() + 1};{ed.cursor_x() + 1}H\x1b[?25h"
+        frame += clip(view.status, 0, view.cols - 1) + "\x1b[K"
+        frame += f"\x1b[{view.cursor_y + 1};{view.cursor_x + 1}H\x1b[?25h"
         stdout.write(frame)
         stdout.flushFile()
 
-    def flash(self, ed: Editor, message: str):
-        stdout.write(f"\x1b[{ed.rows + 1};1H\x1b[K" + clip(message, 0, ed.cols - 1))
+    def flash(self, cols: int, rows: int, message: str):
+        stdout.write(f"\x1b[{rows + 1};1H\x1b[K" + clip(message, 0, cols - 1))
         stdout.flushFile()
         sleep(1000)
 

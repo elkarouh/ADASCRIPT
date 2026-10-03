@@ -1,0 +1,87 @@
+"""vi_term -- what the editor and its terminals share: how a character looks, the codes
+a terminal sends for its keys, the Frame it is handed to draw, and the Terminal class a
+front end is a subclass of.
+
+vi.ady is the editor and the loop that runs it, and it calls a terminal through Terminal.
+A terminal (vi_curses.ady, vi_raw.ady) imports this file and nothing of the editor's,
+which is what lets vi.ady import the terminals and choose between them.
+"""
+
+# How a character is shown. The first six are what the text is made of; CURSOR and BAR
+# are the character the cursor is on, in normal mode and in insert or replace mode. The
+# value of KEYWORD to TYPE is the colour pair a curses terminal draws it in (PLAIN has none).
+type Look_T is enum PLAIN = 0, KEYWORD = 1, STRING = 2, COMMENT = 3, NUMBER = 4, TYPE = 5, CURSOR = 6, BAR = 7
+
+# A stretch of a row that is shown the same way.
+type Seg_T is record:
+    text: str
+    look: Look_T
+
+# The codes a terminal sends for the keys decode() knows, each with its number: the control
+# keys are the letter & 0x1f, and the KEY_ ones are curses'. A terminal that reads bytes
+# (vi_raw, vi_curses) sends curses' codes too, for the keys curses would have given a name.
+type Code_T is enum:
+    BACKSPACE_KEY = 8          # ^H
+    LINE_FEED = 10
+    CARRIAGE_RETURN = 13
+    CTRL_Q = 17
+    CTRL_R = 18
+    CTRL_S = 19
+    ESC = 27
+    DEL = 127
+    KEY_DOWN = 258             # curses.KEY_DOWN, UP, LEFT, RIGHT
+    KEY_UP = 259
+    KEY_LEFT = 260
+    KEY_RIGHT = 261
+    KEY_HOME = 262
+    KEY_BACKSPACE = 263
+    KEY_NPAGE = 338            # page down
+    KEY_PPAGE = 339            # page up
+    KEY_ENTER = 343
+    KEY_END = 360
+    KEY_RESIZE = 410
+
+
+# What the editor shows, handed to a terminal to draw: the text rows cut into stretches
+# that look alike, and the rest a terminal needs to put the status row and the cursor.
+type Frame_T is record:
+    cols: int                  # the window, in columns
+    rows: int                  # and in text rows: the status row is the one after them
+    lines: [][]Seg_T           # each text row, as stretches
+    current: int               # the row the cursor's line is on, -1 when it is not shown
+    status: str                # the status row
+    cursor_x: int              # the cursor's screen column and row; on the status row
+    cursor_y: int              # while a command is typed
+
+
+# What the editor asks of a terminal. Each front end -- vi_curses (illwill), vi_raw (by
+# hand) -- is a subclass saying how a window, a key and a screen are made; the editor's
+# loop, `edit` in vi.ady, calls them, so what happens after a key is said once, there.
+#
+# This class is a terminal with nothing attached: no window to speak of, nothing to draw,
+# and no keyboard, which is the end of the input -- ^Q. A subclass overrides what it has.
+@virtual
+class Terminal:
+    def start(self):
+        """Take the terminal over: raw mode, the alternate screen."""
+        pass
+
+    def stop(self):
+        """Give it back."""
+        pass
+
+    def window(self) -> (int, int):
+        """How big the window is now, as (columns, rows)."""
+        (80, 24)
+
+    def key(self) -> int:
+        """The next key, as a Code_T code."""
+        ord(CTRL_Q)
+
+    def draw(self, view: Frame_T):
+        """VIEW on the screen: its rows, the status row, the cursor."""
+        pass
+
+    def flash(self, cols: int, rows: int, message: str):
+        """MESSAGE on the status row of a window COLS by ROWS text rows, for a second."""
+        pass

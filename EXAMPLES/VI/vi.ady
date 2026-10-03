@@ -1,24 +1,712 @@
-#!/usr/bin/env ady2nim
-"""vi -- a tiny vi-like text editor, on the terminal of your choice (Nim).
+"""vi -- a tiny vi-like text editor: it began as vip (github.com/maksimKorzh/vip) and has
+outgrown it. The editor, the loop that runs it, and the choice of a terminal, in Nim.
 
     vi [file]          on illwill, a terminal library (vi_curses.ady)
     vi -raw [file]     on the raw terminal, by hand (vi_raw.ady)
 
-The editor, and the loop that runs it, are vi_core.ady: `edit` reads a key from the
-terminal it is given, hands it to the editor and has the terminal draw what is left.
-A terminal is what says how -- its window, its keys, its screen -- and the switch is
-only which of the two is handed to `edit`. vi_core cannot make that choice itself:
-both terminals import it, for the editor and the Terminal class they are subclasses of.
+  Normal    h j k l or the arrow keys   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
+            Home End PageUp PageDown   /text then n and N (search, wrapping)
+            counts: 3dd  12G  2yy
+            :w  :w NAME  :q  :q!  :wq  :x  :N (line N)  :$ (the last line)
+  Insert    the arrow, Home, End and Page keys move; ESC leaves
+  Anywhere  ^S saves, ^Q quits
+
+What is shown: the text in colour by language (keywords, strings, comments, numbers
+and type names, for .ady and .py, .nim and .sh files), the line the cursor is on, and
+the cursor itself, a block in normal mode and a bar in insert and replace mode.
+
+A key is decoded once into a Press_T, and every mode is a `case` over what was
+pressed: the editor never looks at a key code. Where the original reaches for an
+exception -- opening a file that is not there, counting with a number that is
+not one -- this asks for a `T | !Failure_T` and looks at it where it asked.
+
+`edit` is the loop. What it asks of a terminal is the Terminal class of vi_term.ady -- how
+big the window is, how a key is read, how a Frame is drawn, how a message is shown -- and
+a terminal (vi_curses, vi_raw) is a subclass that says how; it knows nothing of the editor.
+`edit` decodes each key, hands it to the editor (`handle`) and does the rest, so what
+happens after a key is said once, here. The switch at the end is only which terminal is
+handed to `edit`.
 """
-from vi_core import Editor, edit
+from vi_term import Look_T, Seg_T, Code_T, Frame_T, Terminal
 from vi_curses import IllwillTerminal
 from vi_raw import RawTerminal
 
-let args: []str = $@
-let raw: bool = len(args) >= 1 and args[0] == "-raw"
-let named: []str = (args[1:] if raw else args)
-let editor: Editor = Editor(Path(named[0] if len(named) >= 1 else "noname.txt"))
-if raw:
-    edit(editor, RawTerminal())
-else:
-    edit(editor, IllwillTerminal())
+type Mode_T is enum NORMAL, INSERT, REPLACE_ONE, REPLACE, GOTO, DELETE, YANK, COMMAND  # COMMAND: a line typed after : or /
+
+# What a key press means, whatever code the terminal sent for it.
+type Key_T is enum CHAR, ESCAPE, ENTER, BACKSPACE, SAVE, QUIT, REDO, RESIZE, UP, DOWN, LEFT, RIGHT, HOME, END, PAGEUP, PAGEDOWN, OTHER
+
+type Press_T is record:
+    key:  Key_T
+    text: str = ""              # the character, for a CHAR; "" for the rest
+
+type Snapshot_T is record:
+    lines: []str
+    row: int
+    col: int
+
+# The languages the text can be coloured as, by the file's name.
+type Lang_T is enum NO_LANG, PYTHON, NIM, SHELL
+
+# A triple-quoted string runs over lines: which quotes a line ends inside of, if any, and so
+# the line that follows starts inside of.
+type Quote_T is enum NO_QUOTE, TRIPLE_DOUBLE, TRIPLE_SINGLE
+
+# What a line typed in COMMAND mode is for: an editor command after the colon, or a search
+# after the slash. The character is what the status line shows in front of it.
+type Prompt_T is enum COLON, SLASH
+
+const PROMPT: [Prompt_T]str = [COLON: ":", SLASH: "/"]
+
+const DELIMITER: [Quote_T]str = [NO_QUOTE: "", TRIPLE_DOUBLE: "\"\"\"", TRIPLE_SINGLE: "'''"]
+
+# What scanning a line finds: how each character looks, and the string left open at the end
+# of the line, which the next line starts in.
+type Scan_T is record:
+    looks: []Look_T
+    state: Quote_T
+
+const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
+                          REPLACE: "R", GOTO: "g", DELETE: "d", YANK: "y", COMMAND: ":"]
+
+def decode(ch: int) -> Press_T:
+    """A code a terminal delivers, as what it means: a key it has a name for (Code_T), a
+    printable character, or nothing the editor knows. parse_enum says which of the first."""
+    let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
+    case code:
+        when ParseFailure_T:
+            return Press_T(CHAR, str(chr(ch))) if 32 <= ch <= 126 else Press_T(OTHER, "")
+        when Code_T:
+            case code:
+                when ESC: Press_T(ESCAPE, "")
+                when LINE_FEED | CARRIAGE_RETURN | KEY_ENTER: Press_T(ENTER, "")
+                when BACKSPACE_KEY | DEL | KEY_BACKSPACE: Press_T(BACKSPACE, "")
+                when CTRL_S: Press_T(SAVE, "")
+                when CTRL_Q: Press_T(QUIT, "")
+                when CTRL_R: Press_T(REDO, "")
+                when KEY_RESIZE: Press_T(RESIZE, "")
+                when KEY_UP: Press_T(UP, "")
+                when KEY_DOWN: Press_T(DOWN, "")
+                when KEY_LEFT: Press_T(LEFT, "")
+                when KEY_RIGHT: Press_T(RIGHT, "")
+                when KEY_HOME: Press_T(HOME, "")
+                when KEY_END: Press_T(END, "")
+                when KEY_PPAGE: Press_T(PAGEUP, "")
+                when KEY_NPAGE: Press_T(PAGEDOWN, "")
+
+def tail(text: str, start: int) -> str:
+    """TEXT from START on; empty past the end, where a Nim slice would raise."""
+    text[start:] if start < len(text) else ""
+
+def splice(line: str, start: int, stop: int, text: str) -> str:
+    """LINE with START up to STOP replaced by TEXT."""
+    let before: str = line[:start]
+    let after: str = tail(line, stop)
+    before + text + after
+
+# ---- colouring --------------------------------------------------------
+def language_of(name: str) -> Lang_T:
+    """The language a file is coloured as, from the end of its name."""
+    case name:
+        when /\.(ady|py)$/: PYTHON
+        when /\.nim$/: NIM
+        when /\.sh$/: SHELL
+        when others: NO_LANG
+
+let PYTHON_KEYWORDS: {}str = {"def", "class", "if", "elif", "else", "for", "while", "return", "import", "from",
+    "nimport", "pyimport", "let", "var", "const", "type", "is", "enum", "record",
+    "case", "when", "others", "in", "not", "and", "or", "pass", "break", "continue",
+    "True", "False", "None", "assert", "die", "do", "lambda", "yield", "await",
+    "async", "global", "del", "try", "except", "finally", "raise", "with", "as",
+    "tuple", "distinct", "shell", "quit"}
+
+let NIM_KEYWORDS: {}str = {"proc", "func", "method", "iterator", "template", "macro", "let", "var", "const",
+    "type", "object", "enum", "tuple", "if", "elif", "else", "when", "case", "of",
+    "for", "while", "break", "continue", "return", "yield", "import", "from", "export",
+    "include", "block", "try", "except", "finally", "raise", "defer", "discard",
+    "and", "or", "not", "xor", "in", "notin", "is", "isnot", "div", "mod", "shl",
+    "shr", "nil", "true", "false", "ref", "ptr", "distinct", "using", "static"}
+
+let SHELL_KEYWORDS: {}str = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
+    "case", "esac", "function", "in", "return", "exit", "export", "local", "set",
+    "unset", "shift", "break", "continue", "trap", "source", "eval", "exec"}
+
+def is_keyword(lang: Lang_T, word: str) -> bool:
+    case lang:
+        when PYTHON: word in PYTHON_KEYWORDS
+        when NIM: word in NIM_KEYWORDS
+        when SHELL: word in SHELL_KEYWORDS
+        when others: False
+
+def is_digit(o: int) -> bool:
+    48 <= o <= 57
+
+def is_letter(o: int) -> bool:
+    65 <= o <= 90 or 97 <= o <= 122
+
+def is_type_name(word: str) -> bool:
+    """Capitalised, with a lower-case letter in it: Editor, Press_T; not NORMAL or TAG."""
+    return False if not 65 <= ord(word[0]) <= 90
+    any(97 <= ord(c) <= 122 for c in word)
+
+class Scanner:
+    var looks: []Look_T = []
+
+    def put(self, look: Look_T, upto: int):
+        """Give the characters from the next one up to UPTO this look. The next
+        character is the one at index len(looks): the length of the list is the scan
+        position, so the loop ends once the list has grown to UPTO, and a call with
+        an UPTO already reached adds nothing."""
+        while len(self.looks) < upto:
+            self.looks.append(look)
+
+def scan(line: str, lang: Lang_T, state: Quote_T) -> Scan_T:
+    """How each character of LINE looks, given the triple-quoted string (STATE) the line
+    starts inside, if any."""
+    var sc: Scanner = Scanner()
+    let n: int = len(line)
+    var i: int = 0
+    var open: Quote_T = state
+    if lang == NO_LANG:
+        sc.put(PLAIN, n)
+        return Scan_T(sc.looks, NO_QUOTE)
+    if open != NO_QUOTE:
+        let close: int = line.find(DELIMITER[open])
+        if close < 0:
+            sc.put(STRING, n)
+            return Scan_T(sc.looks, open)
+        sc.put(STRING, close + 3)
+        i = close + 3
+        open = NO_QUOTE
+    while i < n:
+        let o: int = ord(line[i])
+        let before: int = (ord(line[i - 1]) if i > 0 else 0)
+        if o == 35 and not (lang == SHELL and before == 36):          # a # starts a comment, but $# is not one
+            sc.put(PLAIN, i)
+            sc.put(COMMENT, n)
+            i = n
+        elif o == 34 or o == 39:                                      # a quote: a string
+            sc.put(PLAIN, i)
+            let quote: str = line[i:i + 1]
+            let triple: str = quote + quote + quote
+            if lang != SHELL and i + 3 <= n and line[i:i + 3] == triple:      # a slice past the end raises on Nim
+                let close: int = line.find(triple, i + 3)
+                if close < 0:
+                    sc.put(STRING, n)
+                    open = TRIPLE_DOUBLE if quote == "\"" else TRIPLE_SINGLE
+                    i = n
+                else:
+                    sc.put(STRING, close + 3)
+                    i = close + 3
+            else:
+                var j: int = i + 1
+                while j < n and ord(line[j]) != o:
+                    if ord(line[j]) == 92: j += 1                      # a backslash takes the next character
+                    j += 1
+                sc.put(STRING, min(j + 1, n))
+                i = j + 1
+        elif is_digit(o):                                             # a digit: a number, 3.14e2 and 0xFF too
+            sc.put(PLAIN, i)
+            var j: int = i
+            while j < n and (is_digit(ord(line[j])) or is_letter(ord(line[j])) or ord(line[j]) == 46 or ord(line[j]) == 95):
+                j += 1
+            sc.put(NUMBER, j)
+            i = j
+        elif is_letter(o) or o == 95:                                 # a letter: a word
+            sc.put(PLAIN, i)
+            var j: int = i
+            while j < n and (is_letter(ord(line[j])) or is_digit(ord(line[j])) or ord(line[j]) == 95):
+                j += 1
+            let word: str = line[i:j]
+            if is_keyword(lang, word):
+                sc.put(KEYWORD, j)
+            elif lang != SHELL and is_type_name(word):
+                sc.put(TYPE, j)
+            i = j
+        else:
+            i += 1
+    sc.put(PLAIN, n)
+    Scan_T(sc.looks, open)
+
+def count_of(text: str) -> int:
+    """The count typed before a command; 1 when there is none."""
+    let n: int | !ParseFailure_T = parse_int(text)
+    if n is ParseFailure_T: return 1
+    n
+
+def load(path: Path) -> []str:
+    """The lines of PATH; an empty buffer when it cannot be read -- a new file."""
+    let read: []str | !PathFailure_T = path.read_lines()
+    if read is PathFailure_T:
+        return [""]
+    read if len(read) > 0 else [""]
+
+def not_saved(failure: PathFailure_T) -> str:
+    """What to tell the user when a write failed."""
+    f"Not saved: {failure.reason}"
+
+class Editor:
+    var path: Path
+    var lines: []str
+    var yanked: []str = []
+    var history: []Snapshot_T = []
+    var hpos: int = 0
+    var mode: Mode_T = NORMAL
+    var count: str = ""                  # typed before a command: "3" in 3dd
+    var row: int = 0
+    var col: int = 0
+    var top: int = 0
+    var left: int = 0
+    var rows: int = 0
+    var cols: int = 0
+    var cmd: str = ""                    # typed after the colon or slash, in COMMAND mode
+    var prompt: Prompt_T = COLON         # which of the two it was
+    var lang: Lang_T = NO_LANG           # what the text is coloured as
+    var hl_lines: []str = []             # the text the colours in hl were made from
+    var hl: [][]Look_T = []              # how each character of each line looks
+    var pattern: str = ""                # what was last searched for, for n and N
+    var saved: []str = []                # the text as last written, to tell a change from none
+    var message: str = ""                # what to tell the user; the terminal shows it, then clears it
+    var quitting: bool = False           # a command asked to quit
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.lines = load(path)
+        self.saved = list(self.lines)
+        self.lang = language_of(f"{path}")
+        self.history = [self.snapshot()]
+
+    # ---- state ------------------------------------------------------
+    def snapshot(self) -> Snapshot_T:
+        Snapshot_T(list(self.lines), self.row, self.col)
+
+    def restore(self, snap: Snapshot_T):
+        self.lines = list(snap.lines)
+        self.row = snap.row
+        self.col = snap.col
+
+    def record(self):
+        # a snapshot only when the text really changed; any redo tail goes
+        if self.lines != self.history[self.hpos].lines:
+            self.history = self.history[:self.hpos + 1] + [self.snapshot()]
+            self.hpos = len(self.history) - 1
+
+    def undo(self):
+        if self.hpos > 0:
+            self.hpos -= 1
+            self.restore(self.history[self.hpos])
+
+    def redo(self):
+        if self.hpos < len(self.history) - 1:
+            self.hpos += 1
+            self.restore(self.history[self.hpos])
+
+    def times(self) -> int:
+        count_of(self.count)
+
+    def fit(self, cols: int, rows: int):
+        """The window is COLS by ROWS; the last row is the status bar."""
+        self.cols = cols
+        self.rows = rows - 1
+
+    def clamp(self):
+        self.row = max(0, min(self.row, len(self.lines) - 1))
+        let width: int = len(self.lines[self.row])
+        let limit: int = (width if self.mode in {INSERT, REPLACE} else max(width - 1, 0))
+        self.col = max(0, min(self.col, limit))
+
+    # ---- what to show -----------------------------------------------
+    def scroll(self):
+        """Move the window over the text so that the cursor is in it."""
+        self.top = max(min(self.top, self.row), self.row - self.rows + 1)
+        self.left = max(min(self.left, self.col), self.col - self.cols + 1)
+
+    def is_current(self, i: int) -> bool:
+        """Is screen row I the line the cursor is on?"""
+        self.top + i == self.row
+
+    def looks_of(self, n: int) -> []Look_T:
+        """How each character of line N looks. Colours are made for the whole text again when
+        it has changed since they were made: a triple-quoted string runs over lines."""
+        if self.hl_lines != self.lines:
+            var all: [][]Look_T = []
+            var state: Quote_T = NO_QUOTE
+            for line in self.lines:
+                let found: Scan_T = scan(line, self.lang, state)
+                all.append(found.looks)
+                state = found.state
+            self.hl = all
+            self.hl_lines = list(self.lines)
+        self.hl[n]
+
+    def row_segments(self, i: int) -> []Seg_T:
+        """What screen row I shows, from the left edge on, in stretches that look alike:
+        a line, with the character under the cursor of its own look, or ~ past the end."""
+        let n: int = self.top + i
+        if n >= len(self.lines): return [Seg_T("~", PLAIN)]
+        let line: str = self.lines[n]
+        var looks: []Look_T = list(self.looks_of(n))
+        let here: bool = n == self.row and self.mode != COMMAND
+        let cursor: Look_T = (BAR if self.mode in {INSERT, REPLACE} else CURSOR)
+        if here and self.col < len(looks):
+            looks[self.col] = cursor
+        var out: []Seg_T = []
+        var a: int = self.left
+        while a < len(line):
+            var b: int = a + 1
+            while b < len(line) and looks[b] == looks[a]:
+                b += 1
+            out.append(Seg_T(line[a:b], looks[a]))
+            a = b
+        if here and self.col >= len(line):
+            out.append(Seg_T(" ", cursor))
+        out
+
+    def cursor_y(self) -> int:
+        """The cursor's screen row: in the text, or on the status line while a command is typed."""
+        self.rows if self.mode == COMMAND else self.row - self.top
+
+    def cursor_x(self) -> int:
+        """The cursor's screen column, likewise."""
+        len(self.cmd) + 1 if self.mode == COMMAND else self.col - self.left
+
+    def status(self) -> str:
+        if self.mode == COMMAND:
+            return f"{PROMPT[self.prompt]}{self.cmd}"
+        let total: int = len(self.lines)
+        let pct: int = (self.row + 1) * 100 // total
+        f'{TAG[self.mode]} "{self.path}" line {self.row + 1} of {total} --{pct}%-- col {self.col}'
+
+    def write_to(self, target: Path) -> None | !PathFailure_T:
+        """Write the text to TARGET."""
+        target.write_text("\n".join(self.lines) + "\n")
+
+    def save_file(self) -> None | !PathFailure_T:
+        """Write the file; once it is written, the text is no longer modified."""
+        let written: None | !PathFailure_T = self.write_to(self.path)
+        if written is PathFailure_T: return written
+        self.saved = list(self.lines)
+
+    def save(self) -> str:
+        """Write the file; what to tell the user."""
+        let written: None | !PathFailure_T = self.save_file()
+        if written is PathFailure_T: return not_saved(written)
+        "Saved"
+
+    def modified(self) -> bool:
+        self.lines != self.saved
+
+    # ---- editing ----------------------------------------------------
+    def put_line(self, text: str):
+        self.lines[self.row] = text
+
+    def insert_line(self, at: int, text: str):
+        self.lines[at:at] = [text]
+
+    def delete_lines(self, lo: int, hi: int):
+        self.lines[lo:hi] = []
+
+    def begin_insert(self, command: char):
+        """i a A o O: where the cursor goes, then insert mode."""
+        case command:
+            when 'a': self.col += 1
+            when 'A': self.col = len(self.lines[self.row])
+            when 'o':
+                self.row += 1
+                self.insert_line(self.row, "")
+            when 'O': self.insert_line(self.row, "")
+            when others: pass
+        self.mode = INSERT
+
+    def move(self, command: char):
+        case command:
+            when 'h': self.col -= 1
+            when 'l': self.col += 1
+            when 'k': self.row -= 1
+            when 'j': self.row += 1
+            when '0': self.col = 0
+            when '$':
+                self.row += self.times() - 1
+                self.col = len(self.lines[min(self.row, len(self.lines) - 1)])
+            when 'G': self.row = (self.times() - 1 if self.count != "" else len(self.lines) - 1)
+            when others: pass
+
+    def navigate(self, key: Key_T):
+        """The arrow, Home, End and Page keys. A page is the window less a line."""
+        let page: int = max(self.rows - 1, 1)
+        case key:
+            when UP: self.row -= 1
+            when DOWN: self.row += 1
+            when LEFT: self.col -= 1
+            when RIGHT: self.col += 1
+            when HOME: self.col = 0
+            when END: self.col = len(self.lines[self.row])
+            when PAGEUP: self.row -= page
+            when PAGEDOWN: self.row += page
+            when others: pass
+
+    def last_match(self, line: str, before: int) -> int:
+        """Where the last match of the pattern in LINE starts before BEFORE; -1 if none."""
+        var best: int = -1
+        var at: int = line.find(self.pattern)
+        while 0 <= at < before:
+            best = at
+            at = line.find(self.pattern, at + 1)
+        best
+
+    def search(self, backward: bool):
+        """Move to the next match of the pattern after the cursor (before it, if BACKWARD),
+        wrapping round the end of the text; the cursor's own line is visited twice, the
+        second time for what lies on the other side of the cursor."""
+        if self.pattern == "":
+            self.message = "No previous search pattern"
+            return
+        let total: int = len(self.lines)
+        for step in 0 .. total:
+            let r: int = (self.row + step) % total if not backward else (self.row - step + total) % total
+            let line: str = self.lines[r]
+            var at: int = -1
+            if backward:
+                at = self.last_match(line, (self.col if step == 0 else len(line) + 1))
+                if step == total and at < self.col: at = -1
+            else:
+                at = line.find(self.pattern, (self.col + 1 if step == 0 else 0))
+                if step == total and at > self.col: at = -1
+            if at >= 0:
+                self.row = r
+                self.col = at
+                return
+        self.message = f"Pattern not found: {self.pattern}"
+
+    def put(self):
+        return if not self.yanked              # nothing yanked: nothing to put
+        self.lines[self.row + 1:self.row + 1] = self.yanked
+        self.row += 1
+
+    # ---- modes ------------------------------------------------------
+    def begin_command(self, prompt: Prompt_T):
+        """Start a line typed after the colon or the slash."""
+        self.mode = COMMAND
+        self.prompt = prompt
+        self.cmd = ""
+
+    def normal(self, press: Press_T):
+        let line: str = self.lines[self.row]
+        case press.key:
+            when REDO: self.redo()
+            when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
+            when CHAR:
+                case press.text:
+                    when ":": self.begin_command(COLON)
+                    when "/": self.begin_command(SLASH)
+                    when "n": self.search(False)
+                    when "N": self.search(True)
+                    when "i" | "a" | "A" | "o" | "O": self.begin_insert(press.text[0])
+                    when "h" | "j" | "k" | "l" | "0" | "$" | "G": self.move(press.text[0])
+                    when "r": self.mode = REPLACE_ONE
+                    when "R": self.mode = REPLACE
+                    when "g": self.mode = GOTO
+                    when "d": self.mode = DELETE
+                    when "y": self.mode = YANK
+                    when "x": self.put_line(splice(line, self.col, self.col + 1, ""))
+                    when "p": self.put()
+                    when "u": self.undo()
+                    when others: pass
+            when others: pass
+        if self.mode not in {DELETE, YANK, GOTO}:
+            self.count = ""
+
+    def insert(self, press: Press_T):
+        let line: str = self.lines[self.row]
+        case press.key:
+            when ESCAPE:
+                self.mode = NORMAL
+                self.col -= 1
+            when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
+            when ENTER:
+                self.put_line(line[:self.col])
+                self.row += 1
+                self.insert_line(self.row, tail(line, self.col))
+                self.col = 0
+            when BACKSPACE:
+                if self.col > 0:
+                    self.put_line(splice(line, self.col - 1, self.col, ""))
+                    self.col -= 1
+                elif self.row > 0:
+                    self.row -= 1
+                    self.col = len(self.lines[self.row])
+                    let above: str = self.lines[self.row]
+                    let below: str = self.lines[self.row + 1]
+                    self.put_line(above + below)
+                    self.delete_lines(self.row + 1, self.row + 2)
+            when CHAR:
+                self.put_line(splice(line, self.col, self.col, press.text))
+                self.col += 1
+            when others: pass
+
+    def overwrite(self, press: Press_T):
+        let line: str = self.lines[self.row]
+        case press.key:
+            when ESCAPE:
+                self.mode = NORMAL
+                self.col -= 1
+            when UP | DOWN | LEFT | RIGHT | HOME | END | PAGEUP | PAGEDOWN: self.navigate(press.key)
+            when BACKSPACE: self.col -= 1
+            when CHAR:
+                self.put_line(splice(line, self.col, self.col + 1, press.text))
+                self.col += 1
+            when others: pass
+
+    def replace_one(self, press: Press_T):
+        """r: the next character replaces the one under the cursor, once."""
+        let line: str = self.lines[self.row]
+        if press.key == CHAR and self.col < len(line):
+            self.put_line(splice(line, self.col, self.col + 1, press.text))
+        self.mode = NORMAL
+
+    def operator(self, press: Press_T):
+        """The second key of dd, yy and gg; anything else cancels."""
+        let lo: int = self.row
+        let hi: int = min(self.row + self.times(), len(self.lines))
+        case (self.mode, press.text):
+            when (DELETE, "d"):
+                self.yanked = self.lines[lo:hi]
+                self.delete_lines(lo, hi)
+                if not self.lines:
+                    self.lines = [""]
+                self.col = 0
+            when (YANK, "y"): self.yanked = self.lines[lo:hi]
+            when (GOTO, "g"): self.row = 0
+            when others: pass
+        self.mode = NORMAL
+        self.count = ""
+
+    def command(self, press: Press_T):
+        """A key typed after the colon or slash: the line builds up; ENTER runs it, ESC drops it."""
+        case press.key:
+            when ESCAPE:
+                self.mode = NORMAL
+                self.cmd = ""
+            when ENTER: self.execute()
+            when BACKSPACE:
+                if self.cmd == "":
+                    self.mode = NORMAL
+                else:
+                    self.cmd = self.cmd[:len(self.cmd) - 1]
+            when CHAR: self.cmd = f"{self.cmd}{press.text}"
+            when others: pass
+
+    def execute(self):
+        """Run the line typed after the colon -- a line number, or a word and what it takes --
+        or search for what was typed after the slash (nothing typed: the last pattern)."""
+        let typed: str = self.cmd
+        let text: str = typed.strip()
+        self.mode = NORMAL
+        self.cmd = ""
+        if self.prompt == SLASH:
+            if typed != "": self.pattern = typed
+            self.search(False)
+            return
+        if text == "": return
+        let line: int | !ParseFailure_T = parse_int(text)
+        if line is ParseFailure_T:
+            self.run(text)
+        else:
+            self.row = line - 1
+
+    def run(self, text: str):
+        let (word, _, tail_text) = text.partition(" ")
+        let rest: str = tail_text.strip()
+        case word:
+            when "w":
+                if rest == "":
+                    self.message = self.save()
+                else:
+                    let written: None | !PathFailure_T = self.write_to(Path(rest))
+                    if written is PathFailure_T:
+                        self.message = not_saved(written)
+                    else:
+                        self.message = f"Wrote {rest}"
+            when "q":
+                if self.modified():
+                    self.message = "No write since last change (add ! to override)"
+                else:
+                    self.quitting = True
+            when "q!": self.quitting = True
+            when "wq" | "x":
+                let written: None | !PathFailure_T = self.save_file()
+                if written is PathFailure_T:
+                    self.message = not_saved(written)
+                else:
+                    self.quitting = True
+            when "$": self.row = len(self.lines) - 1
+            when others: self.message = f"Not an editor command: {text}"
+
+    # ---- one key -------------------------------------------------------
+    def handle(self, press: Press_T):
+        """What the editor does with a key; QUIT and SAVE are the terminal's. A command
+        can ask to quit (`quitting`) and leave something to tell the user (`message`)."""
+        # digits make a count -- a leading 0 is the motion, not a digit
+        let counting: bool = self.mode in {NORMAL, DELETE, YANK, GOTO}
+        if counting and press.text.isdigit() and (press.text != "0" or self.count != ""):
+            self.count = f"{self.count}{press.text}"
+            return
+        case self.mode:
+            when NORMAL: self.normal(press)
+            when INSERT: self.insert(press)
+            when REPLACE: self.overwrite(press)
+            when REPLACE_ONE: self.replace_one(press)
+            when DELETE | YANK | GOTO: self.operator(press)
+            when COMMAND: self.command(press)
+        self.clamp()
+        self.record()
+
+
+def frame_of(ed: Editor) -> Frame_T:
+    """What the editor shows now, for a terminal to draw."""
+    ed.scroll()
+    var lines: [][]Seg_T = []
+    var current: int = -1
+    for i in 0 ..< ed.rows:
+        lines.append(ed.row_segments(i))
+        if ed.is_current(i):
+            current = i
+    Frame_T(cols=ed.cols, rows=ed.rows, lines=lines, current=current, status=ed.status(),
+            cursor_x=ed.cursor_x(), cursor_y=ed.cursor_y())
+
+
+def edit(ed: Editor, term: Terminal):
+    """Edit until the user quits, on TERM."""
+    term.start()
+    var going: bool = True
+    while going:
+        let (cols, rows) = term.window()     # the window may have changed since the last key
+        ed.fit(cols, rows)
+        ed.clamp()
+        term.draw(frame_of(ed))
+        let press: Press_T = decode(term.key())
+        let (cols2, rows2) = term.window()   # ... or while it waited: a page is the window less a line
+        ed.fit(cols2, rows2)
+        case press.key:
+            when QUIT: going = False
+            when SAVE: term.flash(ed.cols, ed.rows, ed.save())
+            when RESIZE: pass
+            when others:
+                ed.handle(press)
+                if ed.quitting:
+                    going = False
+                elif ed.message != "":
+                    term.flash(ed.cols, ed.rows, ed.message)
+                    ed.message = ""
+    term.stop()
+
+
+if __name__ == "__main__":
+    let args: []str = $@
+    let raw: bool = len(args) >= 1 and args[0] == "-raw"
+    let named: []str = (args[1:] if raw else args)
+    var editor: Editor = Editor(Path(named[0] if len(named) >= 1 else "noname.txt"))
+    if raw:
+        edit(editor, RawTerminal())
+    else:
+        edit(editor, IllwillTerminal())

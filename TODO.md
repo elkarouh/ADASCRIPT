@@ -6,12 +6,12 @@ history of this file if the reasoning behind one of them is ever wanted.
 
 - [ ] an imported function named like a builtin is read as the builtin. A
       same-file `def run` overrides the builtin `run([...])` (the tutorial says
-      so), but `from vi_core import run` does not: the call is the builtin's, and the
+      so), but `from loop import run` does not: the call is the builtin's, and the
       importer is given the process runtime (`adascriptRun` and the rest) and its
       imports -- `osproc`, `posix`, `streams`, `strtabs`, `times` -- which can
       clash with the importer's own: illwill's `Key` against posix's, "ambiguous
       identifier", in a file that never mentions a process. Found moving the vi
-      loop into `vi_core`, where it is called `edit` to stay clear of it. The
+      loop into a module of its own, where it is called `edit` to stay clear of it. The
       builtins (`run`, `die`, `warn`, ...) should give way to an imported name as
       they do to a local one.
 - [ ] a method's parameter is made `var` only for a direct write to it
@@ -21,7 +21,8 @@ history of this file if the reasoning behind one of them is ever wanted.
       fix is not just to copy the proc rule: a method that overrides must have its
       base's exact signature, and a `var` the subclass alone infers from its body
       makes a *different* method -- the base's is called, silently. Today the way
-      out is to make the class `@virtual`, a reference, as `Editor` now is. What
+      out is a reference class (`@virtual`), or a plain record handed over instead,
+      as vi's terminals are handed a `Frame_T` and not the `Editor`. What
       is wanted is `var` decided from the declaration (`ed: var Editor`), the same
       in the base and every override, and refused where they differ.
 - [ ] general function decorators on Nim. Today the Nim backend knows five
@@ -626,8 +627,7 @@ Split the chain into a `let` of the first call.
 `Press_T(ESCAPE)` for `record: key: Key_T; text: str = ""` works on Python but on
 Nim is emitted as the conversion `Press_T(ESCAPE)`: "type mismatch: got 'Key_T'
 but expected 'Press_T = object'". `Press_T(CHAR, "x")` and `Press_T(key=ESCAPE)`
-are fine. EXAMPLES/VI/vi_py.ady is Python-only (curses) so it does not meet it, but
-a program built for both would.
+are fine; a program built for both backends would meet it.
 
 ## Found writing EXAMPLES/VI/vi_curses.ady (Adascript on Nim)
 
@@ -663,5 +663,5 @@ Known, and not done:
 
 In a plain function `if n is Failure_T: return 1` then `return n` works (it is
 emitted `n.value`). In a method it is emitted `is_err(n)` and `return n`,
-and Nim refuses the Result. EXAMPLES/VI/vi_core.ady keeps that code in a function
+and Nim refuses the Result. EXAMPLES/VI/vi.ady keeps that code in a function
 (`count_of`) for this.

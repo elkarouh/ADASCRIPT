@@ -4,7 +4,7 @@ the Nim backend.
 
     vi [file]              this terminal, IllwillTerminal; `vi -raw [file]` is vi_raw's
 
-The editor is vi_core.ady, and its loop calls the terminal; this file is the
+The editor is vi.ady, and its loop calls the terminal; this file is the
 terminal, an IllwillTerminal. Nim has no curses,
 so the terminal is illwill (TO_NIM/STDLIB/illwill.nim, one file in pure Nim):
 raw keyboard input that decodes arrow keys and tells a lone ESC from one, and a
@@ -13,7 +13,7 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios, os
-from vi_core import Editor, Terminal, Look_T, Code_T
+from vi_term import Terminal, Frame_T, Look_T, Code_T
 
 # illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.
 # nimraw: const STYLE_REVERSE = {styleReverse}
@@ -61,12 +61,11 @@ class IllwillTerminal(Terminal):
     def key(self) -> int:
         read_code()
 
-    def draw(self, ed: Editor):
-        ed.scroll()
-        var screen: TerminalBuffer = newTerminalBuffer(ed.cols, ed.rows + 1)
-        for i in 0 ..< ed.rows:
+    def draw(self, view: Frame_T):
+        var screen: TerminalBuffer = newTerminalBuffer(view.cols, view.rows + 1)
+        for i in 0 ..< view.rows:
             var x: int = 0
-            for seg in ed.row_segments(i):
+            for seg in view.lines[i]:
                 screen.resetAttributes()
                 case seg.look:
                     when KEYWORD: screen.setForegroundColor(fgYellow)
@@ -78,17 +77,17 @@ class IllwillTerminal(Terminal):
                 # the cursor's character is reversed, or underlined in insert mode; the line it is on is underlined
                 if seg.look == CURSOR: screen.setStyle(STYLE_REVERSE)
                 elif seg.look == BAR: screen.setStyle(STYLE_BAR)
-                elif ed.is_current(i): screen.setStyle(STYLE_LINE)
+                elif i == view.current: screen.setStyle(STYLE_LINE)
                 screen.write(x, i, seg.text)
                 x += len(seg.text)
         screen.resetAttributes()
-        screen.write(0, ed.rows, ed.status())
-        screen.setCursorPos(ed.cursor_x(), ed.cursor_y())
+        screen.write(0, view.rows, view.status)
+        screen.setCursorPos(view.cursor_x, view.cursor_y)
         screen.display()
         showCursor()
 
-    def flash(self, ed: Editor, message: str):
-        var line: TerminalBuffer = newTerminalBuffer(ed.cols, 1)
+    def flash(self, cols: int, rows: int, message: str):
+        var line: TerminalBuffer = newTerminalBuffer(cols, 1)
         line.write(0, 0, message)
         line.display()
         sleep(1000)
