@@ -13,6 +13,8 @@ This makes SARSA conservative: exploration mistakes count against it.
 """
 nimport random
 nimport sequtils
+from random nimport rand, randomize
+from sequtils nimport maxIndex
 
 # ─── environment constants ────────────────────────────────────────
 type Row_T      is 1..7

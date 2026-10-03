@@ -94,6 +94,8 @@ def _nim_reset():
     from hek_parsec import ParserState
     ParserState.export_symbols = False
     ParserState.nim_imports = set()
+    ParserState.nim_from = {}           # `from M nimport A, B`: just these names of M
+    ParserState.nim_qualified = set()   # `nimport M`: M's names only as M.name, as Python's import M
     ParserState.nim_pragmas = set()
     ParserState.nim_init_stmts = []
     ParserState.nim_top_decls = []   # helper proc/type declarations inserted after imports
@@ -668,6 +670,9 @@ def _resolved_imports(code, search_dir):
                      if os.path.isfile(p)), None)
     try:
         code = normalize_imports(code, lambda mod: find(mod) is not None)
+        # which of the `nimport`s are .ady modules, for the translation that reads them
+        import hek_nim_stmt as _hns
+        _hns.ADY_MODULES.update(m for m in import_map(code) if find(m))
         for mod, listed in import_map(code).items():
             path = find(mod)
             if path:
@@ -906,12 +911,17 @@ def translate(code, export_symbols=False):
     # Nim. One pass makes it not matter there either -- see _declare_before_use.
     output = _declare_before_use('\n'.join(output).split('\n'))
 
+    # A float `%` is Nim's `mod`, which for floats is math's. Generated code asks for
+    # just that operator, as it does for `^`, rather than relying on a `nimport math`.
+    if _re_order.search(r"(?<![\w`.])\w[^\n#\"]* mod ", "\n".join(output)):
+        ParserState.nim_from.setdefault("math", set()).add("`mod`")
+
     # Insert collected Nim imports at the top (after any leading comments),
     # followed by the pragmas, helper declarations and init statements the
     # translation asked for. Those do not depend on there being an import: a
     # program with none still needs, say, the adascriptExit helper that its
     # `quit(main())` was rewritten to call, and it used to be left out.
-    if ParserState.nim_imports or ParserState.nim_pragmas or \
+    if ParserState.nim_imports or ParserState.nim_qualified or ParserState.nim_from or ParserState.nim_pragmas or \
             getattr(ParserState, 'nim_top_decls', []) or ParserState.nim_init_stmts:
         # Find the first non-comment, non-blank line
         insert_pos = 0
@@ -924,6 +934,16 @@ def translate(code, export_symbols=False):
         if ParserState.nim_imports:
             output.insert(insert_pos, "import " + ", ".join(sorted(ParserState.nim_imports)))
             extra_offset = 1
+        # a module the file nimports and the generated code does not import for itself is
+        # imported qualified-only: its names are M.name, bare ones are undeclared
+        for _m in sorted(ParserState.nim_from):
+            if _m not in ParserState.nim_imports:
+                output.insert(insert_pos + extra_offset,
+                              f"from {_m} import {', '.join(sorted(ParserState.nim_from[_m]))}")
+                extra_offset += 1
+        for _q in sorted(ParserState.nim_qualified - ParserState.nim_imports - set(ParserState.nim_from)):
+            output.insert(insert_pos + extra_offset, f"from {_q} import nil")
+            extra_offset += 1
         if ParserState.nim_pragmas:
             pragma_lines = [f"{{.{p}.}}" for p in sorted(ParserState.nim_pragmas)]
             for j, pl in enumerate(pragma_lines):

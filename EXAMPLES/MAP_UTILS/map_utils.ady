@@ -52,6 +52,7 @@ What changed in the translation
 """
 
 nimport math
+from math nimport sin, floor, degToRad, tan, sqrt, cos, arctan2, radToDeg, arctan, arcsin, round, hypot
 
 # ---------------------------------------------------------------------------
 # Units

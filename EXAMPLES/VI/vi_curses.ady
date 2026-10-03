@@ -13,6 +13,8 @@ illwill for a key, drawing the rows into its buffer, and giving ^S and ^Q to the
 program -- illwill leaves flow control on, so the terminal would take them.
 """
 nimport illwill, termios, os
+from termios nimport Termios, tcgetattr, IXON, tcsetattr, TCSANOW
+from illwill nimport write, styleReverse, styleUnderscore, styleBright, Key, getKeyWithTimeout, illwillInit, illwillDeinit, terminalWidth, terminalHeight, TerminalBuffer, newTerminalBuffer, resetAttributes, setForegroundColor, fgYellow, fgGreen, fgBlue, fgMagenta, fgCyan, setStyle, setCursorPos, display, showCursor
 from vi_editor import Editor, Terminal, edit, Frame_T, Look_T, Code_T
 
 # illwill takes a style as a Nim set, which Adascript's set literal is not: three of them.

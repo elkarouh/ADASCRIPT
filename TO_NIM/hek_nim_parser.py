@@ -3488,6 +3488,9 @@ def to_nim(self, indent=0):
     hc = _block_inline_header_comment(block_node) if block_node else ""
     body = block_node.to_nim(indent + 1) if block_node else ""
     ParserState.symbol_table.pop_scope()
+    # the pragma, and the Future and await the body is made of, are asyncdispatch's: the
+    # generated code asks for them itself, not through the file's `nimport asyncdispatch`
+    ParserState.nim_from.setdefault("asyncdispatch", set()).update({"async", "await", "Future", "waitFor"})
     return f"{decos}{_ind(indent)}proc {_nim_ident(name)}({params}){ret_ann} {{.async.}} ={hc}\n{body}"
 
 

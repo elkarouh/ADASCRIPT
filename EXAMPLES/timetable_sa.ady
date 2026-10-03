@@ -22,6 +22,9 @@ nimport strutils
 nimport os
 nimport math
 nimport random
+from json nimport *
+from math nimport exp
+from random nimport randomize, rand
 
 type State_T  is []int
 type Action_T is str

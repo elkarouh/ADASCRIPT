@@ -31,6 +31,7 @@ params is a []str; use str() to convert numbers before passing.
 """
 
 nimport db_sqlite
+from db_sqlite nimport DbConn, open, sql, exec, getAllRows, getValue, close
 
 
 class DB:

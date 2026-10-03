@@ -7,6 +7,7 @@ once per build no matter how many modules import it.
 """
 
 nimport math
+from math nimport arctan2, sqrt, PI
 
 type Point_T is tuple:
     x: float

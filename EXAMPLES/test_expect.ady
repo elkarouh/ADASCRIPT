@@ -4,6 +4,7 @@ test_expect — drive bc via PTY using the expect stdlib.
 """
 
 nimport expect
+from expect nimport Spawn, spawn, expect, send, close, expectEof
 
 var s: Spawn = spawn("bc")
 s.expect("\\$|>|bc")   # wait for bc to start (it may print a version line or just prompt)

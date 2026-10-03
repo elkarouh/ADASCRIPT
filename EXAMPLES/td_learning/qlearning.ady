@@ -13,6 +13,8 @@ This learns the optimal (cliff-edge) path, while SARSA would stay a row above.
 """
 nimport random
 nimport sequtils
+from random nimport rand, randomize
+from sequtils nimport maxIndex
 
 # ─── environment constants ────────────────────────────────────────
 type Row_T      is 1..4

@@ -3689,7 +3689,8 @@ def _translate_module_call(module_local, func_name, args_str):
         if sym_type.startswith("_nim_module:"):
             nim_mod2 = _PY_MODULE_TO_NIM.get(py_module, py_module)
             if nim_mod2 and nim_mod2 not in ("_sys_native",):
-                ParserState.nim_imports.add(nim_mod2)
+                ParserState.nim_qualified.add(nim_mod2)
+                return f"{nim_mod2}.{func_name}{args_str}"
             return f"{func_name}{args_str}"
         return None
 
@@ -4393,6 +4394,7 @@ def _translate_stdlib_patterns(expr):
 @method(await_expr)
 def to_nim(self, prec=None):
     """await_expr: 'await' primary -> Nim: 'await primary' (requires asyncdispatch)"""
+    ParserState.nim_from.setdefault("asyncdispatch", set()).update({"await", "waitFor"})
     return f"await {self.nodes[0].to_nim()}"
 
 
@@ -4647,10 +4649,13 @@ def to_nim(self, prec=None):
             exponents = [seq.nodes[1].to_nim(PREC_POWER) for seq in node.nodes]
             for exp in reversed(exponents):
                 # Use pow() for float exponents, ^ for int
+                # the generated code asks for just the name it uses, so that it
+                # does not hand the file the rest of math (`nimport math` does that)
                 if '.' in exp or exp == '0.5':
-                    ParserState.nim_imports.add("math")
+                    ParserState.nim_from.setdefault("math", set()).add("pow")
                     result = f"pow(float({result}), {exp})"
                 else:
+                    ParserState.nim_from.setdefault("math", set()).add("`^`")
                     result = f"{result} ^ {exp}"
         elif fname in ("call_trailer", "index_trailer", "slice_trailer", "attr_trailer", "trailer"):
             for tr in node.nodes:

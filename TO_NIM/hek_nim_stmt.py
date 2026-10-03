@@ -57,6 +57,9 @@ _AUGOP_TO_NIM = {
 # AdaScript stdlib modules that 'from X import Y' should resolve natively.
 # Only entries where the AdaScript name != the Nim import name are needed
 # for nimport; the full set is needed for from_abs.to_nim().
+# .ady modules the file imports, as `nimport` after the import check; they stay plain imports
+ADY_MODULES: set = set()
+
 _NIMPORT_NAME_MAP = {
     "time":     "times",
     "datetime": "times",
@@ -2143,9 +2146,16 @@ def to_nim(self):
     """from_nim_abs: 'from' dotted_name 'nimport' import_names -> Nim: import module"""
     module = self.nodes[0].to_nim()
     nim_mod = _NIMPORT_NAME_MAP.get(module, module)
-    ParserState.nim_imports.add(nim_mod)
-    # Selective names (from X nimport Y) or star (from X nimport *) both just add the import.
-    # Individual names become directly accessible after `import nim_mod`.
+    names_node = self.nodes[1] if len(self.nodes) > 1 else None
+    names = _import_names_to_nim(names_node).strip("()") if names_node is not None else "*"
+    items = [n.strip() for n in names.split(",") if n.strip()]
+    # `from M nimport A, B` is Python's `from M import A, B`: A and B and nothing else of M's,
+    # which Nim says as `from M import A, B`. A star, a rename (Nim has none) or an .ady
+    # module (whose names the importer rewrote bare) takes the whole module, as `import`.
+    if module in ADY_MODULES or items == ["*"] or any(" as " in i for i in items) or not items:
+        ParserState.nim_imports.add(nim_mod)
+    else:
+        ParserState.nim_from.setdefault(nim_mod, set()).update(items)
     return None
 
 
@@ -2193,7 +2203,10 @@ def to_nim(self):
             lines.append(_emit_pyimport("re"))
         else:
             nim_mod = _NIMPORT_NAME_MAP.get(part, part)
-            ParserState.nim_imports.add(nim_mod)
+            if part in ADY_MODULES:
+                ParserState.nim_imports.add(nim_mod)
+            else:
+                ParserState.nim_qualified.add(nim_mod)
             # Register `part` as a nim_module alias so `part.func(args)` -> `func(args)`
             ParserState.symbol_table.add(part, f"_nim_module:{part}", "let")
     return chr(10).join(lines) if lines else None

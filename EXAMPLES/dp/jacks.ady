@@ -14,6 +14,7 @@ Policy Iteration:
   Repeat until policy is stable.
 """
 nimport math
+from math nimport exp, pow, fac
 
 # ─── domain types ─────────────────────────────────────────────────
 type Cars_T     is 0..20
