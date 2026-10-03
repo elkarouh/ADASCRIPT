@@ -457,6 +457,8 @@ def include_ady_modules(code, search_dir, _seen=None):
         return path or (bundled if os.path.isfile(bundled) else None)
     # `import M` of an .ady module, `nimport` of a Nim one, `pyimport` of a Python one
     code = normalize_imports(code, lambda name: find_checked(name) is not None)
+    from ady_modules import refuse_bare_nim_names
+    refuse_bare_nim_names(code, lambda name: find_checked(name) is not None)
     for mod, listed in import_map(code).items():
         path = find_checked(mod)
         if path:

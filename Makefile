@@ -720,21 +720,25 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_refuse_[0-9]*.ady $(TMPDIR)/ady_refuse.out
-	@# nimport is Python's too: `nimport math` binds math, so a bare sqrt is undeclared, and
-	@# so is a name left out of `from math nimport floor`. Nim's compiler does the refusing.
-	@echo "=== nimport: only the names asked for (Nim backend) ==="
+	@# nimport is Python's too: `nimport math` binds math, so a bare sqrt is refused, and so
+	@# is a name left out of `from math nimport floor`; both backends say so, with the line
+	@# and what to write. Only the common Nim modules are known to the check; the rest Nim refuses.
+	@echo "=== nimport: only the names asked for, both backends ==="
 	@printf 'nimport math\nprint sqrt(4.0)\n' > $(TMPDIR)/ady_nimport_1.ady
 	@printf 'from math nimport floor\nprint ceil(2.5)\n' > $(TMPDIR)/ady_nimport_2.ady
-	@for c in "1:a bare name after nimport M:sqrt" "2:a name left out of the from-list:ceil"; do \
-	    n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
-	    printf '  %-42s' "$$what"; \
-	    if $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py c $(TMPDIR)/ady_nimport_$$n.ady > $(TMPDIR)/ady_nimport.out 2>&1; then \
-	        echo "FAIL (accepted)"; exit 1; \
-	    fi; \
-	    grep -q "undeclared identifier: '$$want'" $(TMPDIR)/ady_nimport.out \
-	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_nimport.out; exit 1; }; \
+	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
+	    for c in "1:a bare name after nimport M:'sqrt' is not imported from math: write math.sqrt" \
+	             "2:a name left out of the from-list:'ceil' is not imported from math: add ceil to"; do \
+	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
+	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
+	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_nimport_$$n.ady > $(TMPDIR)/ady_nimport.out 2>&1; then \
+	            echo "FAIL (accepted)"; exit 1; \
+	        fi; \
+	        grep -q "$$want" $(TMPDIR)/ady_nimport.out \
+	            && echo OK || { echo FAIL; cat $(TMPDIR)/ady_nimport.out; exit 1; }; \
+	    done; \
 	done
-	@rm -f $(TMPDIR)/ady_nimport_[0-9].ady $(TMPDIR)/ady_nimport.out $(TMPDIR)/ady_nimport_[0-9]
+	@rm -f $(TMPDIR)/ady_nimport_[0-9].ady $(TMPDIR)/ady_nimport.out
 	@# A distinct type mixes with nothing else: not its base, not another
 	@# distinct type on the same base. Nim's compiler refuses each of these;
 	@# the Python backend refuses those it can see -- a typed name given, or

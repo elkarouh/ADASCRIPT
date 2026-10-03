@@ -267,3 +267,59 @@ def resolve_imports(code, module, listed, module_source):
         out.append(code[last:m.start()]); out.append(name); last = m.end()
     out.append(code[last:])
     return "".join(out)
+
+
+# What the common Nim modules a file `nimport`s hand out, so that a bare use of one of
+# their names is refused here, with the line and what to do, as it is for an .ady module,
+# rather than by Nim's compiler at a line of generated code (or, on the Python backend, by
+# a NameError at run time). Only names that are unmistakably the module's: a function counts
+# when it is called bare (`sqrt(x)`; `x.strip()` is a method of the value, not a use), a
+# constant or type when it appears at all. Other Nim modules are left to Nim's compiler.
+_NIM_CALLS = {
+    "math": "sqrt cbrt sin cos tan arcsin arccos arctan arctan2 sinh cosh tanh exp ln log2 log10 "
+            "pow floor ceil trunc hypot degToRad radToDeg fac gcd lcm isNaN",
+    "os": "getCurrentDir setCurrentDir fileExists dirExists walkDir walkFiles createDir removeFile "
+          "removeDir copyFile moveFile joinPath splitFile splitPath extractFilename expandTilde "
+          "getHomeDir getTempDir paramStr paramCount commandLineParams execShellCmd getAppFilename",
+    "strutils": "strip startsWith endsWith toUpperAscii toLowerAscii parseInt parseFloat parseBool "
+                "parseHexInt align alignLeft center indent unindent splitLines splitWhitespace",
+    "sequtils": "filterIt mapIt anyIt allIt countIt toSeq maxIndex minIndex foldl foldr keepIf "
+                "applyIt newSeqWith deduplicate distribute",
+    "random": "rand randomize sample shuffle initRand gauss",
+    "algorithm": "sortedByIt binarySearch lowerBound upperBound nextPermutation isSorted",
+    "time": "cpuTime epochTime getTime getLocalTime getGMTime initDuration initTime toUnix fromUnix",
+    "json": "parseJson newJObject newJArray newJString newJInt newJFloat newJBool newJNull "
+            "getStr getInt getFloat getBool getElems getFields",
+}
+_NIM_NAMES = {
+    "math": "PI TAU",
+    "json": "JsonNode",
+    "random": "Rand",
+}
+
+
+def refuse_bare_nim_names(code, is_ady):
+    """Refuse a bare use of a name of a Nim module the file `nimport`s -- in the
+    normalized form, where `import M` of an .ady module is `nimport M` too, IS_ADY(name)
+    says which are .ady and so not this function's."""
+    imports = import_map(code)
+    text = _blank(code)
+    for module, listed in imports.items():
+        if is_ady(module) or listed is STAR or module not in _NIM_CALLS and module not in _NIM_NAMES:
+            continue
+        calls = set(_NIM_CALLS.get(module, "").split())
+        plain = set(_NIM_NAMES.get(module, "").split())
+        bare = re.search(rf'^nimport[ \t]+(?:[\w./]+[ \t]*,[ \t]*)*{re.escape(module)}\b', code, re.MULTILINE)
+        for name in sorted(calls | plain):
+            if name in listed:
+                continue
+            pattern = rf'(?<![\w.$]){re.escape(name)}\b' + (r'(?=[ \t]*\()' if name in calls else '')
+            use = next((u for u in re.finditer(pattern, text)
+                        if not text[:u.start()].rstrip().endswith(("def", "class", "type"))), None)
+            if not use or _binds(text, name):
+                continue               # unused, or a name of the file's own
+            line = text.count("\n", 0, use.start()) + 1
+            from_list = f"`from {module} nimport {', '.join(sorted(set(listed) | {name}))}`"
+            fix = (f"write {module}.{name}, or add {name} to {from_list}" if bare else
+                   f"add {name} to {from_list}, or `nimport {module}` and write {module}.{name}")
+            raise SyntaxError(f"line {line}: '{name}' is not imported from {module}: {fix}")

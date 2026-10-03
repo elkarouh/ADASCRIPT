@@ -1032,7 +1032,7 @@ from shortest_path import Minimizer, Maximizer   # another .ady file as a librar
 
 `nimport` has Python's meaning too: `nimport math` binds `math` (write `math.sqrt(x)`; a bare
 `sqrt` is undeclared), `from math nimport sqrt, floor` gives just those two, and
-`from json nimport *` gives the whole module. Nim's compiler does the refusing, with the name.
+`from json nimport *` gives the whole module. For the common modules (`math`, `os`, `time`, `strutils`, `sequtils`, `random`, `algorithm`, `json`) a bare name is refused with a message giving the line and the fix; for other modules Nim's compiler refuses it.
 The transpiler imports for itself what it writes (`^` for `**`, a float `%`, `async`, `await`).
 
 **Modules** — a module is a `.ady` file; `import` links a whole project:
