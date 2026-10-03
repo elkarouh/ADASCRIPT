@@ -26,7 +26,7 @@ the distance to the side it was put at.
 from map_utils import GeoPoint, GeoVector, Vector, Position, GeoFailure_T, LatLong_T
 from map_utils import Kilometers_T, Meters_T, Degrees_T, Bearing_T, SquareMeters_T
 from map_utils import geo_point_from_dms, human_latlong2dec, vector_xy, must
-from regions import Region, Circle, Sector, Polygon
+from regions import Region, Circle, Sector, Polygon, HalfAngle_T
 
 # ---- the data ------------------------------------------------------------------
 
@@ -48,7 +48,14 @@ const RESTRICTED: []str = [
 # R-2, a restricted circle of 20 km, and the approach to Marseille: a wedge of 25 degrees
 # either side of north, 150 km deep.
 const R2_CENTRE: str = "443600N 0050900E"
+const R2_RADIUS: Kilometers_T = 20.0
 const FUNNEL_HEADING: Bearing_T = 355.0
+const FUNNEL_HALF_ANGLE: HalfAngle_T = 25.0
+const FUNNEL_RANGE: Kilometers_T = 150.0
+
+# The holding pattern: points on a circle round the last beacon.
+const HOLD_RADIUS: Kilometers_T = 20.0
+const HOLD_POINTS: int = 6
 
 # The kinds of airspace the route is checked against; the last is made of the others.
 type Zone_T is enum R1, R2, FUNNEL, OPEN_FUNNEL
@@ -145,15 +152,47 @@ def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
     let along: Meters_T = dot / length
     return Fix_T(Kilometers_T(float(along) / 1000.0), Kilometers_T(abs(float(across)) / 1000.0), side_of_track(across))
 
-def main():
-    let airports: []Airport_T = ROUTE
-    # The airspace: R-1 and R-2 are restricted, the funnel is the approach to Marseille,
-    # and what may be used of the funnel is what is not restricted.
+type Airspace_T is record:
+    r1:          Region        # restricted area R-1: a polygon
+    r2:          Region        # restricted circle R-2
+    funnel:      Region        # the approach to Marseille: a wedge
+    restricted:  Region        # R-1 or R-2
+    open_funnel: Region        # the funnel, less what is restricted
+
+def airspace() -> Airspace_T:
+    """The airspace the route is checked against, composed with the region operators:
+    R-1 and R-2 are restricted, the funnel is the approach to Marseille, and what may
+    be used of the funnel is what is not restricted."""
     let r1: Region = Polygon(outline())
-    let r2: Region = Circle(must(geo_point_from_dms(R2_CENTRE)), 20.0)
-    let funnel: Region = Sector(position_of(LFML), FUNNEL_HEADING, 25.0, 150.0)
+    let r2: Region = Circle(must(geo_point_from_dms(R2_CENTRE)), R2_RADIUS)
+    let funnel: Region = Sector(position_of(LFML), FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE)
     let restricted: Region = r1 | r2
     let open_funnel: Region = funnel & ~restricted
+    return Airspace_T(r1, r2, funnel, restricted, open_funnel)
+
+def plane_beside(start: GeoPoint, leg: GeoVector, fraction: float, off: Kilometers_T, turn: Degrees_T) -> GeoPoint:
+    """A plane OFF km to the side of the point FRACTION of the way along a leg, in the
+    direction TURN degrees from the leg's bearing: +90 is to the right, -90 to the left."""
+    let on_track: GeoPoint = start + leg * fraction
+    let bearing: Bearing_T = leg.phase()
+    return on_track + GeoVector(off, Degrees_T(float(bearing)) + turn)
+
+def holding_pattern(beacon: GeoPoint, radius: Kilometers_T, count: int) -> []GeoPoint:
+    """COUNT points on a circle of RADIUS round BEACON, made by turning one of them round it."""
+    let first: GeoPoint = beacon + GeoVector(radius, 0.0)
+    var points: []GeoPoint = []
+    for k in 0 ..< count:
+        points.append(first.rotate_around_point(beacon, Degrees_T(360.0 * float(k) / float(count))))
+    return points
+
+def main():
+    let airports: []Airport_T = ROUTE
+    let air: Airspace_T = airspace()
+    let r1: Region = air.r1
+    let r2: Region = air.r2
+    let funnel: Region = air.funnel
+    let restricted: Region = air.restricted
+    let open_funnel: Region = air.open_funnel
     let zones: []Region = [r1, r2, funnel, open_funnel]            # in the order of Zone_T
 
     print "ROUTE"
@@ -196,29 +235,21 @@ def main():
     # A plane 12 km to the right of the middle of the second leg, and one 7 km to the left
     # of a point a quarter of the way along the third.
     let second: GeoVector = legs[1]
-    let midway: GeoPoint = starts[1] + second * 0.5
-    let to_right: GeoVector = GeoVector(12.0, Degrees_T(float(second.phase()) + 90.0))
-    let strayed_right: GeoPoint = midway + to_right
+    let strayed_right: GeoPoint = plane_beside(starts[1], second, 0.5, 12.0, 90.0)
     let fix_right: Fix_T = fix_on_leg(starts[1], second, strayed_right)
     print f"  a plane at {strayed_right.human()}: {fix_right.along:.1f} km along the leg, {fix_right.across:.1f} km to the {fix_right.side}"
     let third: GeoVector = legs[2]
-    let quarter: GeoPoint = starts[2] + third * 0.25
-    let to_left: GeoVector = GeoVector(7.0, Degrees_T(float(third.phase()) - 90.0))
-    let strayed_left: GeoPoint = quarter + to_left
+    let strayed_left: GeoPoint = plane_beside(starts[2], third, 0.25, 7.0, -90.0)
     let fix_left: Fix_T = fix_on_leg(starts[2], third, strayed_left)
     print f"  a plane at {strayed_left.human()}: {fix_left.along:.1f} km along the leg, {fix_left.across:.1f} km to the {fix_left.side}"
 
     print ""
     print "HOLDING PATTERN"
     print "---------------"
-    # Six points on a circle of 20 km round the last beacon, made by turning one of them.
     let beacon: GeoPoint = position_of(LFML)
-    let first: GeoPoint = beacon + GeoVector(20.0, 0.0)
-    var pattern: []GeoPoint = []
-    for k in 0 ..< 6:
-        let spot: GeoPoint = first.rotate_around_point(beacon, Degrees_T(60.0 * float(k)))
-        pattern.append(spot)
-        print f"  point {k + 1}: {spot.human()}"
+    let pattern: []GeoPoint = holding_pattern(beacon, HOLD_RADIUS, HOLD_POINTS)
+    for k in 0 ..< len(pattern):
+        print f"  point {k + 1}: {pattern[k].human()}"
 
     # ---- what it printed is right ----------------------------------------------
     var summed: Kilometers_T = 0.0

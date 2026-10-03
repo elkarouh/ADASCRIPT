@@ -248,10 +248,12 @@ ADA_INDENT_TESTS := \
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
 #   tsp.ady         — matplotlib not installed by default (pyimport)
+#   MAP_UTILS/route_map.ady — folium not installed by default (pyimport)
 #   BENCH_SEARCH/bench_search.ady — a timing program: its output is the clock
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
+    MAP_UTILS/route_map.ady \
     test_input.ady \
     VI/vi_nim.ady \
     VI/vi_raw.ady \

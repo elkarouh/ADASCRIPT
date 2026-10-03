@@ -36,8 +36,14 @@ four airports, checked against restricted airspace and an approach funnel built 
 regions, with a plane's distance off its track and a holding pattern. It checks its own
 results.
 
+`route_map.ady` draws that route on a Folium map -- the route coloured by the airspace it
+is in, the zones, the airports, two planes off their track and the holding pattern, each a
+layer -- as the original demo drew its points. It needs `pip install folium` for the
+Python that nimpy loads, so `make test` only compiles it.
+
     ady2nim c map_utils.ady && ./map_utils
     ady2nim c -r test_map_utils.ady
     ady2nim c -r test_hek_map_utils.ady
     ady2nim c -r test_regions.ady
     ady2nim c route_check.ady && ./route_check
+    ady2nim c route_map.ady && ./route_map [FILE.html [show]]

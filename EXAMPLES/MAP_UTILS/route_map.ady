@@ -1,0 +1,238 @@
+#!/usr/bin/env ady2nim
+"""route_map -- route_check on a map, with Folium.
+
+    route_map [FILE.html [show]]
+
+The original demo of map_utils drew its points and its triangle on a folium map and
+opened it in the browser.  This draws what route_check works out:
+
+  * the route, a polyline of points every kilometre along each leg -- a great-circle
+    arc, not the straight line between airports -- coloured by the airspace it is in:
+    red where it is restricted, green in the approach funnel where it may be used, blue
+    elsewhere;
+  * the airspace: the polygon R-1, the circle R-2 and the approach funnel, each a layer
+    that can be switched on and off;
+  * the airports, with their positions and what the leg to them takes;
+  * the two planes off their track, joined to it by a dashed line, with how far along and
+    to which side; and the holding pattern round Marseille.
+
+The map is written to FILE.html (route_map.html when none is given); `show` opens it in the
+browser too, as the original did.  What was written is read back and counted, so that a
+layer lost on the way is an error.
+
+It needs the folium package for the Python that nimpy embeds (`pip install folium`).
+"""
+pyimport folium
+
+from map_utils import GeoPoint, GeoVector, Kilometers_T, Degrees_T, Bearing_T, geo_point_from_dms, must
+from regions import Region, HalfAngle_T
+from route_check import Airport_T, ROUTE, R2_CENTRE, R2_RADIUS, FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE
+from route_check import HOLD_RADIUS, HOLD_POINTS, CRUISE, Hours_T, Fix_T, Airspace_T
+from route_check import position_of, outline, airspace, plane_beside, holding_pattern, fix_on_leg, hours_minutes
+
+# ---- how a stretch of the route is drawn -----------------------------------------------------
+
+type Style_T is enum PLAIN_LEG, RESTRICTED_LEG, FUNNEL_LEG
+
+const COLOUR: [Style_T]str = [PLAIN_LEG: "#1f78b4", RESTRICTED_LEG: "#e31a1c", FUNNEL_LEG: "#33a02c"]
+const WEIGHT: [Style_T]int = [PLAIN_LEG: 4, RESTRICTED_LEG: 7, FUNNEL_LEG: 6]
+const MEANING: [Style_T]str = [PLAIN_LEG: "open airspace", RESTRICTED_LEG: "restricted", FUNNEL_LEG: "approach funnel, unrestricted"]
+
+def style_at(point: GeoPoint, air: Airspace_T) -> Style_T:
+    return RESTRICTED_LEG if point in air.restricted
+    return FUNNEL_LEG if point in air.open_funnel
+    return PLAIN_LEG
+
+# ---- folium, in the few words this needs --------------------------------------------------
+
+def latlon(point: GeoPoint) -> []float:
+    """folium's way to write a position: [latitude, longitude]."""
+    return [float(point.latitude), float(point.longitude)]
+
+def latlons(points: []GeoPoint) -> [][]float:
+    return [latlon(p) for p in points]
+
+def put(layer: PyObject, into: PyObject) -> None:
+    """Add a folium layer to a map or a group. add_to hands the layer back, and Nim insists
+    that what a call returns is used."""
+    let added: PyObject = layer.add_to(into)
+
+def group(on: PyObject, name: str) -> PyObject:
+    """A layer that can be switched on and off, named in the layer control."""
+    let made: PyObject = folium.FeatureGroup(name=name)
+    put(made, on)
+    return made
+
+# ---- the route --------------------------------------------------------------------------
+
+type Drawn_T is record:
+    lines:  int                # polylines drawn
+    km:     [Style_T]int       # kilometres in each style
+
+def draw_leg(into: PyObject, start: GeoPoint, leg: GeoVector, air: Airspace_T, label: str) -> Drawn_T:
+    """A leg as polylines, a new one wherever the airspace changes, joined end to start."""
+    let total: float = float(leg.magnitude())
+    var drawn: Drawn_T = Drawn_T(0, [PLAIN_LEG: 0, RESTRICTED_LEG: 0, FUNNEL_LEG: 0])
+    var points: [][]float = []
+    var style: Style_T = PLAIN_LEG
+    for k in 0 .. int(total):
+        let here: GeoPoint = start + leg * (float(k) / total if total > 0.0 else 0.0)
+        let now: Style_T = style_at(here, air)
+        if k > 0 and now != style:
+            points.append(latlon(here))                    # the old stretch ends where the new one starts
+            let line: PyObject = folium.PolyLine(locations=points, color=COLOUR[style], weight=WEIGHT[style], opacity=0.9, tooltip=f"{label}: {MEANING[style]}")
+            put(line, into)
+            drawn.lines += 1
+            points = []
+        points.append(latlon(here))
+        style = now
+        drawn.km[now] += 1
+    points.append(latlon(start + leg))                     # the airport itself, which the last kilometre falls short of
+    let last: PyObject = folium.PolyLine(locations=points, color=COLOUR[style], weight=WEIGHT[style], opacity=0.9, tooltip=f"{label}: {MEANING[style]}")
+    put(last, into)
+    drawn.lines += 1
+    return drawn
+
+# ---- the airspace ---------------------------------------------------------------------------
+
+def funnel_outline(apex: GeoPoint) -> []GeoPoint:
+    """The outline of the wedge: the apex, then points every 2.5 degrees along its far edge."""
+    var points: []GeoPoint = [apex]
+    let first: float = float(FUNNEL_HEADING) - float(FUNNEL_HALF_ANGLE)
+    let steps: int = int(2.0 * float(FUNNEL_HALF_ANGLE) / 2.5)
+    for k in 0 .. steps:
+        points.append(apex + GeoVector(FUNNEL_RANGE, Degrees_T(first + 2.5 * float(k))))
+    return points
+
+def draw_airspace(on: PyObject, apex: GeoPoint) -> int:
+    """The three zones, each in a layer of its own; how many shapes."""
+    let g1: PyObject = group(on, "R-1, restricted")
+    let r1: PyObject = folium.Polygon(locations=latlons(outline()), color="#e31a1c", weight=2, fill=True, fill_color="#e31a1c", fill_opacity=0.18, tooltip="R-1: restricted area")
+    put(r1, g1)
+    let g2: PyObject = group(on, "R-2, restricted")
+    let centre: GeoPoint = must(geo_point_from_dms(R2_CENTRE))
+    let r2: PyObject = folium.Circle(location=latlon(centre), radius=float(R2_RADIUS) * 1000.0, color="#e31a1c", weight=2, fill=True, fill_color="#e31a1c", fill_opacity=0.18, tooltip="R-2: restricted circle")
+    put(r2, g2)
+    let g3: PyObject = group(on, "Approach funnel")
+    let wedge: PyObject = folium.Polygon(locations=latlons(funnel_outline(apex)), color="#33a02c", weight=2, fill=True, fill_color="#33a02c", fill_opacity=0.10, tooltip="Approach funnel")
+    put(wedge, g3)
+    return 3
+
+# ---- the program ----------------------------------------------------------------------
+
+def main():
+    let out: Path = Path($1 if $# >= 1 else "route_map.html")
+    let air: Airspace_T = airspace()
+    let airports: []Airport_T = ROUTE
+    let apex: GeoPoint = position_of(LFML)
+
+    var points: []GeoPoint = []
+    for a in airports:
+        points.append(position_of(a))
+
+    let m: PyObject = folium.Map(location=latlon(points[1]), zoom_start=6, control_scale=True)
+
+    # the route, leg by leg
+    let route: PyObject = group(m, "Route")
+    var legs: []GeoVector = []
+    var lines: int = 0
+    var km: [Style_T]int = [PLAIN_LEG: 0, RESTRICTED_LEG: 0, FUNNEL_LEG: 0]
+    var total_km: Kilometers_T = 0.0
+    for i in 1 ..< len(points):
+        let leg: GeoVector = points[i] - points[i - 1]            # from the last airport to this
+        legs.append(leg)
+        total_km += leg.magnitude()
+        let drawn: Drawn_T = draw_leg(route, points[i - 1], leg, air, f"{airports[i - 1]} to {airports[i]}")
+        lines += drawn.lines
+        for style in Style_T:
+            km[style] += drawn.km[style]
+
+    # the airports
+    let stops: PyObject = group(m, "Airports")
+    for i in 0 ..< len(points):
+        var note: str = f"{airports[i]}  {points[i].human()}"
+        if i > 0:
+            let hours: Hours_T = legs[i - 1].magnitude() / CRUISE
+            note = f"{note}<br>{legs[i - 1].magnitude():.1f} km from {airports[i - 1]}, {hours_minutes(hours)} at {int(float(CRUISE))} km/h"
+        let icon: PyObject = folium.Icon(color="darkblue", icon="plane", prefix="fa")
+        let pin: PyObject = folium.Marker(location=latlon(points[i]), icon=icon, tooltip=f"{airports[i]}", popup=note)
+        put(pin, stops)
+
+    let shapes: int = draw_airspace(m, apex)
+
+    # two planes off their track, each joined to the track by a dashed line
+    let off: PyObject = group(m, "Off track")
+    let planes: int = 2
+    let right: GeoPoint = plane_beside(points[1], legs[1], 0.5, 12.0, 90.0)
+    let fix_right: Fix_T = fix_on_leg(points[1], legs[1], right)
+    let left: GeoPoint = plane_beside(points[2], legs[2], 0.25, 7.0, -90.0)
+    let fix_left: Fix_T = fix_on_leg(points[2], legs[2], left)
+    let on_right: GeoPoint = points[1] + legs[1] * 0.5
+    let on_left: GeoPoint = points[2] + legs[2] * 0.25
+    let tie_right: PyObject = folium.PolyLine(locations=[latlon(on_right), latlon(right)], color="#ff7f00", weight=3, dash_array="6")
+    put(tie_right, off)
+    let tie_left: PyObject = folium.PolyLine(locations=[latlon(on_left), latlon(left)], color="#ff7f00", weight=3, dash_array="6")
+    put(tie_left, off)
+    let icon_right: PyObject = folium.Icon(color="orange", icon="plane", prefix="fa")
+    let plane_right: PyObject = folium.Marker(location=latlon(right), icon=icon_right, tooltip=f"{fix_right.across:.1f} km to the {fix_right.side}, {fix_right.along:.1f} km along")
+    put(plane_right, off)
+    let icon_left: PyObject = folium.Icon(color="orange", icon="plane", prefix="fa")
+    let plane_left: PyObject = folium.Marker(location=latlon(left), icon=icon_left, tooltip=f"{fix_left.across:.1f} km to the {fix_left.side}, {fix_left.along:.1f} km along")
+    put(plane_left, off)
+
+    # the holding pattern round the last airport
+    let hold: PyObject = group(m, "Holding pattern")
+    let ring: PyObject = folium.Circle(location=latlon(apex), radius=float(HOLD_RADIUS) * 1000.0, color="#6a3d9a", weight=2, dash_array="6", fill=False, tooltip="holding pattern")
+    put(ring, hold)
+    let pattern: []GeoPoint = holding_pattern(apex, HOLD_RADIUS, HOLD_POINTS)
+    for k in 0 ..< len(pattern):
+        let spot: PyObject = folium.CircleMarker(location=latlon(pattern[k]), radius=6, color="#6a3d9a", fill=True, fill_opacity=0.9, tooltip=f"hold {k + 1}: {pattern[k].human()}")
+        put(spot, hold)
+
+    # a legend, and the layer control
+    var legend: str = "<div style='position: fixed; bottom: 30px; left: 30px; z-index: 9999; background: white; padding: 8px 12px; border: 1px solid #888; font: 13px sans-serif'><b>route_check</b>"
+    for style in Style_T:
+        legend = f"{legend}<br><span style='color: {COLOUR[style]}; font-weight: bold'>&#9644;</span> {MEANING[style]}"
+    legend = f"{legend}<br><span style='color: #ff7f00; font-weight: bold'>&#9644;</span> a plane off its track</div>"
+    let root: PyObject = m.get_root()
+    let page: PyObject = root.html
+    let note: PyObject = folium.Element(legend)
+    let attached: PyObject = page.add_child(note)
+    let control: PyObject = folium.LayerControl()
+    put(control, m)
+
+    var south: float = 90.0
+    var north: float = -90.0
+    var west: float = 180.0
+    var east: float = -180.0
+    for p in points + [apex] + outline():
+        south = min(south, float(p.latitude))
+        north = max(north, float(p.latitude))
+        west = min(west, float(p.longitude))
+        east = max(east, float(p.longitude))
+    let fitted: PyObject = m.fit_bounds([[south, west], [north, east]])
+
+    let saved: PyObject = m.save(str(out))
+    print f"route_map: wrote {out}"
+    print f"  route {total_km:.1f} km: {km[PLAIN_LEG]} km in open airspace, {km[RESTRICTED_LEG]} restricted, {km[FUNNEL_LEG]} in the funnel"
+    print f"  {lines} route lines, {len(points)} airports, {shapes} zones, {planes} planes off track, {len(pattern)} holding points"
+
+    # what was written has what was drawn
+    let written: str | !PathFailure_T = out.read_text()
+    if written is PathFailure_T:
+        print f"error: {written.reason}"
+        quit(1)
+    assert written.count("L.polyline(") == lines + 2           # the route and the two ties
+    assert written.count("L.marker(") == len(points) + planes
+    assert written.count("L.polygon(") == 2                    # R-1 and the funnel
+    assert written.count("L.circle(") == 2                     # R-2 and the holding ring
+    assert written.count("L.circleMarker(") == len(pattern)
+    assert "R-1: restricted area" in written and "Approach funnel" in written and "EBBR" in written
+    assert km[PLAIN_LEG] + km[RESTRICTED_LEG] + km[FUNNEL_LEG] >= int(float(total_km))
+    print "route_map: the page has every layer"
+
+    if $# >= 2 and $2 == "show":
+        let shown: PyObject = m.show_in_browser()
+
+if __name__ == "__main__":
+    main()
