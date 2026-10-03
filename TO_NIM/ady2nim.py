@@ -2408,7 +2408,20 @@ def main(argv=None):
         # mold linker rejects R_X86_64_32S relocations — compile all C objects
         # as position-independent so mold accepts them.
         cmd.append("--passC:-fPIC")
-        if "nimpy" in (getattr(ParserState, "nim_imports", None) or set()):
+        # ParserState holds only what the last transpile saw -- a dependency's, once
+        # there are any, and nothing at all when the build is up to date -- so ask
+        # the generated Nim itself whether it, or a dependency, imports nimpy.
+        _uses_nimpy = False
+        for _nf in [nim_file] + [os.path.join(cache_dir, *d.split("/")) + ".nim"
+                                 for d in _seen_deps]:
+            try:
+                with open(_nf, encoding="utf-8") as _fh:
+                    if _re_order.search(r"^import\b.*\bnimpy\b", _fh.read(), _re_order.MULTILINE):
+                        _uses_nimpy = True
+                        break
+            except OSError:
+                pass
+        if _uses_nimpy:
             try:
                 import sysconfig as _sc
                 _libdir = _sc.get_config_var("LIBDIR") or ""
