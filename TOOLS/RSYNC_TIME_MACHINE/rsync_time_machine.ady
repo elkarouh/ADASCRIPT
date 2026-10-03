@@ -46,7 +46,7 @@ nimport time
 
 # Terminal styling comes from the Adascript standard library rather than
 # maintaining a second set of ANSI escape sequences in this example.
-from ansi import bold, fg_green, fg_red, fg_yellow, fg_magenta
+from ansi import Style, bold, fg_green, fg_red, fg_yellow, fg_magenta
 
 # Reusable combined styles.  Keep these as Style values so call sites can
 # simply write `text | success_style` rather than rebuilding the combination.

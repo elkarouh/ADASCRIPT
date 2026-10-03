@@ -468,7 +468,7 @@ def include_ady_modules(code, search_dir, _seen=None):
         wanted = [n.strip() for n in names.split(",")] if names else [match.group("from")]
         kept, pieces = [], []
         for name in wanted:
-            path = find(name, search_dir)
+            path = find_checked(name)
             if path is None:
                 kept.append(name)
                 continue
