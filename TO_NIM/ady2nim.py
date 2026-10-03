@@ -1363,7 +1363,7 @@ def run_tests():
         ),
         (
             "async def f():\n    pass\n",
-            "proc f() {.async.} =\n    discard\n",
+            "from asyncdispatch import Future, async, await, waitFor\nproc f() {.async.} =\n    discard\n",
         ),
         (
             "case x:\n    when 1:\n        pass\n",
@@ -1408,7 +1408,7 @@ def run_tests():
         ),
         (
             "x = a ** 2\n",
-            "var x = a ^ 2\n",
+            "from math import `^`\nvar x = a ^ 2\n",
         ),
         (
             "x = [1, 2, 3]\n",

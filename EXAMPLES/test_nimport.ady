@@ -1,0 +1,22 @@
+#!/usr/bin/env ady2nim
+"""test_nimport -- `nimport` follows Python's rules, as `import` does.
+
+`nimport math` binds `math`: the file writes `math.sqrt(x)`. `from math nimport floor`
+gives the file `floor` and nothing else of math's; `from strutils nimport *` gives it all
+of strutils, as Python's star does. A bare name the file did not ask for is undeclared:
+the Makefile checks that `nimport math` then `sqrt(4.0)` is refused.
+"""
+nimport math, os
+from math nimport floor
+from strutils nimport *
+
+def main():
+    assert math.sqrt(9.0) == 3.0                  # qualified, through `nimport math`
+    assert floor(2.5) == 2.0                      # from-listed
+    assert "  a  ".strip() == "a"                 # strutils, by the star
+    assert 2.0 ** 3 == 8.0 and 7.5 % 2.0 == 1.5   # operators the transpiler imports itself
+    assert os.getpid() > 0                        # another qualified module
+    print "test_nimport: ok"
+
+if __name__ == "__main__":
+    main()

@@ -1030,6 +1030,11 @@ from awk import AwkBase                          # record-processor base class
 from shortest_path import Minimizer, Maximizer   # another .ady file as a library (auto-transpiled)
 ```
 
+`nimport` has Python's meaning too: `nimport math` binds `math` (write `math.sqrt(x)`; a bare
+`sqrt` is undeclared), `from math nimport sqrt, floor` gives just those two, and
+`from json nimport *` gives the whole module. Nim's compiler does the refusing, with the name.
+The transpiler imports for itself what it writes (`^` for `**`, a float `%`, `async`, `await`).
+
 **Modules** — a module is a `.ady` file; `import` links a whole project:
 
 ```adascript
@@ -1688,7 +1693,7 @@ for s in Stage_T'First .. Stage_T'Last:
 
 - **Comments on a `case` header** — blank lines and inline comments survive into the output, inside `def`, `class`, `for`, `while`, `if`, fields and method bodies alike. Two placements do not, on both backends: a comment on the `case` line itself is dropped, and one on a `type ... is enum` line is relocated to the last generated member.
 - **A plain named type is an alias**: `type Velocity_T is float` and `type Distance_T is float` mix freely. Write `type Velocity_T is distinct float` where mixing would be a bug. Subranges are bounds-checked on Nim only; on Python a range is a plain `int`.
-- **`%` on a negative operand differs between the backends**: Python's result has the divisor's sign (`-7 % 3` is 2, `-30.0 % 360` is 330.0); on Nim `%` is `mod`, which keeps the dividend's (-1, -30.0), and a float `%` needs `nimport math`. For a bearing or any wrap-around write it out: `x - period * floor(x / period)` (floats), and see `modulo` in `EXAMPLES/MAP_UTILS/map_utils.ady`.
+- **`%` on a negative operand differs between the backends**: Python's result has the divisor's sign (`-7 % 3` is 2, `-30.0 % 360` is 330.0); on Nim `%` is `mod`, which keeps the dividend's (-1, -30.0), and a float `%` is `mod`, which the transpiler imports from `math` itself. For a bearing or any wrap-around write it out: `x - period * floor(x / period)` (floats), and see `modulo` in `EXAMPLES/MAP_UTILS/map_utils.ady`.
 - **A slice that runs past the end raises on Nim, and is shorter or empty on Python**: `s[0:5]` and `s[1:5]` on `"ab"`, and `s[3:]`, raise `IndexDefect` (`s[2:]` is `""` on both). Clamp it -- `s[a:min(len(s), b)]`, after `if a >= len(s): return ""` -- as `slice_of` does in `map_utils.ady` and `clip` in `vi_raw.ady`.
 - **Ticks do not chain** — `Stage_T'First'Image` is a parse error; bind the intermediate value first. Ticks on field accesses and subscripts are fine.
 - **Case subject must be structural** — `case state:` where `state` is a tuple variable emits Nim's native `case`, which rejects non-ordinal selectors. Destructure with `let (a, b) = state` first, then `case (a, b):`.

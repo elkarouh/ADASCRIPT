@@ -1592,6 +1592,15 @@ line 3: 'import os' is not allowed: os is not an .ady module. Use 'nimport os' f
 line 2: 'geometry' is an .ady module: write `import geometry`, `nimport` is for Nim modules
 ```
 
+All three follow Python's rules. `nimport math` binds `math`, so the file writes
+`math.sqrt(x)`, and a bare `sqrt` is undeclared; `from math nimport sqrt, floor` gives the
+file `sqrt` and `floor` and nothing else of `math`'s; `from json nimport *` gives it the
+whole module, as Python's star does. Nim says this with `from math import nil` and
+`from math import sqrt, floor`, and the compiler does the refusing, naming the bare name.
+A name the transpiler itself writes into the Nim (the `^` of `**`, a float `%`, `async`
+and `await`) is imported for it, so the file does not have to list those. A rename in a
+`from M nimport A as B` is not a thing Nim has, so it takes the whole module.
+
 `import M as N` and `from M import A as B` rename, as in Python: `N.name`, and `B`
 for `A`, and the old names `M` and `A` are then refused. `from stdlib import PriorityQueue` is the one exception to all this:
 `stdlib` is a bundled shim with a Nim and a Python implementation.
