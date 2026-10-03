@@ -4,6 +4,7 @@ jointjs — JsElem base class and shared helpers for JointJS applications.
 """
 
 nimport js/jsffi
+from js/jsffi nimport *
 
 jsvar joint: JsObject
 let dia: JsObject = joint["dia"]

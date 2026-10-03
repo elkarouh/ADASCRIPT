@@ -1,0 +1,1 @@
+/root/.cache/adascript/cache-6AD47DE5F44B5217/.roi_model
