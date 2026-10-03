@@ -911,9 +911,10 @@ def translate(code, export_symbols=False):
     # Nim. One pass makes it not matter there either -- see _declare_before_use.
     output = _declare_before_use('\n'.join(output).split('\n'))
 
-    # A float `%` is Nim's `mod`, which for floats is math's. Generated code asks for
-    # just that operator, as it does for `^`, rather than relying on a `nimport math`.
-    if _re_order.search(r"(?<![\w`.])\w[^\n#\"]* mod ", "\n".join(output)):
+    # A float `%` is Nim's `mod`, which for floats is math's. A file that imports math
+    # gets just that operator for it, as for `^`, not the rest of math; a file that does not
+    # import math is left as it was (an integer `mod` needs nothing).
+    if ({"math"} & (ParserState.nim_qualified | set(ParserState.nim_from) | ParserState.nim_imports)) and _re_order.search(r"(?<![\w`.])\w[^\n#\"]* mod ", "\n".join(output)):
         ParserState.nim_from.setdefault("math", set()).add("`mod`")
 
     # Insert collected Nim imports at the top (after any leading comments),
