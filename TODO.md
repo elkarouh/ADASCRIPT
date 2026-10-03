@@ -629,7 +629,7 @@ but expected 'Press_T = object'". `Press_T(CHAR, "x")` and `Press_T(key=ESCAPE)`
 are fine. EXAMPLES/VI/vi_py.ady is Python-only (curses) so it does not meet it, but
 a program built for both would.
 
-## Found writing EXAMPLES/VI/vi_nim.ady (Adascript on Nim)
+## Found writing EXAMPLES/VI/vi_curses.ady (Adascript on Nim)
 
 Each is worked around there, and none is needed for Python:
 

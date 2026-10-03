@@ -1,4 +1,4 @@
-# vi.ady, vi_core.ady, vi_nim.ady, vi_raw.ady, vi_py.ady
+# vi.ady, vi_core.ady, vi_curses.ady, vi_raw.ady, vi_py.ady
 
 A tiny vi-like editor in Adascript. It began as a translation of
 [vip](https://github.com/maksimKorzh/vip), the 125-line Python editor, to idiomatic
@@ -24,7 +24,7 @@ The terminals are the plumbing, each a subclass of `Terminal`:
 
 | file | class | built with | on |
 |------|-------|------------|----|
-| `vi_nim.ady` | `IllwillTerminal` | `ady2nim` | illwill |
+| `vi_curses.ady` | `IllwillTerminal` | `ady2nim` | illwill |
 | `vi_raw.ady` | `RawTerminal` | `ady2nim` | Nim's `terminal` and `termios`, by hand |
 | `vi_py.ady` | `CursesTerminal` | `ady2py` | curses |
 
@@ -121,7 +121,7 @@ cursor's row -- and each terminal says what a look is made of:
 `vi_core` knows nothing of any terminal's key codes or of drawing. A terminal says how big
 its window is (`window`), reads a key (`key`), draws what the editor shows (`draw`: `scroll`,
 `row_segments`, `status`, and `cursor_y` and `cursor_x`) and flashes a message (`flash`);
-`edit` does the rest. Nim has no curses, so `vi_nim.ady` uses
+`edit` does the rest. Nim has no curses, so `vi_curses.ady` uses
 [illwill](https://github.com/johnnovak/illwill) (`TO_NIM/STDLIB/illwill.nim`, one file in
 pure Nim, `nimport illwill`), which does the two hard parts (reading the arrow keys is one of them):
 
@@ -132,7 +132,7 @@ pure Nim, `nimport illwill`), which does the two hard parts (reading the arrow k
 - **The screen.** The rows are written into a `TerminalBuffer` and `display` sends only
   what changed since the last frame.
 
-What is left in `vi_nim.ady` is small: illwill leaves flow control on, so the terminal
+What is left in `vi_curses.ady` is small: illwill leaves flow control on, so the terminal
 would take `^S` and `^Q`; a three-line `termios` call turns `IXON` off. The bundled
 copy has one change from illwill 0.4.1: a modified arrow (`ESC [ 1 ; 5 D`) is read
 whole, where illwill left `5D` behind to be typed. There is no resize event: the window
@@ -155,7 +155,7 @@ do when nothing does it for you, with only Nim's `terminal` module and `termios`
 - **Drawing.** One frame per key, built as a string and written in one go; the window
   size is read again at every key, as there is no resize event.
 
-It is longer than `vi_nim.ady` and passes the same key scripts; it reads an arrow key's escape sequence itself, as it does a lone ESC.
+It is longer than `vi_curses.ady` and passes the same key scripts; it reads an arrow key's escape sequence itself, as it does a lone ESC.
 
 Slices and list edits in `vi_core` are written so that they mean the same on both
 backends: a slice past the end raises on Nim, so `tail` and `splice` are the only way

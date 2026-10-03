@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the vi editor (vi_core.ady) on each of its terminals -- vi_py.ady (curses,
-built with ady2py as vi_py.py), and vi.ady (Nim) on illwill (vi_nim.ady) and, with -raw,
+built with ady2py as vi_py.py), and vi.ady (Nim) on illwill (vi_curses.ady) and, with -raw,
 on Nim's terminal module and termios (vi_raw.ady): the editor is run in a terminal of its
 own (a pty), is typed a script of keys, and the file it wrote is compared with what is
 wanted.

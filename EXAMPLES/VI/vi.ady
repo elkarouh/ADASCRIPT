@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """vi -- a tiny vi-like text editor, on the terminal of your choice (Nim).
 
-    vi [file]          on illwill, a terminal library (vi_nim.ady)
+    vi [file]          on illwill, a terminal library (vi_curses.ady)
     vi -raw [file]     on the raw terminal, by hand (vi_raw.ady)
 
 The editor, and the loop that runs it, are vi_core.ady: `edit` reads a key from the
@@ -11,7 +11,7 @@ only which of the two is handed to `edit`. vi_core cannot make that choice itsel
 both terminals import it, for the editor and the Terminal class they are subclasses of.
 """
 from vi_core import Editor, edit
-from vi_nim import IllwillTerminal
+from vi_curses import IllwillTerminal
 from vi_raw import RawTerminal
 
 let args: []str = $@

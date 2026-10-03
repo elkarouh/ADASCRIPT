@@ -2463,7 +2463,7 @@ without a local copy next to your source file:
 | `import awk`  | `AwkBase` — subclass and override `process_record()`, `begin()`, `finish()` |
 | `import strscan` | character classification (`is_digit_ch`, `is_space_ch`, …) and the small scanners a hand-written lexer needs (`skip_space`, `skip_quoted`, `lead_ident`, `strip_line_comment`) |
 | `import ansi` | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red`; styles add, `bold + fg_red`, into one escape |
-| `nimport illwill` | a curses-like terminal library in pure Nim, one file (`EXAMPLES/VI/vi_nim.ady`) |
+| `nimport illwill` | a curses-like terminal library in pure Nim, one file (`EXAMPLES/VI/vi_curses.ady`) |
 
 Example — a custom awk processor in any directory:
 

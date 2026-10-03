@@ -1728,7 +1728,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import graphs`   | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
 | `import db`       | thin SQLite wrapper                                        |
 | `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
-| `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_nim.ady` uses it |
+| `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
 
 `stdlib.nim` in the same directory is a Nim shim for a few Python builtins

@@ -167,7 +167,7 @@ in order to build.
 | `import iters` | itertools analogues (`pairwise`, `chain`, `combinations`, …) | `test_iters.ady` |
 | `import graphs` | `dijkstra[Node_T]`, `shortest_path[Node_T]` over `{Node_T}[](float, Node_T)` | `test_graphs.ady` |
 | `nimport expect` | `Spawn`, `send`, `expect` PTY automation | `test_expect.ady` |
-| `nimport illwill` | curses-like terminal library in pure Nim, one file | `EXAMPLES/VI/vi_nim.ady` |
+| `nimport illwill` | curses-like terminal library in pure Nim, one file | `EXAMPLES/VI/vi_curses.ady` |
 | `import <file>` | any other `.ady` compiled as a library | `test_shortest_path.ady` |
 
 ## A.4 Known limitations (as of this writing)

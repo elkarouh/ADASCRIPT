@@ -421,8 +421,8 @@ define vi_tests
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi.out || tail -n 8 $(TMPDIR)/ady_vi.out; exit 1; }; fi
 	@printf '  %-62s' "EXAMPLES/VI/vi.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi > $(TMPDIR)/ady_vi_nim.out 2>&1 \
-	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_nim.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_nim.out || tail -n 8 $(TMPDIR)/ady_vi_nim.out; exit 1; }; fi
+	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi > $(TMPDIR)/ady_vi_curses.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_curses.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_curses.out || tail -n 8 $(TMPDIR)/ady_vi_curses.out; exit 1; }; fi
 	@printf '  %-62s' "EXAMPLES/VI/vi.ady -raw (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi -raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \

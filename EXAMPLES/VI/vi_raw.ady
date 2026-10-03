@@ -2,7 +2,7 @@
 """vi_raw -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend, on the raw terminal.
 
-    vi -raw [file]         this terminal, RawTerminal; `vi [file]` is vi_nim's
+    vi -raw [file]         this terminal, RawTerminal; `vi [file]` is vi_curses's
 
 The editor is vi_core.ady, and its loop calls the terminal; this file is the
 terminal, a RawTerminal. Nim has no curses,

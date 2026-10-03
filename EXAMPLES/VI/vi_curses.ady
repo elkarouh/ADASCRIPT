@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""vi_nim -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
+"""vi_curses -- a tiny vi-like text editor (it began as vip, github.com/maksimKorzh/vip), on
 the Nim backend.
 
     vi [file]              this terminal, IllwillTerminal; `vi -raw [file]` is vi_raw's

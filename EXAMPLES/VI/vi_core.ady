@@ -1,6 +1,6 @@
 """vi_core -- the editor, with no terminal in it: a tiny vi-like text editor. It began as
 vip (github.com/maksimKorzh/vip) and has outgrown it. `edit` below is its loop; the
-terminals it calls are vi_py.ady (curses, Python), vi_nim.ady (illwill, Nim) and
+terminals it calls are vi_py.ady (curses, Python), vi_curses.ady (illwill, Nim) and
 vi_raw.ady (Nim, by hand), and vi.ady, the Nim program, picks one with -raw.
 
   Normal    h j k l or the arrow keys   0 $   gg G   x   r R   i a A o O   dd yy p   u ^R
@@ -75,7 +75,7 @@ const TAG: [Mode_T]str = [NORMAL: "n", INSERT: "i", REPLACE_ONE: "r",
 
 # The codes a terminal sends for the keys decode() knows, each with its number: the control
 # keys are the letter & 0x1f, and the KEY_ ones are curses'. A terminal that reads bytes
-# (vi_raw, vi_nim) sends curses' codes too, for the keys curses would have given a name.
+# (vi_raw, vi_curses) sends curses' codes too, for the keys curses would have given a name.
 type Code_T is enum:
     BACKSPACE_KEY = 8          # ^H
     LINE_FEED = 10
@@ -692,7 +692,7 @@ class Editor:
 
 
 # ---- the terminals, and the loop that drives them ---------------------------
-# What the editor asks of a terminal. Each front end -- vi_nim (illwill), vi_raw (by hand),
+# What the editor asks of a terminal. Each front end -- vi_curses (illwill), vi_raw (by hand),
 # vi_py (curses) -- is a subclass saying how; `edit` is the editor's own loop and calls them,
 # so what happens after a key is said once, here, and not once per terminal.
 #
