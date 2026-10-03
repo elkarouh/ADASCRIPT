@@ -15,6 +15,7 @@ nimport strutils
 nimport sequtils
 nimport os
 nimport time
+from strutils nimport parseInt
 from math nimport exp
 from random nimport rand
 from json nimport *

@@ -2,6 +2,7 @@
 # test_timing - Monitor test execution with timing information
 nimport os
 nimport times
+from os nimport getCurrentDir
 
 var completedTests: {}str  ## All completed tests (persistent)
 var intervalTests: {}str   ## Tests since last 5-min summary

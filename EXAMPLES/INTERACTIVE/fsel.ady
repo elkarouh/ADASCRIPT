@@ -1,6 +1,7 @@
 #!/usr/bin/env ady2nim
 # https://github.com/vroby65/fsel/tree/main ported to adascript
 nimport os
+from os nimport getCurrentDir, setCurrentDir
 from ansi import Style, bold, fg_blue, fg_magenta
 
 let editor: str = $EDITOR if $EDITOR else "nano"

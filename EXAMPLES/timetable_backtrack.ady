@@ -35,6 +35,7 @@ nimport math
 nimport random
 nimport strutils
 nimport algorithm, sequtils, tables
+from strutils nimport parseInt
 from algorithm nimport sortedByIt
 from json nimport *
 

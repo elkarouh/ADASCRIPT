@@ -55,6 +55,7 @@ Key findings:
 nimport math
 nimport random
 nimport time
+from math nimport exp, sqrt
 from time nimport cpuTime
 from random nimport randomize, rand
 pyimport matplotlib

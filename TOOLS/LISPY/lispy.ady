@@ -21,6 +21,7 @@ beside this file.
 """
 
 nimport math
+from math nimport *
 # character classification and the atom scan
 from strscan import is_space_ch, skip_quoted_esc, skip_while
 # ============================================================
