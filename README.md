@@ -1574,7 +1574,7 @@ import *`. A bare use of any other name of `geometry`'s is refused, on both
 backends, with the line and what to do:
 
 ```
-line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry import Point_T, bearing, distance`
+line 12: 'bearing' is not imported from geometry: add bearing to `from geometry import Point_T, bearing, distance`, or `import geometry` and write geometry.bearing
 ```
 
 A name the file declares itself is not checked, so it cannot clash by accident;

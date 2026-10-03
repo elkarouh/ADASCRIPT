@@ -234,9 +234,13 @@ def resolve_imports(code, module, listed, module_source):
             continue                   # unused, or a name of the file's own
         line = text.count("\n", 0, use.start()) + 1
         what = f"'{name}'" if owner == name else f"'{name}' (a member of {owner})"
-        raise SyntaxError(
-            f"line {line}: {what} is not imported from {module}: write {qual}.{name}, "
-            f"or add {owner} to `from {module} nimport {', '.join(sorted(set(listed) | {owner}))}`")
+        from_list = f"`from {module} import {', '.join(sorted(set(listed) | {owner}))}`"
+        # `M.name` is Python's too: it needs `import M`, which a from-import alone is not
+        if re.search(rf'^nimport[ \t]+(?:[\w./]+[ \t]*,[ \t]*)*{re.escape(module)}\b', code, re.MULTILINE):
+            fix = f"write {qual}.{name}, or add {owner} to {from_list}"
+        else:
+            fix = f"add {owner} to {from_list}, or `import {module}` and write {qual}.{name}"
+        raise SyntaxError(f"line {line}: {what} is not imported from {module}: {fix}")
     out, last = [], 0
     for m in re.finditer(rf'(?<![\w.$]){re.escape(qual)}\.(\w+)', text):
         name = m.group(1)

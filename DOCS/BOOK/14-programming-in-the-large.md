@@ -105,7 +105,7 @@ through a value. A bare use of any other name of `geometry`'s is refused, on bot
 backends, with the line and what to add:
 
 ```
-line 12: 'bearing' is not imported from geometry: write geometry.bearing, or add bearing to `from geometry import Point_T, bearing, distance`
+line 12: 'bearing' is not imported from geometry: add bearing to `from geometry import Point_T, bearing, distance`, or `import geometry` and write geometry.bearing
 ```
 
 (The module is still compiled and linked whole; the rule is checked from the text,
