@@ -112,4 +112,10 @@ assert abs(float(gauge.level()) - 20.0) < 0.01
 assert max(float(gauge.level()), 1.0) > 19.0
 assert min(float(gauge.level()), 99.0) < 21.0
 assert abs(gauge.level() - 18.0) > 1.5               # still a Distance_T either side: the 1.5 is one too
+# a table of distinct values written as literals: each element is of the element type, in a
+# fixed array and in one indexed by an enum
+type Spot_T is enum NEAR, FAR
+let reach: [Spot_T]Distance_T = [NEAR: 3.0, FAR: 9.5]
+let marks: [3]Distance_T = [1.0, 2.0, 4.0]
+assert reach[FAR] - reach[NEAR] == 6.5 and marks[2] > marks[0]
 print "test_distinct: ok"

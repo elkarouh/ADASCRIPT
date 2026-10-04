@@ -1,0 +1,19 @@
+#!/usr/bin/env ady2nim
+"""test_str_repeat -- `"x" * n`, for a character Nim has as a char and for one it has not.
+
+An ASCII one-character literal repeats as a Nim char; "─" is three bytes in UTF-8, so
+it has to repeat as a string, or the Nim build dies on a char literal that is not one.
+"""
+
+def main():
+    let width: int = 4
+    assert "=" * 3 == "==="
+    assert 3 * "=" == "==="
+    assert "─" * 3 == "───"
+    assert 2 * "═" == "══"
+    assert "─" * width == "────"
+    assert ("ab" * 2) == "abab"
+    print "test_str_repeat: ok"
+
+if __name__ == "__main__":
+    main()

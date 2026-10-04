@@ -1681,16 +1681,20 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     ParserState.nim_imports.add("strutils")
                     # Use char literal if possible (avoids nested quote issues in fmt strings)
                     _rs = result
-                    if (_rs.startswith('"') and _rs.endswith('"') and len(_rs) == 3) or \
-                       (_rs.startswith("'") and _rs.endswith("'") and len(_rs) == 3):
+                    # a Nim char is one byte: "x" can be 'x', "─" cannot
+                    if ((_rs.startswith('"') and _rs.endswith('"') and len(_rs) == 3) or
+                            (_rs.startswith("'") and _rs.endswith("'") and len(_rs) == 3)) \
+                            and _rs[1].isascii():
                         _rs = f"'{_rs[1]}'"
                     result = f"repeat({_rs}, {right})"
                     continue
                 if right_is_str:
                     ParserState.nim_imports.add("strutils")
                     _rs = right
-                    if (_rs.startswith('"') and _rs.endswith('"') and len(_rs) == 3) or \
-                       (_rs.startswith("'") and _rs.endswith("'") and len(_rs) == 3):
+                    # a Nim char is one byte: "x" can be 'x', "─" cannot
+                    if ((_rs.startswith('"') and _rs.endswith('"') and len(_rs) == 3) or
+                            (_rs.startswith("'") and _rs.endswith("'") and len(_rs) == 3)) \
+                            and _rs[1].isascii():
                         _rs = f"'{_rs[1]}'"
                     result = f"repeat({_rs}, {result})"
                     continue

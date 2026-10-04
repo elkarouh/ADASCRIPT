@@ -1,0 +1,244 @@
+#!/usr/bin/env ady2nim
+"""physics_calc -- a unit-safe physics calculator.
+
+A mass is a Mass_T, a time a Duration_T, a length a Distance_T in metres or a
+Distance_in_miles_T in miles, and no one of them can be passed for another: the
+compiler refuses
+
+    marathon_mi + marathon_m          # miles plus metres
+    marathon_mi / record_t            # miles per second: no such unit declared
+    let d: Distance_T = g * t         # that is a Velocity_T
+
+so a unit has to be said, by a conversion that is written down. Derived units say what
+products and quotients of the base ones make -- Velocity_T is Distance_T / Duration_T,
+Force_T is Mass_T * Acceleration_T -- and `v * t` is then a Distance_T again.
+
+Shown: distinct types, a typed conversion factor (metres per mile), derived units,
+an enum with enum-indexed tables, a named tuple, a speed classified from thresholds, and
+the checks at the end -- the numbers agree with the physics, and the conversions with
+each other. Runs the same on both backends.
+"""
+
+# ---- base units (SI) and the mile -----------------------------------------------------------
+
+type Distance_T          is distinct float      # metres
+type Duration_T          is distinct float      # seconds
+type Mass_T              is distinct float      # kilograms
+type Distance_in_miles_T is distinct float      # statute miles
+
+# ---- derived units ------------------------------------------------------------------------
+
+type Velocity_T     is Distance_T     / Duration_T
+type Acceleration_T is Velocity_T     / Duration_T
+type Force_T        is Mass_T         * Acceleration_T
+type Momentum_T     is Mass_T         * Velocity_T
+type Energy_T       is Force_T        * Distance_T         # joules: newton metres
+
+# metres per mile is itself a unit, so a conversion is a product and the compiler can
+# check it: a Distance_in_miles_T times it is a Distance_T, and nothing else comes out
+type MetresPerMile_T is Distance_T / Distance_in_miles_T
+
+const METRES_PER_MILE: MetresPerMile_T = 1609.344      # exact, by definition
+const HOUR: Duration_T = 3600.0
+
+def to_metres(d: Distance_in_miles_T) -> Distance_T:
+    return d * METRES_PER_MILE
+
+def to_miles(d: Distance_T) -> Distance_in_miles_T:
+    return d / METRES_PER_MILE
+
+def mph(v: Velocity_T) -> float:
+    """Miles covered in an hour at v."""
+    return float(to_miles(v * HOUR))
+
+def kmh(v: Velocity_T) -> float:
+    return float(v * HOUR) / 1000.0
+
+# ---- the celestial bodies -------------------------------------------------------------------
+
+type Body_T is enum MERCURY, VENUS, EARTH, MOON, MARS, JUPITER
+
+const GRAVITY: [Body_T]Acceleration_T = [
+    MERCURY: 3.70,
+    VENUS:   8.87,
+    EARTH:   9.81,
+    MOON:    1.62,
+    MARS:    3.72,
+    JUPITER: 24.79,
+]
+
+const RADIUS: [Body_T]Distance_T = [        # mean surface radius, metres
+    MERCURY: 2_439_700.0,
+    VENUS:   6_051_800.0,
+    EARTH:   6_371_000.0,
+    MOON:    1_737_400.0,
+    MARS:    3_389_500.0,
+    JUPITER: 69_911_000.0,
+]
+
+const BODY_NAME: [Body_T]str = [
+    MERCURY: "Mercury",
+    VENUS:   "Venus",
+    EARTH:   "Earth",
+    MOON:    "Moon",
+    MARS:    "Mars",
+    JUPITER: "Jupiter",
+]
+
+# ---- how fast ------------------------------------------------------------------------------
+
+type Pace_T is enum STATIONARY, WALKING, JOGGING, HIGHWAY, SUBSONIC, SOUND, SUPERSONIC
+
+# the speed each pace starts at: a speed is the last pace it has reached, so there is no gap
+# between one pace and the next for a speed to fall into
+const PACE_FROM: [Pace_T]Velocity_T = [
+    STATIONARY: 0.0,
+    WALKING:    0.001,
+    JOGGING:    5.0,
+    HIGHWAY:    30.0,
+    SUBSONIC:   100.0,
+    SOUND:      343.0,
+    SUPERSONIC: 1000.0,
+]
+
+const PACE_NAME: [Pace_T]str = [
+    STATIONARY: "stationary",
+    WALKING:    "walking pace",
+    JOGGING:    "jogging / cycling",
+    HIGHWAY:    "highway speed",
+    SUBSONIC:   "subsonic aircraft",
+    SOUND:      "near / at sound speed",
+    SUPERSONIC: "supersonic",
+]
+
+def pace_of(v: Velocity_T) -> Pace_T:
+    return max(p for p in Pace_T if v >= PACE_FROM[p])
+
+# ---- the physics ---------------------------------------------------------------------------
+
+type Kinematics_T is tuple:
+    final_velocity: Velocity_T
+    distance:       Distance_T
+    force:          Force_T
+    momentum:       Momentum_T
+    kinetic_energy: Energy_T
+
+def free_fall(g: Acceleration_T, t: Duration_T, m: Mass_T) -> Kinematics_T:
+    """An object dropped from rest under constant gravity:
+       v = g t,  d = (1/2) v t,  F = m g,  p = m v,  KE = F d."""
+    let v:  Velocity_T = g * t
+    let d:  Distance_T = 0.5 * v * t
+    let f:  Force_T    = m * g
+    let p:  Momentum_T = m * v
+    let ke: Energy_T   = f * d
+    return (final_velocity: v, distance: d, force: f, momentum: p, kinetic_energy: ke)
+
+def weight_on(m: Mass_T, body: Body_T) -> Force_T:
+    return m * GRAVITY[body]
+
+def escape_velocity(body: Body_T) -> Velocity_T:
+    """v = sqrt(2 g r), from the surface gravity and the radius."""
+    return Velocity_T((2.0 * float(GRAVITY[body]) * float(RADIUS[body])) ** 0.5)
+
+def velocity_from_miles(d: Distance_in_miles_T, t: Duration_T) -> Velocity_T:
+    """d / t is refused -- miles per second is no unit that was declared -- so the distance
+    goes through to_metres() first, which says which unit system is meant."""
+    return to_metres(d) / t
+
+# ---- the program ---------------------------------------------------------------------------
+
+def separator() -> None:
+    print("─" * 60)
+
+def near(a: float, b: float, tolerance: float) -> bool:
+    return abs(a - b) <= tolerance
+
+def main():
+    let mass:      Mass_T     = 70.0
+    let fall_time: Duration_T = 5.0
+
+    print("=" * 60)
+    print("  Adascript Unit-Safe Physics Calculator")
+    print("=" * 60)
+
+    print()
+    print(f"Free-fall kinematics: {float(mass):.0f} kg object, t = {float(fall_time):.0f} s")
+    separator()
+    for body in Body_T'First .. Body_T'Last:
+        let r: Kinematics_T = free_fall(GRAVITY[body], fall_time, mass)
+        print(f"  {BODY_NAME[body]}:")
+        print(f"    g               = {float(GRAVITY[body]):.2f} m/s²")
+        print(f"    final velocity  = {float(r.final_velocity):.2f} m/s  ({PACE_NAME[pace_of(r.final_velocity)]})")
+        print(f"    distance fallen = {float(r.distance):.4f} m  /  {float(to_miles(r.distance)):.6f} mi")
+        print(f"    weight (force)  = {float(r.force):.2f} N")
+        print(f"    momentum        = {float(r.momentum):.2f} kg·m/s")
+        print(f"    kinetic energy  = {float(r.kinetic_energy):.2f} J")
+        print()
+
+    separator()
+    print(f"Weight of {float(mass):.0f} kg on each body:")
+    separator()
+    for body in Body_T'First .. Body_T'Last:
+        print(f"  {BODY_NAME[body]:<10}  {float(weight_on(mass, body)):>8.2f} N")
+    print()
+
+    separator()
+    print("Estimated escape velocities:")
+    separator()
+    for body in Body_T'First .. Body_T'Last:
+        let ve: Velocity_T = escape_velocity(body)
+        print(f"  {BODY_NAME[body]:<10}  {float(ve) / 1000.0:>8.2f} km/s  ({mph(ve):>10.2f} mph)  [{PACE_NAME[pace_of(ve)]}]")
+    print()
+
+    separator()
+    print("Distance_in_miles_T  <->  Distance_T  (an explicit conversion, both ways)")
+    separator()
+    print()
+
+    # a marathon is 26 miles 385 yards
+    let marathon_mi: Distance_in_miles_T = 26.2188
+    let marathon_m:  Distance_T          = to_metres(marathon_mi)
+    print("  A marathon distance:")
+    print(f"    {float(marathon_mi):.4f} mi  ->  {float(marathon_m):.2f} m")
+
+    # the world record (Kelvin Kiptum, 2023): 2 h 0 min 35 s
+    let record_t:  Duration_T = 2.0 * HOUR + 35.0
+    let average:   Velocity_T = velocity_from_miles(marathon_mi, record_t)
+    print(f"  World-record time:  {float(record_t):.0f} s  (2 h 0 m 35 s)")
+    print(f"  Average speed:      {float(average):.4f} m/s")
+    print(f"                      {kmh(average):.4f} km/h")
+    print(f"                      {mph(average):.4f} mph")
+    print()
+
+    let back_mi: Distance_in_miles_T = to_miles(marathon_m)
+    print(f"  Round-trip check:   {float(marathon_mi):.6f} mi  ->  {float(marathon_m):.6f} m  ->  {float(back_mi):.6f} mi")
+    print()
+
+    separator()
+    print("Unit-safety summary:")
+    separator()
+    let d1: Distance_T          = 100.0
+    let d2: Distance_in_miles_T = 1.0
+    let t1: Duration_T          = 10.0
+    let v1: Velocity_T          = d1 / t1                       # Distance_T / Duration_T
+    let v2: Velocity_T          = velocity_from_miles(d2, t1)   # miles to metres first
+    print(f"  {float(d1):.0f} m  in {float(t1):.0f} s         ->  v = {float(v1):.3f} m/s")
+    print(f"  {float(d2):.0f} mi in {float(t1):.0f} s  (= {float(to_metres(d2)):.2f} m) ->  v = {float(v2):.3f} m/s")
+    print(f"  {float(d1):.0f} m in miles               ->  {float(to_miles(d1)):.6f} mi")
+    print(f"  {float(d2):.0f} mi in metres              ->  {float(to_metres(d2)):.4f} m")
+    print()
+
+    # the numbers agree with the physics, and the conversions with each other
+    let earth: Kinematics_T = free_fall(GRAVITY[EARTH], fall_time, mass)
+    assert near(float(earth.kinetic_energy), 0.5 * float(mass) * float(earth.final_velocity) ** 2, 1e-6)
+    assert near(float(earth.force), float(weight_on(mass, EARTH)), 1e-9)
+    assert near(float(escape_velocity(EARTH)), 11_186.0, 10.0)             # about 11.2 km/s
+    assert near(float(back_mi), float(marathon_mi), 1e-9)
+    assert near(float(average), 42195.0 / 7235.0, 1e-3)                    # a marathon is 42 195 m
+    assert pace_of(4.95) == WALKING and pace_of(99.95) == HIGHWAY          # between two old ranges
+    assert pace_of(0.0) == STATIONARY and pace_of(2000.0) == SUPERSONIC
+    print("Done.")
+    print("physics_calc: all checks passed")
+
+if __name__ == "__main__":
+    main()

@@ -2481,10 +2481,16 @@ def _wrap_distinct_literal(value, nim_type):
         return f"{t}({v})" if _is_nim_literal(v) else value
     m = (_re_dl.match(r"^seq\[([A-Za-z_]\w*)\]$", t)
          or _re_dl.match(r"^array\[[^\[\]]+,\s*([A-Za-z_]\w*)\]$", t))
-    if m and is_distinct(m.group(1)) and v[:2] in ("@[", "[") and v.endswith("]"):
+    if m and is_distinct(m.group(1)) and v.startswith(("@[", "[")) and v.endswith("]"):
         head = "@[" if v.startswith("@[") else "["
         items = _split_top_level(v[len(head):-1]) if v[len(head):-1].strip() else []
-        return head + ", ".join(_wrap_distinct_literal(x, m.group(1)) for x in items) + "]"
+        def element(x):
+            # an enum-indexed table writes `MEMBER: value`: the value is the element
+            k = _re_dl.match(r"^([A-Za-z_]\w*):\s*(.*)$", x.strip(), _re_dl.S)
+            if k:
+                return f"{k.group(1)}: {_wrap_distinct_literal(k.group(2), m.group(1))}"
+            return _wrap_distinct_literal(x, m.group(1))
+        return head + ", ".join(element(x) for x in items) + "]"
     return value
 
 
