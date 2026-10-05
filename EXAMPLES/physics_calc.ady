@@ -52,6 +52,7 @@ const MPS_PER_MPH: float = METRES_PER_MILE / 3600.0
 const MPS_PER_KMH: float = 1000.0 / 3600.0
 type Velocity_in_mph_T is MPS_PER_MPH * Velocity_T
 type Velocity_in_kmh_T is MPS_PER_KMH * Velocity_T
+type Velocity_in_kms_T is 1000.0 * Velocity_T
 
 # ---- the celestial bodies -------------------------------------------------------------------
 
@@ -156,32 +157,32 @@ def main():
     print("=" * 60)
 
     print()
-    print(f"Free-fall kinematics: {float(mass):.0f} kg object, t = {float(fall_time):.0f} s")
+    print(f"Free-fall kinematics: {mass:.0f} kg object, t = {fall_time:.0f} s")
     separator()
-    for body in Body_T'First .. Body_T'Last:
+    for body in Body_T:
         let r: Kinematics_T = free_fall(GRAVITY[body], fall_time, mass)
         print(f"  {BODY_NAME[body]}:")
-        print(f"    g               = {float(GRAVITY[body]):.2f} m/s²")
-        print(f"    final velocity  = {float(r.final_velocity):.2f} m/s  ({PACE_NAME[pace_of(r.final_velocity)]})")
-        print(f"    distance fallen = {float(r.distance):.4f} m  /  {float(Distance_in_miles_T(r.distance)):.6f} mi")
-        print(f"    weight (force)  = {float(r.force):.2f} N")
-        print(f"    momentum        = {float(r.momentum):.2f} kg·m/s")
-        print(f"    kinetic energy  = {float(r.kinetic_energy):.2f} J")
+        print(f"    g               = {GRAVITY[body]:.2f} m/s²")
+        print(f"    final velocity  = {r.final_velocity:.2f} m/s  ({PACE_NAME[pace_of(r.final_velocity)]})")
+        print(f"    distance fallen = {r.distance:.4f} m  /  {Distance_in_miles_T(r.distance):.6f} mi")
+        print(f"    weight (force)  = {r.force:.2f} N")
+        print(f"    momentum        = {r.momentum:.2f} kg·m/s")
+        print(f"    kinetic energy  = {r.kinetic_energy:.2f} J")
         print()
 
     separator()
-    print(f"Weight of {float(mass):.0f} kg on each body:")
+    print(f"Weight of {mass:.0f} kg on each body:")
     separator()
-    for body in Body_T'First .. Body_T'Last:
-        print(f"  {BODY_NAME[body]:<10}  {float(weight_on(mass, body)):>8.2f} N")
+    for body in Body_T:
+        print(f"  {BODY_NAME[body]:<10}  {weight_on(mass, body):>8.2f} N")
     print()
 
     separator()
     print("Estimated escape velocities:")
     separator()
-    for body in Body_T'First .. Body_T'Last:
+    for body in Body_T:
         let ve: Velocity_T = escape_velocity(body)
-        print(f"  {BODY_NAME[body]:<10}  {float(ve) / 1000.0:>8.2f} km/s  ({float(Velocity_in_mph_T(ve)):>10.2f} mph)  [{PACE_NAME[pace_of(ve)]}]")
+        print(f"  {BODY_NAME[body]:<10}  {Velocity_in_kms_T(ve):>8.2f} km/s  ({Velocity_in_mph_T(ve):>10.2f} mph)  [{PACE_NAME[pace_of(ve)]}]")
     print()
 
     separator()
@@ -193,19 +194,19 @@ def main():
     let marathon_mi: Distance_in_miles_T = 26.2188
     let marathon_m:  Distance_T          = Distance_T(marathon_mi)
     print("  A marathon distance:")
-    print(f"    {float(marathon_mi):.4f} mi  ->  {float(marathon_m):.2f} m")
+    print(f"    {marathon_mi:.4f} mi  ->  {marathon_m:.2f} m")
 
     # the world record (Kelvin Kiptum, 2023): 2 h 0 min 35 s
     let record_t:  Duration_T = 2.0 * HOUR + 35.0
     let average:   Velocity_T = Distance_T(marathon_mi) / record_t
-    print(f"  World-record time:  {float(record_t):.0f} s  (2 h 0 m 35 s)")
-    print(f"  Average speed:      {float(average):.4f} m/s")
-    print(f"                      {float(Velocity_in_kmh_T(average)):.4f} km/h")
-    print(f"                      {float(Velocity_in_mph_T(average)):.4f} mph")
+    print(f"  World-record time:  {record_t:.0f} s  (2 h 0 m 35 s)")
+    print(f"  Average speed:      {average:.4f} m/s")
+    print(f"                      {Velocity_in_kmh_T(average):.4f} km/h")
+    print(f"                      {Velocity_in_mph_T(average):.4f} mph")
     print()
 
     let back_mi: Distance_in_miles_T = Distance_in_miles_T(marathon_m)
-    print(f"  Round-trip check:   {float(marathon_mi):.6f} mi  ->  {float(marathon_m):.6f} m  ->  {float(back_mi):.6f} mi")
+    print(f"  Round-trip check:   {marathon_mi:.6f} mi  ->  {marathon_m:.6f} m  ->  {back_mi:.6f} mi")
     print()
 
     separator()
@@ -216,10 +217,10 @@ def main():
     let t1: Duration_T          = 10.0
     let v1: Velocity_T          = d1 / t1                       # Distance_T / Duration_T
     let v2: Velocity_T          = Distance_T(d2) / t1             # miles to metres first: d2 / t1 is refused
-    print(f"  {float(d1):.0f} m  in {float(t1):.0f} s         ->  v = {float(v1):.3f} m/s")
-    print(f"  {float(d2):.0f} mi in {float(t1):.0f} s  (= {float(Distance_T(d2)):.2f} m) ->  v = {float(v2):.3f} m/s")
-    print(f"  {float(d1):.0f} m in miles               ->  {float(Distance_in_miles_T(d1)):.6f} mi")
-    print(f"  {float(d2):.0f} mi in metres              ->  {float(Distance_T(d2)):.4f} m")
+    print(f"  {d1:.0f} m  in {t1:.0f} s         ->  v = {v1:.3f} m/s")
+    print(f"  {d2:.0f} mi in {t1:.0f} s  (= {Distance_T(d2):.2f} m) ->  v = {v2:.3f} m/s")
+    print(f"  {d1:.0f} m in miles               ->  {Distance_in_miles_T(d1):.6f} mi")
+    print(f"  {d2:.0f} mi in metres              ->  {Distance_T(d2):.4f} m")
     print()
 
     # the numbers agree with the physics, and the conversions with each other
