@@ -141,6 +141,7 @@ STANDALONE := \
     test_distinct.ady \
     test_units.ady \
     test_money.ady \
+    test_scaled_units.ady \
     test_subrange_array.ady \
     test_variant_literal.ady \
     test_set_operators.ady \
@@ -284,7 +285,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_ordered_map test_function_type test_distinct test_units test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat physics_calc
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat
 
 ALL_COMPILE := \
     $(LIBS) \
@@ -793,6 +794,33 @@ test: compile
 	    && $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_distinct_ok.ady >/dev/null 2>&1 \
 	    && echo OK || { echo FAIL; exit 1; }
 	@rm -rf $(TMPDIR)/ady_distinct_* $(TMPDIR)/ady_distinct.out
+	@# A scaled unit, `type C is K * B`, converts from B and from a plain
+	@# number, and is a unit of its own otherwise; its factor is fixed when the
+	@# program is compiled. Nim only: ady2py refuses the declaration.
+	@echo "=== scaled units, ady2nim ==="
+	@printf 'type Distance_T is distinct float\ntype Duration_T is distinct float\ntype Km_T is 1000.0 * Distance_T\ntype C_T is distinct int\nvar d: Distance_T = 5.0\nvar t: Duration_T = 2.0\nvar k: Km_T = 1.0\nvar r: float = 2.0\nconst R: Duration_T = 2.0\n' \
+	    > $(TMPDIR)/ady_scaled_hdr.ady
+	@for c in "1:a unit no declaration relates:does not convert:let e: Km_T = Km_T(t)" \
+	          "2:a km plus a metre:type mismatch:let e: Km_T = k + d" \
+	          "3:a km given as metres:type mismatch:let e: Distance_T = k" \
+	          "4:a factor that is a variable:is not a const:type Bad_T is r * Distance_T" \
+	          "5:a factor that is a unit:the factor of a scaled unit is a plain number:type Bad_T is R * Distance_T" \
+	          "6:a multiple of an int unit:a multiple of a distinct float:type Bad_T is 100.0 * C_T"; do \
+	    n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; rest=$${rest#*:}; \
+	    want=$${rest%%:*}; line=$${rest#*:}; \
+	    { cat $(TMPDIR)/ady_scaled_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_scaled_$$n.ady; \
+	    printf '  %-42s' "$$what"; \
+	    if (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_scaled_cache $(ADY2NIM) c ady_scaled_$$n.ady) \
+	            > $(TMPDIR)/ady_scaled.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	    grep -q "$$want" $(TMPDIR)/ady_scaled.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_scaled.out; exit 1; }; \
+	done
+	@printf '  %-42s' "refused by ady2py"; \
+	    if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_scaled_hdr.ady \
+	            > $(TMPDIR)/ady_scaled.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	    grep -q "built by ady2nim only" $(TMPDIR)/ady_scaled.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_scaled.out; exit 1; }
+	@rm -rf $(TMPDIR)/ady_scaled_* $(TMPDIR)/ady_scaled.out
 	@for t in $(BOTH_BACKENDS_COMPARED); do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \

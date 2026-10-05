@@ -364,7 +364,7 @@ history of this file if the reasoning behind one of them is ever wanted.
       `TOOLS/TCHECK/Tcheck_tact.ady`'s `build_type_from` says so where it
       spells out the returns it would otherwise leave implicit.
 - [ ] distinct types and units, what is left (the feature itself --
-      `distinct`, scaling, derived units -- is done: book 2.7,
+      `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
       - the Python backend does not check an argument's type (it records
         no parameter types); building for Nim catches it.
@@ -375,6 +375,11 @@ history of this file if the reasoning behind one of them is ever wanted.
         raised to a power: `Area_T` is `Length_T * Length_T`, and there is
         no `Length_T ** 2`. Nim's `unchained` does full dimensional
         analysis; this is deliberately smaller.
+      - a conversion between two distinct types no scaled unit relates,
+        `Duration_T(d)` for a `Distance_T` d, keeps the number on both
+        backends: Nim's own conversion takes any distinct float. A scaled
+        unit (`type C is K * B`, EXAMPLES/test_scaled_units.ady) refuses
+        it for C and B; every other distinct type should too.
       - exact money is `distinct int` in cents, and converting int cents
         to and from a float rate is written out by hand. `round` would be
         the tool, and it is not portable (next item).

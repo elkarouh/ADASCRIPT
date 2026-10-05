@@ -182,6 +182,16 @@ def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
 ```
 `m * (v * v)` is refused (Speed*Speed has no unit) unless `type SpeedSq_T is Speed_T * Speed_T` exists. Relations run both ways: `e / v` is a Momentum, `p / m` a Speed.
 
+**A fixed multiple of a unit** is declared with a number (or a `const` float) times the unit -- Nim only, `ady2py` refuses it:
+```adascript
+const METRES_PER_MILE: float = 1609.344
+type Distance_in_km_T    is 1000.0 * Distance_T            # one km is 1000 m
+type Distance_in_miles_T is METRES_PER_MILE * Distance_T   # one mile is 1609.344 m
+let mi: Distance_in_miles_T = Distance_in_miles_T(d)       # d: Distance_T -> d / 1609.344
+let m: Distance_T = Distance_T(mi)                         # mi * 1609.344
+```
+`C(x)` scales when x is the other unit, keeps the number when x is a plain number, is refused for any other unit; km to miles goes through the base. The factor must be fixed at compile time (a `let`/`var` or a unit-typed const is refused): a varying rate such as euros per dollar is a derived unit, below.
+
 **Money** (the commonest case): `Dollar_T` scales by a count, a tax rate or a discount; a currency conversion needs the rate as a derived unit:
 ```adascript
 type Dollar_T is distinct float

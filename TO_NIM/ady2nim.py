@@ -66,6 +66,7 @@ _nimport_tuple_field_order: dict = {}
 # its module-level names with their types: globals and type aliases. Each is
 # (ParserState attribute, merged into the importer's at its reset).
 _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
+                    "scaled_units",
                     "generic_funcs",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
@@ -109,6 +110,8 @@ def _nim_reset():
     ParserState.ady_type_decls = {}
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
+    ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
+    ParserState._scaled_bases_done = set()   # bases whose to_B is emitted
     ParserState.generic_funcs = {}      # generic function -> its type parameters
     ParserState.class_field_types = {}
     ParserState.proc_param_types = {}
@@ -722,10 +725,18 @@ def translate(code, export_symbols=False):
     from ady_stmt import scan_union_aliases, scan_type_decls
     ParserState.union_aliases = scan_union_aliases(code)
     ParserState.ady_type_decls = scan_type_decls(code)
-    from ady_declarations import distinct_types, unit_relations
+    from ady_declarations import distinct_types, unit_relations, scaled_units
+    from ady_stmt import scan_consts
+    _scaled = scaled_units(ParserState.ady_type_decls, scan_consts(code),
+                           ParserState.distinct_types)
+    # a base an imported module scaled already has its to_B there
+    ParserState._scaled_bases_done = {b for n, (_, b) in ParserState.scaled_units.items()
+                                      if n not in _scaled}
+    ParserState.scaled_units.update(_scaled)
     ParserState.distinct_types.update(
-        distinct_types(ParserState.ady_type_decls, ParserState.distinct_types))
-    ParserState.unit_relations.update(unit_relations(ParserState.ady_type_decls))
+        distinct_types(ParserState.ady_type_decls, ParserState.distinct_types, _scaled))
+    ParserState.unit_relations.update(
+        unit_relations(ParserState.ady_type_decls, _scaled))
     # Generic functions, this module's and those it nimports, must be called
     # with their type arguments written out: see check_generic_calls.
     from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls

@@ -311,7 +311,16 @@ def translate(code):
     from ady_stmt import scan_union_aliases, scan_type_decls
     _PS_rp.union_aliases = scan_union_aliases(code)
     _PS_rp.ady_type_decls = scan_type_decls(code)
-    from ady_declarations import distinct_types, unit_relations
+    from ady_declarations import distinct_types, unit_relations, scaled_units
+    from ady_stmt import scan_consts
+    # A scaled unit's conversions are chosen by the type of their argument,
+    # which this backend does not always know: guessing wrong would relabel
+    # metres as miles, so it is not built here.
+    for _name, (_k, _b) in scaled_units(_PS_rp.ady_type_decls, scan_consts(code)).items():
+        raise SyntaxError(
+            f"type {_name} is {_k} * {_b}: a scaled unit is built by ady2nim "
+            f"only -- its conversions depend on the type of their argument, "
+            f"which the Python backend cannot always see")
     _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls)
     _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
     # a generic function must be called with its type arguments written out

@@ -397,6 +397,17 @@ def scan_union_aliases(code):
     return out
 
 
+_CONST_DECL = _re_dup.compile(
+    r"^const[ \t]+([A-Za-z_]\w*)[ \t]*(?::[ \t]*([^=\n]+?))?[ \t]*=", _re_dup.MULTILINE)
+
+
+def scan_consts(code):
+    """Every module-level `const` CODE declares, as {name: its declared
+    type, or None}: what a scaled unit's factor may be."""
+    return {m.group(1): (m.group(2).strip() if m.group(2) else None)
+            for m in _CONST_DECL.finditer(code)}
+
+
 _CLASS_DECL = _re_dup.compile(r"^[ \t]*class[ \t]+([A-Za-z_]\w*)", _re_dup.MULTILINE)
 
 
@@ -741,6 +752,11 @@ distinct_def = ikw("distinct") + type_annotation
 # times a Duration_T is a Distance_T. See ady_declarations.unit_relations.
 derived_def = fw("derived_def")
 derived_def = IDENTIFIER + (V_STAR | V_SLASH) + IDENTIFIER
+# scaled_def: K * B -- a multiple of a distinct float, K a number or a const:
+# `type Distance_in_km_T is 1000.0 * Distance_T`. `CONST * B` reads as a
+# derived_def; ady_declarations.scaled_units tells the two apart.
+scaled_def = fw("scaled_def")
+scaled_def = NUMBER + V_STAR + IDENTIFIER
 # int_range_def: int range LO .. HI  (synonym for constrained_subrange_def)
 int_range_def = fw("int_range_def")
 int_range_def = literal("int") + literal("range") + subrange_def
@@ -755,7 +771,7 @@ elem_type.parsers.insert(0, subrange_def)
 from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_def | derived_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

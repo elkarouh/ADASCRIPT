@@ -2300,6 +2300,9 @@ def to_nim(self, indent=0):
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "distinct_def":
         return _distinct_type_nim(name, params, rhs, indent)
+    elif rhs_type in ("derived_def", "scaled_def") and name in getattr(
+            ParserState, "scaled_units", {}):
+        return _scaled_type_nim(name, params, indent)
     elif rhs_type == "derived_def":
         return _derived_type_nim(name, params, indent)
     elif rhs_type == "float_range_def":
@@ -2452,6 +2455,33 @@ def _derived_type_nim(name, params, indent):
         nim_op = "div" if (o == "/" and kind == "int") else o
         lines.append(f"{ind}proc `{nim_op}`{_exp}(a: {l}, b: {r}): {res} = "
                      f"{res}({base}(a) {nim_op} {base}(b))")
+    return "\n".join(lines)
+
+
+@method(scaled_def)
+def to_nim(self, prec=None):
+    """scaled_def: NUMBER '*' IDENTIFIER -- a multiple of a unit; type_stmt
+    renders it, from the declaration scan."""
+    return ""
+
+
+def _scaled_type_nim(name, params, indent):
+    """`type C is K * B` -> a distinct float C and the conversions between
+    C and B, each a `to_` proc that `C(x)` and `B(x)` are emitted as (see
+    primary): from B to C divides by K, from C to B multiplies, and a plain
+    number, or a value already of the type, is taken as it is. A unit of
+    neither type matches no overload, and Nim refuses it."""
+    factor, base = ParserState.scaled_units[name]
+    lines, _exp = _distinct_lines(name, params, "float", "float", indent)
+    ind = _ind(indent)
+    done = ParserState._scaled_bases_done
+    for t in ([base] if base not in done else []) + [name]:
+        lines += [f"{ind}proc to_{t}{_exp}(x: float): {t} = {t}(x)",
+                  f"{ind}proc to_{t}{_exp}(x: int): {t} = {t}(float(x))",
+                  f"{ind}proc to_{t}{_exp}(x: {t}): {t} = x"]
+    done.add(base)
+    lines += [f"{ind}proc to_{name}{_exp}(x: {base}): {name} = {name}(float(x) / {factor})",
+              f"{ind}proc to_{base}{_exp}(x: {name}): {base} = {base}(float(x) * {factor})"]
     return "\n".join(lines)
 
 

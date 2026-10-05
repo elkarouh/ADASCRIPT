@@ -1405,6 +1405,10 @@ def _nim_atom_unit(e):
     called = _outer_call_name(e) if e.endswith(")") else None
     if called and is_distinct(called):
         return called
+    if called and called.startswith("to_") and called[3:] in (
+            getattr(ParserState, "scaled_units", None) or {}).keys() | {
+            b for _, b in (getattr(ParserState, "scaled_units", None) or {}).values()}:
+        return called[3:]                 # `Distance_T(k)`, emitted as to_Distance_T
     if called in ("float", "int"):
         return UNIT_PLAIN
     if called in ("abs", "min", "max"):
@@ -2843,6 +2847,30 @@ def _emit_tick_attr(base, field, attr):
     )
 
 
+def _scaled_conversion(node, name):
+    """`C(x)` where C is in a scaled declaration, `type C is K * B` or the B
+    of one, as its `to_C(x)`, which scales x when x is of the other unit; or
+    None for anything else. Nim's own `C(x)` would take a value of any
+    distinct float and keep its number: a Distance_T relabelled as miles.
+    A unit that converts to C by no declaration is refused here, by name;
+    one this cannot tell is left to the overloads of to_C."""
+    from ady_declarations import scaled_sources, is_distinct
+    sources = scaled_sources(name)
+    if sources is None or len(node.nodes) < 2 or not hasattr(node.nodes[1], "nodes"):
+        return None
+    trailers = [t.to_nim() for t in node.nodes[1].nodes]
+    if not trailers or not trailers[0].startswith("("):
+        return None
+    arg = trailers[0][1:-1]
+    unit = _unit_of(arg)
+    if unit and is_distinct(unit) and unit != name and unit not in sources:
+        raise SyntaxError(
+            f"{name}({arg}): a {unit} does not convert to a {name} -- "
+            f"a {name} converts from "
+            + ", ".join(sorted(sources | {"a plain number"})))
+    return f"to_{name}{trailers[0]}" + "".join(trailers[1:])
+
+
 @method(primary)
 def to_nim(self, prec=None):
     """primary: atom trailer* -> Nim: base.trailer1.trailer2..."""
@@ -2850,6 +2878,9 @@ def to_nim(self, prec=None):
     # Map Python builtin names to Nim equivalents
     raw_name = result
     result = _PY_IDENT_TO_NIM.get(result, result)
+    _scaled = _scaled_conversion(self, raw_name)
+    if _scaled is not None:
+        return _scaled
     if raw_name == "print":
         _spaced = _spaced_echo(self)
         if _spaced is not None:

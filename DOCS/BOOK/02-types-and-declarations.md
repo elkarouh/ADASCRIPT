@@ -466,6 +466,47 @@ unit unless you declare one, such as `type SpeedSq_T is Speed_T * Speed_T`,
 and then `Energy_T` would be `Mass_T * SpeedSq_T` instead. Pick the
 decomposition that names quantities you actually use.
 
+### A multiple of a unit: kilometres and miles
+
+A kilometre is a thousand metres, and a mile 1609.344 of them. Each is a
+unit of its own -- a mile plus a metre is a bug -- but the step between them
+is fixed, so it can be declared once rather than written out at every use:
+
+```python
+# EXAMPLES/test_scaled_units.ady
+const METRES_PER_MILE: float = 1609.344          # exact, by definition
+
+type Distance_T          is distinct float                # metres
+type Distance_in_km_T    is 1000.0 * Distance_T           # a km is 1000 m
+type Distance_in_miles_T is METRES_PER_MILE * Distance_T  # a mile is 1609.344 m
+
+def to_miles(d: Distance_T) -> Distance_in_miles_T:
+    return Distance_in_miles_T(d)
+```
+
+`type C is K * B` reads as what one C *is*: a thousand B. It is the `*` of a
+derived unit with a number in place of a unit, and so it does not say the
+opposite of what `type Velocity_T is Distance_T / Duration_T` says. From it
+come the two conversions: `Distance_in_miles_T(d)` of a `Distance_T` divides
+by the factor, and `Distance_T(mi)` of a `Distance_in_miles_T` multiplies by
+it. Of a plain number each keeps the number, as any distinct type's
+conversion does, and of any other unit -- `Distance_in_miles_T(t)` for a
+`Duration_T` -- it is refused. Two multiples of one base convert through it,
+`Distance_in_km_T(Distance_T(mi))`. Otherwise the new type is a distinct
+float like any other: it scales, adds to itself and compares, and mixes with
+nothing.
+
+The factor is fixed when the program is compiled: a number, or a `const`
+plain float. A `let` or `var` is refused, and so is a const of a unit type.
+That is the line between a mile and a dollar: a rate that changes as the
+program runs is a value, and a value of a unit of its own -- the exchange
+rate below.
+
+A scaled unit is built by `ady2nim` only. Which conversion `C(x)` is depends
+on the type of x, which the Python backend cannot always see, and guessing
+wrong would relabel metres as miles; `ady2py` refuses the declaration.
+`EXAMPLES/physics_calc.ady` uses both the kilometre and the mile.
+
 ### Money
 
 The commonest quantity of all is money, and it takes nothing new. An amount

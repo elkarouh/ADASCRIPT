@@ -11,20 +11,30 @@ compiler refuses
 
 so a unit has to be said, by a conversion that is written down. Derived units say what
 products and quotients of the base ones make -- Velocity_T is Distance_T / Duration_T,
-Force_T is Mass_T * Acceleration_T -- and `v * t` is then a Distance_T again.
+Force_T is Mass_T * Acceleration_T -- and `v * t` is then a Distance_T again. Scaled
+units say what multiple of one another is -- a mile is METRES_PER_MILE metres -- and
+the conversions between the two come from that: `Distance_in_miles_T(d)` of a
+Distance_T divides by it, `Distance_T(mi)` multiplies.
 
-Shown: distinct types, a typed conversion factor (metres per mile), derived units,
-an enum with enum-indexed tables, a named tuple, a speed classified from thresholds, and
+Shown: distinct types, scaled units (the mile and the kilometre), derived units, an
+enum with enum-indexed tables, a named tuple, a speed classified from thresholds, and
 the checks at the end -- the numbers agree with the physics, and the conversions with
-each other. Runs the same on both backends.
+each other. Nim only: a scaled unit's conversion depends on the type of its argument,
+which the Python backend cannot always see.
 """
 
-# ---- base units (SI) and the mile -----------------------------------------------------------
+# ---- base units (SI), the kilometre and the mile ---------------------------------------------
+
+const METRES_PER_MILE: float = 1609.344         # exact, by definition
 
 type Distance_T          is distinct float      # metres
 type Duration_T          is distinct float      # seconds
 type Mass_T              is distinct float      # kilograms
-type Distance_in_miles_T is distinct float      # statute miles
+
+# a multiple of a unit is a unit of its own: a mile plus a metre is refused, and
+# Distance_in_miles_T(d) of a Distance_T is d / METRES_PER_MILE miles
+type Distance_in_km_T    is 1000.0 * Distance_T            # a km is 1000 m
+type Distance_in_miles_T is METRES_PER_MILE * Distance_T   # a mile is 1609.344 m
 
 # ---- derived units ------------------------------------------------------------------------
 
@@ -34,25 +44,15 @@ type Force_T        is Mass_T         * Acceleration_T
 type Momentum_T     is Mass_T         * Velocity_T
 type Energy_T       is Force_T        * Distance_T         # joules: newton metres
 
-# metres per mile is itself a unit, so a conversion is a product and the compiler can
-# check it: a Distance_in_miles_T times it is a Distance_T, and nothing else comes out
-type MetresPerMile_T is Distance_T / Distance_in_miles_T
-
-const METRES_PER_MILE: MetresPerMile_T = 1609.344      # exact, by definition
 const HOUR: Duration_T = 3600.0
-
-def to_metres(d: Distance_in_miles_T) -> Distance_T:
-    return d * METRES_PER_MILE
-
-def to_miles(d: Distance_T) -> Distance_in_miles_T:
-    return d / METRES_PER_MILE
 
 def mph(v: Velocity_T) -> float:
     """Miles covered in an hour at v."""
-    return float(to_miles(v * HOUR))
+    return float(Distance_in_miles_T(v * HOUR))
 
 def kmh(v: Velocity_T) -> float:
-    return float(v * HOUR) / 1000.0
+    """Kilometres covered in an hour at v."""
+    return float(Distance_in_km_T(v * HOUR))
 
 # ---- the celestial bodies -------------------------------------------------------------------
 
@@ -142,8 +142,8 @@ def escape_velocity(body: Body_T) -> Velocity_T:
 
 def velocity_from_miles(d: Distance_in_miles_T, t: Duration_T) -> Velocity_T:
     """d / t is refused -- miles per second is no unit that was declared -- so the distance
-    goes through to_metres() first, which says which unit system is meant."""
-    return to_metres(d) / t
+    is converted to metres first, which says which unit system is meant."""
+    return Distance_T(d) / t
 
 # ---- the program ---------------------------------------------------------------------------
 
@@ -169,7 +169,7 @@ def main():
         print(f"  {BODY_NAME[body]}:")
         print(f"    g               = {float(GRAVITY[body]):.2f} m/s²")
         print(f"    final velocity  = {float(r.final_velocity):.2f} m/s  ({PACE_NAME[pace_of(r.final_velocity)]})")
-        print(f"    distance fallen = {float(r.distance):.4f} m  /  {float(to_miles(r.distance)):.6f} mi")
+        print(f"    distance fallen = {float(r.distance):.4f} m  /  {float(Distance_in_miles_T(r.distance)):.6f} mi")
         print(f"    weight (force)  = {float(r.force):.2f} N")
         print(f"    momentum        = {float(r.momentum):.2f} kg·m/s")
         print(f"    kinetic energy  = {float(r.kinetic_energy):.2f} J")
@@ -197,7 +197,7 @@ def main():
 
     # a marathon is 26 miles 385 yards
     let marathon_mi: Distance_in_miles_T = 26.2188
-    let marathon_m:  Distance_T          = to_metres(marathon_mi)
+    let marathon_m:  Distance_T          = Distance_T(marathon_mi)
     print("  A marathon distance:")
     print(f"    {float(marathon_mi):.4f} mi  ->  {float(marathon_m):.2f} m")
 
@@ -210,7 +210,7 @@ def main():
     print(f"                      {mph(average):.4f} mph")
     print()
 
-    let back_mi: Distance_in_miles_T = to_miles(marathon_m)
+    let back_mi: Distance_in_miles_T = Distance_in_miles_T(marathon_m)
     print(f"  Round-trip check:   {float(marathon_mi):.6f} mi  ->  {float(marathon_m):.6f} m  ->  {float(back_mi):.6f} mi")
     print()
 
@@ -223,9 +223,9 @@ def main():
     let v1: Velocity_T          = d1 / t1                       # Distance_T / Duration_T
     let v2: Velocity_T          = velocity_from_miles(d2, t1)   # miles to metres first
     print(f"  {float(d1):.0f} m  in {float(t1):.0f} s         ->  v = {float(v1):.3f} m/s")
-    print(f"  {float(d2):.0f} mi in {float(t1):.0f} s  (= {float(to_metres(d2)):.2f} m) ->  v = {float(v2):.3f} m/s")
-    print(f"  {float(d1):.0f} m in miles               ->  {float(to_miles(d1)):.6f} mi")
-    print(f"  {float(d2):.0f} mi in metres              ->  {float(to_metres(d2)):.4f} m")
+    print(f"  {float(d2):.0f} mi in {float(t1):.0f} s  (= {float(Distance_T(d2)):.2f} m) ->  v = {float(v2):.3f} m/s")
+    print(f"  {float(d1):.0f} m in miles               ->  {float(Distance_in_miles_T(d1)):.6f} mi")
+    print(f"  {float(d2):.0f} mi in metres              ->  {float(Distance_T(d2)):.4f} m")
     print()
 
     # the numbers agree with the physics, and the conversions with each other

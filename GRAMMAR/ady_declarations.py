@@ -636,37 +636,123 @@ def parse_derived(rhs):
     return (m.group(1), m.group(2), m.group(3)) if m else None
 
 
-def distinct_types(decls, known=None):
-    """{name: kind} for every `type X is distinct T` and every derived unit
-    `type C is A / B` in DECLS (the output of scan_type_decls), kind being
-    the scalar the type is made of -- "int", "float", "str", "char", "bool"
-    or "enum" -- or None for anything else. A derived unit is made of what
-    its operands are; a declaration that cannot be one raises SyntaxError.
-    KNOWN is what an imported module already declared, which a derived unit
-    here may be made from."""
+def distinct_types(decls, known=None, scaled=None):
+    """{name: kind} for every `type X is distinct T`, every derived unit
+    `type C is A / B` and every scaled unit `type C is K * B` (SCALED, the
+    output of scaled_units) in DECLS (the output of scan_type_decls), kind
+    being the scalar the type is made of -- "int", "float", "str", "char",
+    "bool" or "enum" -- or None for anything else. A derived unit is made of
+    what its operands are; a declaration that cannot be one raises
+    SyntaxError. KNOWN is what an imported module already declared, which a
+    derived unit here may be made from."""
     out = dict(known or {})
+    scaled = scaled or {}
     for name, rhs in decls.items():
         if rhs is not None and rhs.strip().startswith("distinct "):
             out[name] = _decl_kind(rhs, decls, frozenset({name}))
     derived = {n: parse_derived(r) for n, r in decls.items()
-               if r is not None and parse_derived(r) is not None}
-    # a derived unit may be made from another: resolve until nothing moves
+               if r is not None and n not in scaled and parse_derived(r) is not None}
+    # a derived unit may be made from another, and a scaled unit from either:
+    # resolve until nothing moves
     pending = dict(derived)
+    pending.update({n: (None, "*", b) for n, (_, b) in scaled.items()})
     while pending:
         moved = False
         for name, (a, op, b) in list(pending.items()):
-            if a in out and b in out and a not in pending and b not in pending:
+            if a is None and b in out and b not in pending:
+                out[name] = _check_scaled(name, scaled[name][0], b, out)
+                del pending[name]
+                moved = True
+            elif a in out and b in out and a not in pending and b not in pending:
                 out[name] = _check_derived(name, a, op, b, out)
                 del pending[name]
                 moved = True
         if not moved:
             name, (a, op, b) = next(iter(pending.items()))
+            if a is None:
+                raise SyntaxError(
+                    f"type {name} is {scaled[name][0]} * {b}: {b} is not a "
+                    f"distinct float -- a scaled unit is a multiple of one, "
+                    f"declared `type {b} is distinct float`")
             bad = next((x for x in (a, b) if x not in out), a)
             raise SyntaxError(
                 f"type {name} is {a} {op} {b}: {bad} is not a distinct "
                 f"numeric type -- a derived unit is made from two of them, "
                 f"declared `type {bad} is distinct float`")
     return out
+
+
+# --- scaled units --------------------------------------------------------------
+# `type Distance_in_km_T is 1000.0 * Distance_T` says one Distance_in_km_T is
+# a thousand Distance_T. The two stay apart -- a km plus a metre is refused --
+# and the conversions between them are made from the declaration:
+# `Distance_in_km_T(d)` of a Distance_T divides by the factor, and
+# `Distance_T(k)` of a Distance_in_km_T multiplies by it. The factor is fixed
+# when the program is compiled, a number or a `const` float: a rate that
+# changes as the program runs, euros per dollar, is a unit of its own
+# (`type Rate_T is Euro_T / Dollar_T`) and a value of it is passed in.
+# Only Nim builds them: see ady2py.
+
+_SCALED = _re_du.compile(
+    r"^(\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][-+]?\d+)?|[A-Za-z_]\w*)[ \t]*\*[ \t]*([A-Za-z_]\w*)$")
+
+
+def scaled_units(decls, consts, known=None):
+    """{name: (factor, base)} for every `type C is FACTOR * B` in DECLS,
+    FACTOR a number or a name in CONSTS ({name: declared type or None}, the
+    output of scan_consts). `A * B` between two types is a derived unit and
+    not one of these; a name that is neither a type nor a float const
+    raises SyntaxError. KNOWN is the distinct types an imported module
+    declared."""
+    known = known or {}
+    out = {}
+    for name, rhs in decls.items():
+        m = _SCALED.match((rhs or "").strip())
+        if not m:
+            continue
+        factor, base = m.group(1), m.group(2)
+        if factor[0].isdigit():
+            out[name] = (factor, base)
+            continue
+        if factor in decls or factor in known:
+            continue                          # A * B: a derived unit
+        if factor not in consts:
+            raise SyntaxError(
+                f"type {name} is {factor} * {base}: {factor} is not a const -- "
+                f"the factor of a scaled unit is fixed when the program is "
+                f"compiled, a number or a `const` float. A rate that changes "
+                f"as it runs is a unit of its own, `type Rate_T is A / B`")
+        ctype = consts[factor]
+        if ctype not in (None, "float"):
+            raise SyntaxError(
+                f"type {name} is {factor} * {base}: {factor} is a {ctype} -- "
+                f"the factor of a scaled unit is a plain number, a `const` "
+                f"float")
+        out[name] = (factor, base)
+    return out
+
+
+def _check_scaled(name, factor, base, kinds):
+    """The kind of `type NAME is FACTOR * BASE`, or SyntaxError."""
+    if kinds[base] != "float":
+        raise SyntaxError(
+            f"type {name} is {factor} * {base}: {base} is made of "
+            f"{kinds[base]} -- a scaled unit is a multiple of a distinct "
+            f"float, since converting to it divides")
+    return "float"
+
+
+def scaled_sources(target):
+    """The units a conversion to TARGET takes and scales -- for a scaled
+    unit its base, for a base the units scaled from it -- or None when
+    TARGET is not in a scaled declaration, and `TARGET(x)` relabels."""
+    from hek_parsec import ParserState
+    scaled = getattr(ParserState, "scaled_units", None) or {}
+    out = set()
+    if target in scaled:
+        out.add(scaled[target][1])
+    out |= {n for n, (_, b) in scaled.items() if b == target}
+    return out or None
 
 
 def _check_derived(name, a, op, b, kinds):
@@ -701,13 +787,15 @@ def derived_ops(name, a, op, b):
             ("/", name, a, b), ("/", name, b, a)]
 
 
-def unit_relations(decls):
+def unit_relations(decls, scaled=None):
     """{(op, left, right): result} for what every derived unit in DECLS says
     about the operators between its units. Anything between two distinct
-    types that is not here has no unit, and is refused."""
+    types that is not here has no unit, and is refused. SCALED names the
+    scaled units, `K * B`, which say nothing about operators."""
     rel = {}
+    scaled = scaled or {}
     for name, rhs in decls.items():
-        d = parse_derived(rhs) if rhs is not None else None
+        d = parse_derived(rhs) if rhs is not None and name not in scaled else None
         if d is None:
             continue
         for op, l, r, res in derived_ops(name, *d):
