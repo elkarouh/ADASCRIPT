@@ -1081,6 +1081,22 @@ def _nim_expr_type(expr):
         if len(s) >= 2 and s[-1] == '"' and (s[0] == '"' or s.startswith(("fmt\"", "$\"", "r\""))):
             return "string"
 
+        # a call to a proc of this program, `clip(a, 2)`: its declared return
+        # type. Only a call that is the whole expression -- the parenthesis
+        # that opens after the name is the one that closes at the end.
+        _call = _re.match(r"^([A-Za-z_]\w*)\(", s)
+        if _call and s.endswith(")"):
+            _depth = 0
+            for _i in range(_call.end() - 1, len(s)):
+                _depth += s[_i] == "("
+                _depth -= s[_i] == ")"
+                if _depth == 0:
+                    break
+            if _i == len(s) - 1:
+                _rt = getattr(ParserState, "proc_return_types", {}).get(_call.group(1))
+                if _rt:
+                    return _rt
+
         # concatenation: every operand of a top-level `&` has the same type,
         # and it is the type of the whole. Without this the resolver gave up
         # on `s & "2"` and `a & b` -- so `int(s + "2")` never reached
@@ -2993,6 +3009,8 @@ def to_nim(self, prec=None):
                             # Fix bare initTable() when field type is known
                             if fv == "initTable()" and ftype.startswith("Table["):
                                 fv = f"initTable[{ftype[6:-1]}]()"
+                            elif fv == "initHashSet()" and ftype.startswith("HashSet["):
+                                fv = f"initHashSet[{ftype[8:-1]}]()"
                             elif ftype.startswith("OrderedTable["):
                                 from hek_nim_stmt import _to_ordered_table
                                 fv = _to_ordered_table(fv, ftype)
@@ -3038,6 +3056,8 @@ def to_nim(self, prec=None):
                     pairs_parts = []
                     for fn, av in zip(named_fields, args):
                         ftype = ftype_map.get(fn, "")
+                        if av == "initHashSet()" and ftype.startswith("HashSet["):
+                            av = f"initHashSet[{ftype[8:-1]}]()"
                         # If field type is a ref object class, cast to that type for proper subtype coercion
                         if ftype.strip() == "char":
                             _cl = _char_literal_arg(av)
@@ -3646,7 +3666,10 @@ def to_nim(self, prec=None):
             # The narrowed thing can be a prefix of what is being read:
             # `if b[1] is not None:` proves b[1], and the body says
             # `b[1].a`. The .get() belongs between the two.
-            if result.startswith(_pth + ".") or result.startswith(_pth + "["):
+            if (result.startswith(_pth + ".") or result.startswith(_pth + "[")) \
+                    and not result.startswith(_pth + _narrow_suffix(_pth)):
+                # (not when the call path already unwrapped it: an optional
+                # proc called as `self.f(x)` arrives as `self.f.get()(x)`)
                 ParserState.nim_imports.add("options")
                 return f"{_pth}{_narrow_suffix(_pth)}" + result[len(_pth):]
     return result
@@ -4316,7 +4339,9 @@ def _translate_stdlib_patterns(expr):
                 return _SYS_ATTR[attr] + rest
 
     # --- 4. 'sep'.join(x) -> x.join("sep") ---
-    m = _re.match(r"^(.+)\.join\((.+)\)$", expr)
+    # DOTALL: the argument may hold a newline -- an f-string with a "\n" in it
+    # is a triple-quoted fmt""" on Nim, which spans two lines
+    m = _re.match(r"^(.+)\.join\((.+)\)$", expr, _re.DOTALL)
     if m and _is_join_receiver(m.group(1)) and _is_str_join_call(m.group(1), m.group(2)):
         sep, arg = m.group(1), m.group(2)
         ParserState.nim_imports.add("strutils")

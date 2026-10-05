@@ -117,6 +117,7 @@ STANDALONE := \
     test_vi_highlight.ady \
     test_vi_loop.ady \
     test_kilo_editor.ady \
+    test_nim_quirks.ady \
     test_format_zero_decimals.ady \
     test_region_operators.ady \
     test_vi_save.ady \

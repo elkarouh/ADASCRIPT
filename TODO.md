@@ -25,6 +25,21 @@ history of this file if the reasoning behind one of them is ever wanted.
       as vi's terminals are handed a `Frame_T` and not the `Editor`. What
       is wanted is `var` decided from the declaration (`ed: var Editor`), the same
       in the base and every override, and refused where they differ.
+- [ ] three things found porting kilo that are language decisions, not slips
+      (the slips were fixed: `+=` on a string field, `+` with a call operand,
+      a failure narrowed in a method, `"".join` over a multi-line f-string,
+      `{}` as a record field -- `EXAMPLES/test_nim_quirks.ady`).
+      (1) A slice past the end of a string or list raises on Nim and is clipped
+      on Python; kilo's `clip`/`tail`/`splice` stand in for it. One of the two
+      has to give.
+      (2) Nim reads names without case or underscores, so enum members `PAGE_UP`
+      and `PAGEUP`, or two names differing in the case after the first letter,
+      collide on Nim and not on Python. Refuse the pair at transpile time, or
+      accept it.
+      (3) A `let` class instance is immutable on Nim (a `var`-less object), so
+      `let r = Row(..); r.x = 1` fails there where Python allows it; kilo writes
+      through `self.rows[i].x`. Refuse the write on both backends, or make `let`
+      of a class a reference.
 - [ ] general function decorators on Nim. Today the Nim backend knows five
       annotations (`@contextmanager`, `@virtual`, `@proc`, `@export`,
       `@used`) and refuses any other decorator, while Python passes every

@@ -449,6 +449,10 @@ def to_nim(self):
             return f"{target}.add({value})"
         sym = ParserState.symbol_table.lookup(target)
         ttype = (sym.get("type") or "") if sym else ""
+        if not ttype:
+            # `self.text += s`: a field, typed by its class
+            from hek_nim_expr import _field_type
+            ttype = _field_type(target)
         if ttype in ("string", "str") or value.startswith('"') or value.startswith('fmt"'):
             nim_op = "&="
     # Ada-style &= -> string concat &= (not bitwise and=) when target is string

@@ -280,9 +280,7 @@ assert at(mv) == (2, 0)
 print "moving OK"
 
 # pages: the window is 10 rows of text here (12 less the status bar and the message)
-var fifty: str = ""
-for i in 0 ..< 50:
-    fifty = fifty + f"line {i}\n"
+let fifty: str = "".join([f"line {i}\n" for i in 0 ..< 50])
 var big: Editor = started_on("big.txt", fifty)
 assert big.text_rows == 10
 code(big, PAGE_DOWN)                                     # to the bottom of the screen, then a screenful down

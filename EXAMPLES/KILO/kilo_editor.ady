@@ -204,7 +204,7 @@ def clip(text: str, start: int, width: int) -> str:
 
 def splice(text: str, start: int, stop: int, new: str) -> str:
     """TEXT with START up to STOP replaced by NEW."""
-    f"{clip(text, 0, start)}{new}{tail(text, stop)}"
+    clip(text, 0, start) + new + tail(text, stop)
 
 def spaces(n: int) -> str:
     """N spaces; none for a number below 0."""
@@ -276,9 +276,7 @@ let C_KEYWORDS: {}str = {"auto", "break", "case", "continue", "default", "do", "
 let C_TYPES: {}str = {"int", "long", "double", "float", "char", "unsigned", "signed",
     "void", "short", "const", "bool"}
 
-let NO_WORDS: {}str = {}
-
-let PLAIN_TEXT: Syntax_T = Syntax_T(name="", extensions=[], keywords=NO_WORDS, types=NO_WORDS,
+let PLAIN_TEXT: Syntax_T = Syntax_T(name="", extensions=[], keywords={}, types={},
     line_comment="", block_start="", block_end="", strings=False, numbers=False)
 
 let C_SYNTAX: Syntax_T = Syntax_T(name="C", extensions=[".c", ".h", ".cpp", ".hpp", ".cc"],
@@ -462,8 +460,7 @@ class Editor:
         let read: []str | !PathFailure_T = self.path.read_lines()
         if read is PathFailure_T:
             return read
-        else:
-            self.rows = [Row(line.rstrip("\r")) for line in read]
+        self.rows = [Row(line.rstrip("\r")) for line in read]
         for k in 0 ..< len(self.rows):
             self.update_row(k)
         self.modified = False
@@ -540,7 +537,7 @@ class Editor:
         let chars: str = self.rows[self.cy].chars
         let at: int = int(self.cx)
         # past the end of the row: pad with spaces up to the cursor
-        self.set_chars(self.cy, f"{clip(chars, 0, at)}{spaces(at - len(chars))}{c}{tail(chars, at)}")
+        self.set_chars(self.cy, clip(chars, 0, at) + spaces(at - len(chars)) + c + tail(chars, at))
         self.cx += 1
 
     def insert_newline(self):
@@ -565,7 +562,7 @@ class Editor:
         let chars: str = self.rows[self.cy].chars
         if self.cx == 0:
             let above: str = self.rows[self.cy - 1].chars
-            self.set_chars(self.cy - 1, f"{above}{chars}")
+            self.set_chars(self.cy - 1, above + chars)
             self.delete_row(self.cy)
             self.cy -= 1
             self.cx = Col_T(len(above))
@@ -742,7 +739,7 @@ class Editor:
             when LEFT | UP: self.step = -1
             when CHAR:
                 if is_printable(byte_at(press.text, 0)) and len(self.query) < QUERY_LEN:
-                    self.query = f"{self.query}{press.text}"
+                    self.query += press.text
                     self.last_match = -1
             when others: pass
         if self.last_match == -1: self.step = 1
@@ -826,8 +823,8 @@ class Editor:
         let left: str = f"{clip(self.filename, 0, 20)} - {len(self.rows)} lines {'(modified)' if self.modified else ''}"
         let right: str = f"{self.cy + 1}/{len(self.rows)}"
         if len(left) + len(right) > self.cols:
-            return clip(f"{left}{spaces(self.cols)}", 0, self.cols)
-        f"{left}{spaces(self.cols - len(left) - len(right))}{right}"
+            return clip(left + spaces(self.cols), 0, self.cols)
+        left + spaces(self.cols - len(left) - len(right)) + right
 
 def frame_of(ed: Editor, now: int) -> Frame_T:
     """What the editor shows at time NOW, for a terminal to draw."""

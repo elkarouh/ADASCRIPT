@@ -3104,7 +3104,7 @@ def _func_def_to_nim_inner(self, indent=0):
                 _mutators = "|".join(_re.escape(m) for m in sorted(ParserState.var_self_methods))
                 _mutator_calls = rf"|\.(?:{_mutators})\(" if _mutators else ""
                 _inplace = _re.search(
-                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/]?=(?!=)|\[.*\]\s*[+\-*/]?=(?!=)|[+\-*/]=" + _mutator_calls + ")",
+                    _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/&]?=(?!=)|\[.*\]\s*[+\-*/&]?=(?!=)|[+\-*/&]=" + _mutator_calls + ")",
                     _scan)
                 # ...and so is mutating what a field or an element holds, as
                 # the `self` check below allows: `p.items.add(x)`,
@@ -3113,7 +3113,7 @@ def _func_def_to_nim_inner(self, indent=0):
                 # the call.
                 if not _inplace:
                     _inplace = _re.search(
-                        _anchor + r"(?:\.\w+|\[[^\]\n]*\])+\s*(?:\.(?:add|append|extend|pop|clear|remove|sort|del|incl|excl)\(|[+\-*/]?=(?!=))",
+                        _anchor + r"(?:\.\w+|\[[^\]\n]*\])+\s*(?:\.(?:add|append|extend|pop|clear|remove|sort|del|incl|excl)\(|[+\-*/&]?=(?!=))",
                         _scan)
                 # Rebinding the name (s = ...) is local to the function in
                 # Python and must not turn the parameter into an out-parameter;
@@ -5513,12 +5513,12 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         }
         def _body_has_self_mutation(body_text):
             # Direct field mutation
-            if _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text):
+            if _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", body_text):
                 return True
             # Mutation reached through a subscript or a nested field:
             # `self.builds[i].host = x`, `self.rows[i].n += 1`.  Without this
             # the method kept a non-var self and Nim refused the assignment.
-            if _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/]?=(?!=)", body_text):
+            if _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/&]?=(?!=)", body_text):
                 return True
             # Method call on self that isn't known-read-only
             for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
@@ -5546,8 +5546,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         def _purity_evidence(body_text):
             """(may_mutate, sibling_calls) for the pure-method fixpoint."""
             may_mutate = bool(
-                _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", body_text)
-                or _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/]?=(?!=)", body_text))
+                _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", body_text)
+                or _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/&]?=(?!=)", body_text))
             sibling_calls = set()
             for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
                 callee = m.group(1)
@@ -5612,7 +5612,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         for p in params:
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/]=|=(?!=))", _body_no_comments
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", _body_no_comments
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)
@@ -5757,6 +5757,9 @@ def _by_value_calls_neutralised(text, by_value):
 def _extract_block_body(block_node, indent, is_init_body=False):
     """Extract body statements from a block node."""
     result_lines = []
+    # A guard that leaves the method -- `if r is Failure_T: return r` -- proves
+    # what it proves for the rest of the body, as it does in `block`
+    _guard_unwrapped = []
 
     def _emit(line):
         # In init bodies, strip var from self.x assignments
@@ -5768,6 +5771,7 @@ def _extract_block_body(block_node, indent, is_init_body=False):
             if s.startswith("self.") and ("= initTable()" in s or "= collect(initTable" in s or s.endswith("= @[]")):
                 return
         result_lines.append(line)
+        note_option_guard(line, _guard_unwrapped)
 
     for node in block_node.nodes:
         tname = type(node).__name__
@@ -5795,6 +5799,8 @@ def _extract_block_body(block_node, indent, is_init_body=False):
     # If init body is empty after skipping, add discard
     if is_init_body and all(not l.strip() for l in result_lines):
         result_lines = [_ind(indent) + "discard"]
+    for _gname in _guard_unwrapped:
+        hek_nim_expr._narrow_drop(_gname)
     return result_lines
 if __name__ == "__main__":
     print("=" * 60)

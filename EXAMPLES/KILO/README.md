@@ -132,13 +132,13 @@ Changed:
 | | total lines | code lines |
 |---|---|---|
 | `kilo.c` | 1308 | 986 |
-| `kilo_editor.ady` | 853 | 607 |
+| `kilo_editor.ady` | 850 | 605 |
 | `kilo.ady` | 163 | 114 |
-| Adascript, the two together (tests not counted) | 1016 | 721 |
+| Adascript, the two together (tests not counted) | 1013 | 719 |
 
 Code lines are the non-blank lines that are not comments: no `//` or `/* */` in the C, no `#` lines
 and no `"""` docstrings in Adascript. The Adascript is about a quarter shorter in code lines
-(721 against 986) *while doing more*; in total lines the difference is smaller (1016 against 1308),
+(719 against 986) *while doing more*; in total lines the difference is smaller (1013 against 1308),
 because the Adascript files carry docstrings and comments that explain the choices.
 
 Added over kilo.c: undo and redo; cut and paste of a row; Home and End; a window that
@@ -174,9 +174,9 @@ Not clearer, or worse:
 - **Two files and an interface** to follow (`Code_T`, `Key_T`, `Frame_T`, `Terminal`) where kilo has one
   global; to find what a key does you go through `decode`, `handle` and a method.
 - **Slicing is a trap**: a slice past the end of a string raises on Nim, so `clip`, `tail` and `splice`
-  stand in for it, and some Adascript quirks (a string concatenation that must go through an
-  f-string, a failure value that cannot be used until it is narrowed with an `else`) are worked around
-  in the code, and not always obvious to a reader.
+  stand in for it. (The other quirks met while writing this -- string `+` with a call operand,
+  `+=` on a field, a failure narrowed inside a method, `{}` in a record -- were fixed in the
+  transpiler and the code uses the plain forms; what is left is in `TODO.md`.)
 - **Snapshots for undo** copy the whole text at each change; that is simple to read and does not
   suit a big file.
 
