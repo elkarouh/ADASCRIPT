@@ -143,6 +143,8 @@ STANDALONE := \
     test_money.ady \
     test_scaled_units.ady \
     test_cents.ady \
+    test_union_args.ady \
+    test_union_wide.ady \
     test_subrange_array.ady \
     test_variant_literal.ady \
     test_set_operators.ady \
@@ -842,7 +844,10 @@ test: compile
 	          "8:cents plus dollars:type mismatch:let e: C_T = c + u" \
 	          "9:cents from a float:type mismatch:let e: C_T = C_T(r)" \
 	          "10:cents from a time:does not convert:let e: C_T = C_T(t)" \
-	          "11:dollars given as cents:type mismatch:let e: C_T = u"; do \
+	          "11:dollars given as cents:type mismatch:let e: C_T = u" \
+	          "12:unrelated units, no scaling:does not convert:let e: Duration_T = Duration_T(d)" \
+	          "13:unrelated, through arithmetic:does not convert:let e: Duration_T = Duration_T(d * 2.0)" \
+	          "14:a count from a distance:does not convert:let e: Usd_T = Usd_T(d)"; do \
 	    n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; rest=$${rest#*:}; \
 	    want=$${rest%%:*}; line=$${rest#*:}; \
 	    { cat $(TMPDIR)/ady_scaled_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_scaled_$$n.ady; \

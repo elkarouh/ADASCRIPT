@@ -2547,6 +2547,21 @@ def _wrap_distinct_literal(value, nim_type):
                 return f"{k.group(1)}: {_wrap_distinct_literal(k.group(2), m.group(1))}"
             return _wrap_distinct_literal(x, m.group(1))
         return head + ", ".join(element(x) for x in items) + "]"
+    # Table[K, V] with a distinct key or value: `{"a": 1.0}` is a Table[string,
+    # float] until each literal is given the type its place asks for.
+    m = _re_dl.match(r"^(Ordered)?Table\[(.+)\]$", t, _re_dl.S)
+    if m and v.startswith("{") and v.endswith("}.toTable"):
+        kv = _split_top_level_commas(m.group(2))
+        if len(kv) == 2 and (is_distinct(kv[0].strip()) or is_distinct(kv[1].strip())):
+            inner = v[1:-len("}.toTable")].strip()
+            pairs = []
+            for item in (_split_top_level_commas(inner) if inner else []):
+                k, sep, val = _split_top_level_colon(item)
+                if not sep:
+                    return value
+                pairs.append(f"{_wrap_distinct_literal(k, kv[0])}: "
+                             f"{_wrap_distinct_literal(val, kv[1])}")
+            return "{" + ", ".join(pairs) + "}.toTable"
     return value
 
 

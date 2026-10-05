@@ -1457,6 +1457,11 @@ def _is_distinct_param(ptype):
     return is_distinct(t[4:].strip() if t.startswith("var ") else t)
 
 
+def _wrap_table_literal(arg, ptype):
+    from hek_nim_stmt import _wrap_distinct_literal
+    return _wrap_distinct_literal(arg, ptype)
+
+
 def _is_literal_arg(arg):
     from hek_nim_stmt import _is_nim_literal
     return _is_nim_literal(arg)
@@ -2855,19 +2860,26 @@ def _scaled_conversion(node, name):
     A unit that converts to C by no declaration is refused here, by name;
     one this cannot tell is left to the overloads of to_C."""
     from ady_declarations import scaled_sources, is_distinct
+    if not is_distinct(name):
+        return None
     sources = scaled_sources(name)
-    if sources is None or len(node.nodes) < 2 or not hasattr(node.nodes[1], "nodes"):
+    if len(node.nodes) < 2 or not hasattr(node.nodes[1], "nodes"):
         return None
     trailers = [t.to_nim() for t in node.nodes[1].nodes]
     if not trailers or not trailers[0].startswith("("):
         return None
     arg = trailers[0][1:-1]
     unit = _unit_of(arg)
-    if unit and is_distinct(unit) and unit != name and unit not in sources:
+    if unit and is_distinct(unit) and unit != name and unit not in (sources or ()):
         raise SyntaxError(
             f"{name}({arg}): a {unit} does not convert to a {name} -- "
-            f"a {name} converts from "
-            + ", ".join(sorted(sources | {"a plain number"})))
+            + ("a " + name + " converts from "
+               + ", ".join(sorted(sources | {"a plain number"}))
+               if sources else
+               "go through the plain number, float(...) or int(...), to say "
+               "that the units are meant"))
+    if sources is None:
+        return None
     return f"to_{name}{trailers[0]}" + "".join(trailers[1:])
 
 
@@ -3945,10 +3957,22 @@ def _wrap_option_args(expr):
                     changed = True
             else:
                 new_args.append(kw_prefix + arg)
+        elif (_union_info(ptype) is not None and not _union_type_of(arg)
+                and not _expr_is_result(arg) and _value_nim_type(arg) is not None):
+            # a plain member of the union, or its failure, given where the
+            # union is expected: `f(3)` for `int | !Failure_T`
+            new_args.append(kw_prefix + _result_wrap(arg, ptype))
+            changed = True
         elif _is_distinct_param(ptype) and _is_literal_arg(arg):
             # a literal passed where a distinct type is expected is of it
             from hek_nim_stmt import _wrap_distinct_literal
             new_args.append(kw_prefix + _wrap_distinct_literal(arg, ptype))
+            changed = True
+        elif (arg.strip().startswith("{") and arg.strip().endswith("}.toTable")
+                and "Table[" in (ptype or "")
+                and _wrap_table_literal(arg, ptype) != arg):
+            # a table literal passed where the keys or values are distinct
+            new_args.append(kw_prefix + _wrap_table_literal(arg, ptype))
             changed = True
         elif ptype == "char" and _char_literal_arg(arg) is not None:
             # The mirror of the rule below. Adascript has no character type --

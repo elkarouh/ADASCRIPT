@@ -1,0 +1,49 @@
+#!/usr/bin/env ady2nim
+# test_union_args.ady — a plain value, or a failure, passed where a union is expected
+#
+#   ady2nim EXAMPLES/test_union_args.ady -r
+#
+# `f(3)` for a parameter of `int | !Failure_T`, `show(2.5)` for `int | float`:
+# the argument is a member of the union, and is taken as one -- no
+# constructor is written. A union that is already a union is passed as it is.
+# Table literals whose keys or values are distinct types take the types
+# their place asks for, as a literal does anywhere else.
+
+type Failure_T is record:
+    message: str
+
+type Metre_T is distinct float
+type Id_T is distinct int
+
+def describe(x: int | !Failure_T) -> str:
+    if x is Failure_T:
+        return "failed: " + x.message
+    return "ok " + str(x)
+
+def half(n: int) -> int | !Failure_T:
+    return Failure_T("odd") if n % 2 == 1
+    n // 2
+
+def show(x: int | float) -> str:
+    if x is int:
+        return "int " + str(x)
+    return "float " + str(x)
+
+def total(t: {Id_T}Metre_T) -> float:
+    var s: float = 0.0
+    for k, v in t.items():
+        s += float(v)
+    return s
+
+assert describe(3) == "ok 3"
+assert describe(Failure_T("no")) == "failed: no"
+assert describe(half(4)) == "ok 2"
+assert describe(half(3)) == "failed: odd"
+let r: int | !Failure_T = half(8)
+assert describe(r) == "ok 4"
+assert show(2.5) == "float 2.5"
+assert show(7) == "int 7"
+assert total({1: 1.5, 2: 2.5}) == 4.0
+let m: {str}Metre_T = {"a": 3.0}
+assert float(m["a"]) == 3.0
+print "test_union_args: ok"

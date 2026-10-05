@@ -369,17 +369,19 @@ history of this file if the reasoning behind one of them is ever wanted.
       - the Python backend does not check an argument's type (it records
         no parameter types); building for Nim catches it.
       - a literal whose context Nim cannot see (an argument to something
-        that is not a known routine, an element of a table literal) needs
-        `V(x)` written.
+        that is not a known routine) needs `V(x)` written. A table literal
+        with a distinct key or value type no longer does, when declared,
+        returned or passed as a known routine's argument.
       - a derived unit is float, or int for a product, and a unit cannot be
         raised to a power: `Area_T` is `Length_T * Length_T`, and there is
         no `Length_T ** 2`. Nim's `unchained` does full dimensional
         analysis; this is deliberately smaller.
-      - a conversion between two distinct types no scaled unit relates,
-        `Duration_T(d)` for a `Distance_T` d, keeps the number on both
-        backends: Nim's own conversion takes any distinct float. A scaled
-        unit (`type C is K * B`, EXAMPLES/test_scaled_units.ady) refuses
-        it for C and B; every other distinct type should too.
+      - a conversion between two distinct types no declaration relates,
+        `Duration_T(d)` for a `Distance_T` d, is refused on Nim, naming
+        both types; `Duration_T(float(d))` is the spelling that says the
+        units are meant. ady2py still keeps the number: it records no
+        parameter types and knows a value's unit only where a name or
+        operator shows it.
       - cents: `type Dollar_T is 100 * Dollar_in_cent_T` over a `distinct
         int` is done on Nim (EXAMPLES/test_cents.ady); ady2py still
         refuses scaled units. Building them there, where the argument's
@@ -448,17 +450,25 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] Nim: a `T | !F` passed as an *argument* whose value is a plain T or E
-      -- `f(3)` where f takes `int | !Failure_T`. The constructor is typed from a
-      return, a declaration or an assignment; an argument is none of those.
-- [ ] a union of more than six members (stdlib.nim's OneOf2..OneOf6), and
-      an optional union written out, `int | float | None`: today that is
-      `?Number_T`, the union named first.
+- [x] Nim: a `T | !F` passed as an *argument* whose value is a plain T or E
+      -- `f(3)` where f takes `int | !Failure_T` -- is typed from the
+      parameter (EXAMPLES/test_union_args.ady).
+- [x] a union of more than six members: stdlib.nim now has OneOf2..OneOf10
+      (generated blocks). The Python backend still stops at six
+      (`hek_py_declarations.py`).
+- [ ] an optional union written out, `int | float | None`, stays refused on
+      purpose: `None` goes with one other type, and `type Num_T is int |
+      float` with `?Num_T` says the same thing with a name. Revisit only if
+      the name proves a burden.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
-      check then catches a failure put there by mistake.
+      check then catches a failure put there by mistake. The message names
+      the generated code, not the line.
 - [ ] an adapter from exceptions at the boundary: a `T | !F` from a call
-      that raises.
+      that raises. Needs a decision first: what spells "this call's
+      exception is that failure" -- a `try`-expression, a decorator on the
+      callee, or a typed `shell:`-like block -- and how the exception's
+      message maps onto `F`'s fields.
 
 ### Feature 2 — `.map()` and `.and_then()` method rewriting on `?T`
 

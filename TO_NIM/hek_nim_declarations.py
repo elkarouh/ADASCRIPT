@@ -569,9 +569,9 @@ def to_nim(self, prec=None):
 
 def _nim_union_type(values):
     """OneOfN[...] of the Nim spellings of a union's members."""
-    if len(values) > 6:
+    if len(values) > 10:
         raise SyntaxError(
-            f"a union of {len(values)} members: six at most -- group some "
+            f"a union of {len(values)} members: ten at most -- group some "
             f"of them in a record")
     return f"OneOf{len(values)}[{', '.join(values)}]"
 

@@ -958,23 +958,25 @@ What is still missing there:
 - Which side a returned value is on is read from its type. Where the Nim
   backend cannot work the type out it assumes the value side, and Nim's
   own type check then refuses a failure put there by mistake — correct,
-  but the message names the generated code rather than the line. One case
-  is not yet typed at all: on Nim, a plain value passed as an *argument*
-  where a `T | !F` is expected (`f(3)`).
-- A union of more than six members, and an optional union written out
-  (`int | float | None`), are not supported.
+  but the message names the generated code rather than the line. A plain
+  value or a failure passed as an *argument* where a `T | !F` is expected
+  (`f(3)`) is typed from the parameter, on Nim.
+- A union is at most ten members on Nim, six on the Python backend. An
+  optional union written out (`int | float | None`) is refused, on purpose:
+  `None` goes with one other type, and an optional union is declared as a
+  type first and written `?Name`.
 - There is no adapter from an exception at the boundary: a call that
   raises does not become a `T | !F` by itself.
 
 Units have gaps of their own, and they are the ones this document's
 argument most needs to be honest about:
 
-- A conversion between two distinct types that no scaled unit relates is
-  not refused. `Duration_T(d)` for a `Distance_T` `d` compiles and keeps
-  the number, on both backends, because Nim's own conversion takes any
-  distinct float. A scaled unit refuses it for its own pair; every other
-  distinct type should, and does not yet. Until then a conversion is a
-  place where you have said so, not a place where the compiler has checked.
+- A conversion between two distinct types that no declaration relates is
+  refused on Nim: `Duration_T(d)` for a `Distance_T` `d` says so by name,
+  and `Duration_T(float(d))` is how you say the units are meant. The
+  Python backend still takes it and keeps the number, because it does not
+  record the type of an argument; building the same source for Nim is
+  what catches it.
 - Scaled units, the kilometre, the mile and money in cents, are built by
   `ady2nim` only; `ady2py` refuses the declaration.
 - A unit cannot be raised to a power. An area is `Length_T * Length_T`,
@@ -982,8 +984,10 @@ argument most needs to be honest about:
   smaller than Nim's dimensional-analysis libraries.
 - The Python backend does not check an argument's type, so a wrong unit
   passed to a function is caught when the same source is built for Nim.
-- A literal whose context Nim cannot see, an element of a table literal for
-  one, needs the type written: `V(x)`.
+- A literal whose context Nim cannot see, an argument to something that is
+  not a known routine for one, needs the type written: `V(x)`. A table
+  literal declared, returned or passed as `{K}V` with a distinct `K` or `V`
+  takes the types it is given.
 
 ---
 

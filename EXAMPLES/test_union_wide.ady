@@ -1,0 +1,37 @@
+#!/usr/bin/env ady2nim
+# test_union_wide.ady — a union of more than six members
+#
+#   ady2nim EXAMPLES/test_union_wide.ady -r
+#
+# stdlib.nim carries OneOf2 .. OneOf10; eight members is not special.
+
+type A_T is record:
+    a: int
+type B_T is record:
+    b: int
+type C_T is record:
+    c: int
+type D_T is record:
+    d: int
+type E_T is record:
+    e: int
+type Big_T is int | float | str | A_T | B_T | C_T | D_T | E_T
+
+def pick(n: int) -> Big_T:
+    if n == 0:
+        return 1
+    if n == 1:
+        return 2.5
+    if n == 2:
+        return "s"
+    if n == 3:
+        return D_T(4)
+    return E_T(5)
+
+let a: Big_T = pick(2)
+if a is str:
+    assert a == "s"
+let b: Big_T = pick(4)
+assert b is E_T and b.e == 5
+assert pick(0) is int and pick(1) is float and pick(3) is D_T
+print "test_union_wide: ok"
