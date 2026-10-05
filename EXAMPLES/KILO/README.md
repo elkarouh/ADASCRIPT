@@ -31,6 +31,38 @@ translation. `kilo.ady` is the plumbing around it.
 `../VI/vi_raw.ady` it reads the keys with `read(2)` and tells a lone ESC from an arrow key by
 waiting for more bytes (100 ms, kilo's `VTIME`).
 
+### Why two files, and not one
+
+Kilo is one file because C makes it cheap to be one, and because it is a demonstration of how
+small an editor can be. Here the file is split along a line of abstraction, so that each layer
+knows only what is below it:
+
+- **`kilo_editor.ady` is the model and the logic**: rows, colouring, the cursor, what each key does,
+  find, undo, and the frame it hands over to be drawn. It imports nothing, and does not know
+  there is a terminal, a keyboard, `termios` or an escape sequence.
+- **`kilo.ady` is the edge**: raw mode, reading bytes and escape sequences, writing the frame as
+  VT100 escapes. It knows nothing about rows or colouring; it turns bytes into key codes and
+  a `Frame_T` into bytes.
+
+What that buys, in what is here:
+
+- **The logic is tested without a terminal.** `../test_kilo_editor.ady` types keys into an `Editor` and
+  reads the `Frame_T` back, and runs the whole loop (`edit`) on a `Terminal` that is a list of keys: no pty,
+  no timing, and it runs in a fraction of a second. The pty test is then left with what only a
+  pty can show, the escape sequences.
+- **The terminal can be replaced.** `edit` asks for a `Terminal` -- a window size, a key, a clock, a frame to
+  draw -- and `RawTerminal` is one of them. `../VI/` has three terminals (illwill, raw, curses) under one editor;
+  another here would not touch the editor.
+- **The terminal's details stay out of the editor's.** The two kinds of column, the colouring and the history
+  are written without a word about timeouts, `poll` or escape sequences, and the escape-sequence reader
+  is written without a word about rows.
+- **The Nim-only part is small.** `kilo.ady` is the only file that needs `nimport` and `termios`; the
+  library is plain Adascript.
+
+The cost is a second file and a small interface to keep (`Code_T`, `Key_T`, `Frame_T`, `Terminal`), which
+kilo's global `E` does not have to; for 1300 lines of C that is fair, for a 150-line editor it
+would not be.
+
 ### What the language is used for
 
 - **Distinct types.** Kilo's `cx` is a place in the row's characters and also a place on the
