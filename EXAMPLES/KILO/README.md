@@ -127,6 +127,59 @@ Changed:
   they are typed like any other control character.
 - The alternate screen is used, so the shell's screen comes back on quit.
 
+## Size, and what the extra lines buy
+
+| | total lines | code lines |
+|---|---|---|
+| `kilo.c` | 1308 | 986 |
+| `kilo_editor.ady` | 853 | 607 |
+| `kilo.ady` | 163 | 114 |
+| Adascript, the two together (tests not counted) | 1016 | 721 |
+
+Code lines are the non-blank lines that are not comments: no `//` or `/* */` in the C, no `#` lines
+and no `"""` docstrings in Adascript. The Adascript is about a quarter shorter in code lines
+(721 against 986) *while doing more*; in total lines the difference is smaller (1016 against 1308),
+because the Adascript files carry docstrings and comments that explain the choices.
+
+Added over kilo.c: undo and redo; cut and paste of a row; Home and End; a window that
+follows the cursor in render columns, so it is right with tabs; search that lands on the right
+character in a row with a tab; colouring of the rows below an edit that changes a `/* */`, including
+when rows are inserted or deleted; non-printable characters marked in every file; a failed open or
+save reported as a value; and a loop that can be driven by a script, with tests (below) that need no
+terminal. What kilo.c has and this does not: the resize signal handler and the cursor-position
+fallback for the window size (see Differences).
+
+### Readability, honestly
+
+Clearer than the C:
+
+- **Columns that cannot be mixed up.** In C `cx` is both a place in the characters and a place
+  on the screen, and only care keeps them apart; here `Col_T` and `RCol_T` are different types and
+  mixing them does not compile.
+- **Names for what the numbers mean.** Key codes, colours and modes are enums that `case` checks
+  for completeness, where kilo has `#define`s, `int`s, and a `switch` with a `default`.
+- **No memory handling.** No `realloc`, `memmove`, `memcpy`, `malloc` or NUL terminators, and no
+  `+1` for them; a row is a string and the rows a list. Kilo's buffer arithmetic (`size`, `rsize`, `hl`)
+  is the larger part of its row code.
+- **Failures are in the types.** `None | !PathFailure_T` says that a write can fail, where C has
+  `goto writeerr` and an `errno`.
+- **The editor does not know the terminal**, and the frame it hands over is data that tests can look at.
+- **Highlighting is a function** of a line and the state it starts in, and a keyword is a set lookup,
+  not a loop of `memcmp`.
+
+Not clearer, or worse:
+
+- It is **no shorter where the work is the same**: the colouring scan and the key handling are about
+  as long as kilo's, and the scan is as dense as the C.
+- **Two files and an interface** to follow (`Code_T`, `Key_T`, `Frame_T`, `Terminal`) where kilo has one
+  global; to find what a key does you go through `decode`, `handle` and a method.
+- **Slicing is a trap**: a slice past the end of a string raises on Nim, so `clip`, `tail` and `splice`
+  stand in for it, and some Adascript quirks (a string concatenation that must go through an
+  f-string, a failure value that cannot be used until it is narrowed with an `else`) are worked around
+  in the code, and not always obvious to a reader.
+- **Snapshots for undo** copy the whole text at each change; that is simple to read and does not
+  suit a big file.
+
 ## Tests
 
 - `../test_kilo_editor.ady` -- the logic, with no terminal: rows and tabs, 17 lines of colouring (one
