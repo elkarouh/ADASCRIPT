@@ -946,6 +946,11 @@ and `Path(s)` is how you mean it.
 
 ## What is not yet true
 
+The Nim backend is the reference one; the Python backend is less
+supported, and only Nim supports every feature. Where this section says a
+check is missing, it is usually missing on Python only, and building the
+same source for Nim is what catches it.
+
 Failures as values (`T | !Failure_T`) are enforced in both directions: a
 failure cannot be dropped — a bare call whose result nobody takes is
 refused, on both backends — and on the Nim backend a value is not usable as

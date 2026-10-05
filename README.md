@@ -21,6 +21,15 @@ work, refactoring, and some of the more difficult feature implementations, so
 the project does include some AI-assisted code and writing. That said, the
 overall design, review, and ongoing maintenance of the project are handled by me.
 
+> **The two backends are not equal.** The Nim backend (`ady2nim`) is the
+> reference: it supports every feature of the language and its compiler does
+> the checking. The Python backend (`ady2py`) supports less -- it refuses some
+> declarations (scaled units, for one), does not check an argument's type, and
+> stops at six union members -- so a program that runs on Python can still be
+> refused by Nim. Write for Nim when you want every guarantee; use Python as a
+> second target for what it can take. See "What is not yet true" in
+> `DOCS/WHY_ADASCRIPT.md`.
+
 Most Python 3 code is valid Adascript as it stands. The exception is `import`:
 Adascript asks where a module comes from -- `pyimport os` for a Python package,
 `nimport os` for a Nim module -- and the Nim backend rejects a plain `import os`.
