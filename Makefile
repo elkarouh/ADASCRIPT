@@ -491,7 +491,7 @@ test-vi:
 # -----------------------------------------------------------------------
 define kilo_tests
 	@echo "=== kilo, typed keys in a pty of its own: KILO/kilo.ady (Nim) ==="
-	@printf '  %-62s' "EXAMPLES/KILO/kilo.ady (37 key scripts, 11 screen checks)"; \
+	@printf '  %-62s' "EXAMPLES/KILO/kilo.ady (47 key scripts, 11 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
 	    $(PYTHON) $(EXDIR)/KILO/test_kilo.py $(EXDIR)/KILO/kilo > $(TMPDIR)/ady_kilo.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_kilo.out | head -20; grep -q FAIL $(TMPDIR)/ady_kilo.out || tail -n 8 $(TMPDIR)/ady_kilo.out; exit 1; }; fi

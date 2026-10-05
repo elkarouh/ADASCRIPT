@@ -5,6 +5,8 @@ It has no terminal in it; the program, kilo.ady, is one, a subclass of Terminal 
     kilo <filename>
 
     ^S save      ^Q quit (three more presses when there are unsaved changes)
+    ^Z undo      ^Y redo (a run of typed characters is one step)
+    ^K cut the row under the cursor      ^U paste it above the cursor's row
     ^F find      the arrows, ENTER and ESC in the search line: next, previous, stay, go back
     arrows, Home, End, PageUp, PageDown   move       Backspace, Del   delete
 
@@ -68,7 +70,7 @@ const QUIT_TIMES: int = 3            # presses of ^Q it takes to leave a file wi
 const QUERY_LEN: int = 256           # the longest search
 const TAB_STOP: int = 8
 const MESSAGE_SECONDS: int = 5       # how long a message is shown
-const HELP: str = "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find"
+const HELP: str = "HELP: ^S save | ^Q quit | ^F find | ^Z undo | ^Y redo | ^K cut line | ^U paste"
 
 # ---- what the editor and its terminals share ---------------------------------
 
@@ -87,10 +89,14 @@ type Code_T is enum:
     CTRL_C = 3
     CTRL_F = 6
     CTRL_H = 8
+    CTRL_K = 11
     CTRL_L = 12
     ENTER = 13
     CTRL_Q = 17
     CTRL_S = 19
+    CTRL_U = 21
+    CTRL_Y = 25
+    CTRL_Z = 26
     ESC = 27
     BACKSPACE = 127
     ARROW_LEFT = 1000
@@ -105,7 +111,7 @@ type Code_T is enum:
 
 # What a key press means, whatever code the terminal sent for it. OTHER is a key kilo
 # ignores: ^C, ^L (the screen is drawn again after every key anyway) and ESC.
-type Key_T is enum CHAR, NEWLINE, ERASE, ESCAPE, SAVE, QUIT, FIND, LEFT, RIGHT, UP, DOWN, HOME, END, SCREEN_UP, SCREEN_DOWN, OTHER
+type Key_T is enum CHAR, NEWLINE, ERASE, ESCAPE, SAVE, QUIT, FIND, UNDO, REDO, CUT, PASTE, LEFT, RIGHT, UP, DOWN, HOME, END, SCREEN_UP, SCREEN_DOWN, OTHER
 
 type Press_T is record:
     key:  Key_T
@@ -169,6 +175,10 @@ def decode(ch: int) -> Press_T:
                 when CTRL_Q: Press_T(QUIT, "")
                 when CTRL_S: Press_T(SAVE, "")
                 when CTRL_F: Press_T(FIND, "")
+                when CTRL_Z: Press_T(UNDO, "")
+                when CTRL_Y: Press_T(REDO, "")
+                when CTRL_K: Press_T(CUT, "")
+                when CTRL_U: Press_T(PASTE, "")
                 when BACKSPACE | CTRL_H | DEL_KEY: Press_T(ERASE, "")
                 when ESC: Press_T(ESCAPE, "")
                 when ARROW_LEFT: Press_T(LEFT, "")
@@ -398,6 +408,12 @@ class Row:
             at += width
         Col_T(len(self.chars))
 
+# The text, and where the cursor was, at one step of the history, for undo and redo.
+type Snapshot_T is record:
+    lines: []str
+    cx: int
+    cy: int
+
 # ---- the editor ------------------------------------------------------------------
 
 class Editor:
@@ -427,6 +443,11 @@ class Editor:
     var saved_cy: int = 0
     var saved_rowoff: int = 0
     var saved_coloff: RCol_T = 0
+    var saved_lines: []str = []          # the text as last read or written, to tell a change from none
+    var history: []Snapshot_T = []       # the text after each change (empty until the first key) ...
+    var hpos: int = 0                    # ... and which of them is the text now
+    var typing: bool = False             # was the last change a typed character? a run of them is one step
+    var cut: []str = []                  # the lines ^K took out, for ^U to put back
 
     def __init__(self, path: Path):
         self.path = path
@@ -446,6 +467,11 @@ class Editor:
         for k in 0 ..< len(self.rows):
             self.update_row(k)
         self.modified = False
+        self.saved_lines = self.lines()
+
+    def lines(self) -> []str:
+        """The characters of each row."""
+        [row.chars for row in self.rows]
 
     def text(self) -> str:
         """The rows as the file holds them: each ends with a newline."""
@@ -462,6 +488,7 @@ class Editor:
             self.say(f"Can't save! I/O error: {written.reason}", now)
             return
         self.modified = False
+        self.saved_lines = self.lines()
         self.say(f"{len(text)} bytes written on disk", now)
 
     def say(self, text: str, now: int):
@@ -545,6 +572,66 @@ class Editor:
         else:
             self.set_chars(self.cy, splice(chars, int(self.cx) - 1, int(self.cx), ""))
             self.cx -= 1
+
+    def cut_line(self, now: int):
+        """^K: the cursor's row is taken out of the text, to be put back with ^U."""
+        if self.cy >= len(self.rows):
+            self.say("Nothing to cut", now)
+            return
+        self.cut = [self.rows[self.cy].chars]
+        self.delete_row(self.cy)
+        self.cx = Col_T(min(int(self.cx), self.here()))
+
+    def paste_lines(self, now: int):
+        """^U: the rows ^K took out go above the cursor's row, and the cursor below them."""
+        if len(self.cut) == 0:
+            self.say("Nothing to paste", now)
+            return
+        for line in self.cut:
+            self.insert_row(self.cy, line)
+            self.cy += 1
+        self.cx = Col_T(min(int(self.cx), self.here()))
+
+    # ---- undo ---
+    def snapshot(self) -> Snapshot_T:
+        Snapshot_T(self.lines(), int(self.cx), self.cy)
+
+    def record(self, typing: bool):
+        """After a key: if the text changed, it is a step of the history -- unless it is one
+        more typed character after others, which go in the step they began. A step made after
+        an undo drops what could have been redone."""
+        if self.lines() == self.history[self.hpos].lines:
+            self.typing = False
+            return
+        if typing and self.typing:
+            self.history[self.hpos] = self.snapshot()
+        else:
+            self.history = self.history[:self.hpos + 1] + [self.snapshot()]
+            self.hpos = len(self.history) - 1
+        self.typing = typing
+
+    def go_to(self, step: int):
+        """The text, and the cursor, as they were at history step STEP."""
+        let snap: Snapshot_T = self.history[step]
+        self.hpos = step
+        self.rows = [Row(line) for line in snap.lines]
+        self.update_row(0)
+        self.cy = min(snap.cy, len(self.rows))
+        self.cx = Col_T(min(snap.cx, self.here()))
+        self.modified = snap.lines != self.saved_lines
+        self.typing = False
+
+    def undo(self, now: int):
+        if self.hpos == 0:
+            self.say("Nothing to undo", now)
+        else:
+            self.go_to(self.hpos - 1)
+
+    def redo(self, now: int):
+        if self.hpos >= len(self.history) - 1:
+            self.say("Nothing to redo", now)
+        else:
+            self.go_to(self.hpos + 1)
 
     # ---- moving -----------------------------------------------------
     def move(self, key: Key_T):
@@ -668,6 +755,8 @@ class Editor:
         if self.finding:
             self.find_key(press, now)
             return
+        if len(self.history) == 0:                  # the text as it was before the first key
+            self.history = [self.snapshot()]
         case press.key:
             when NEWLINE: self.insert_newline()
             when QUIT:
@@ -684,7 +773,13 @@ class Editor:
             when HOME: self.cx = 0
             when END: self.cx = Col_T(self.here())
             when CHAR: self.insert_char(press.text)
+            when UNDO: self.undo(now)
+            when REDO: self.redo(now)
+            when CUT: self.cut_line(now)
+            when PASTE: self.paste_lines(now)
             when ESCAPE | OTHER: pass
+        if press.key != UNDO and press.key != REDO:
+            self.record(press.key == CHAR)
         self.quit_times = QUIT_TIMES
 
     # ---- what to show ----------------------------------------------

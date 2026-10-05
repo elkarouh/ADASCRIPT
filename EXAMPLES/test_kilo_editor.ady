@@ -367,6 +367,93 @@ code(back, ARROW_DOWN)
 assert at(back) == (0, 2)                                        # one match to a row: "three" has two, and the next row with one is the first
 print "find OK"
 
+# ---- undo, redo, cut and paste -----------------------------------------------------------------
+
+var ud: Editor = started_on("undo.txt", "one\ntwo\nthree\n")
+code(ud, CTRL_Z)                                         # nothing yet
+assert ud.message == "Nothing to undo"
+typed(ud, "abc")                                         # a run of typed characters is one step
+assert lines_of(ud)[0] == "abcone"
+code(ud, CTRL_Z)
+assert lines_of(ud) == ["one", "two", "three"]
+assert at(ud) == (0, 0)
+assert not ud.modified                                   # back to what is in the file
+code(ud, CTRL_Z)
+assert ud.message == "Nothing to undo"
+code(ud, CTRL_Y)
+assert lines_of(ud)[0] == "abcone"
+assert ud.modified
+assert at(ud) == (0, 3)
+code(ud, CTRL_Y)
+assert ud.message == "Nothing to redo"
+typed(ud, "x")
+code(ud, ARROW_RIGHT)                                    # a key that changes nothing ends the run
+typed(ud, "y")
+assert lines_of(ud)[0] == "abcxoyne"
+code(ud, CTRL_Z)
+assert lines_of(ud)[0] == "abcxone"
+code(ud, CTRL_Z)
+assert lines_of(ud)[0] == "abcone"
+typed(ud, "\r")                                          # a new change drops what could be redone
+code(ud, CTRL_Z)
+code(ud, CTRL_Y)
+code(ud, CTRL_Y)
+assert lines_of(ud) == ["abc", "one", "two", "three"]
+code(ud, CTRL_Z)
+code(ud, CTRL_Z)
+code(ud, CTRL_Z)
+assert lines_of(ud) == ["one", "two", "three"]
+
+# undo after a save is a change again, and undoing it back is not
+var us: Editor = started_on("undosave.txt", "a\n")
+typed(us, "x")
+code(us, CTRL_S)
+assert not us.modified
+code(us, CTRL_Z)
+assert us.modified
+code(us, CTRL_Y)
+assert not us.modified
+
+# the colours follow an undo
+var uc: Editor = started_on("undo.c", "int a;\n")
+typed(uc, "/*")
+assert letters(uc.rows[0].hl) == "MMMMMMMM"
+code(uc, CTRL_Z)
+assert letters(uc.rows[0].hl) == "TTTPPP"
+
+# cut and paste
+var cp: Editor = started_on("cut.txt", "one\ntwo\nthree\n")
+code(cp, CTRL_U)
+assert cp.message == "Nothing to paste"
+code(cp, ARROW_DOWN)
+code(cp, ARROW_RIGHT)
+code(cp, CTRL_K)
+assert lines_of(cp) == ["one", "three"]
+assert at(cp) == (1, 1)
+assert cp.modified
+code(cp, ARROW_DOWN)
+code(cp, ARROW_DOWN)
+code(cp, CTRL_K)
+assert cp.message == "Nothing to cut"
+code(cp, CTRL_U)                                         # above the row the cursor is on
+assert lines_of(cp) == ["one", "three", "two"]
+assert at(cp) == (3, 0)
+cp.cy = 0
+code(cp, CTRL_U)
+assert lines_of(cp) == ["two", "one", "three", "two"]
+code(cp, CTRL_Z)                                         # a cut and a paste are steps
+assert lines_of(cp) == ["one", "three", "two"]
+code(cp, CTRL_Z)
+code(cp, CTRL_Z)
+assert lines_of(cp) == ["one", "two", "three"]
+assert not cp.modified
+var only: Editor = started_on("only.txt", "x\n")
+code(only, CTRL_K)
+assert len(only.rows) == 0
+code(only, CTRL_U)
+assert lines_of(only) == ["x"]
+print "undo and paste OK"
+
 # ---- save and quit --------------------------------------------------------------------------
 
 var sv: Editor = started_on("save.txt", "a\nb\n")
@@ -498,6 +585,10 @@ assert decode(6).key == FIND
 assert decode(27).key == ESCAPE
 assert decode(3).key == OTHER
 assert decode(12).key == OTHER
+assert decode(26).key == UNDO
+assert decode(25).key == REDO
+assert decode(11).key == CUT
+assert decode(21).key == PASTE
 assert decode(ord(ARROW_UP)).key == UP
 assert decode(ord(HOME_KEY)).key == HOME
 assert decode(ord(PAGE_DOWN)).key == SCREEN_DOWN
@@ -544,7 +635,7 @@ let script: Scripted = Scripted([ord('X'), ord(ARROW_DOWN), ord('Y'), 19, 17])
 edit(loop, script)
 assert (script.started, script.stopped) == (1, 1)
 assert len(script.drawn) == 5                            # a frame before every key
-assert script.drawn[0].message == "HELP: Ctrl-S = save | Ctrl-Q ="      # cut to the window
+assert script.drawn[0].message == "HELP: ^S save | ^Q quit | ^F f"      # cut to the window
 assert (script.drawn[0].cols, script.drawn[0].rows, len(script.drawn[0].lines)) == (30, 6, 6)
 assert script.drawn[1].lines[0] == [Seg_T("Xone", NORMAL)]
 assert script.drawn[4].message == "10 bytes written on disk"

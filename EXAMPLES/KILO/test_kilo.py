@@ -24,6 +24,7 @@ SEQUENCES = {
     CTRL_LEFT: ESC + "[1;5D", SS3_UP: ESC + "OA",
 }
 FIND, QUIT, SAVE = "\x06", "\x11", "\x13"
+UNDO, REDO, CUT, PASTE = "\x1a", "\x19", "\x0b", "\x15"
 
 CASES = [
     ("typing", "hello", "helloone\ntwo\nthree\nfour\nfive\n"),
@@ -52,6 +53,17 @@ CASES = [
     ("^C and ESC do nothing", "\x03" + ESC + "x", "xone\ntwo\nthree\nfour\nfive\n"),
     ("below the last row", DOWN * 8 + "x", "one\ntwo\nthree\nfour\nfive\nx\n"),
     ("append rows", DOWN * 5 + "a\rb", "one\ntwo\nthree\nfour\nfive\na\nb\n"),
+    # undo and redo (a run of typed characters is one step), cut and paste of a row
+    ("undo typing", "abc" + UNDO, BASE),
+    ("undo, redo", "abc" + UNDO + REDO, "abcone\ntwo\nthree\nfour\nfive\n"),
+    ("undo steps", "ab" + RIGHT + "c" + UNDO, "abone\ntwo\nthree\nfour\nfive\n"),
+    ("undo a cut", DOWN + CUT + UNDO, BASE),
+    ("undo a join", DOWN + "\x7f" + UNDO, BASE),
+    ("cut", DOWN + CUT, "one\nthree\nfour\nfive\n"),
+    ("cut, paste", CUT + DOWN + DOWN + PASTE, "two\nthree\none\nfour\nfive\n"),
+    ("cut the last, paste", DOWN * 4 + CUT + UP + PASTE, "one\ntwo\nthree\nfive\nfour\n"),
+    ("paste with nothing cut", PASTE + "x", "xone\ntwo\nthree\nfour\nfive\n"),
+    ("undo with nothing done", UNDO + "x", "xone\ntwo\nthree\nfour\nfive\n"),
     # find: ^F, the text, then ENTER (stay on the match) or ESC (go back); the arrows look further
     ("find", FIND + "thr\rx", "one\ntwo\nxthree\nfour\nfive\n"),
     ("find next", FIND + "o" + DOWN + DOWN + "\rx", "one\ntwo\nthree\nfxour\nfive\n"),
@@ -173,7 +185,7 @@ def screen_checks(program):
         ("number colour", re.search(r"\x1b\[31m" + SKIP + "12", coloured)),
         ("comment colour", re.search(r"\x1b\[36m" + SKIP + "// first", coloured)),
         ("status bar", re.search(r"\x1b\[7mhl\.c - 3 lines +1/3", coloured)),
-        ("help message", "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find" in coloured),
+        ("help message", "HELP: ^S save | ^Q quit | ^F find | ^Z undo | ^Y redo | ^K cut line | ^U paste" in coloured),
         ("search match", re.search(r"\x1b\[34m" + SKIP + "static", searched)),
         ("search prompt", "Search: static (Use ESC/Arrows/Enter)" in searched),
         ("welcome", "Kilo editor -- version 0.0.1" in empty),

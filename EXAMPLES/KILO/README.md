@@ -49,7 +49,8 @@ waiting for more bytes (100 ms, kilo's `VTIME`).
 
 ## Keys
 
-Arrows, Home, End, PageUp, PageDown, Backspace, Del; `^S` saves; `^Q` quits (a file with unsaved
+Arrows, Home, End, PageUp, PageDown, Backspace, Del; `^Z` undoes and `^Y` redoes; `^K` cuts the
+row under the cursor and `^U` pastes it above the cursor's row; `^S` saves; `^Q` quits (a file with unsaved
 changes wants it four times, and any other key starts the count again); `^F` searches: type the
 text, the arrows go to the next or previous match, ENTER stays on it, ESC goes back to where the
 search began. Anything else that is a character is typed, TAB and the control characters too (a
@@ -60,6 +61,16 @@ character that is not printable is shown reversed, `^A` as an `A`).
 Kept, on purpose: one match to a row in a search, which starts from the top of the file and puts
 the match on the top row; a cursor that can sit on the row after the last; kilo's colours; Del that
 deletes backwards.
+
+Added, on top of kilo (which has no undo and no cut or paste):
+
+- **Undo and redo**, `^Z` and `^Y`, one step to a change; a run of typed characters is one step, and
+  any key that changes nothing (an arrow) ends the run. Undo past a save makes the file modified again,
+  and back to what is written makes it unmodified. The history is a list of snapshots of the text, as in
+  `../VI/vi_editor.ady`; a new change drops what could have been redone.
+- **Cut and paste of a row**, `^K` and `^U`: one buffer, replaced by each cut (not added to, as in
+  nano). The key bindings are nano's; `^C` and `^L` do nothing, as in kilo, and `^Z` is undo, not
+  suspend, because raw mode takes the signal keys.
 
 Changed:
 
@@ -87,10 +98,10 @@ Changed:
 ## Tests
 
 - `../test_kilo_editor.ady` -- the logic, with no terminal: rows and tabs, 17 lines of colouring (one
-  letter to a character) and a block comment that follows an edit, typing, moving and paging, find,
+  letter to a character) and a block comment that follows an edit, typing, moving and paging, undo, redo, cut and paste, find,
   save and quit, the frame handed to a terminal (status bar, welcome, message fading, scrolling),
   the key codes, and `edit` on a terminal that is a script of keys. A part of `make test`.
-- `test_kilo.py` -- 37 key scripts typed into the program in a pty (the file it saves is compared
+- `test_kilo.py` -- 47 key scripts typed into the program in a pty (the file it saves is compared
   with what a kilo writes for the same keys) and 11 checks of what it draws: the colours, the status
   bar, the help message, the match of a search, the welcome, and no colour in a `.txt`.
 
