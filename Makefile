@@ -288,6 +288,36 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat
 
+# -----------------------------------------------------------------------
+# Skipped when this machine cannot build them -- a Nim package that is not
+# installed. The programs below import nimpy (the pyimport bridge) or
+# db_connector (SQLite); both come from nimble, and a machine without them
+# has nothing to test them with. Each is probed by asking Nim to check a
+# one-line import, and the programs whose package is missing are dropped from
+# every list above, compiled and run alike, with a line saying so. Every other
+# failure is still a failure.
+# -----------------------------------------------------------------------
+nim_has = $(shell d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
+    && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
+NEEDS_NIMPY := pyimport_similar.ady test_pyobject_calls.ady tsp.ady MAP_UTILS/route_map.ady
+NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
+SKIPPED :=
+ifeq ($(call nim_has,nimpy),)
+SKIPPED += $(NEEDS_NIMPY)
+SKIP_NOTES += "nimpy (nimble install nimpy): $(NEEDS_NIMPY)"
+endif
+ifeq ($(call nim_has,db_connector/db_sqlite),)
+SKIPPED += $(NEEDS_DB_CONNECTOR)
+SKIP_NOTES += "db_connector (nimble install db_connector): $(NEEDS_DB_CONNECTOR)"
+endif
+LIBS := $(filter-out $(SKIPPED),$(LIBS))
+STANDALONE := $(filter-out $(SKIPPED),$(STANDALONE))
+STDIN_EXAMPLES := $(filter-out $(SKIPPED),$(STDIN_EXAMPLES))
+ARG_EXAMPLES := $(filter-out $(SKIPPED),$(ARG_EXAMPLES))
+EXPECT_EXAMPLES := $(filter-out $(SKIPPED),$(EXPECT_EXAMPLES))
+TIMETABLE_EXAMPLES := $(filter-out $(SKIPPED),$(TIMETABLE_EXAMPLES))
+COMPILE_ONLY := $(filter-out $(SKIPPED),$(COMPILE_ONLY))
+
 ALL_COMPILE := \
     $(LIBS) \
     $(STANDALONE) \
@@ -404,6 +434,7 @@ check-quotes:
 	@$(PYTHON) $(CURDIR)/DOCS/check_quotes.py || exit 1
 
 compile: lint-emitters check-quotes
+	@for n in $(SKIP_NOTES); do echo "  SKIPPED, not installed: $$n"; done
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
 	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
 	@printf '  %-42s%s\n' "all $(words $(ALL_COMPILE))" OK
