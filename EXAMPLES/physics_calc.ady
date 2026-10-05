@@ -46,13 +46,12 @@ type Energy_T       is Force_T        * Distance_T         # joules: newton metr
 
 const HOUR: Duration_T = 3600.0
 
-def mph(v: Velocity_T) -> float:
-    """Miles covered in an hour at v."""
-    return float(Distance_in_miles_T(v * HOUR))
-
-def kmh(v: Velocity_T) -> float:
-    """Kilometres covered in an hour at v."""
-    return float(Distance_in_km_T(v * HOUR))
+# a speed is a unit too, and scales like a distance does: one mph is 1609.344 m
+# in 3600 s, so Velocity_in_mph_T(v) of a Velocity_T divides by that
+const MPS_PER_MPH: float = METRES_PER_MILE / 3600.0
+const MPS_PER_KMH: float = 1000.0 / 3600.0
+type Velocity_in_mph_T is MPS_PER_MPH * Velocity_T
+type Velocity_in_kmh_T is MPS_PER_KMH * Velocity_T
 
 # ---- the celestial bodies -------------------------------------------------------------------
 
@@ -187,7 +186,7 @@ def main():
     separator()
     for body in Body_T'First .. Body_T'Last:
         let ve: Velocity_T = escape_velocity(body)
-        print(f"  {BODY_NAME[body]:<10}  {float(ve) / 1000.0:>8.2f} km/s  ({mph(ve):>10.2f} mph)  [{PACE_NAME[pace_of(ve)]}]")
+        print(f"  {BODY_NAME[body]:<10}  {float(ve) / 1000.0:>8.2f} km/s  ({float(Velocity_in_mph_T(ve)):>10.2f} mph)  [{PACE_NAME[pace_of(ve)]}]")
     print()
 
     separator()
@@ -206,8 +205,8 @@ def main():
     let average:   Velocity_T = velocity_from_miles(marathon_mi, record_t)
     print(f"  World-record time:  {float(record_t):.0f} s  (2 h 0 m 35 s)")
     print(f"  Average speed:      {float(average):.4f} m/s")
-    print(f"                      {kmh(average):.4f} km/h")
-    print(f"                      {mph(average):.4f} mph")
+    print(f"                      {float(Velocity_in_kmh_T(average)):.4f} km/h")
+    print(f"                      {float(Velocity_in_mph_T(average)):.4f} mph")
     print()
 
     let back_mi: Distance_in_miles_T = Distance_in_miles_T(marathon_m)
