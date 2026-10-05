@@ -844,6 +844,86 @@ name is in the signature, in the grep and in the compiler's message —
 combinations, which a program has to name to be read anyway, and the gain is
 that there is nothing to learn beyond `type C is A / B`.
 
+Kilometres and miles are the next step, and the one most languages stop at.
+A distance in kilometres is not a distance in metres, and the bug is rarely
+the missing multiplication; it is the multiplication done twice, or in the
+wrong direction, or not at all because both sides were `float`. Adascript
+lets a unit say what multiple of another it is, and the conversions are
+generated from that one line:
+
+<!-- from: EXAMPLES/physics_calc.ady -->
+```python
+const METRES_PER_MILE: float = 1609.344         # exact, by definition
+
+type Distance_T          is distinct float      # metres
+type Duration_T          is distinct float      # seconds
+
+type Distance_in_km_T    is 1000.0 * Distance_T            # a km is 1000 m
+type Distance_in_miles_T is METRES_PER_MILE * Distance_T   # a mile is 1609.344 m
+```
+
+`type Distance_in_km_T is 1000.0 * Distance_T` says a kilometre is a thousand
+metres. It is a unit of its own: a mile plus a metre is refused, and so is a
+mile divided by a time, because no one declared miles per second. The way
+across is a conversion that is written where it happens, `Distance_T(mi)`
+to multiply and `Distance_in_miles_T(d)` to divide, and nobody has to write
+`* 1609.344` or remember which way it goes. A speed scales the same way, so
+`Velocity_in_kmh_T(average)` and `Velocity_in_mph_T(average)` are one call
+each, and the round trip is checked in the example rather than trusted:
+
+<!-- from: EXAMPLES/physics_calc.ady -->
+```python
+    let marathon_mi: Distance_in_miles_T = 26.2188
+    let marathon_m:  Distance_T          = Distance_T(marathon_mi)
+    let average:   Velocity_T = Distance_T(marathon_mi) / record_t
+    print(f"                      {Velocity_in_kmh_T(average):.4f} km/h")
+    let back_mi: Distance_in_miles_T = Distance_in_miles_T(marathon_m)
+    assert near(float(back_mi), float(marathon_mi), 1e-9)
+```
+
+Money is where a conversion has to state its *policy*, and the same
+declaration does it. Keep the ledger in whole cents, an `int`, so that sums,
+counts and splits are exact; see it in dollars, a float, for tax and exchange
+rates; and the only way back to cents is a conversion that rounds, to the
+nearest cent with halves away from zero, written on the line where it
+happens:
+
+<!-- from: EXAMPLES/test_cents.ady -->
+```python
+type Dollar_in_cent_T is distinct int
+type Dollar_T         is 100 * Dollar_in_cent_T
+type Euro_in_cent_T   is distinct int
+type Euro_T           is 100 * Euro_in_cent_T
+type Eur_per_usd_T    is Euro_T / Dollar_T      # a rate that changes: a value
+
+def to_euro(amount: Dollar_in_cent_T, rate: Eur_per_usd_T) -> Euro_in_cent_T:
+    return Euro_in_cent_T(Dollar_T(amount) * rate)    # the one rounding
+```
+
+<!-- from: EXAMPLES/test_cents.ady -->
+```python
+assert line // 3 == price
+assert Dollar_in_cent_T(Dollar_T(1.005)) == 101  # 1.005 * 100 is 100.49999999999999
+assert Dollar_in_cent_T(Dollar_T(-0.125)) == -13
+let tax: Dollar_in_cent_T = Dollar_in_cent_T(Dollar_T(line) * 0.08)
+assert tax == 480                                # 479.76 cents
+```
+
+The cents are never silently a float: cents times `1.5` is refused, cents
+plus dollars is refused, cents made from a float is refused, and a fractional
+factor such as `0.5 * C_T` is refused when the type is declared. Float
+arithmetic on money is where a lost cent comes from, and here it can only
+happen at a conversion you can point at.
+
+This is, as far as I know, unusual. Most languages give you either a units
+library that tracks exponents and is invisible at the call site, or nothing.
+Here the scale is one line, the conversion in both directions comes with it,
+and the rounding policy is a visible call. One honest limit: scaled units are
+Nim only. A conversion depends on the type of its argument, which the Python
+backend cannot always see, so `ady2py` refuses the declaration with a message
+saying the program is built by `ady2nim` only, and `make test` checks that it
+does. Plain `distinct` units and derived units such as `Knots_T` work on both.
+
 Not every name should be distinct. Conversions are work, and a value that
 is meant to mix with its base — an epoch plus a number of seconds — is
 better as an alias. Make distinct the quantities whose mixing would be a
