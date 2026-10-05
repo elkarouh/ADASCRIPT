@@ -107,3 +107,4 @@ sublime-claude/
 # What the PGREP test builds for its Python-backend run.
 TOOLS/PGREP/test/Pgrep_py.py
 TOOLS/PGREP/test/pgrep_py
+node_modules/
