@@ -951,11 +951,7 @@ supported, and only Nim supports every feature. Where this section says a
 check is missing, it is usually missing on Python only, and building the
 same source for Nim is what catches it.
 
-Failures as values (`T | !Failure_T`) are enforced in both directions: a
-failure cannot be dropped — a bare call whose result nobody takes is
-refused, on both backends — and on the Nim backend a value is not usable as
-the value until a test or a `do:` step has said it is not the failure.
-What is still missing there:
+Failures as values (`T | !F`):
 
 - The check that the value was tested is Nim's type check. On the Python
   backend an untested failure used as a value fails when that line runs,
