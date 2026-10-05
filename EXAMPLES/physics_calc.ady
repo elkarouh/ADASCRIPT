@@ -139,11 +139,6 @@ def escape_velocity(body: Body_T) -> Velocity_T:
     """v = sqrt(2 g r), from the surface gravity and the radius."""
     return Velocity_T((2.0 * float(GRAVITY[body]) * float(RADIUS[body])) ** 0.5)
 
-def velocity_from_miles(d: Distance_in_miles_T, t: Duration_T) -> Velocity_T:
-    """d / t is refused -- miles per second is no unit that was declared -- so the distance
-    is converted to metres first, which says which unit system is meant."""
-    return Distance_T(d) / t
-
 # ---- the program ---------------------------------------------------------------------------
 
 def separator() -> None:
@@ -202,7 +197,7 @@ def main():
 
     # the world record (Kelvin Kiptum, 2023): 2 h 0 min 35 s
     let record_t:  Duration_T = 2.0 * HOUR + 35.0
-    let average:   Velocity_T = velocity_from_miles(marathon_mi, record_t)
+    let average:   Velocity_T = Distance_T(marathon_mi) / record_t
     print(f"  World-record time:  {float(record_t):.0f} s  (2 h 0 m 35 s)")
     print(f"  Average speed:      {float(average):.4f} m/s")
     print(f"                      {float(Velocity_in_kmh_T(average)):.4f} km/h")
@@ -220,7 +215,7 @@ def main():
     let d2: Distance_in_miles_T = 1.0
     let t1: Duration_T          = 10.0
     let v1: Velocity_T          = d1 / t1                       # Distance_T / Duration_T
-    let v2: Velocity_T          = velocity_from_miles(d2, t1)   # miles to metres first
+    let v2: Velocity_T          = Distance_T(d2) / t1             # miles to metres first: d2 / t1 is refused
     print(f"  {float(d1):.0f} m  in {float(t1):.0f} s         ->  v = {float(v1):.3f} m/s")
     print(f"  {float(d2):.0f} mi in {float(t1):.0f} s  (= {float(Distance_T(d2)):.2f} m) ->  v = {float(v2):.3f} m/s")
     print(f"  {float(d1):.0f} m in miles               ->  {float(Distance_in_miles_T(d1)):.6f} mi")
