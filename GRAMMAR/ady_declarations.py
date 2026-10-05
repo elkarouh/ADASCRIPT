@@ -636,7 +636,7 @@ def parse_derived(rhs):
     return (m.group(1), m.group(2), m.group(3)) if m else None
 
 
-def distinct_types(decls, known=None, scaled=None):
+def distinct_types(decls, known=None, scaled=None, consts=None):
     """{name: kind} for every `type X is distinct T`, every derived unit
     `type C is A / B` and every scaled unit `type C is K * B` (SCALED, the
     output of scaled_units) in DECLS (the output of scan_type_decls), kind
@@ -647,6 +647,7 @@ def distinct_types(decls, known=None, scaled=None):
     derived unit here may be made from."""
     out = dict(known or {})
     scaled = scaled or {}
+    consts = consts or {}
     for name, rhs in decls.items():
         if rhs is not None and rhs.strip().startswith("distinct "):
             out[name] = _decl_kind(rhs, decls, frozenset({name}))
@@ -660,7 +661,7 @@ def distinct_types(decls, known=None, scaled=None):
         moved = False
         for name, (a, op, b) in list(pending.items()):
             if a is None and b in out and b not in pending:
-                out[name] = _check_scaled(name, scaled[name][0], b, out)
+                out[name] = _check_scaled(name, scaled[name][0], b, out, consts)
                 del pending[name]
                 moved = True
             elif a in out and b in out and a not in pending and b not in pending:
@@ -672,8 +673,8 @@ def distinct_types(decls, known=None, scaled=None):
             if a is None:
                 raise SyntaxError(
                     f"type {name} is {scaled[name][0]} * {b}: {b} is not a "
-                    f"distinct float -- a scaled unit is a multiple of one, "
-                    f"declared `type {b} is distinct float`")
+                    f"distinct float or int -- a scaled unit is a multiple of "
+                    f"one, declared `type {b} is distinct float`")
             bad = next((x for x in (a, b) if x not in out), a)
             raise SyntaxError(
                 f"type {name} is {a} {op} {b}: {bad} is not a distinct "
@@ -723,22 +724,34 @@ def scaled_units(decls, consts, known=None):
                 f"compiled, a number or a `const` float. A rate that changes "
                 f"as it runs is a unit of its own, `type Rate_T is A / B`")
         ctype = consts[factor]
-        if ctype not in (None, "float"):
+        if ctype not in (None, "float", "int"):
             raise SyntaxError(
                 f"type {name} is {factor} * {base}: {factor} is a {ctype} -- "
                 f"the factor of a scaled unit is a plain number, a `const` "
-                f"float")
+                f"float (or int, for a multiple of an int)")
         out[name] = (factor, base)
     return out
 
 
-def _check_scaled(name, factor, base, kinds):
-    """The kind of `type NAME is FACTOR * BASE`, or SyntaxError."""
-    if kinds[base] != "float":
+def _check_scaled(name, factor, base, kinds, consts=None):
+    """The kind of `type NAME is FACTOR * BASE`, or SyntaxError. A multiple
+    of a float is a float. A multiple of an int -- a dollar is 100 cents --
+    is a float too, since converting to it divides, and its factor must be a
+    whole number, a literal without a point or a `const` int."""
+    if kinds[base] == "float":
+        return "float"
+    if kinds[base] != "int":
         raise SyntaxError(
             f"type {name} is {factor} * {base}: {base} is made of "
             f"{kinds[base]} -- a scaled unit is a multiple of a distinct "
-            f"float, since converting to it divides")
+            f"float or int, since converting to it divides")
+    whole = (not _re_du.search(r"[.eE]", factor) if factor[0].isdigit()
+             else (consts or {}).get(factor) == "int")
+    if not whole:
+        raise SyntaxError(
+            f"type {name} is {factor} * {base}: {base} is a distinct int, "
+            f"so the factor is a whole number, a literal such as 100 or a "
+            f"`const` int -- {factor} is not")
     return "float"
 
 

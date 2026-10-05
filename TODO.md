@@ -380,9 +380,11 @@ history of this file if the reasoning behind one of them is ever wanted.
         backends: Nim's own conversion takes any distinct float. A scaled
         unit (`type C is K * B`, EXAMPLES/test_scaled_units.ady) refuses
         it for C and B; every other distinct type should too.
-      - exact money is `distinct int` in cents, and converting int cents
-        to and from a float rate is written out by hand. `round` would be
-        the tool, and it is not portable (next item).
+      - cents: `type Dollar_T is 100 * Dollar_in_cent_T` over a `distinct
+        int` is done on Nim (EXAMPLES/test_cents.ady); ady2py still
+        refuses scaled units. Building them there, where the argument's
+        unit is known, would lift that for money, km and miles alike. The
+        conversion to cents rounds with its own helper, not `round`.
 - [ ] `round(x)` differs between the backends. Python's returns an int and
       rounds half to even (`round(2.5)` is 2); Nim's `round` is in `math`,
       which Adascript does not import for it ("undeclared identifier"),

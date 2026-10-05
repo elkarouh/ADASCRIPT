@@ -190,7 +190,7 @@ type Distance_in_miles_T is METRES_PER_MILE * Distance_T   # one mile is 1609.34
 let mi: Distance_in_miles_T = Distance_in_miles_T(d)       # d: Distance_T -> d / 1609.344
 let m: Distance_T = Distance_T(mi)                         # mi * 1609.344
 ```
-`C(x)` scales when x is the other unit, keeps the number when x is a plain number, is refused for any other unit; km to miles goes through the base. The factor must be fixed at compile time (a `let`/`var` or a unit-typed const is refused): a varying rate such as euros per dollar is a derived unit, below.
+`C(x)` scales when x is the other unit, keeps the number when x is a plain number, is refused for any other unit; km to miles goes through the base. Over a `distinct int` it counts money: `type Dollar_T is 100 * Dollar_in_cent_T` makes `Dollar_T(cents)` a float and `Dollar_in_cent_T(d)` the nearest cent, halves away from zero; cents times a float is refused. The factor must be fixed at compile time (a `let`/`var` or a unit-typed const is refused): a varying rate such as euros per dollar is a derived unit, below.
 
 **Money** (the commonest case): `Dollar_T` scales by a count, a tax rate or a discount; a currency conversion needs the rate as a derived unit:
 ```adascript

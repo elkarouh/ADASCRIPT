@@ -142,6 +142,7 @@ STANDALONE := \
     test_units.ady \
     test_money.ady \
     test_scaled_units.ady \
+    test_cents.ady \
     test_subrange_array.ady \
     test_variant_literal.ady \
     test_set_operators.ady \
@@ -798,14 +799,19 @@ test: compile
 	@# number, and is a unit of its own otherwise; its factor is fixed when the
 	@# program is compiled. Nim only: ady2py refuses the declaration.
 	@echo "=== scaled units, ady2nim ==="
-	@printf 'type Distance_T is distinct float\ntype Duration_T is distinct float\ntype Km_T is 1000.0 * Distance_T\ntype C_T is distinct int\nvar d: Distance_T = 5.0\nvar t: Duration_T = 2.0\nvar k: Km_T = 1.0\nvar r: float = 2.0\nconst R: Duration_T = 2.0\n' \
+	@printf 'type Distance_T is distinct float\ntype Duration_T is distinct float\ntype Km_T is 1000.0 * Distance_T\ntype C_T is distinct int\ntype Usd_T is 100 * C_T\nvar c: C_T = 5\nvar u: Usd_T = 1.0\nvar d: Distance_T = 5.0\nvar t: Duration_T = 2.0\nvar k: Km_T = 1.0\nvar r: float = 2.0\nconst R: Duration_T = 2.0\n' \
 	    > $(TMPDIR)/ady_scaled_hdr.ady
 	@for c in "1:a unit no declaration relates:does not convert:let e: Km_T = Km_T(t)" \
 	          "2:a km plus a metre:type mismatch:let e: Km_T = k + d" \
 	          "3:a km given as metres:type mismatch:let e: Distance_T = k" \
 	          "4:a factor that is a variable:is not a const:type Bad_T is r * Distance_T" \
 	          "5:a factor that is a unit:the factor of a scaled unit is a plain number:type Bad_T is R * Distance_T" \
-	          "6:a multiple of an int unit:a multiple of a distinct float:type Bad_T is 100.0 * C_T"; do \
+	          "6:a fractional factor of cents:so the factor is a whole number:type Bad_T is 0.5 * C_T" \
+	          "7:cents times a float:type mismatch:let e: C_T = c * 1.5" \
+	          "8:cents plus dollars:type mismatch:let e: C_T = c + u" \
+	          "9:cents from a float:type mismatch:let e: C_T = C_T(r)" \
+	          "10:cents from a time:does not convert:let e: C_T = C_T(t)" \
+	          "11:dollars given as cents:type mismatch:let e: C_T = u"; do \
 	    n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; rest=$${rest#*:}; \
 	    want=$${rest%%:*}; line=$${rest#*:}; \
 	    { cat $(TMPDIR)/ady_scaled_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_scaled_$$n.ady; \

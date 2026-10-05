@@ -502,6 +502,9 @@ That is the line between a mile and a dollar: a rate that changes as the
 program runs is a value, and a value of a unit of its own -- the exchange
 rate below.
 
+A multiple of an `int` unit is the same declaration, and it is how money
+is counted -- see Money below. Its factor is a whole number.
+
 A scaled unit is built by `ady2nim` only. Which conversion `C(x)` is depends
 on the type of x, which the Python backend cannot always see, and guessing
 wrong would relabel metres as miles; `ady2py` refuses the declaration.
@@ -545,9 +548,42 @@ dollars squared, and `total / rate` applies the rate the wrong way round:
 none compiles, and each is a bug that otherwise reaches the ledger.
 `EXAMPLES/test_money.ady` is a whole order — lines, tax, a discount, a
 budget and a conversion of each line — that the compiler holds to every
-step. Amounts to be added up exactly are better as a `distinct int` in
-cents; a rate is a float, so converting between them is written out, where
-you decide how to round.
+step.
+
+### Money in cents
+
+Amounts to be added up exactly are better as a whole number of cents, and a
+dollar is a hundred of them. The scaled unit of the last section does that
+over a `distinct int`:
+
+```python
+# EXAMPLES/test_cents.ady
+type Dollar_in_cent_T is distinct int
+type Dollar_T         is 100 * Dollar_in_cent_T
+type Euro_in_cent_T   is distinct int
+type Euro_T           is 100 * Euro_in_cent_T
+type Eur_per_usd_T    is Euro_T / Dollar_T      # a rate that changes: a value
+
+def to_euro(amount: Dollar_in_cent_T, rate: Eur_per_usd_T) -> Euro_in_cent_T:
+    return Euro_in_cent_T(Dollar_T(amount) * rate)    # the one rounding
+
+let price: Dollar_in_cent_T = 1999
+let line: Dollar_in_cent_T = price * 3                # exact: 5997
+let tax: Dollar_in_cent_T = Dollar_in_cent_T(Dollar_T(line) * 0.08)
+```
+
+The cents are the ledger: `+`, `-`, comparison, `* n`, `//` and `%` are
+whole-number arithmetic and exact. A `Dollar_T` is the float view, for a tax
+rate or an exchange rate, and `Dollar_in_cent_T(d)` is the only way back: it
+rounds to the nearest cent, halves away from zero, so 0.125 is 13 cents and
+-0.125 is -13, and `1.005` is 101 although the double nearest it is a hair
+below. The rounding is written where it happens. `price * 1.08` does not
+compile -- cents times a float would round where nobody sees it -- and nor
+does cents plus dollars or `Dollar_in_cent_T(2.5)`.
+
+The exchange rate is not scaled: it changes as the program runs, so it is a
+value of `Eur_per_usd_T`, and dollars times it are euros. A scaled unit of
+an int is built by `ady2nim` only, as the others are.
 
 On Nim each unit is `distinct float` with the operations borrowed and one
 small proc per relation, so the compiler checks every use at no run-time

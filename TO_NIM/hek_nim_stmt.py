@@ -2471,18 +2471,44 @@ def _scaled_type_nim(name, params, indent):
     primary): from B to C divides by K, from C to B multiplies, and a plain
     number, or a value already of the type, is taken as it is. A unit of
     neither type matches no overload, and Nim refuses it."""
+    from ady_declarations import distinct_kind
     factor, base = ParserState.scaled_units[name]
     lines, _exp = _distinct_lines(name, params, "float", "float", indent)
     ind = _ind(indent)
     done = ParserState._scaled_bases_done
+    whole = distinct_kind(base) == "int"       # a dollar is 100 cents
     for t in ([base] if base not in done else []) + [name]:
+        if whole and t == base:
+            # cents are counted: a float, which has no cents, is not one
+            lines += [f"{ind}proc to_{t}{_exp}(x: int): {t} = {t}(x)",
+                      f"{ind}proc to_{t}{_exp}(x: {t}): {t} = x"]
+            continue
         lines += [f"{ind}proc to_{t}{_exp}(x: float): {t} = {t}(x)",
                   f"{ind}proc to_{t}{_exp}(x: int): {t} = {t}(float(x))",
                   f"{ind}proc to_{t}{_exp}(x: {t}): {t} = x"]
     done.add(base)
-    lines += [f"{ind}proc to_{name}{_exp}(x: {base}): {name} = {name}(float(x) / {factor})",
-              f"{ind}proc to_{base}{_exp}(x: {name}): {base} = {base}(float(x) * {factor})"]
+    lines += [f"{ind}proc to_{name}{_exp}(x: {base}): {name} = {name}(float(int(x)) / {factor})"
+              if whole else
+              f"{ind}proc to_{name}{_exp}(x: {base}): {name} = {name}(float(x) / {factor})"]
+    if whole:
+        if "adaRoundHalfAway" not in ParserState._scaled_bases_done:
+            ParserState._scaled_bases_done.add("adaRoundHalfAway")
+            lines.insert(0, _ROUND_HALF_AWAY)
+        lines.append(f"{ind}proc to_{base}{_exp}(x: {name}): {base} = "
+                     f"{base}(adaRoundHalfAway(float(x) * float({factor})))")
+    else:
+        lines.append(f"{ind}proc to_{base}{_exp}(x: {name}): {base} = {base}(float(x) * {factor})")
     return "\n".join(lines)
+
+
+# float -> whole number, halves away from zero -- what a receipt does, and
+# what Python's round() does not (it takes halves to the even number). A
+# product a few ulps short of a half, 1.005 * 100, is the half it was written
+# as: the double nearest 1.005 is below it.
+_ROUND_HALF_AWAY = (
+    "proc adaRoundHalfAway(x: float): int = (if abs(x) < 9.0e15: "
+    "(let r = int(abs(x) + 0.5 + abs(x) * 8.9e-16); if x < 0.0: -r else: r) "
+    'else: raise newException(RangeDefect, "an amount too large to count in cents"))')
 
 
 def _is_nim_literal(value):

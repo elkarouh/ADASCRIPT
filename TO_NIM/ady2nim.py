@@ -727,14 +727,16 @@ def translate(code, export_symbols=False):
     ParserState.ady_type_decls = scan_type_decls(code)
     from ady_declarations import distinct_types, unit_relations, scaled_units
     from ady_stmt import scan_consts
-    _scaled = scaled_units(ParserState.ady_type_decls, scan_consts(code),
+    _consts = scan_consts(code)
+    _scaled = scaled_units(ParserState.ady_type_decls, _consts,
                            ParserState.distinct_types)
     # a base an imported module scaled already has its to_B there
     ParserState._scaled_bases_done = {b for n, (_, b) in ParserState.scaled_units.items()
                                       if n not in _scaled}
     ParserState.scaled_units.update(_scaled)
     ParserState.distinct_types.update(
-        distinct_types(ParserState.ady_type_decls, ParserState.distinct_types, _scaled))
+        distinct_types(ParserState.ady_type_decls, ParserState.distinct_types, _scaled,
+                       _consts))
     ParserState.unit_relations.update(
         unit_relations(ParserState.ady_type_decls, _scaled))
     # Generic functions, this module's and those it nimports, must be called

@@ -1,0 +1,63 @@
+#!/usr/bin/env ady2nim
+# test_cents.ady — money counted in cents, seen in dollars: `100 * Cents`
+#
+#   ady2nim EXAMPLES/test_cents.ady -r
+#
+# `type Dollar_T is 100 * Dollar_in_cent_T` says one Dollar_T is a hundred
+# Dollar_in_cent_T, a `distinct int`. The cents are the ledger: sums, counts
+# and splits are whole-number arithmetic and exact. A Dollar_T is the float
+# view, for tax, percentages and exchange rates, and the only way back to
+# cents is `Dollar_in_cent_T(d)`, which rounds to the nearest cent, halves
+# away from zero, on purpose and where it is written.
+#
+# What is refused is checked in the Makefile: cents times a float, cents
+# plus dollars, cents made of a float.
+#
+# Nim only, like every scaled unit: ady2py refuses the declaration.
+
+type Dollar_in_cent_T is distinct int
+type Dollar_T         is 100 * Dollar_in_cent_T
+type Euro_in_cent_T   is distinct int
+type Euro_T           is 100 * Euro_in_cent_T
+type Eur_per_usd_T    is Euro_T / Dollar_T      # a rate that changes: a value
+
+def to_euro(amount: Dollar_in_cent_T, rate: Eur_per_usd_T) -> Euro_in_cent_T:
+    return Euro_in_cent_T(Dollar_T(amount) * rate)    # the one rounding
+
+# --- exact, in cents -----------------------------------------------------------
+let price: Dollar_in_cent_T = 1999
+let qty: int = 3
+let line: Dollar_in_cent_T = price * qty
+assert line == 5997
+assert line // 3 == price
+assert line % Dollar_in_cent_T(1000) == 997
+assert line + price > line
+
+# --- cents in dollars, and back --------------------------------------------------
+assert Dollar_T(price) == 19.99
+assert Dollar_T(5) == Dollar_T(5)
+assert Dollar_in_cent_T(Dollar_T(19.99)) == price
+assert Dollar_in_cent_T(7) == 7                  # a whole number keeps its number
+
+# --- rounding: to the nearest cent, halves away from zero ---------------------
+assert Dollar_in_cent_T(Dollar_T(1.005)) == 101  # 1.005 * 100 is 100.49999999999999
+assert Dollar_in_cent_T(Dollar_T(0.285)) == 29
+assert Dollar_in_cent_T(Dollar_T(0.125)) == 13
+assert Dollar_in_cent_T(Dollar_T(-0.125)) == -13
+assert Dollar_in_cent_T(Dollar_T(0.124)) == 12
+assert Dollar_in_cent_T(Dollar_T(0.0)) == 0
+
+# --- tax, written where it rounds ---------------------------------------------
+let tax: Dollar_in_cent_T = Dollar_in_cent_T(Dollar_T(line) * 0.08)
+assert tax == 480                                # 479.76 cents
+let total: Dollar_in_cent_T = line + tax
+print f"total {Dollar_T(total):.2f}"             # 64.77
+
+# --- an exchange rate -----------------------------------------------------------
+let rate: Eur_per_usd_T = 0.92
+let eur: Euro_in_cent_T = to_euro(price, rate)
+assert eur == 1839                               # 18.3908 euros
+print f"{Dollar_T(price):.2f} USD = {Euro_T(eur):.2f} EUR"
+assert to_euro(0, rate) == 0
+
+print "test_cents: all checks passed"
