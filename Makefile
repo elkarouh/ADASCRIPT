@@ -32,7 +32,7 @@ C5DIR  := $(TOOLDIR)/C500
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
 
-.PHONY: test test-vi compile clean install uninstall
+.PHONY: test test-vi test-kilo compile clean install uninstall
 
 # Where 'make install' puts the ady2nim / ady2py launchers.
 # Override with: make install PREFIX=$HOME/.local
@@ -116,6 +116,7 @@ STANDALONE := \
     test_nimport_qualified.ady \
     test_vi_highlight.ady \
     test_vi_loop.ady \
+    test_kilo_editor.ady \
     test_format_zero_decimals.ady \
     test_region_operators.ady \
     test_vi_save.ady \
@@ -265,6 +266,7 @@ COMPILE_ONLY := \
     test_input.ady \
     VI/vi_curses.ady \
     VI/vi_raw.ady \
+    KILO/kilo.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     awk_logscan.ady \
@@ -480,6 +482,37 @@ test-vi:
 	    fi; \
 	done
 	$(vi_tests)
+
+# -----------------------------------------------------------------------
+# The kilo tests: key scripts typed into KILO/kilo.ady (the Nim backend, on the raw
+# terminal) in a pty of its own, and the file it saves compared; then what it draws, read
+# for colours, the status bar and the search. Shared by `test` and by `test-kilo`. The logic
+# of the editor with no terminal is test_kilo_editor.ady, in the self-contained examples.
+# -----------------------------------------------------------------------
+define kilo_tests
+	@echo "=== kilo, typed keys in a pty of its own: KILO/kilo.ady (Nim) ==="
+	@printf '  %-62s' "EXAMPLES/KILO/kilo.ady (37 key scripts, 11 screen checks)"; \
+	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
+	    $(PYTHON) $(EXDIR)/KILO/test_kilo.py $(EXDIR)/KILO/kilo > $(TMPDIR)/ady_kilo.out 2>&1 \
+	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_kilo.out | head -20; grep -q FAIL $(TMPDIR)/ady_kilo.out || tail -n 8 $(TMPDIR)/ady_kilo.out; exit 1; }; fi
+endef
+
+# -----------------------------------------------------------------------
+# test-kilo — the kilo tests alone: build kilo.ady and test_kilo_editor.ady, then run them
+# -----------------------------------------------------------------------
+.PHONY: test-kilo
+test-kilo:
+	@mkdir -p $(TMPDIR)
+	@for k in KILO/kilo test_kilo_editor; do \
+	    if ! $(ADY2NIM) c $(EXDIR)/$$k.ady >/dev/null 2>&1; then \
+	        echo "  EXAMPLES/$$k.ady                    FAIL (does not build)"; \
+	        $(ADY2NIM) c $(EXDIR)/$$k.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
+	    fi; \
+	done
+	@printf '  %-62s' "EXAMPLES/test_kilo_editor.ady"; \
+	    $(EXDIR)/test_kilo_editor > $(TMPDIR)/ady_kilo_editor.out 2>&1 \
+	        && echo OK || { echo FAIL; tail -n 8 $(TMPDIR)/ady_kilo_editor.out; exit 1; }
+	$(kilo_tests)
 
 # -----------------------------------------------------------------------
 # test — compile everything, then run the runnable subset
@@ -986,6 +1019,8 @@ test: compile
 	        | grep -q "record 3: NF=4" && echo OK || { echo FAIL; exit 1; }
 
 	$(vi_tests)
+
+	$(kilo_tests)
 
 	@# lispy wants a terminal for its prompt, but it can be run without one.
 	@echo "=== lispy ==="

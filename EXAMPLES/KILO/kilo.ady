@@ -1,0 +1,163 @@
+#!/usr/bin/env ady2nim
+"""kilo -- Kilo, a very small text editor (antirez's kilo.c, https://github.com/antirez/kilo),
+on the Nim backend, on the raw terminal.
+
+    kilo <filename>
+
+The editor is kilo_editor.ady, and its loop calls the terminal; this file is the terminal,
+a RawTerminal. Like kilo it uses no terminal library and writes VT100 escapes itself: Nim's
+`terminal` module for the size of the window and `termios` for raw mode -- no echo, no line
+editing, no signals, and ^S and ^Q reach the program instead of stopping the terminal.
+What a terminal has to do is here: reading a key (an escape sequence such as an arrow key
+is made one key; a lone ESC is told from the start of one by whether more bytes follow
+within 100 ms, kilo's VTIME), and drawing a frame, built as one string and written in one go.
+
+The license of kilo is in kilo_editor.ady, which is the translation; this is the plumbing.
+"""
+nimport os
+nimport time
+from terminal nimport terminalSize
+from posix nimport TPollfd, POLLIN, poll, read
+from termios nimport Termios, tcsetattr, TCSAFLUSH, tcgetattr, BRKINT, ICRNL, INPCK, ISTRIP, IXON, OPOST, ECHO, ICANON, IEXTEN, ISIG, VMIN, VTIME, CS8, CSIZE
+from kilo_editor import Editor, Terminal, Frame_T, Look_T, Code_T, edit
+
+const NOTHING: int = -1                  # a key with no meaning here: a function key
+
+# ---- the terminal ---------------------------------------------------
+
+var original: Termios                    # the terminal as it was, to give back
+
+def raw_mode(on: bool) -> None:
+    """kilo's enableRawMode: no break, no CR to NL, no parity check, no strip, no start/stop
+    output control; no post-processing of the output; 8 bit characters; no echo, no
+    canonical mode, no extended functions, no signal characters (^C, ^Z)."""
+    if not on:
+        let back: cint = tcsetattr(0, TCSAFLUSH, addr(original))
+        return
+    let got: cint = tcgetattr(0, addr(original))
+    var t: Termios = original
+    t.c_iflag = t.c_iflag and not (BRKINT or ICRNL or INPCK or ISTRIP or IXON)
+    t.c_oflag = t.c_oflag and not OPOST
+    t.c_cflag = t.c_cflag or CS8
+    t.c_lflag = t.c_lflag and not (ECHO or ICANON or IEXTEN or ISIG)
+    t.c_cc[VMIN] = chr(1)
+    t.c_cc[VTIME] = chr(0)
+    let set: cint = tcsetattr(0, TCSAFLUSH, addr(t))
+
+def key_waiting(ms: int) -> bool:
+    """Is there a byte to read, within MS milliseconds?"""
+    var fds: TPollfd
+    fds.fd = cint(0)
+    fds.events = POLLIN
+    poll(addr(fds), 1, cint(ms)) > 0
+
+def read_byte() -> int:
+    """The next byte from the keyboard, read straight from the descriptor: getch reads through
+    C's buffer, which swallows the rest of an escape sequence where key_waiting cannot see it.
+    The end of the input is ^Q."""
+    var b: char
+    let n: int = read(cint(0), addr(b), 1)
+    ord(b) if n == 1 else ord(CTRL_Q)
+
+var pushed: int = NOTHING                # a byte read ahead, to be the next key
+
+def read_code() -> int:
+    """The next key, as a code (editorReadKey). A lone ESC is told from the start of an escape
+    sequence by whether more bytes follow. ESC [ A to D are the arrows, ESC [ H and F (and
+    ESC O H and F) Home and End, and ESC [ n ~ is Home (1, 7), Del (3), End (4, 8), PageUp
+    (5) or PageDown (6); a modifier, as in ESC [ 1 ; 5 D, does not change an arrow. Any other
+    sequence is swallowed and read as NOTHING, and ESC and a character (Alt-x) is an ESC,
+    the character kept for the next call."""
+    if pushed != NOTHING:
+        let ahead: int = pushed
+        pushed = NOTHING
+        return ahead
+    let first: int = read_byte()
+    if first != ord(ESC) or not key_waiting(100):
+        return first
+    let second: int = read_byte()
+    if second != ord('[') and second != ord('O'):
+        pushed = second
+        return ord(ESC)
+    var last: int = read_byte()
+    var number: int = 0                                      # the first number of ESC [ n ... ~
+    var counted: bool = False
+    if second == ord('['):
+        while not 64 <= last <= 126:                       # up to the final byte
+            if last == ord(';'):
+                counted = True
+            elif not counted:
+                number = number * 10 + (last - ord('0'))
+            last = read_byte()
+    let final: char = chr(last)
+    case final:
+        when 'A': ord(ARROW_UP)
+        when 'B': ord(ARROW_DOWN)
+        when 'C': ord(ARROW_RIGHT)
+        when 'D': ord(ARROW_LEFT)
+        when 'H': ord(HOME_KEY)
+        when 'F': ord(END_KEY)
+        when '~' if second != ord('['): NOTHING
+        when '~':
+            case number:
+                when 1 | 7: ord(HOME_KEY)
+                when 3: ord(DEL_KEY)
+                when 4 | 8: ord(END_KEY)
+                when 5: ord(PAGE_UP)
+                when 6: ord(PAGE_DOWN)
+                when others: NOTHING
+        when others: NOTHING
+
+def sgr(look: Look_T) -> str:
+    """The escape sequence that sets how a character looks (kilo's editorSyntaxToColor);
+    a character that is not printable is reversed."""
+    case look:
+        when COMMENT | MLCOMMENT: "\x1b[36m"           # cyan
+        when KEYWORD1: "\x1b[33m"                      # yellow
+        when KEYWORD2: "\x1b[32m"                      # green
+        when STRING: "\x1b[35m"                        # magenta
+        when NUMBER: "\x1b[31m"                        # red
+        when MATCH: "\x1b[34m"                         # blue
+        when NONPRINT: "\x1b[7m"
+        when NORMAL: "\x1b[39m"
+
+class RawTerminal(Terminal):
+    def start(self):
+        raw_mode(True)
+        stdout.write("\x1b[?1049h")                  # the alternate screen, so the shell's stays as it was
+
+    def stop(self):
+        stdout.write("\x1b[?1049l\x1b[?25h")
+        stdout.flushFile()
+        raw_mode(False)
+
+    def window(self) -> (int, int):
+        """How big the window is now; a terminal that says 0 x 0 is not up yet."""
+        let (w, h) = terminalSize()
+        (max(w, 1), max(h, 3))
+
+    def key(self) -> int:
+        read_code()
+
+    def clock(self) -> int:
+        int(time.time())
+
+    def draw(self, view: Frame_T):
+        var frame: str = "\x1b[?25l\x1b[H"                  # hide the cursor, go home
+        for i in 0 ..< view.rows:
+            for seg in view.lines[i]:
+                frame += sgr(seg.look) + seg.text + "\x1b[0m"
+            frame += "\x1b[39m\x1b[0K\r\n"                  # to the end of the line, then down
+        frame += "\x1b[0K\x1b[7m" + view.status + "\x1b[0m\r\n"
+        frame += "\x1b[0K" + view.message
+        frame += f"\x1b[{view.cursor_y + 1};{view.cursor_x + 1}H\x1b[?25h"
+        stdout.write(frame)
+        stdout.flushFile()
+
+if $# != 1:
+    die("Usage: kilo <filename>")
+var editor: Editor = Editor(Path($1))
+let opened: None | !PathFailure_T = editor.open()
+if opened is PathFailure_T:
+    die(f"Opening file: {opened.reason}")
+edit(editor, RawTerminal())

@@ -1,0 +1,560 @@
+#!/usr/bin/env ady2nim
+"""Test: KILO/kilo_editor -- the parts of the editor that need no terminal. A row and its tabs,
+what the colouring makes of a line (one letter for each character, so a line and its colours
+read side by side), what each key does to the text and the cursor, find, save and quit, what
+is handed to a terminal to draw, and `edit` on a terminal that is a script of keys.
+Key scripts typed into the real program, in a pty, are KILO/test_kilo.py.
+"""
+from KILO/kilo_editor import Editor, Row, Terminal, Frame_T, Seg_T, Look_T, Code_T, Key_T, Press_T, Col_T, RCol_T, Scan_T, Syntax_T, C_SYNTAX, PLAIN_TEXT, syntax_of, highlight, decode, frame_of, edit
+
+# ---- helpers -----------------------------------------------------------------
+
+def letters(looks: []Look_T) -> str:
+    """P plain, K keyword, T type, S string, N number, C comment, M block comment, ? not printable, = match."""
+    var out: str = ""
+    for look in looks:
+        case look:
+            when NORMAL: out = out + "P"
+            when NONPRINT: out = out + "?"
+            when COMMENT: out = out + "C"
+            when MLCOMMENT: out = out + "M"
+            when KEYWORD1: out = out + "K"
+            when KEYWORD2: out = out + "T"
+            when STRING: out = out + "S"
+            when NUMBER: out = out + "N"
+            when MATCH: out = out + "="
+    out
+
+def check(line: str, want: str):
+    let got: str = letters(highlight(line, C_SYNTAX, False).looks)
+    print f"{line}\n{got}"
+    assert got == want
+
+let dir: Path = Path(${TMPDIR:-"/tmp"}) / "ady_test_kilo"
+shell: rm -rf -- {!dir}
+assert dir.mkdir() is None
+
+def started_on(name: str, text: str) -> Editor:
+    """An editor on a file NAME holding TEXT."""
+    let p: Path = dir / name
+    assert p.write_text(text) is None
+    var ed: Editor = Editor(p)
+    assert ed.open() is None
+    ed.fit(40, 12)
+    ed
+
+def empty(name: str) -> Editor:
+    """An editor on a file that is not there."""
+    let p: Path = dir / name
+    var ed: Editor = Editor(p)
+    assert ed.open() is None
+    ed.fit(40, 12)
+    ed
+
+def code(ed: Editor, c: Code_T):
+    ed.handle(decode(ord(c)), 0)
+
+def typed(ed: Editor, text: str):
+    """Type TEXT: a \\r is ENTER, a \\x7f BACKSPACE, any other character itself."""
+    for c in text:
+        ed.handle(decode(ord(c)), 0)
+
+def slurp(p: Path) -> str:
+    """What the file holds."""
+    let r: str | !PathFailure_T = p.read_text()
+    if r is PathFailure_T: return "<unreadable>"
+    r
+
+def lines_of(ed: Editor) -> []str:
+    [row.chars for row in ed.rows]
+
+def at(ed: Editor) -> (int, int):
+    (ed.cy, int(ed.cx))
+
+# ---- a row, and its tabs -----------------------------------------------------------
+
+let tabbed: Row = Row("a\tb\tc")
+assert tabbed.render == "a       b       c"
+assert tabbed.chars == "a\tb\tc"
+assert int(tabbed.render_col(0)) == 0
+assert int(tabbed.render_col(1)) == 1
+assert int(tabbed.render_col(2)) == 8                  # after the tab
+assert int(tabbed.render_col(3)) == 9
+assert int(tabbed.render_col(4)) == 16
+assert int(tabbed.render_col(5)) == 17                 # the end of the row
+assert int(tabbed.col_of(0)) == 0
+assert int(tabbed.col_of(1)) == 1
+assert int(tabbed.col_of(5)) == 1                      # inside a tab: the tab
+assert int(tabbed.col_of(8)) == 2
+assert int(tabbed.col_of(16)) == 4
+assert int(tabbed.col_of(99)) == 5                     # past the end: the end
+assert Row("\tx").render == "        x"
+assert Row("abcdefg\tx").render == "abcdefg x"         # a tab that is one column wide
+assert Row("").render == ""
+print "rows OK"
+
+# ---- colouring ------------------------------------------------------------------------
+
+check("int x = 42;", "TTTPPPPPNNP")
+check("if (a) return 3.14; // c", "KKPPPPPKKKKKKPNNNNPPCCCC")
+check("#include <stdio.h>", "PPPPPPPPPPPPPPPPPP")
+check("static const char *s = \"a\\\"b\";", "KKKKKKPTTTTTPTTTTPPPPPPSSSSSSP")
+check("x = 'c' + \"\";", "PPPPSSSPPPSSP")
+check("\"open", "SSSSS")
+check("\"ends in a backslash\\", "SSSSSSSSSSSSSSSSSSSSS")
+check("int_t interface printf(x)", "PPPPPPPPPPPPPPPPPPPPPPPPP")      # a keyword is a whole word
+check("a = b1 + 123 - 2.5;", "PPPPPPPPPNNNPPPNNNP")                   # b1 is a name; 2.5 is one number
+check("return(x);", "KKKKKKPPPP")                                       # ( ends a word
+check("  /* c */ int x;", "PPMMMMMMMPTTTPPP")
+check("x = 1; /* a // b */ y", "PPPPNPPMMMMMMMMMMMMPP")                # // inside /* */ is not a comment
+check("a //b", "PPCCC")                                                 # a // starts a comment after a separator
+check("a//b", "PPPP")                                                   # ... and kilo does not see one inside a word
+check("ctl\x01x\x7f", "PPP?P?")
+check("NULL, nullptr, true", "KKKKPPKKKKKKKPPKKKK")
+check("", "")
+# a language with no kind of comment, and no strings: nothing but non-printable is marked
+assert letters(highlight("int x = 4; // \"s\"\x01", PLAIN_TEXT, False).looks) == "PPPPPPPPPPPPPPPPP?"
+# a block comment carries over: where a line starts decides how it looks
+let first: Scan_T = highlight("x /* open", C_SYNTAX, False)
+assert letters(first.looks) == "PPMMMMMMM"
+assert first.open
+let middle: Scan_T = highlight("still // here", C_SYNTAX, first.open)
+assert letters(middle.looks) == "MMMMMMMMMMMMM"
+assert middle.open
+let last: Scan_T = highlight("end */ int", C_SYNTAX, middle.open)
+assert letters(last.looks) == "MMMMMMPTTT"
+assert not last.open
+# which language, from the name
+assert syntax_of("a.c").name == "C"
+assert syntax_of("dir/b.hpp").name == "C"
+assert syntax_of("c.cc").name == "C"
+assert syntax_of("notes.txt").name == ""
+assert syntax_of("a.c.bak").name == ""                  # the end of the name, not any part
+assert syntax_of("Makefile").name == ""
+print "colouring OK"
+
+# a block comment runs over rows, and follows an edit made above it
+var hl: Editor = started_on("hl.c", "int a;\n/* start\nmiddle\nend */ int b;\nint c;\n")
+def rows_hl(ed: Editor) -> []str:
+    [letters(row.hl) for row in ed.rows]
+assert rows_hl(hl) == ["TTTPPP", "MMMMMMMM", "MMMMMM", "MMMMMMPTTTPPP", "TTTPPP"]
+hl.cy = 1
+hl.cx = 0
+code(hl, DEL_KEY)                                        # joins "/* start" to "int a;"
+assert lines_of(hl)[0] == "int a;/* start"
+assert rows_hl(hl) == ["TTTPPPMMMMMMMM", "MMMMMM", "MMMMMMPTTTPPP", "TTTPPP"]
+hl.cy = 0
+hl.cx = 6
+typed(hl, "x")                                           # "int a;x/* start": still opens it
+assert rows_hl(hl)[1] == "MMMMMM"
+code(hl, DEL_KEY)                                        # "int a;/* start" again
+hl.cx = 7
+code(hl, DEL_KEY)                                        # "/*" loses its "/": the comment is gone
+assert lines_of(hl)[0] == "int a;* start"
+assert rows_hl(hl) == ["TTTPPPPPPPPPP", "PPPPPP", "PPPPPPPTTTPPP", "TTTPPP"]
+typed(hl, "/")                                           # and it is back
+assert lines_of(hl)[0] == "int a;/* start"
+assert rows_hl(hl)[1] == "MMMMMM"
+print "block comments OK"
+
+# a tab is spread out in the colouring too
+let tabs: Editor = started_on("tabs.c", "\tint x;\n")
+assert tabs.rows[0].render == "        int x;"
+assert letters(tabs.rows[0].hl) == "PPPPPPPPTTTPPP"
+print "tabs OK"
+
+# ---- opening a file ------------------------------------------------------------------------
+
+let gone: Editor = empty("not_there.txt")
+assert len(gone.rows) == 0
+assert not gone.modified
+let crlf: Editor = started_on("crlf.txt", "one\r\ntwo\r\n")
+assert lines_of(crlf) == ["one", "two"]
+let blank: Editor = started_on("blank.txt", "")
+assert len(blank.rows) == 0
+assert started_on("lines.txt", "a\n\nb\n").rows[1].chars == ""
+# a name that is a directory is there and cannot be read: a failure, not a new file
+var directory: Editor = Editor(dir)
+assert directory.open() is PathFailure_T
+print "open OK"
+
+# ---- typing --------------------------------------------------------------------------------
+
+var ed: Editor = empty("typing.txt")
+typed(ed, "hello")                                       # the first character makes the first row
+assert lines_of(ed) == ["hello"]
+assert at(ed) == (0, 5)
+assert ed.modified
+typed(ed, "\r")                                          # ENTER at the end: an empty row below
+assert lines_of(ed) == ["hello", ""]
+assert at(ed) == (1, 0)
+typed(ed, "wor\x7f\x7fo")                                # BACKSPACE
+assert lines_of(ed) == ["hello", "wo"]
+ed.cy = 0
+ed.cx = 2
+typed(ed, "\r")                                          # ENTER in the middle splits the row
+assert lines_of(ed) == ["he", "llo", "wo"]
+assert at(ed) == (1, 0)
+typed(ed, "\r")                                          # ... at column 0: an empty row above it
+assert lines_of(ed) == ["he", "", "llo", "wo"]
+assert at(ed) == (2, 0)
+typed(ed, "\x7f")                                        # BACKSPACE at column 0 joins to the row above
+assert lines_of(ed) == ["he", "llo", "wo"]
+assert at(ed) == (1, 0)
+typed(ed, "\x7f")
+assert lines_of(ed) == ["hello", "wo"]
+assert at(ed) == (0, 2)                                  # where the join is
+ed.cy = 0
+ed.cx = 0
+typed(ed, "\x7f")                                        # nothing before the first character
+assert lines_of(ed) == ["hello", "wo"]
+code(ed, DEL_KEY)                                        # DEL is a BACKSPACE, as in kilo
+assert lines_of(ed) == ["hello", "wo"]
+ed.cx = 5
+code(ed, DEL_KEY)
+assert lines_of(ed) == ["hell", "wo"]
+typed(ed, "\x08")                                        # ^H too
+assert lines_of(ed) == ["hel", "wo"]
+ed.cy = 0
+ed.cx = 1
+typed(ed, "\tx")                                         # TAB is a character; ^A, ^D and the like too
+assert lines_of(ed) == ["h\txel", "wo"]
+typed(ed, "\x01")
+assert lines_of(ed)[0] == "h\tx\x01el"
+code(ed, CTRL_C)                                         # ^C, ^L and ESC do nothing
+code(ed, CTRL_L)
+code(ed, ESC)
+assert lines_of(ed)[0] == "h\tx\x01el"
+# below the last row there is nothing yet; typing makes the rows
+var below: Editor = started_on("below.txt", "a\n")
+below.cy = 4
+typed(below, "z")
+assert lines_of(below) == ["a", "", "", "", "z"]
+below.cy = 5
+typed(below, "\r")                                       # ENTER on the row after the last adds one
+assert len(below.rows) == 6
+assert at(below) == (6, 0)
+print "typing OK"
+
+# ---- moving --------------------------------------------------------------------------------
+
+var mv: Editor = started_on("moving.txt", "abc\n\nlonger line\nx\n")
+code(mv, ARROW_RIGHT)
+code(mv, ARROW_RIGHT)
+assert at(mv) == (0, 2)
+code(mv, ARROW_RIGHT)
+code(mv, ARROW_RIGHT)                                    # past the end of a row: the start of the next
+assert at(mv) == (1, 0)
+code(mv, ARROW_LEFT)                                     # before the start: the end of the one above
+assert at(mv) == (0, 3)
+code(mv, ARROW_DOWN)                                     # an empty row: the column does not fit
+assert at(mv) == (1, 0)
+code(mv, ARROW_DOWN)
+code(mv, ARROW_UP)
+code(mv, ARROW_UP)
+code(mv, ARROW_UP)                                       # not above the first row
+assert at(mv) == (0, 0)
+code(mv, ARROW_LEFT)                                     # nor left of the first character
+assert at(mv) == (0, 0)
+code(mv, END_KEY)
+assert at(mv) == (0, 3)
+code(mv, ARROW_DOWN)
+code(mv, ARROW_DOWN)
+assert at(mv) == (2, 0)
+code(mv, END_KEY)
+assert at(mv) == (2, 11)
+code(mv, ARROW_DOWN)                                     # a shorter row: the end of it
+assert at(mv) == (3, 1)
+code(mv, ARROW_DOWN)                                     # the row after the last, which is empty
+assert at(mv) == (4, 0)
+code(mv, ARROW_DOWN)
+code(mv, ARROW_RIGHT)                                    # and no further
+assert at(mv) == (4, 0)
+code(mv, HOME_KEY)
+assert at(mv) == (4, 0)
+code(mv, ARROW_UP)
+code(mv, ARROW_UP)
+code(mv, END_KEY)
+code(mv, HOME_KEY)
+assert at(mv) == (2, 0)
+print "moving OK"
+
+# pages: the window is 10 rows of text here (12 less the status bar and the message)
+var fifty: str = ""
+for i in 0 ..< 50:
+    fifty = fifty + f"line {i}\n"
+var big: Editor = started_on("big.txt", fifty)
+assert big.text_rows == 10
+code(big, PAGE_DOWN)                                     # to the bottom of the screen, then a screenful down
+big.scroll()
+assert (big.cy, big.rowoff) == (19, 10)
+code(big, PAGE_DOWN)
+big.scroll()
+assert (big.cy, big.rowoff) == (29, 20)
+code(big, PAGE_UP)
+big.scroll()
+assert (big.cy, big.rowoff) == (10, 10)                  # first to the top of the screen, then a screenful up
+code(big, PAGE_UP)
+big.scroll()
+assert (big.cy, big.rowoff) == (0, 0)
+big.cy = 45
+big.scroll()
+for k in 0 ..< 3:
+    code(big, PAGE_DOWN)
+assert big.cy == 50                                      # not past the row after the last
+print "pages OK"
+
+# ---- find -------------------------------------------------------------------------------------
+
+def segs(ed: Editor, i: int) -> []str:
+    """What screen row I shows, as TEXT/look pairs: a look is one letter, as in `letters`."""
+    [f"{seg.text}|{letters([seg.look])}" for seg in ed.row_segments(i)]
+
+var fd: Editor = started_on("find.txt", "alpha\nbeta\n\tgamma beta\ndelta\n")
+code(fd, CTRL_F)
+assert fd.finding
+assert fd.message == "Search: (Use ESC/Arrows/Enter)"
+typed(fd, "b")
+assert (at(fd), fd.rowoff, fd.query) == ((1, 0), 1, "b")        # the first match is on the top row of the screen
+typed(fd, "et")
+assert at(fd) == (1, 0)
+assert fd.message == "Search: bet (Use ESC/Arrows/Enter)"
+assert (fd.match_row, int(fd.match_col), fd.match_len) == (1, 0, 3)
+assert segs(fd, 0) == ["bet|=", "a|P"]
+code(fd, ARROW_DOWN)                                             # the next match: in a row with a tab,
+assert at(fd) == (2, 7)                                          # where the cursor is the 7th character ...
+assert (fd.match_row, int(fd.match_col)) == (2, 14)              # ... and the match the 14th column
+assert segs(fd, 0) == ["        gamma |P", "bet|=", "a|P"]
+assert frame_of(fd, 0).cursor_x == 14
+code(fd, ARROW_RIGHT)                                            # round the end of the file
+assert at(fd) == (1, 0)
+code(fd, ARROW_UP)                                               # and back
+assert at(fd) == (2, 7)
+code(fd, ARROW_LEFT)
+assert at(fd) == (1, 0)
+code(fd, ARROW_LEFT)                                             # the one before the first is the last
+assert at(fd) == (2, 7)
+typed(fd, "\x7f")                                                # BACKSPACE: "be" is searched from the top
+assert (fd.query, at(fd)) == ("be", (1, 0))
+typed(fd, "\t")                                                  # a character that is not printable is not typed
+assert fd.query == "be"
+typed(fd, "\r")                                                  # ENTER stays where the match is
+assert not fd.finding
+assert at(fd) == (1, 0)
+assert fd.message == ""
+assert fd.match_len == 0
+assert segs(fd, 0) == ["beta|P"]
+
+var back: Editor = started_on("back.txt", "one\ntwo\nthree\nfour\n")
+back.cy = 1
+back.cx = 2
+code(back, CTRL_F)
+typed(back, "four")
+assert (at(back), back.rowoff) == ((3, 0), 3)
+typed(back, "\x1b")                                              # ESC goes back to where it was
+assert (at(back), back.rowoff, back.finding, back.match_len) == ((1, 2), 0, False, 0)
+code(back, CTRL_F)
+typed(back, "zzz")                                               # no match: the cursor stays, and nothing is shown
+assert (at(back), back.match_len) == ((1, 2), 0)
+typed(back, "\r")
+assert at(back) == (1, 2)
+code(back, CTRL_F)
+typed(back, "e")                                                 # a second search starts from the top again
+assert at(back) == (0, 2)
+code(back, ARROW_DOWN)
+assert at(back) == (2, 3)
+code(back, ARROW_DOWN)
+assert at(back) == (0, 2)                                        # one match to a row: "three" has two, and the next row with one is the first
+print "find OK"
+
+# ---- save and quit --------------------------------------------------------------------------
+
+var sv: Editor = started_on("save.txt", "a\nb\n")
+code(sv, CTRL_Q)                                         # nothing changed: out at once
+assert sv.quitting
+
+var q: Editor = started_on("quit.txt", "a\nb\n")
+typed(q, "x")
+code(q, CTRL_Q)
+assert not q.quitting
+assert q.message == "WARNING!!! File has unsaved changes. Press Ctrl-Q 3 more times to quit."
+code(q, CTRL_Q)
+assert q.message == "WARNING!!! File has unsaved changes. Press Ctrl-Q 2 more times to quit."
+typed(q, "y")                                            # any other key starts the count again
+code(q, CTRL_Q)
+assert q.message == "WARNING!!! File has unsaved changes. Press Ctrl-Q 3 more times to quit."
+code(q, CTRL_Q)
+code(q, CTRL_Q)
+assert not q.quitting
+code(q, CTRL_Q)
+assert q.quitting
+assert slurp(q.path) == "a\nb\n"                    # and nothing was written
+
+var sa: Editor = started_on("saved.txt", "a\nb\n")
+typed(sa, "x")
+code(sa, CTRL_S)
+assert sa.message == "5 bytes written on disk"
+assert not sa.modified
+assert slurp(sa.path) == "xa\nb\n"
+code(sa, CTRL_Q)                                         # saved: out at once
+assert sa.quitting
+
+var made: Editor = empty("made.txt")
+typed(made, "hi\rthere")
+code(made, CTRL_S)
+assert slurp(made.path) == "hi\nthere\n"
+var none: Editor = empty("none.txt")
+code(none, CTRL_S)                                       # no rows: an empty file
+assert none.message == "0 bytes written on disk"
+assert slurp(none.path) == ""
+
+# a file that cannot be written: the message says why, and the changes are still unsaved
+var nowhere: Editor = Editor(Path("/no_such_dir_for_test_kilo") / "a.txt")
+nowhere.insert_row(0, "hello")
+code(nowhere, CTRL_S)
+assert nowhere.message.startswith("Can't save! I/O error: ")
+assert nowhere.modified
+print "save and quit OK"
+
+# ---- what is shown --------------------------------------------------------------------------
+
+var fr: Editor = empty("frame.txt")
+let blankview: Frame_T = frame_of(fr, 0)
+assert (blankview.cols, blankview.rows, len(blankview.lines)) == (40, 10, 10)
+assert blankview.lines[0] == [Seg_T("~", NORMAL)]
+assert blankview.lines[3] == [Seg_T("~     Kilo editor -- version 0.0.1", NORMAL)]     # in the middle of an empty file
+assert blankview.lines[4] == [Seg_T("~", NORMAL)]
+assert (blankview.cursor_x, blankview.cursor_y) == (0, 0)
+typed(fr, "x")
+assert frame_of(fr, 0).lines[3] == [Seg_T("~", NORMAL)]                               # no welcome once there is text
+
+var st: Editor = started_on("status.c", "int a;\nint b;\nint c;\n")
+st.filename = "short.c"
+assert st.status_bar() == "short.c - 3 lines                    1/3"
+typed(st, "x")
+assert st.status_bar() == "short.c - 3 lines (modified)         1/3"
+st.cy = 2
+assert st.status_bar() == "short.c - 3 lines (modified)         3/3"
+st.filename = "abcdefghijklmnopqrstuvwxyz.c"                   # 20 characters of it
+assert st.status_bar().startswith("abcdefghijklmnopqrst - 3 lines (modifie")
+assert len(st.status_bar()) == 40
+st.fit(10, 12)
+assert st.status_bar() == "abcdefghij"                         # too narrow for the right: the left, cut
+assert len(frame_of(st, 0).status) == 10
+
+# a message is shown for five seconds
+st.fit(40, 12)
+st.say("hello", 100)
+assert frame_of(st, 100).message == "hello"
+assert frame_of(st, 104).message == "hello"
+assert frame_of(st, 105).message == ""
+st.say("a message that is longer than the window is wide, so it is cut", 100)
+assert frame_of(st, 100).message == "a message that is longer than the window"
+
+# a character that is not printable is shown as a letter, reversed; the match over the colours
+var np: Editor = started_on("np.txt", "a\x01b\x1f\x7f\n")
+assert segs(np, 0) == ["a|P", "A|?", "b|P", "??|?"]
+var cc: Editor = started_on("colour.c", "int x = 1; // n\n\"s\"\n")
+assert segs(cc, 0) == ["int|T", " x = |P", "1|N", "; |P", "// n|C"]
+assert segs(cc, 1) == ["\"s\"|S"]
+assert segs(cc, 2) == ["~|P"]
+
+# the window follows the cursor: to the right, and down
+var wide: Editor = started_on("wide.txt", "0123456789abcdef\n")
+wide.fit(10, 12)
+code(wide, END_KEY)
+let scrolled: Frame_T = frame_of(wide, 0)
+assert scrolled.lines[0] == [Seg_T("789abcdef", NORMAL)]
+assert scrolled.cursor_x == 9                                   # on the last column
+code(wide, HOME_KEY)
+assert frame_of(wide, 0).lines[0] == [Seg_T("0123456789", NORMAL)]
+assert frame_of(wide, 0).cursor_x == 0
+var tall: Editor = started_on("tall.txt", fifty)
+tall.cy = 30
+let lower: Frame_T = frame_of(tall, 0)
+assert lower.lines[0] == [Seg_T("line 21", NORMAL)]
+assert lower.lines[9] == [Seg_T("line 30", NORMAL)]
+assert lower.cursor_y == 9
+# the cursor's column is where it is drawn: a tab is eight
+var tc: Editor = started_on("tabcursor.txt", "\t\tx\n")
+tc.cx = 2
+assert frame_of(tc, 0).cursor_x == 16
+print "frame OK"
+
+# ---- the key codes -----------------------------------------------------------------------------
+
+assert decode(ord('a')).key == CHAR
+assert decode(ord('a')).text == "a"
+assert decode(9).text == "\t"
+assert decode(1).key == CHAR                             # ^A is typed, as it is in kilo
+assert decode(200).text == "\xc8"                        # a byte of UTF-8 is a byte
+assert decode(13).key == NEWLINE
+assert decode(127).key == ERASE
+assert decode(8).key == ERASE
+assert decode(ord(DEL_KEY)).key == ERASE
+assert decode(17).key == QUIT
+assert decode(19).key == SAVE
+assert decode(6).key == FIND
+assert decode(27).key == ESCAPE
+assert decode(3).key == OTHER
+assert decode(12).key == OTHER
+assert decode(ord(ARROW_UP)).key == UP
+assert decode(ord(HOME_KEY)).key == HOME
+assert decode(ord(PAGE_DOWN)).key == SCREEN_DOWN
+assert decode(-1).key == OTHER
+print "keys OK"
+
+# ---- the loop: `edit` on a terminal that is a script of keys ---------------------------------
+
+class Scripted(Terminal):
+    var codes: []int = []
+    var at: int = 0
+    var seconds: int = 0
+    var started: int = 0
+    var stopped: int = 0
+    var drawn: []Frame_T = []
+
+    def __init__(self, keys: []int):
+        self.codes = keys
+
+    def start(self):
+        self.started += 1
+
+    def stop(self):
+        self.stopped += 1
+
+    def window(self) -> (int, int):
+        (30, 8)
+
+    def key(self) -> int:
+        if self.at >= len(self.codes):
+            return 17                    # the end of the input is ^Q
+        self.at += 1
+        self.codes[self.at - 1]
+
+    def clock(self) -> int:
+        self.seconds += 1                # a second for every look at the clock
+        self.seconds
+
+    def draw(self, view: Frame_T):
+        self.drawn.append(view)
+
+var loop: Editor = started_on("loop.txt", "one\ntwo\n")
+let script: Scripted = Scripted([ord('X'), ord(ARROW_DOWN), ord('Y'), 19, 17])
+edit(loop, script)
+assert (script.started, script.stopped) == (1, 1)
+assert len(script.drawn) == 5                            # a frame before every key
+assert script.drawn[0].message == "HELP: Ctrl-S = save | Ctrl-Q ="      # cut to the window
+assert (script.drawn[0].cols, script.drawn[0].rows, len(script.drawn[0].lines)) == (30, 6, 6)
+assert script.drawn[1].lines[0] == [Seg_T("Xone", NORMAL)]
+assert script.drawn[4].message == "10 bytes written on disk"
+assert slurp(loop.path) == "Xone\ntYwo\n"
+assert loop.quitting
+
+# the end of the input is ^Q, which a file with changes wants four times: nothing attached, and the loop ends
+var pending: Editor = started_on("pending.txt", "a\n")
+typed(pending, "z")
+edit(pending, Terminal())
+assert pending.quitting
+assert slurp(pending.path) == "a\n"
+print "test_kilo_editor OK"

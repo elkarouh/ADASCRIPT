@@ -1,0 +1,758 @@
+"""kilo_editor -- Kilo, a very small text editor, as a library: a translation of antirez's
+kilo.c (https://github.com/antirez/kilo) to Adascript. The editor, and the loop that runs it.
+It has no terminal in it; the program, kilo.ady, is one, a subclass of Terminal below.
+
+    kilo <filename>
+
+    ^S save      ^Q quit (three more presses when there are unsaved changes)
+    ^F find      the arrows, ENTER and ESC in the search line: next, previous, stay, go back
+    arrows, Home, End, PageUp, PageDown   move       Backspace, Del   delete
+
+What is shown: the text in colour by language (C and C++, from the file's name: keywords,
+types, strings, numbers, and // and /* */ comments, which run over lines), the status bar,
+a message that fades after five seconds, and the search match.
+
+Kilo is one file of C, a global struct and 1300 lines. Here the pieces are what they are:
+
+    Look_T, Code_T, Key_T   how a character looks; what a terminal sends; what a key means
+    Row                     a line of the file: its characters, how they are drawn, how they
+                            look; a tab is one character in `chars` and up to eight in `render`
+    highlight               how each character of a rendered line looks (editorUpdateSyntax)
+    Editor                  the text, the cursor and what a key does to them
+    Frame_T                 what the editor shows, handed to a terminal to draw
+    Terminal, edit          what a terminal is asked for, and the loop that asks it
+
+Kilo keeps one number for the cursor's column, `cx`, and uses it as a place in the line and as
+a place on the screen; with a tab in the line the two differ, and kilo's search and its
+scrolling go wrong there. Here the two are types of their own: Col_T is a place in a row's
+`chars`, RCol_T is one in its `render`, and `Row.render_col` and `Row.col_of` are the only
+way from one to the other. A key is decoded once into a Press_T, and a file that cannot be
+read or written is a `| !PathFailure_T` where kilo calls perror and exits.
+
+The differences from kilo are listed in README.md. In short: Home and End move (kilo
+inserts a stray character), tabs stop at multiples of 8, a line comment inside a block comment
+does not end the block, and a character that is not printable is shown reversed
+in every file, not only in one with a language.
+
+-----------------------------------------------------------------------
+
+Kilo is Copyright (C) 2016 Salvatore Sanfilippo <antirez at gmail dot com>
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+ *  Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+ *  Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""
+
+const KILO_VERSION: str = "0.0.1"
+const QUIT_TIMES: int = 3            # presses of ^Q it takes to leave a file with unsaved changes
+const QUERY_LEN: int = 256           # the longest search
+const TAB_STOP: int = 8
+const MESSAGE_SECONDS: int = 5       # how long a message is shown
+const HELP: str = "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find"
+
+# ---- what the editor and its terminals share ---------------------------------
+
+# How a character is shown. A terminal gives each one a colour (kilo's editorSyntaxToColor).
+type Look_T is enum NORMAL, NONPRINT, COMMENT, MLCOMMENT, KEYWORD1, KEYWORD2, STRING, NUMBER, MATCH
+
+# A place in the characters of a row, and a place in what is drawn of it. The two are the
+# same until there is a tab in the row, and never to be mixed up.
+type Col_T is distinct int
+type RCol_T is distinct int
+
+# The codes a terminal sends for the keys decode() knows: kilo's KEY_ACTION. The control keys
+# are the letter & 0x1f; the ones from 1000 are soft codes, which a terminal makes of an escape
+# sequence.
+type Code_T is enum:
+    CTRL_C = 3
+    CTRL_F = 6
+    CTRL_H = 8
+    CTRL_L = 12
+    ENTER = 13
+    CTRL_Q = 17
+    CTRL_S = 19
+    ESC = 27
+    BACKSPACE = 127
+    ARROW_LEFT = 1000
+    ARROW_RIGHT = 1001
+    ARROW_UP = 1002
+    ARROW_DOWN = 1003
+    DEL_KEY = 1004
+    HOME_KEY = 1005
+    END_KEY = 1006
+    PAGE_UP = 1007
+    PAGE_DOWN = 1008
+
+# What a key press means, whatever code the terminal sent for it. OTHER is a key kilo
+# ignores: ^C, ^L (the screen is drawn again after every key anyway) and ESC.
+type Key_T is enum CHAR, NEWLINE, ERASE, ESCAPE, SAVE, QUIT, FIND, LEFT, RIGHT, UP, DOWN, HOME, END, SCREEN_UP, SCREEN_DOWN, OTHER
+
+type Press_T is record:
+    key:  Key_T
+    text: str = ""              # the character, for a CHAR; "" for the rest
+
+# A stretch of a screen row that is shown the same way.
+type Seg_T is record:
+    text: str
+    look: Look_T
+
+# What the editor shows, handed to a terminal to draw: the text rows cut into stretches that
+# look alike, the status bar and the message, and where the cursor goes.
+type Frame_T is record:
+    cols: int
+    rows: int                  # the text rows: the status bar and the message are the two after them
+    lines: [][]Seg_T
+    status: str                # the status bar, as wide as the window; drawn reversed
+    message: str
+    cursor_x: int              # on the screen, from 0
+    cursor_y: int
+
+# What the editor asks of a terminal. This class is a terminal with nothing attached: 80 by 24,
+# nothing to draw, a clock that stands still, and no keyboard, which is the end of the input
+# -- ^Q. A subclass overrides what it has.
+@virtual
+class Terminal:
+    def start(self):
+        """Take the terminal over: raw mode, the alternate screen."""
+        pass
+
+    def stop(self):
+        """Give it back."""
+        pass
+
+    def window(self) -> (int, int):
+        """How big the window is now, as (columns, rows)."""
+        (80, 24)
+
+    def key(self) -> int:
+        """The next key, as a Code_T code."""
+        ord(CTRL_Q)
+
+    def clock(self) -> int:
+        """The time, in whole seconds."""
+        0
+
+    def draw(self, view: Frame_T):
+        """VIEW on the screen."""
+        pass
+
+def decode(ch: int) -> Press_T:
+    """A code a terminal delivers, as what it means: a key it has a name for (Code_T), or a
+    character, which is typed as it is, TAB and the other control characters too."""
+    let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
+    case code:
+        when ParseFailure_T:
+            return Press_T(CHAR, str(chr(ch))) if 0 <= ch <= 255 else Press_T(OTHER, "")
+        when Code_T:
+            case code:
+                when ENTER: Press_T(NEWLINE, "")
+                when CTRL_Q: Press_T(QUIT, "")
+                when CTRL_S: Press_T(SAVE, "")
+                when CTRL_F: Press_T(FIND, "")
+                when BACKSPACE | CTRL_H | DEL_KEY: Press_T(ERASE, "")
+                when ESC: Press_T(ESCAPE, "")
+                when ARROW_LEFT: Press_T(LEFT, "")
+                when ARROW_RIGHT: Press_T(RIGHT, "")
+                when ARROW_UP: Press_T(UP, "")
+                when ARROW_DOWN: Press_T(DOWN, "")
+                when HOME_KEY: Press_T(HOME, "")
+                when END_KEY: Press_T(END, "")
+                when PAGE_UP: Press_T(SCREEN_UP, "")
+                when PAGE_DOWN: Press_T(SCREEN_DOWN, "")
+                when CTRL_C | CTRL_L: Press_T(OTHER, "")
+
+# ---- strings, byte by byte: kilo works on bytes, as a Nim string does ---------------
+
+def tail(text: str, start: int) -> str:
+    """TEXT from START on; empty past the end, where a Nim slice would raise."""
+    text[start:] if start < len(text) else ""
+
+def clip(text: str, start: int, width: int) -> str:
+    """WIDTH characters of TEXT from START, fewer where it ends."""
+    if start >= len(text) or width <= 0: return ""
+    text[start:min(len(text), start + width)]
+
+def splice(text: str, start: int, stop: int, new: str) -> str:
+    """TEXT with START up to STOP replaced by NEW."""
+    f"{clip(text, 0, start)}{new}{tail(text, stop)}"
+
+def spaces(n: int) -> str:
+    """N spaces; none for a number below 0."""
+    " " * max(n, 0)
+
+def byte_at(text: str, i: int) -> int:
+    """The code of the character at I; 0 past the end, as the NUL ends a C string."""
+    ord(text[i]) if 0 <= i < len(text) else 0
+
+def starts_at(text: str, i: int, prefix: str) -> bool:
+    """Does PREFIX begin at I in TEXT? An empty PREFIX never does: a language without
+    a kind of comment has none to find."""
+    prefix != "" and i + len(prefix) <= len(text) and text[i:i + len(prefix)] == prefix
+
+def is_printable(o: int) -> bool:
+    32 <= o <= 126
+
+def is_digit(o: int) -> bool:
+    48 <= o <= 57
+
+def is_space(o: int) -> bool:
+    o == 32 or 9 <= o <= 13
+
+def is_separator(o: int) -> bool:
+    """Ends a word: NUL, a space, or one of , . ( ) + - / * = ~ % [ ] ;"""
+    o == 0 or is_space(o) or chr(o) in ",.()+-/*=~%[];"
+
+def render_of(chars: str) -> str:
+    """CHARS as it is drawn: a tab is spaces up to the next multiple of TAB_STOP."""
+    var out: str = ""
+    for c in chars:
+        if ord(c) == 9:
+            out += " "
+            while len(out) % TAB_STOP != 0:
+                out += " "
+        else:
+            out += str(c)
+    out
+
+# ---- colouring: the syntax database ----------------------------------------------
+
+# How a language is coloured: the files it is for (a name ending in one of the extensions),
+# its two sets of keywords (the second is drawn in another colour: the types), and the
+# characters of its comments. A language with no name is plain text: nothing is coloured.
+type Syntax_T is record:
+    name: str
+    extensions: []str
+    keywords: {}str
+    types: {}str
+    line_comment: str
+    block_start: str
+    block_end: str
+    strings: bool
+    numbers: bool
+
+# C and C++. kilo's list has `auto` twice, a keyword and a type, and the keyword wins; and
+# `deltype`, which is decltype.
+let C_KEYWORDS: {}str = {"auto", "break", "case", "continue", "default", "do", "else", "enum",
+    "extern", "for", "goto", "if", "register", "return", "sizeof", "static",
+    "struct", "switch", "typedef", "union", "volatile", "while", "NULL",
+    "alignas", "alignof", "and", "and_eq", "asm", "bitand", "bitor", "class",
+    "compl", "constexpr", "const_cast", "decltype", "delete", "dynamic_cast",
+    "explicit", "export", "false", "friend", "inline", "mutable", "namespace",
+    "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq",
+    "private", "protected", "public", "reinterpret_cast", "static_assert",
+    "static_cast", "template", "this", "thread_local", "throw", "true", "try",
+    "typeid", "typename", "virtual", "xor", "xor_eq"}
+
+let C_TYPES: {}str = {"int", "long", "double", "float", "char", "unsigned", "signed",
+    "void", "short", "const", "bool"}
+
+let NO_WORDS: {}str = {}
+
+let PLAIN_TEXT: Syntax_T = Syntax_T(name="", extensions=[], keywords=NO_WORDS, types=NO_WORDS,
+    line_comment="", block_start="", block_end="", strings=False, numbers=False)
+
+let C_SYNTAX: Syntax_T = Syntax_T(name="C", extensions=[".c", ".h", ".cpp", ".hpp", ".cc"],
+    keywords=C_KEYWORDS, types=C_TYPES, line_comment="//", block_start="/*", block_end="*/",
+    strings=True, numbers=True)
+
+let SYNTAXES: []Syntax_T = [C_SYNTAX]
+
+def syntax_of(filename: str) -> Syntax_T:
+    """The language a file is coloured as, from the end of its name; plain text for the rest."""
+    for syn in SYNTAXES:
+        if any(filename.endswith(ext) for ext in syn.extensions):
+            return syn
+    PLAIN_TEXT
+
+# What scanning a line finds: how each character looks, and whether the line ends inside a
+# block comment, which the next line then starts in.
+type Scan_T is record:
+    looks: []Look_T
+    open: bool
+
+def highlight(render: str, syn: Syntax_T, in_comment: bool) -> Scan_T:
+    """How each character of RENDER looks, given whether the line starts inside a block comment."""
+    let n: int = len(render)
+    var hl: []Look_T = []
+    for k in 0 ..< n:
+        hl.append(NORMAL)
+    if syn.name == "":
+        for k in 0 ..< n:
+            if not is_printable(ord(render[k])): hl[k] = NONPRINT
+        return Scan_T(hl, False)
+    var i: int = 0
+    while i < n and is_space(ord(render[i])):          # the indentation is not coloured
+        i += 1
+    var prev_sep: bool = True          # does I stand at the start of a word?
+    var in_string: int = 0             # the quote that opened the string we are in, 0 for none
+    var in_block: bool = in_comment
+    while i < n:
+        let c: int = ord(render[i])
+        if in_block:
+            hl[i] = MLCOMMENT
+            if starts_at(render, i, syn.block_end):
+                hl[i + 1] = MLCOMMENT
+                i += 2
+                in_block = False
+                prev_sep = True
+            else:
+                prev_sep = False
+                i += 1
+        elif in_string != 0:
+            hl[i] = STRING
+            if c == 92 and i + 1 < n:                                  # a backslash takes the next character
+                hl[i + 1] = STRING
+                i += 2
+                prev_sep = False
+            else:
+                if c == in_string: in_string = 0
+                i += 1
+        elif prev_sep and starts_at(render, i, syn.line_comment):      # from here to the end is a comment
+            for k in i ..< n:
+                hl[k] = COMMENT
+            i = n
+        elif starts_at(render, i, syn.block_start):
+            hl[i] = MLCOMMENT
+            hl[i + 1] = MLCOMMENT
+            i += 2
+            in_block = True
+            prev_sep = False
+        elif syn.strings and (c == 34 or c == 39):
+            in_string = c
+            hl[i] = STRING
+            i += 1
+            prev_sep = False
+        elif not is_printable(c):
+            hl[i] = NONPRINT
+            i += 1
+            prev_sep = False
+        elif syn.numbers and ((is_digit(c) and (prev_sep or (i > 0 and hl[i - 1] == NUMBER))) or (c == 46 and i > 0 and hl[i - 1] == NUMBER)):
+            hl[i] = NUMBER
+            i += 1
+            prev_sep = False
+        else:
+            var j: int = i                                             # a word: how far does it go?
+            while prev_sep and j < n and not is_separator(ord(render[j])):
+                j += 1
+            let word: str = render[i:j]
+            if word in syn.keywords or word in syn.types:
+                let look: Look_T = (KEYWORD1 if word in syn.keywords else KEYWORD2)
+                for k in i ..< j:
+                    hl[k] = look
+                i = j
+                prev_sep = False
+            else:
+                prev_sep = is_separator(c)
+                i += 1
+    Scan_T(hl, in_block)
+
+# ---- a row ---------------------------------------------------------------------
+
+# A line of the file (kilo's erow). `chars` is what is in the file, `render` what is drawn:
+# the same, with the tabs spread out. `hl` is how each character of `render` looks.
+class Row:
+    var chars: str
+    var render: str = ""
+    var hl: []Look_T = []
+    var open_at_start: bool = False      # was the row before it inside a block comment, when this was coloured?
+    var open_at_end: bool = False        # does it end inside one?
+    var fresh: bool = True               # not coloured yet
+
+    def __init__(self, chars: str):
+        self.chars = chars
+        self.render = render_of(chars)
+
+    def render_col(self, cx: Col_T) -> RCol_T:
+        """Where in `render` the character CX of `chars` is drawn."""
+        var rx: int = 0
+        for j in 0 ..< min(int(cx), len(self.chars)):
+            rx += (TAB_STOP - rx % TAB_STOP if ord(self.chars[j]) == 9 else 1)
+        RCol_T(rx + max(int(cx) - len(self.chars), 0))
+
+    def col_of(self, rx: RCol_T) -> Col_T:
+        """The character of `chars` that is drawn at RX in `render`: for a place in a tab, the tab."""
+        var at: int = 0
+        for j in 0 ..< len(self.chars):
+            let width: int = (TAB_STOP - at % TAB_STOP if ord(self.chars[j]) == 9 else 1)
+            if at + width > int(rx): return Col_T(j)
+            at += width
+        Col_T(len(self.chars))
+
+# ---- the editor ------------------------------------------------------------------
+
+class Editor:
+    var path: Path
+    var filename: str
+    var rows: []Row = []
+    var syntax: Syntax_T = PLAIN_TEXT
+    var cx: Col_T = 0                    # the cursor: a place in the characters of row `cy`,
+    var cy: int = 0                      # which may be the row after the last, where there is nothing yet
+    var rowoff: int = 0                  # the first row on the screen
+    var coloff: RCol_T = 0               # the first column of `render` on it
+    var cols: int = 80
+    var text_rows: int = 22              # the window less the status bar and the message
+    var modified: bool = False
+    var message: str = ""
+    var message_time: int = 0
+    var quit_times: int = QUIT_TIMES     # presses of ^Q still wanted
+    var quitting: bool = False
+    var finding: bool = False            # is the search line open? ...
+    var query: str = ""
+    var last_match: int = -1             # the row of the last match, -1 for none
+    var step: int = 0                    # 1: look for the next match, -1: the one before, 0: no looking
+    var match_row: int = -1              # the match shown: a row and a place in its `render`, and how long
+    var match_col: RCol_T = 0
+    var match_len: int = 0
+    var saved_cx: Col_T = 0              # where the cursor and the screen were, to go back to on ESC
+    var saved_cy: int = 0
+    var saved_rowoff: int = 0
+    var saved_coloff: RCol_T = 0
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.filename = f"{path}"
+        self.syntax = syntax_of(self.filename)
+
+    # ---- the file ---------------------------------------------------
+    def open(self) -> None | !PathFailure_T:
+        """Read the file. A file that is not there is a new one: no rows. One that is there and
+        cannot be read is a failure (kilo says why and exits)."""
+        return None if not -e self.path                  # not there: a new file
+        let read: []str | !PathFailure_T = self.path.read_lines()
+        if read is PathFailure_T:
+            return read
+        else:
+            self.rows = [Row(line.rstrip("\r")) for line in read]
+        for k in 0 ..< len(self.rows):
+            self.update_row(k)
+        self.modified = False
+
+    def text(self) -> str:
+        """The rows as the file holds them: each ends with a newline."""
+        var out: str = ""
+        for row in self.rows:
+            out += row.chars + "\n"
+        out
+
+    def save(self, now: int):
+        """Write the file, and say how it went."""
+        let text: str = self.text()
+        let written: None | !PathFailure_T = self.path.write_text(text)
+        if written is PathFailure_T:
+            self.say(f"Can't save! I/O error: {written.reason}", now)
+            return
+        self.modified = False
+        self.say(f"{len(text)} bytes written on disk", now)
+
+    def say(self, text: str, now: int):
+        """A message for the line under the status bar, for MESSAGE_SECONDS from NOW."""
+        self.message = text
+        self.message_time = now
+
+    # ---- rows -------------------------------------------------------
+    def update_row(self, at: int):
+        """Colour row AT, and the rows after it for as long as the comment they start in
+        is not the one they were coloured in (a block comment opened or closed above)."""
+        var i: int = at
+        while i < len(self.rows):
+            let start: bool = (i > 0 and self.rows[i - 1].open_at_end)
+            if i > at and not self.rows[i].fresh and self.rows[i].open_at_start == start: break
+            let found: Scan_T = highlight(self.rows[i].render, self.syntax, start)
+            self.rows[i].hl = found.looks
+            self.rows[i].open_at_start = start
+            self.rows[i].open_at_end = found.open
+            self.rows[i].fresh = False
+            i += 1
+
+    def insert_row(self, at: int, chars: str):
+        self.rows[at:at] = [Row(chars)]
+        self.update_row(at)
+        self.modified = True
+
+    def delete_row(self, at: int):
+        self.rows[at:at + 1] = []
+        self.update_row(at)
+        self.modified = True
+
+    def set_chars(self, at: int, chars: str):
+        """Row AT becomes CHARS."""
+        self.rows[at].chars = chars
+        self.rows[at].render = render_of(chars)
+        self.update_row(at)
+        self.modified = True
+
+    def here(self) -> int:
+        """How many characters are in the cursor's row: 0 below the last."""
+        len(self.rows[self.cy].chars) if self.cy < len(self.rows) else 0
+
+    # ---- editing ----------------------------------------------------
+    def insert_char(self, c: str):
+        """Insert C at the cursor, adding rows if it is below the last."""
+        while len(self.rows) <= self.cy:
+            self.insert_row(len(self.rows), "")
+        let chars: str = self.rows[self.cy].chars
+        let at: int = int(self.cx)
+        # past the end of the row: pad with spaces up to the cursor
+        self.set_chars(self.cy, f"{clip(chars, 0, at)}{spaces(at - len(chars))}{c}{tail(chars, at)}")
+        self.cx += 1
+
+    def insert_newline(self):
+        """Split the row at the cursor, or add an empty one above it at column 0."""
+        if self.cy >= len(self.rows):
+            if self.cy == len(self.rows): self.insert_row(self.cy, "")
+        else:
+            let chars: str = self.rows[self.cy].chars
+            let at: int = min(int(self.cx), len(chars))
+            if at == 0:
+                self.insert_row(self.cy, "")
+            else:
+                self.insert_row(self.cy + 1, tail(chars, at))
+                self.set_chars(self.cy, clip(chars, 0, at))
+        self.cy += 1
+        self.cx = 0
+        self.coloff = 0
+
+    def delete_char(self):
+        """Delete the character before the cursor; at column 0, join the row to the one above."""
+        return if self.cy >= len(self.rows) or (self.cx == 0 and self.cy == 0)
+        let chars: str = self.rows[self.cy].chars
+        if self.cx == 0:
+            let above: str = self.rows[self.cy - 1].chars
+            self.set_chars(self.cy - 1, f"{above}{chars}")
+            self.delete_row(self.cy)
+            self.cy -= 1
+            self.cx = Col_T(len(above))
+        else:
+            self.set_chars(self.cy, splice(chars, int(self.cx) - 1, int(self.cx), ""))
+            self.cx -= 1
+
+    # ---- moving -----------------------------------------------------
+    def move(self, key: Key_T):
+        """The arrow keys: left at the start of a row goes to the end of the one above, and
+        right at the end of a row to the start of the next. Down stops below the last row."""
+        case key:
+            when LEFT:
+                if self.cx > 0:
+                    self.cx -= 1
+                elif self.cy > 0:
+                    self.cy -= 1
+                    self.cx = Col_T(self.here())
+            when RIGHT:
+                if self.cy < len(self.rows):
+                    if int(self.cx) < self.here():
+                        self.cx += 1
+                    else:
+                        self.cy += 1
+                        self.cx = 0
+            when UP: self.cy = max(self.cy - 1, 0)
+            when DOWN: self.cy = min(self.cy + 1, len(self.rows))
+            when others: pass
+        self.cx = Col_T(min(int(self.cx), self.here()))    # not past the end of the row it is in now
+
+    def page(self, key: Key_T):
+        """A page is the window: the cursor goes to the top of the screen (or the bottom) and
+        then a window's worth of rows up (down)."""
+        if key == SCREEN_UP:
+            self.cy = self.rowoff
+        else:
+            self.cy = min(self.rowoff + self.text_rows - 1, len(self.rows))
+        for k in 0 ..< self.text_rows:
+            self.move(UP if key == SCREEN_UP else DOWN)
+
+    def scroll(self):
+        """Move the window over the text so that the cursor is in it."""
+        let rx: int = (int(self.rows[self.cy].render_col(self.cx)) if self.cy < len(self.rows) else 0)
+        self.rowoff = max(min(self.rowoff, self.cy), self.cy - self.text_rows + 1)
+        self.coloff = RCol_T(max(min(int(self.coloff), rx), rx - self.cols + 1))
+
+    def fit(self, cols: int, rows: int):
+        """The window is COLS by ROWS: two of the rows are the status bar and the message."""
+        self.cols = cols
+        self.text_rows = max(rows - 2, 1)
+
+    # ---- find -------------------------------------------------------
+    def begin_find(self, now: int):
+        self.finding = True
+        self.query = ""
+        self.last_match = -1
+        self.step = 0
+        self.match_len = 0
+        self.saved_cx = self.cx
+        self.saved_cy = self.cy
+        self.saved_rowoff = self.rowoff
+        self.saved_coloff = self.coloff
+        self.say("Search: (Use ESC/Arrows/Enter)", now)
+
+    def end_find(self, now: int, go_back: bool):
+        if go_back:
+            self.cx = self.saved_cx
+            self.cy = self.saved_cy
+            self.rowoff = self.saved_rowoff
+            self.coloff = self.saved_coloff
+        self.finding = False
+        self.match_len = 0
+        self.say("", now)
+
+    def find_next(self):
+        """Look for the query in `render`, from the row after the last match (before it, when
+        STEP is -1), all round the file; go to the first match, and show it."""
+        var current: int = self.last_match
+        var found: int = -1
+        var offset: int = 0
+        for k in 0 ..< len(self.rows):
+            current += self.step
+            if current == -1:
+                current = len(self.rows) - 1
+            elif current == len(self.rows):
+                current = 0
+            let at: int = self.rows[current].render.find(self.query)
+            if at >= 0:
+                found = current
+                offset = at
+                break
+        self.step = 0
+        self.match_len = 0                  # a search that finds nothing shows no match
+        if found >= 0:
+            self.last_match = found
+            self.match_row = found
+            self.match_col = RCol_T(offset)
+            self.match_len = len(self.query)
+            self.cy = found
+            self.cx = self.rows[found].col_of(self.match_col)
+            self.rowoff = found             # the match is on the top row of the screen
+            self.coloff = 0
+
+    def find_key(self, press: Press_T, now: int):
+        """A key typed in the search line."""
+        case press.key:
+            when ERASE:
+                if self.query != "": self.query = clip(self.query, 0, len(self.query) - 1)
+                self.last_match = -1
+            when ESCAPE | NEWLINE:
+                self.end_find(now, press.key == ESCAPE)
+                return
+            when RIGHT | DOWN: self.step = 1
+            when LEFT | UP: self.step = -1
+            when CHAR:
+                if is_printable(byte_at(press.text, 0)) and len(self.query) < QUERY_LEN:
+                    self.query = f"{self.query}{press.text}"
+                    self.last_match = -1
+            when others: pass
+        if self.last_match == -1: self.step = 1
+        if self.step != 0: self.find_next()
+        self.say(f"Search: {self.query} (Use ESC/Arrows/Enter)", now)
+
+    # ---- one key -----------------------------------------------------
+    def handle(self, press: Press_T, now: int):
+        """What the editor does with a key; NOW is the time, for the message."""
+        if self.finding:
+            self.find_key(press, now)
+            return
+        case press.key:
+            when NEWLINE: self.insert_newline()
+            when QUIT:
+                if self.modified and self.quit_times > 0:
+                    self.say(f"WARNING!!! File has unsaved changes. Press Ctrl-Q {self.quit_times} more times to quit.", now)
+                    self.quit_times -= 1
+                    return                        # the count goes on: only another key stops it
+                self.quitting = True
+            when SAVE: self.save(now)
+            when FIND: self.begin_find(now)
+            when ERASE: self.delete_char()
+            when SCREEN_UP | SCREEN_DOWN: self.page(press.key)
+            when LEFT | RIGHT | UP | DOWN: self.move(press.key)
+            when HOME: self.cx = 0
+            when END: self.cx = Col_T(self.here())
+            when CHAR: self.insert_char(press.text)
+            when ESCAPE | OTHER: pass
+        self.quit_times = QUIT_TIMES
+
+    # ---- what to show ----------------------------------------------
+    def welcome(self) -> str:
+        """The line shown in the middle of an empty file, centred after a ~."""
+        let text: str = f"Kilo editor -- version {KILO_VERSION}"
+        let padding: int = (self.cols - len(text)) // 2
+        if padding <= 0: return clip(text, 0, self.cols)
+        f"~{spaces(padding - 1)}{text}"
+
+    def row_segments(self, i: int) -> []Seg_T:
+        """What screen row I shows, in stretches that look alike: the row from the left edge of
+        the window, with a character that is not printable as a letter, reversed (^A is A, the
+        rest ?); or a ~, or the welcome, past the end of the file."""
+        let n: int = self.rowoff + i
+        if n >= len(self.rows):
+            if len(self.rows) == 0 and i == self.text_rows // 3:
+                return [Seg_T(self.welcome(), NORMAL)]
+            return [Seg_T("~", NORMAL)]
+        let row: Row = self.rows[n]
+        let first: int = int(self.coloff)
+        let last: int = min(len(row.render), first + self.cols)
+        var out: []Seg_T = []
+        var j: int = first
+        while j < last:
+            let look: Look_T = self.look_at(n, j)
+            var text: str = ""
+            while j < last and self.look_at(n, j) == look:
+                let o: int = ord(row.render[j])
+                text += (str(row.render[j]) if look != NONPRINT else (str(chr(64 + o)) if o <= 26 else "?"))
+                j += 1
+            out.append(Seg_T(text, look))
+        out
+
+    def look_at(self, n: int, j: int) -> Look_T:
+        """How character J of the rendered row N looks: the match, or what highlight made of it."""
+        if n == self.match_row and int(self.match_col) <= j < int(self.match_col) + self.match_len:
+            return MATCH
+        self.rows[n].hl[j]
+
+    def status_bar(self) -> str:
+        """The name of the file (its first 20 characters), its lines and whether it is changed, and
+        at the right the cursor's row of the rows, as wide as the window."""
+        let left: str = f"{clip(self.filename, 0, 20)} - {len(self.rows)} lines {'(modified)' if self.modified else ''}"
+        let right: str = f"{self.cy + 1}/{len(self.rows)}"
+        if len(left) + len(right) > self.cols:
+            return clip(f"{left}{spaces(self.cols)}", 0, self.cols)
+        f"{left}{spaces(self.cols - len(left) - len(right))}{right}"
+
+def frame_of(ed: Editor, now: int) -> Frame_T:
+    """What the editor shows at time NOW, for a terminal to draw."""
+    ed.scroll()
+    var lines: [][]Seg_T = []
+    for i in 0 ..< ed.text_rows:
+        lines.append(ed.row_segments(i))
+    let rx: int = (int(ed.rows[ed.cy].render_col(ed.cx)) if ed.cy < len(ed.rows) else 0)
+    let shown: bool = now - ed.message_time < MESSAGE_SECONDS
+    Frame_T(cols=ed.cols, rows=ed.text_rows, lines=lines, status=ed.status_bar(),
+            message=(clip(ed.message, 0, ed.cols) if shown else ""),
+            cursor_x=rx - int(ed.coloff), cursor_y=ed.cy - ed.rowoff)
+
+def edit(ed: Editor, term: Terminal):
+    """Edit until the user quits, on TERM."""
+    term.start()
+    ed.say(HELP, term.clock())
+    while not ed.quitting:
+        let (cols, rows) = term.window()     # the window may have changed since the last key
+        ed.fit(cols, rows)
+        term.draw(frame_of(ed, term.clock()))
+        ed.handle(decode(term.key()), term.clock())
+    term.stop()
