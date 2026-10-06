@@ -5601,7 +5601,10 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                          if m.group(1) in _siblings}
             _by_value = _by_value | set(_siblings)
             for m in _re.finditer(r'(\w+)\(\s*self\b', text):
-                if m.group(1) not in _by_value:
+                # `to_Kilometers_T(self.length())`: the conversion a scaled unit
+                # gets takes its argument by value
+                if m.group(1) not in _by_value and not (
+                        m.group(1).startswith("to_") and m.group(1).endswith("_T")):
                     may_mutate = True
             if _re.search(r'(?:[\])]\(|,)\s*self\b', text):
                 may_mutate = True

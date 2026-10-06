@@ -51,16 +51,17 @@ What changed in the translation
   demo.  The demo's assertions and the flat-plane prints are kept.
 """
 
-from math nimport sin, floor, degToRad, tan, sqrt, cos, arctan2, radToDeg, arctan, arcsin, round, hypot
+from math nimport sin, floor, tan, sqrt, cos, arctan2, arctan, arcsin, round, hypot
 
 # ---------------------------------------------------------------------------
 # Units
 # ---------------------------------------------------------------------------
 
 type Meters_T       is distinct float
-type Kilometers_T   is distinct float
+type Kilometers_T   is 1000.0 * Meters_T      # a km is 1000 m: Kilometers_T(m) and Meters_T(km) convert
 type SquareMeters_T is Meters_T * Meters_T       # a dot or cross product, a triangle's area
 type Degrees_T      is distinct float            # an angle of any size and sign
+type Radians_T      is 57.29577951308232 * Degrees_T   # a radian is 180/pi degrees: Radians_T(d), Degrees_T(r)
 type Duration_T     is distinct float            # seconds
 type Speed_T        is Meters_T / Duration_T     # metres per second
 type Accel_T        is Speed_T / Duration_T      # metres per second squared
@@ -112,13 +113,6 @@ def slice_of(text: str, start: int, stop: int) -> str:
         return ""
     text[start:min(n, stop)]
 
-def to_km(m: Meters_T) -> Kilometers_T:
-    Kilometers_T(float(m) / 1000.0)
-
-def to_m(km: Kilometers_T) -> Meters_T:
-    Meters_T(float(km) * 1000.0)
-
-
 # ---------------------------------------------------------------------------
 # WGS-84 ellipsoid parameters
 # ---------------------------------------------------------------------------
@@ -144,9 +138,9 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let b: float = float(WGS84_B)
     let f: float = WGS84_F
     let dist_m: float = float(dist)
-    let lat1_rad: float = degToRad(float(lat1))
-    let lon1_rad: float = degToRad(float(lon1))
-    let az1_rad: float = degToRad(float(az1))
+    let lat1_rad: float = float(Radians_T(Degrees_T(float(lat1))))
+    let lon1_rad: float = float(Radians_T(Degrees_T(float(lon1))))
+    let az1_rad: float = float(Radians_T(az1))
 
     let tan_u1: float = (1 - f) * tan(lat1_rad)
     let cos_u1: float = 1 / sqrt(1 + tan_u1 ** 2)
@@ -197,7 +191,7 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let lon2: float = lon1_rad + big_l
     let az2: float = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
 
-    Direct_T(Latitude_T(radToDeg(lat2)), Degrees_T(radToDeg(lon2)), modulo(radToDeg(az2) + 360.0, 360.0))
+    Direct_T(Latitude_T(float(Degrees_T(Radians_T(lat2)))), Degrees_T(Radians_T(lon2)), modulo(float(Degrees_T(Radians_T(az2))) + 360.0, 360.0))
 
 
 # ---------------------------------------------------------------------------
@@ -219,10 +213,10 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
     if abs(float(lat1 - lat2)) < 1e-10 and abs(float(lon1 - lon2)) < 1e-10:
         return Inverse_T(0.0, 0.0, 0.0)               # coincident points
 
-    let u1: float = arctan((1 - f) * tan(degToRad(float(lat1))))
-    let u2: float = arctan((1 - f) * tan(degToRad(float(lat2))))
+    let u1: float = arctan((1 - f) * tan(float(Radians_T(Degrees_T(float(lat1))))))
+    let u2: float = arctan((1 - f) * tan(float(Radians_T(Degrees_T(float(lat2))))))
 
-    let omega: float = degToRad(float(lon2 - lon1))
+    let omega: float = float(Radians_T(Degrees_T(float(lon2 - lon1))))
     var lon: float = omega
 
     var alpha: float = 0.0
@@ -261,10 +255,10 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
     )
     let dist_m: float = b * big_a * (sigma - d_sigma)
 
-    var az1: float = radToDeg(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))
+    var az1: float = float(Degrees_T(Radians_T(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))))
     if az1 < 0:
         az1 += 360
-    let az2: float = radToDeg(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
+    let az2: float = float(Degrees_T(Radians_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))))) + 180
 
     Inverse_T(Meters_T(dist_m), az1, az2)
 
@@ -432,7 +426,7 @@ class Vector:
     var y: Meters_T
 
     def __init__(self, length: Meters_T, angle: Degrees_T) -> None:
-        let radians: float = degToRad(float(angle))
+        let radians: float = float(Radians_T(angle))
         self.x = Meters_T(float(length) * cos(radians))
         self.y = Meters_T(float(length) * sin(radians))
 
@@ -444,7 +438,7 @@ class Vector:
 
     def angle(self) -> Degrees_T:
         """Direction of the vector."""
-        Degrees_T(radToDeg(arctan2(float(self.y), float(self.x))))
+        Degrees_T(Radians_T(arctan2(float(self.y), float(self.x))))
 
     # -- transformations -----------------------------------------------------
 
@@ -510,7 +504,7 @@ class Vector:
 
 def vector_xy(x: Meters_T, y: Meters_T) -> Vector:
     """The vector with these parts."""
-    Vector(Meters_T(hypot(float(x), float(y))), Degrees_T(radToDeg(arctan2(float(y), float(x)))))
+    Vector(Meters_T(hypot(float(x), float(y))), Degrees_T(Radians_T(arctan2(float(y), float(x)))))
 
 
 # ---------------------------------------------------------------------------
@@ -563,7 +557,7 @@ class Velocity:
     var y: Speed_T
 
     def __init__(self, speed: Speed_T, angle: Degrees_T) -> None:
-        let radians: float = degToRad(float(angle))
+        let radians: float = float(Radians_T(angle))
         self.x = Speed_T(float(speed) * cos(radians))
         self.y = Speed_T(float(speed) * sin(radians))
 
@@ -573,7 +567,7 @@ class Velocity:
 
     def angle(self) -> Degrees_T:
         """Direction of the velocity, counter-clockwise from the x axis."""
-        Degrees_T(radToDeg(arctan2(float(self.y), float(self.x))))
+        Degrees_T(Radians_T(arctan2(float(self.y), float(self.x))))
 
     def rotated_by(self, relative_angle: Degrees_T) -> Velocity:
         Velocity(self.speed(), self.angle() + relative_angle)
@@ -616,7 +610,7 @@ class Velocity:
 
 def velocity_xy(x: Speed_T, y: Speed_T) -> Velocity:
     """The velocity with these parts."""
-    Velocity(Speed_T(hypot(float(x), float(y))), Degrees_T(radToDeg(arctan2(float(y), float(x)))))
+    Velocity(Speed_T(hypot(float(x), float(y))), Degrees_T(Radians_T(arctan2(float(y), float(x)))))
 
 
 class Acceleration:
@@ -625,7 +619,7 @@ class Acceleration:
     var y: Accel_T
 
     def __init__(self, magnitude: Accel_T, angle: Degrees_T) -> None:
-        let radians: float = degToRad(float(angle))
+        let radians: float = float(Radians_T(angle))
         self.x = Accel_T(float(magnitude) * cos(radians))
         self.y = Accel_T(float(magnitude) * sin(radians))
 
@@ -633,7 +627,7 @@ class Acceleration:
         Accel_T(hypot(float(self.x), float(self.y)))
 
     def angle(self) -> Degrees_T:
-        Degrees_T(radToDeg(arctan2(float(self.y), float(self.x))))
+        Degrees_T(Radians_T(arctan2(float(self.y), float(self.x))))
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""
@@ -661,7 +655,7 @@ class Acceleration:
 
 def acceleration_xy(x: Accel_T, y: Accel_T) -> Acceleration:
     """The acceleration with these parts."""
-    Acceleration(Accel_T(hypot(float(x), float(y))), Degrees_T(radToDeg(arctan2(float(y), float(x)))))
+    Acceleration(Accel_T(hypot(float(x), float(y))), Degrees_T(Radians_T(arctan2(float(y), float(x)))))
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +679,7 @@ class GeoVector:
 
     def __init__(self, distance: Kilometers_T, bearing: Degrees_T) -> None:
         """A displacement of DISTANCE along BEARING (clockwise from true north)."""
-        let radians: float = degToRad(float(bearing))
+        let radians: float = float(Radians_T(bearing))
         let metres: float = float(distance) * 1000.0
         self.north = Meters_T(metres * cos(radians))
         self.east  = Meters_T(metres * sin(radians))
@@ -695,11 +689,11 @@ class GeoVector:
 
     def magnitude(self) -> Kilometers_T:
         """Length of the vector in kilometres."""
-        to_km(self.length())
+        Kilometers_T(self.length())
 
     def heading(self) -> Degrees_T:
         """The bearing as the arctangent gives it: between -180 and 180."""
-        Degrees_T(radToDeg(arctan2(float(self.east), float(self.north))))
+        Degrees_T(Radians_T(arctan2(float(self.east), float(self.north))))
 
     def phase(self) -> Bearing_T:
         """Bearing, clockwise from north, in [0, 360)."""
@@ -707,10 +701,10 @@ class GeoVector:
         modulo(float(around), 360.0)
 
     def east_km(self) -> Kilometers_T:
-        to_km(self.east)
+        Kilometers_T(self.east)
 
     def north_km(self) -> Kilometers_T:
-        to_km(self.north)
+        Kilometers_T(self.north)
 
     def turn(self, angle: Degrees_T) -> GeoVector:
         """A new vector turned by ANGLE."""
@@ -750,7 +744,7 @@ def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVe
     let n: float = float(north) * 1000.0
     let e: float = float(east) * 1000.0
     let distance: float = hypot(n, e) / 1000.0
-    let bearing: float = modulo(radToDeg(arctan2(e, n)), 360.0)
+    let bearing: float = modulo(float(Degrees_T(Radians_T(arctan2(e, n)))), 360.0)
     GeoVector(Kilometers_T(distance), Degrees_T(bearing))
 
 
@@ -787,7 +781,7 @@ class GeoPoint:
     def __sub__(self, other: GeoPoint) -> GeoVector:
         """The geodetic displacement from OTHER to SELF (Vincenty inverse formula)."""
         let way: Inverse_T = vincenty_inverse(self.latitude, self.longitude, other.latitude, other.longitude)
-        GeoVector(to_km(way.distance), Degrees_T(float(way.reverse)))
+        GeoVector(Kilometers_T(way.distance), Degrees_T(float(way.reverse)))
 
     def rotate_around_point(self, pivot: GeoPoint, angle: Degrees_T) -> GeoPoint:
         """This point turned by ANGLE around PIVOT."""

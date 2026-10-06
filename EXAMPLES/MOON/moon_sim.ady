@@ -33,9 +33,9 @@ Usage:  moon_sim [--seed N] [--show] [--out moon_mission.png]
 Nim only (map_utils is):  ady2nim c -r moon_sim.ady
 """
 
-from math nimport sqrt, sin, cos, exp, ln, degToRad, radToDeg, PI
+from math nimport sqrt, sin, cos, exp, ln, PI
 from MAP_UTILS/map_utils import Meters_T, SquareMeters_T, Degrees_T, Duration_T, Speed_T, Accel_T
-from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, vector_xy, velocity_xy, acceleration_xy, to_km, modulo
+from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, vector_xy, velocity_xy, acceleration_xy, Kilometers_T, Radians_T, modulo
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
@@ -341,13 +341,13 @@ class MoonEphemeris:
     def __init__(self, phase0: Degrees_T):
         self.phase0 = phase0
         let rate: float = sqrt(float(MU_EARTH + MU_MOON) / float(MOON_DISTANCE) ** 3)
-        self.n = AngularRate_T(radToDeg(rate))
+        self.n = AngularRate_T(float(Degrees_T(Radians_T(rate))))
 
     def position(self, t: Duration_T) -> Position:
         return ORIGIN + Vector(MOON_DISTANCE, self.phase0 + self.n * t)
 
     def velocity(self, t: Duration_T) -> Velocity:
-        let speed: Speed_T = Speed_T(float(MOON_DISTANCE) * degToRad(float(self.n)))
+        let speed: Speed_T = Speed_T(float(MOON_DISTANCE) * float(Radians_T(Degrees_T(float(self.n)))))
         return Velocity(speed, self.phase0 + self.n * t + Degrees_T(90.0))
 
 # What a coast can stop on. Each is a function of the state that changes sign
@@ -714,7 +714,7 @@ class Guidance:
         self.has_t_go = False
 
     def target(self, gate: Gate_T) -> Target_T:
-        let behind: Degrees_T = Degrees_T(radToDeg(float(gate.uprange / R_MOON)))
+        let behind: Degrees_T = Degrees_T(Radians_T(float(gate.uprange / R_MOON)))
         let up: Vector = rot(self.site_up, behind * -self.s)
         let east: Vector = perp(up) * self.s
         return Target_T(ORIGIN + up * float(R_MOON + gate.alt),
@@ -961,7 +961,7 @@ class Mission:
         var prev: ?Meters_T = None
         var prev_delta: float = 0.0
         for i in 0 .. steps:
-            let delta: float = radToDeg(-0.45 + 0.9 * float(i) / float(steps))
+            let delta: float = float(Degrees_T(Radians_T(-0.45 + 0.9 * float(i) / float(steps))))
             let p: ?Meters_T = miss.signed_periapsis(Degrees_T(delta))
             if p is not None and prev is not None and not found:
                 if float(prev - target) * float(p - target) < 0.0:
@@ -992,7 +992,7 @@ class Mission:
         print
         print "ENTERED LUNAR SOI"
         print f"  Time     = {float(self.t) / 3600.0:.1f} h  ({float(self.t) / 86400.0:.2f} d)"
-        print f"  Distance = {to_km(radius_of(self.r)):.0f} km"
+        print f"  Distance = {Kilometers_T(radius_of(self.r)):.0f} km"
         print f"  Rel. vel = {self.v.speed():.1f} m/s"
 
     # --------------------------------------------------------
@@ -1016,7 +1016,7 @@ class Mission:
         let el: Elements_T = orbital_elements(self.r, self.v, MU_MOON)
         print
         print "LUNAR PERIAPSIS"
-        print f"  Altitude = {to_km(el.radius - R_MOON):.1f} km"
+        print f"  Altitude = {Kilometers_T(el.radius - R_MOON):.1f} km"
         print f"  Speed    = {el.speed:.1f} m/s"
 
     # --------------------------------------------------------
@@ -1037,8 +1037,8 @@ class Mission:
         let ra: Meters_T = R_MOON + self.LOI1_APO_ALT
         let speed: Speed_T = vis_viva(MU_MOON, rp, (rp + ra) / 2.0)
         let dv: Speed_T = self.tangential_burn(self.sc, CSM, speed, LOI_1)
-        print (f"LOI-1 dv = {dv:.1f} m/s   (-> {to_km(rp - R_MOON):.0f} x "
-               f"{to_km(self.LOI1_APO_ALT):.0f} km)")
+        print (f"LOI-1 dv = {dv:.1f} m/s   (-> {Kilometers_T(rp - R_MOON):.0f} x "
+               f"{Kilometers_T(self.LOI1_APO_ALT):.0f} km)")
 
     def coast_to_next_periapsis(self):
         self.phase = LUNAR_ORBIT
@@ -1051,7 +1051,7 @@ class Mission:
         let dv: Speed_T = self.tangential_burn(self.sc, CSM, speed, LOI_2)
         let el: Elements_T = orbital_elements(self.r, self.v, MU_MOON)
         print (f"LOI-2 dv = {dv:.1f} m/s   (circular, e = {el.e:.4f}, "
-               f"alt {to_km(el.radius - R_MOON):.1f} km)")
+               f"alt {Kilometers_T(el.radius - R_MOON):.1f} km)")
         self.phase = LUNAR_CIRCULAR
 
     # --------------------------------------------------------
@@ -1071,7 +1071,7 @@ class Mission:
         let rp: Meters_T = R_MOON + self.DOI_PERI_ALT
         let speed: Speed_T = vis_viva(MU_MOON, r, (r + rp) / 2.0)
         let dv: Speed_T = self.tangential_burn(self.lander, LM, speed, DOI)
-        print f"DOI dv = {dv:.1f} m/s   (-> periapsis {to_km(self.DOI_PERI_ALT):.0f} km)"
+        print f"DOI dv = {dv:.1f} m/s   (-> periapsis {Kilometers_T(self.DOI_PERI_ALT):.0f} km)"
         self.coast_moon(Duration_T(3.0 * 86400.0), [PERILUNE, IMPACT], "descent orbit")
         self.phase = PDI
 
@@ -1095,9 +1095,9 @@ class Mission:
 
         print
         print "POWERED DESCENT INITIATION"
-        print (f"  Altitude = {to_km(radius_of(r) - R_MOON):.1f} km, "
+        print (f"  Altitude = {Kilometers_T(radius_of(r) - R_MOON):.1f} km, "
                f"speed = {v.speed():.0f} m/s, mass = {float(lander.mass()):,.0f} kg")
-        print f"  Landing site is {to_km(Meters_T(degToRad(float(self.DESCENT_ARC)) * float(R_MOON))):.0f} km downrange"
+        print f"  Landing site is {Kilometers_T(Meters_T(float(Radians_T(self.DESCENT_ARC)) * float(R_MOON))):.0f} km downrange"
 
         let dt: Duration_T = self.DT
         var t: Duration_T = 0.0
@@ -1158,7 +1158,7 @@ class Mission:
         let vv: Speed_T = along(v, up)
         let vh: Speed_T = along(v, east)
         let arc: Degrees_T = wrapped(up.angle() - site_up.angle()) * s
-        let miss: Meters_T = Meters_T(degToRad(float(arc)) * float(R_MOON))   # + = overshoot (beyond site)
+        let miss: Meters_T = Meters_T(float(Radians_T(arc)) * float(R_MOON))   # + = overshoot (beyond site)
 
         let good: bool = touched_down and abs(float(vv)) < 3.0 and abs(float(vh)) < 1.5
         if good:
@@ -1270,7 +1270,7 @@ def make_plots(m: Mission, path: str, show: bool):
 
     let d: []Telemetry_T = m.descent
     let tt: []float = [float(x.t) for x in d]
-    let alt: []float = [float(to_km(x.alt)) for x in d]
+    let alt: []float = [float(Kilometers_T(x.alt)) for x in d]
     let vv: []float = [float(x.vv) for x in d]
     let vh: []float = [float(x.vh) for x in d]
     let thr: []float = [x.throttle * 100.0 for x in d]

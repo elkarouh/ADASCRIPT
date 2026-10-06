@@ -40,7 +40,7 @@ the six plots have the same shape as `moon_mission.png`. Matplotlib is needed to
 ## Units
 
 No bare floats in signatures. From map_utils: `Meters_T`, `Degrees_T`, `SquareMeters_T`, `Vector`,
-`Position`, `to_km`, `modulo`, and `rotated_by` / `angle` / `unit` / `cross` for the rotations and
+`Position`, `Kilometers_T` and `Radians_T` (scaled units: `Kilometers_T(m)`, `Degrees_T(r)`), `modulo`, and `rotated_by` / `angle` / `unit` / `cross` for the rotations and
 signs the original did with `rot`, `arctan2` and `np.sign`. Declared here: `Mass_T`, `Duration_T`
 (distinct), `Speed_T`, `Accel_T`, `Force_T`, `Mu_T` (a body's GM), `AngularRate_T` and `AngMom_T` (derived).
 The rocket equation is `ve = isp * G0` (a `Speed_T`), `used = m0 * (1 - exp(-dv / ve))` (a `Mass_T`),
