@@ -34,7 +34,7 @@ type HalfAngle_T is float range 0.0 .. 180.0
 
 def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:
     """The smaller angle between two bearings: never more than half a circle."""
-    let diff: float = abs(a - b) % 360              # not negative, so `%` is the same on both backends
+    let diff: float = float(a - b)                  # a - b wraps into 0 .. 360
     180 - abs(180 - diff)                           # 0 .. 180: diff itself up to 180, then 360 - diff
 
 

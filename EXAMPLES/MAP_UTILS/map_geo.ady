@@ -133,7 +133,7 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let lon2: Radians_T = lon1_rad + big_l
     let az2: Radians_T = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
 
-    Direct_T(Latitude_T(Degrees_T(lat2)), Degrees_T(lon2), Bearing_T(modulo(float(Degrees_T(az2)) + 360.0, 360.0)))
+    Direct_T(Latitude_T(Degrees_T(lat2)), Degrees_T(lon2), Bearing_T(Degrees_T(az2)))
 
 # ---------------------------------------------------------------------------
 # Vincenty inverse formula
@@ -201,7 +201,7 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
         az1 += 360
     let az2: Degrees_T = Degrees_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
 
-    Inverse_T(Meters_T(dist_m), Bearing_T(float(az1)), Bearing_T(float(az2)))
+    Inverse_T(Meters_T(dist_m), Bearing_T(az1), Bearing_T(az2))
 
 # ---------------------------------------------------------------------------
 # Geodetic geometry -- GeoVector
@@ -243,7 +243,7 @@ class GeoVector:
     def phase(self) -> Bearing_T:
         """Bearing, clockwise from north, in [0, 360)."""
         let around: Degrees_T = self.heading()
-        Bearing_T(modulo(float(around), 360.0))
+        Bearing_T(around)
 
     def east_km(self) -> Kilometers_T:
         Kilometers_T(self.east)
@@ -255,7 +255,7 @@ class GeoVector:
         """A new vector turned by ANGLE."""
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        GeoVector(km, Degrees_T(float(bearing)) + angle)
+        GeoVector(km, Degrees_T(bearing) + angle)
 
     def __mul__(self, other: GeoVector) -> SquareMeters_T:
         self.north * other.north + self.east * other.east
@@ -267,12 +267,12 @@ class GeoVector:
     def __truediv__(self, scale: float) -> GeoVector:
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        GeoVector(km / scale, Degrees_T(float(bearing)))
+        GeoVector(km / scale, Degrees_T(bearing))
 
     def __mul__(self, scale: float) -> GeoVector:
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        GeoVector(km * scale, Degrees_T(float(bearing)))
+        GeoVector(km * scale, Degrees_T(bearing))
 
     def __str__(self) -> str:
         let km: Kilometers_T = self.magnitude()

@@ -175,7 +175,7 @@ def plane_beside(start: GeoPoint, leg: GeoVector, fraction: float, off: Kilomete
     direction TURN degrees from the leg's bearing: +90 is to the right, -90 to the left."""
     let on_track: GeoPoint = start + leg * fraction
     let bearing: Bearing_T = leg.phase()
-    return on_track + GeoVector(off, Degrees_T(float(bearing)) + turn)
+    return on_track + GeoVector(off, Degrees_T(bearing) + turn)
 
 def holding_pattern(beacon: GeoPoint, radius: Kilometers_T, count: int) -> []GeoPoint:
     """COUNT points on a circle of RADIUS round BEACON, made by turning one of them round it."""
