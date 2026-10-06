@@ -702,9 +702,6 @@ and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a funct
 
 Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
 
-- [ ] `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list
-      concatenation on Nim (`&`).
 - [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_utils import` works from a sibling directory only because the
-      parent is searched; map_utils itself is Nim-only (`from math nimport`), so
-      anything built on it is too.
+      parent is searched. (map_utils itself stays Nim-only, by decision.)

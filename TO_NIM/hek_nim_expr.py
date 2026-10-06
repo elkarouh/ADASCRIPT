@@ -998,6 +998,9 @@ def _field_type(expr):
     import re as _re_ft
     _bsym = ParserState.symbol_table.lookup(base.strip())
     _btype = _re_ft.sub(r"^var\s+", "", (_bsym.get("type") or "") if isinstance(_bsym, dict) else "")
+    if not _btype and "." in base:
+        # a chain: `self.inner.xs` -- the type of `self.inner` is the object's
+        _btype = _re_ft.sub(r"^var\s+", "", _field_type(base.strip()))
     _ftype = ParserState.class_field_types.get(_btype, {}).get(field) if _btype else None
     if not _ftype:
         _fsym = ParserState.symbol_table.lookup(field)

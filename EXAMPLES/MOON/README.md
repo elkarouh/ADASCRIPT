@@ -85,8 +85,9 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 * **`Record(a, b, None)` with a positional `None` for a `?T` field emitted `nil` on Nim, and
   `opt == value` / `opt != value` on a `?Enum` did not compile.** Fixed in the transpiler (the field is
   lifted to `none(T)` or `some(v)`, positional or by name; the value beside `==` is lifted to
-  `some(v)`). One left: `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list
-  concatenation.
+  `some(v)`).
+* **`a + b` on two `[]T` fields reached through `self.x.y`** was not seen as a list concatenation on
+  Nim (`&`). Fixed in the transpiler.
 * **`min(a, b, c)` with three arguments, and `raise NotImplementedError()` without a message,
   did not compile on Nim.** Fixed in the transpiler (nested two-argument calls; the exception's name
   as its message, and `except NotImplementedError` catches it).
