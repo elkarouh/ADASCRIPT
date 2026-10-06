@@ -1,10 +1,6 @@
-#!/bin/sh
-# Tcheckout.ksh -- check out one file of an NM submodule that is not checked
-# out, and only that file: what Tcheck_tact's DIFF and NET DIFF links run
-# first where the file's submodule is not checked out. Tcheckout.ady is the
-# Adascript version, with the same options and messages; this one is for
-# where the Adascript build is not at hand (link it as Tcheckout, the name
-# the links run).
+#!/bin/ksh
+# Check out one file of an NM submodule that is not checked out, and only that.
+# Used by Treport.
 #
 #   Tcheckout [-root DIR] <system>/<subsystem>/<path>
 #   Tcheckout [-root DIR] -u <system>/<subsystem>/<path>
@@ -58,240 +54,240 @@
 # -l and -u work there too; -u of a repository's last file removes the
 # repository from the cache.
 #
-# Needs git 2.25 or later (sparse-checkout).
 
 PROG=${0##*/}
-die() { echo "$PROG: $*" >&2; exit 1; }
+die() { echo "${PROG}: $*" >&2; exit 1; }
+_co=commit; peel="^{$_co}"   # git revision peel suffix
 
 root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
 mode=checkout cache="" revs="" all=""
-while [ $# -gt 0 ]; do
-    case $1 in
-    -root) [ $# -gt 1 ] || die "-root requires a directory"; root=$2; shift 2 ;;
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -root) [[ $# -gt 1 ]] || die "-root requires a directory"; root=$2; shift 2 ;;
     -u) mode=uncheckout; shift ;;
     -l) mode=list; shift ;;
     -all) all=1; shift ;;
-    -cache) [ $# -gt 1 ] || die "-cache requires a directory"; cache=$2; shift 2 ;;
-    -rev) [ $# -gt 1 ] || die "-rev requires a revision"; revs="$revs $2"; shift 2 ;;
+    -cache) [[ $# -gt 1 ]] || die "-cache requires a directory"; cache=$2; shift 2 ;;
+    -rev) [[ $# -gt 1 ]] || die "-rev requires a revision"; revs="${revs} $2"; shift 2 ;;
     -h|-help|--help) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
     -*) die "unknown option: $1" ;;
     *) break ;;
-    esac
+  esac
 done
 
 parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
-    target=$1
-    case $target in
-    */) die "not a file: $target" ;;
+  target=$1
+  case ${target} in
+    */) die "not a file: ${target}" ;;
     */*/*) ;;
-    *) die "not <system>/<subsystem>/<path>: $target" ;;
-    esac
-    system=${target%%/*}; rest=${target#*/}
-    sub=$system/${rest%%/*}; file=${rest#*/}
+    *) die "not <system>/<subsystem>/<path>: ${target}" ;;
+  esac
+  system=${target%%/*}; rest=${target#*/}
+  sub=${system}/${rest%%/*}; file=${rest#*/}
 }
 
-[ -n "$cache" ] || [ -n "$root" ] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
+[[ -n "${cache}" ]] || [[ -n "${root}" ]] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
 
-if [ -n "$all" ]; then
-    # every file -l lists, taken out one by one: the others still, when one
-    # cannot be
-    [ $mode = uncheckout ] || die "-all goes with -u"
-    [ $# -le 1 ] || die "usage: $PROG [-root DIR | -cache DIR] -u -all [<system>/<subsystem>]"
-    if [ -n "$cache" ]; then where=-cache dir=$cache; else where=-root dir=$root; fi
-    files=$("$0" $where "$dir" -l ${1:+"$1"}) || exit 1
-    [ -n "$files" ] || { echo "$PROG: nothing checked out"; exit 0; }
-    printf '%s\n' "$files" | {
-        rc=0
-        while read -r f; do
-            "$0" $where "$dir" -u "$f" || rc=1
-        done
-        exit $rc
-    }
-    exit
+if [[ -n "${all}" ]]; then
+  # every file -l lists, taken out one by one: the others still, when one
+  # cannot be
+  [[ ${mode} = uncheckout ]] || die "-all goes with -u"
+  [[ $# -le 1 ]] || die "usage: ${PROG} [-root DIR | -cache DIR] -u -all [<system>/<subsystem>]"
+  if [[ -n "${cache}" ]]; then where=-cache dir=${cache}; else where=-root dir=${root}; fi
+  files=$("$0" ${where} "${dir}" -l ${1:+"$1"}) || exit 1
+  [[ -n "${files}" ]] || { echo "${PROG}: nothing checked out"; exit 0; }
+  printf '%s\n' "${files}" | {
+    rc=0
+    while read -r f; do
+      "$0" ${where} "${dir}" -u "${f}" || rc=1
+    done
+    exit ${rc}
+  }
+  exit
 fi
-if [ -n "$cache" ]; then
-    if [ $mode = list ]; then
-        [ $# -le 1 ] || die "usage: $PROG [-cache DIR] -l [<system>/<subsystem>]"
-        only=${1%/}
-        for repo in "$cache"/*/*; do
-            [ -e "$repo/.git" ] || continue
-            path=${repo#"$cache"/}
-            [ -z "$only" ] || [ "$path" = "$only" ] || continue
-            git -C "$repo" sparse-checkout list | sed "s|^/*|$path/|"
-        done
-        exit 0
-    fi
-    [ $# -eq 1 ] || die "usage: $PROG [-cache DIR] [-u | -rev REV...] <system>/<subsystem>/<path>"
-    parse_target "$1"
-    work=$cache/$sub
-    if [ $mode = uncheckout ]; then
-        [ -e "$work/.git" ] || die "$sub is not in the cache $cache"
-        git -C "$work" sparse-checkout list | grep -qxF "/$file" || die "$target is not checked out"
-        [ -z "$(git -C "$work" status --porcelain -- "$file")" ] ||
-            die "$target has changes: not taken out"
-        others=$(git -C "$work" sparse-checkout list | grep -vxF "/$file")
-        if [ -n "$others" ]; then
-            printf '%s\n' "$others" | git -C "$work" sparse-checkout set --no-cone --stdin ||
-                die "could not take $file out of $sub"
-            echo "$PROG: $target taken out"
-        else
-            rm -rf "$work" || die "could not remove $work"
-            rmdir "$cache/$system" 2>/dev/null
-            echo "$PROG: $target taken out -- $sub's last: its clone removed from $cache"
-        fi
-        exit 0
-    fi
-    url=${TCHECK_NM_URL:-https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm}/$(printf '%s' "$system.${sub#*/}" | tr 'A-Z' 'a-z').git
-    fresh=""
-    if [ ! -e "$work/.git" ]; then
-        mkdir -p "$work" || die "could not create $work"
-        [ -z "$(ls -A "$work")" ] || die "$work is not empty: not cloning into it"
-        echo "$PROG: cloning $url into $work (no contents until needed)"
-        git clone -q --filter=blob:none --no-checkout "$url" "$work" || die "could not clone $url"
-        git -C "$work" sparse-checkout set --no-cone "/$file" || die "could not set up the sparse checkout"
-        fresh=1
-    fi
-    # the revisions compared, fetched when missing
-    for rev in $revs; do
-        git -C "$work" rev-parse -q --verify "$rev^{commit}" >/dev/null && continue
-        echo "$PROG: fetching $sub, for $rev"
-        git -C "$work" fetch -q --tags origin || die "could not fetch $url"
-        break
+if [[ -n "${cache}" ]]; then
+  if [[ ${mode} = list ]]; then
+    [[ $# -le 1 ]] || die "usage: ${PROG} [-cache DIR] -l [<system>/<subsystem>]"
+    only=${1%/}
+    for repo in "${cache}"/*/*; do
+      [[ -e "${repo}/.git" ]] || continue
+      path=${repo#"${cache}"/}
+      [[ -z "${only}" ]] || [[ "${path}" = "${only}" ]] || continue
+      git -C "${repo}" sparse-checkout list | sed "s|^/*|${path}/|"
     done
-    for rev in $revs; do
-        git -C "$work" rev-parse -q --verify "$rev^{commit}" >/dev/null || die "no $rev in $url"
-    done
-    git -C "$work" sparse-checkout list | grep -qxF "/$file" ||
-        git -C "$work" sparse-checkout add "/$file" || die "could not add $file to $work"
-    # the file, known to git: in HEAD, else at the first revision that has it
-    if [ -z "$fresh" ] && git -C "$work" cat-file -e "HEAD:$file" 2>/dev/null; then
-        exit 0
-    fi
-    at=""
-    for rev in $revs; do
-        git -C "$work" cat-file -e "$rev:$file" 2>/dev/null && { at=$rev; break; }
-    done
-    [ -n "$at" ] || at=$(git -C "$work" rev-parse -q --verify origin/HEAD) || at=""
-    [ -n "$at" ] || die "$file is at none of:$revs"
-    git -C "$work" -c advice.detachedHead=false checkout -q -f "$at" || die "could not check out $at in $work"
-    echo "$PROG: $target checked out in $cache (at $at)"
     exit 0
+  fi
+  [[ $# -eq 1 ]] || die "usage: ${PROG} [-cache DIR] [-u | -rev REV...] <system>/<subsystem>/<path>"
+  parse_target "$1"
+  work=${cache}/${sub}
+  if [[ ${mode} = uncheckout ]]; then
+    [[ -e "${work}/.git" ]] || die "${sub} is not in the cache ${cache}"
+    git -C "${work}" sparse-checkout list | grep -qxF "/${file}" || die "${target} is not checked out"
+    [[ -z "$(git -C "${work}" status --porcelain -- "${file}")" ]] ||
+      die "${target} has changes: not taken out"
+    others=$(git -C "${work}" sparse-checkout list | grep -vxF "/${file}")
+    if [[ -n "${others}" ]]; then
+      printf '%s\n' "${others}" | git -C "${work}" sparse-checkout set --no-cone --stdin ||
+        die "could not take ${file} out of ${sub}"
+      echo "${PROG}: ${target} taken out"
+    else
+      rm -rf "${work}" || die "could not remove ${work}"
+      rmdir "${cache}/${system}" 2>/dev/null
+      echo "${PROG}: ${target} taken out -- ${sub}'s last: its clone removed from ${cache}"
+    fi
+    exit 0
+  fi
+  url=${TCHECK_NM_URL:-https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm}/$(printf '%s' "${system}.${sub#*/}" | tr 'A-Z' 'a-z').git
+  fresh=""
+  if [[ ! -e "${work}/.git" ]]; then
+    mkdir -p "${work}" || die "could not create ${work}"
+    [[ -z "$(ls -A "${work}")" ]] || die "${work} is not empty: not cloning into it"
+    echo "${PROG}: cloning ${url} into ${work} (no contents until needed)"
+    git clone -q --filter=blob:none --no-checkout "${url}" "${work}" || die "could not clone ${url}"
+    git -C "${work}" sparse-checkout set --no-cone "/${file}" || die "could not set up the sparse checkout"
+    fresh=1
+  fi
+  # the revisions compared, fetched when missing
+  for rev in ${revs}; do
+    git -C "${work}" rev-parse -q --verify "${rev}${peel}" >/dev/null && continue
+    echo "${PROG}: fetching ${sub}, for ${rev}"
+    git -C "${work}" fetch -q --tags origin || die "could not fetch ${url}"
+    break
+  done
+  for rev in ${revs}; do
+    git -C "${work}" rev-parse -q --verify "${rev}${peel}" >/dev/null || die "no ${rev} in ${url}"
+  done
+  git -C ${work} sparse-checkout list | grep -qxF "/${file}" ||
+    git -C ${work} sparse-checkout add "/${file}" || die "could not add ${file} to ${work}"
+  # the file, known to git: in HEAD, else at the first revision that has it
+  if [[ -z "${fresh}" ]] && git -C "${work}" cat-file -e "HEAD:${file}" 2>/dev/null; then
+    exit 0
+  fi
+  at=""
+  for rev in ${revs}; do
+    git -C "${work}" cat-file -e "${rev}:${file}" 2>/dev/null && { at=${rev}; break; }
+  done
+  [[ -n "${at}" ]] || at=$(git -C "${work}" rev-parse -q --verify origin/HEAD) || at=""
+  [[ -n "${at}" ]] || die "${file} is at none of:${revs}"
+  git -C "${work}" -c advice.detachedHead=false checkout -q -f "${at}" || die "could not check out ${at} in ${work}"
+  echo "${PROG}: ${target} checked out in ${cache} (at ${at})"
+  exit 0
 fi
 
-[ -n "$root" ] || die "no NM workspace: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or give -root"
-git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git work tree: $root"
+[[ -n "${root}" ]] || die "no NM workspace: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or give -root"
+git -C "${root}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git work tree: ${root}"
 
 submodule_paths() {     # the workspace's submodules: NAME PATH a line
-    git -C "$root" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null |
-        awk '{ n = $1; sub(/^submodule\./, "", n); sub(/\.path$/, "", n); print n, $2 }'
+  git -C "${root}" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null |
+    awk '{ n = $1; sub(/^submodule\./, "", n); sub(/\.path$/, "", n); print n, $2 }'
 }
 checked_out() {         # DIR: whether DIR is a checked-out submodule's top
-    git -C "$1" rev-parse --show-toplevel 2>/dev/null | grep -qx "$(cd "$1" 2>/dev/null && pwd -P)"
+  git -C "$1" rev-parse --show-toplevel 2>/dev/null | grep -qx "$(cd "$1" 2>/dev/null && pwd -P)"
 }
 sparse() {              # DIR: whether its checkout is sparse
-    [ "$(git -C "$1" config --bool core.sparseCheckout)" = true ]
+  [[ "$(git -C "$1" config --bool core.sparseCheckout)" = true ]]
 }
 keep_worktree_in_config() {     # DIR: core.worktree where git submodule has it
-    # sparse-checkout moves core.worktree to the work tree's own config
-    # (config.worktree); git submodule reads and unsets it in the
-    # repository's config -- where it goes back
-    _gitdir=$(git -C "$1" rev-parse --absolute-git-dir)
-    _wt=$(git config -f "$_gitdir/config.worktree" core.worktree) || return 0
-    git config -f "$_gitdir/config.worktree" --unset core.worktree
-    git config -f "$_gitdir/config" core.worktree "$_wt"
+  # sparse-checkout moves core.worktree to the work tree's own config
+  # (config.worktree); git submodule reads and unsets it in the
+  # repository's config -- where it goes back
+  _gitdir=$(git -C "$1" rev-parse --absolute-git-dir)
+  _wt=$(git config -f "${_gitdir}/config.worktree" core.worktree) || return 0
+  git config -f "${_gitdir}/config.worktree" --unset core.worktree
+  git config -f "${_gitdir}/config" core.worktree "${_wt}"
 }
 
-if [ $mode = list ]; then
-    [ $# -le 1 ] || die "usage: $PROG [-root DIR] -l [<system>/<subsystem>]"
-    only=${1%/}
-    submodule_paths | while read -r name path; do
-        [ -z "$only" ] || [ "$path" = "$only" ] || continue
-        checked_out "$root/$path" && sparse "$root/$path" || continue
-        git -C "$root/$path" sparse-checkout list | sed "s|^/*|$path/|"
-    done
-    exit 0
+if [[ ${mode} = list ]]; then
+  [[ $# -le 1 ]] || die "usage: ${PROG} [-root DIR] -l [<system>/<subsystem>]"
+  only=${1%/}
+  submodule_paths | while read -r name path; do
+    [[ -z "${only}" ]] || [[ "${path}" = "${only}" ]] || continue
+    checked_out "${root}/${path}" && sparse "${root}/${path}" || continue
+    git -C "${root}/${path}" sparse-checkout list | sed "s|^/*|${path}/|"
+  done
+  exit 0
 fi
-[ $# -eq 1 ] || die "usage: $PROG [-root DIR] [-u] <system>/<subsystem>/<path>"
+[[ $# -eq 1 ]] || die "usage: ${PROG} [-root DIR] [-u] <system>/<subsystem>/<path>"
 
 parse_target "$1"
-work=$root/$sub
+work=${root}/${sub}
 
 # the submodule's name: the one whose path is SUB, in .gitmodules
-name=$(submodule_paths | awk -v p="$sub" '$2 == p { print $1; exit }')
-[ -n "$name" ] || die "$sub is not a submodule of $root"
+name=$(submodule_paths | awk -v p="${sub}" '$2 == p { print $1; exit }')
+[[ -n "${name}" ]] || die "${sub} is not a submodule of ${root}"
 
-if [ $mode = uncheckout ]; then
-    checked_out "$work" || die "$sub is not checked out"
-    sparse "$work" || die "$sub is checked out in full, not by $PROG: not touching it"
-    git -C "$work" sparse-checkout list | grep -qxF "/$file" || die "$target is not checked out"
-    [ -z "$(git -C "$work" status --porcelain -- "$file")" ] ||
-        die "$target has changes: not taken out"
-    others=$(git -C "$work" sparse-checkout list | grep -vxF "/$file")
-    if [ -n "$others" ]; then
-        printf '%s\n' "$others" | git -C "$work" sparse-checkout set --no-cone --stdin ||
-            die "could not take $file out of $sub"
-        keep_worktree_in_config "$work"
-        echo "$PROG: $target taken out"
-    else
-        git -C "$root" submodule deinit -q -- "$sub" || die "could not deinitialise $sub"
-        echo "$PROG: $target taken out -- $sub's last: deinitialised, its clone kept in $(git -C "$root" rev-parse --absolute-git-dir)/modules/$name"
-    fi
-    exit 0
+if [[ ${mode} = uncheckout ]]; then
+  checked_out "${work}" || die "${sub} is not checked out"
+  sparse "${work}" || die "${sub} is checked out in full, not by ${PROG}: not touching it"
+  git -C "${work}" sparse-checkout list | grep -qxF "/${file}" || die "${target} is not checked out"
+  [[ -z "$(git -C "${work}" status --porcelain -- "${file}")" ]] ||
+    die "${target} has changes: not taken out"
+  others=$(git -C "${work}" sparse-checkout list | grep -vxF "/${file}")
+  if [[ -n "${others}" ]]; then
+    printf '%s\n' "${others}" | git -C "${work}" sparse-checkout set --no-cone --stdin ||
+      die "could not take ${file} out of ${sub}"
+    keep_worktree_in_config "${work}"
+    echo "${PROG}: ${target} taken out"
+  else
+    git -C "${root}" submodule deinit -q -- "${sub}" || die "could not deinitialise ${sub}"
+    echo "${PROG}: ${target} taken out -- ${sub}'s last: deinitialised, its clone kept in $(git -C "${root}" rev-parse --absolute-git-dir)/modules/${name}"
+  fi
+  exit 0
 fi
 
-if checked_out "$work"; then
-    # checked out already
-    if [ -e "$work/$file" ]; then
-        echo "$PROG: $target is checked out already"
-        exit 0
-    fi
-    if sparse "$work"; then
-        echo "$PROG: adding $file to the sparse checkout of $sub"
-        git -C "$work" sparse-checkout add "/$file" || die "could not add $file to $sub"
-        keep_worktree_in_config "$work"
-        exit 0
-    fi
-    die "$sub is checked out, without $file: not at a commit that has it -- not moved"
+if checked_out "${work}"; then
+  # checked out already
+  if [[ -e "${work}/${file}" ]]; then
+    echo "${PROG}: ${target} is checked out already"
+    exit 0
+  fi
+  if sparse "${work}"; then
+    echo "${PROG}: adding ${file} to the sparse checkout of ${sub}"
+    git -C "${work}" sparse-checkout add "/${file}" || die "could not add ${file} to ${sub}"
+    keep_worktree_in_config "${work}"
+    exit 0
+  fi
+  die "${sub} is checked out, without ${file}: not at a commit that has it -- not moved"
 fi
 
 # the commit the superproject records for SUB
-commit=$(git -C "$root" ls-tree HEAD -- "$sub" | awk '$2 == "commit" { print $3 }')
-[ -n "$commit" ] || die "the superproject records no commit for $sub"
+commit=$(git -C "${root}" ls-tree HEAD -- "${sub}" | awk '$2 == "commit" { print $3 }')
+[[ -n "${commit}" ]] || die "the superproject records no commit for ${sub}"
 
-git -C "$root" submodule --quiet init -- "$sub" || die "could not register $sub"
-url=$(git -C "$root" config "submodule.$name.url")
-[ -n "$url" ] || die "no URL for submodule $name"
-gitdir=$(git -C "$root" rev-parse --absolute-git-dir)/modules/$name
+git -C "${root}" submodule --quiet init -- "${sub}" || die "could not register ${sub}"
+url=$(git -C "${root}" config "submodule.${name}.url")
+[[ -n "${url}" ]] || die "no URL for submodule ${name}"
+gitdir=$(git -C "${root}" rev-parse --absolute-git-dir)/modules/${name}
 
-mkdir -p "$work" || die "could not create $work"
+mkdir -p "${work}" || die "could not create ${work}"
 # nothing of anyone's in it to lose: the forced checkout below is safe
-[ -z "$(ls -A "$work" 2>/dev/null)" ] || die "$work is not empty: not checking out into it"
-if [ -d "$gitdir" ]; then
-    # cloned once, then deinitialised: its repository is still there
-    echo "$PROG: reusing $gitdir"
-    printf 'gitdir: %s\n' "$gitdir" > "$work/.git"
+[[ -z "$(ls -A "${work}" 2>/dev/null)" ]] || die "${work} is not empty: not checking out into it"
+if [[ -d "${gitdir}" ]]; then
+  # cloned once, then deinitialised: its repository is still there
+  echo "${PROG}: reusing ${gitdir}"
+  printf 'gitdir: %s\n' "${gitdir}" > "${work}/.git"
 else
-    echo "$PROG: cloning $sub from $url (no contents until needed)"
-    rmdir "$work"
-    mkdir -p "${gitdir%/*}" || die "could not create ${gitdir%/*}"
-    git clone --filter=blob:none --no-checkout --separate-git-dir="$gitdir" "$url" "$work" ||
-        die "could not clone $url"
+  echo "${PROG}: cloning ${sub} from ${url} (no contents until needed)"
+  rmdir "${work}"
+  mkdir -p "${gitdir%/*}" || die "could not create ${gitdir%/*}"
+  git clone --filter=blob:none --no-checkout --separate-git-dir="${gitdir}" "${url}" "${work}" ||
+    die "could not clone ${url}"
 fi
 # where the work tree is, from the repository -- relative, as git submodule
 # writes it: .git/modules/<name> back up to the workspace, then down to SUB
 up=../..
-rest_of_name=$name
+rest_of_name=${name}
 while :; do
-    up=$up/..
-    case $rest_of_name in */*) rest_of_name=${rest_of_name#*/} ;; *) break ;; esac
+  up=${up}/..
+  case $rest_of_name in */*) rest_of_name=${rest_of_name#*/} ;; *) break ;; esac
 done
-git -C "$work" config core.worktree "$up/$sub"
+git -C "${work}" config core.worktree "${up}/${sub}"
 # this file alone, then the recorded commit, fetched if it is not there yet
-git -C "$work" sparse-checkout set --no-cone "/$file" || die "could not set up the sparse checkout"
-keep_worktree_in_config "$work"
-git -C "$work" cat-file -e "$commit^{commit}" 2>/dev/null || git -C "$work" fetch --tags origin ||
-    die "could not fetch $sub"
+git -C "${work}" sparse-checkout set --no-cone "/${file}" || die "could not set up the sparse checkout"
+keep_worktree_in_config "${work}"
+git -C "${work}" cat-file -e "${commit}${peel}" 2>/dev/null || git -C "${work}" fetch --tags origin ||
+  die "could not fetch ${sub}"
 # forced: a deinitialised submodule's index still lists the files its
 # emptied directory lacks, which a plain checkout keeps as deletions
-git -C "$work" -c advice.detachedHead=false checkout -q -f "$commit" || die "could not check out $commit in $sub"
-echo "$PROG: $target checked out ($sub at ${commit%"${commit#????????}"}, this file only)"
+git -C "${work}" -c advice.detachedHead=false checkout -q -f "${commit}" || die "could not check out ${commit} in ${sub}"
+echo "${PROG}: ${target} checked out (${sub} at ${commit%"${commit#????????}"}, this file only)"

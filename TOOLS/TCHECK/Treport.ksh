@@ -34,9 +34,9 @@
 # Each file's DIFF lines (one per commit) and NET DIFF line (the whole
 # baseline's change to it) are #emacs: links: Emacs ediff, or with -tool
 # NAME that diff tool through git difftool. They run in the file's
-# submodule of $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, checking the file out
+# submodule of ${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY}, checking the file out
 # first when it is not (Tcheckout); without a workspace, in a clone of its
-# repository from Bitbucket, in $TCHECK_NM_CACHE.
+# repository from Bitbucket, in ${TCHECK_NM_CACHE}.
 #
 # Environment: TCHECK_CM_OT, the CM tree (default /cm/ot);
 # CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY, the NM workspace; TCHECK_NM_CACHE,
@@ -45,14 +45,14 @@
 # Portable across ksh93 and zsh in ksh emulation -- a /bin/ksh that is zsh:
 # no .sh.match (a regex only says whether a line matches; the fields come
 # out with ${x#...}, ${x%%...} and set --), no ${s:i:1}.
-[ -n "$ZSH_VERSION" ] && emulate ksh
+[[ -n "${ZSH_VERSION}" ]] && emulate ksh
 
 set -o noglob     # tickets, commits and paths are words, never patterns
 
 PROG=${0##*/}
 CM_OT=${TCHECK_CM_OT:-/cm/ot}
-TACT_ROOT=$CM_OT/TACT
-CFMUTEST_ROOT=$CM_OT/CFMUTEST
+TACT_ROOT=${CM_OT}/TACT
+CFMUTEST_ROOT=${CM_OT}/CFMUTEST
 
 COLORED=true
 BATCH=0
@@ -62,7 +62,7 @@ DIFF_TOOL=""      # -tool NAME; "" for Emacs ediff links
 BASELINE=""
 
 function usage {
-    print -r -- "usage: $PROG [-no-color] [-tool NAME | -meld] [-batch] [-short] [-user NAME] BASELINE"
+    print -r -- "usage: ${PROG} [-no-color] [-tool NAME | -meld] [-batch] [-short] [-user NAME] BASELINE"
     print -r -- "  The changes in the CFMUTEST baseline built on TACT baseline BASELINE"
     print -r -- "  (e.g. 30.0.0.132), by committer and branch."
     print -r -- "  -no-color    Plain output, without ANSI colours (colour is the default)."
@@ -78,7 +78,7 @@ function usage {
 }
 
 function die {
-    print -r -u2 -- "$PROG: $*"
+    print -r -u2 -- "${PROG}: $*"
     exit 1
 }
 
@@ -96,10 +96,10 @@ function hr {
 }
 
 function trim {                 # TEXT -> REPLY, without surrounding blanks
-    typeset s=$1
-    while [[ $s == [[:space:]]* ]]; do s=${s#?}; done
-    while [[ $s == *[[:space:]] ]]; do s=${s%?}; done
-    REPLY=$s
+    typeset s=${1}
+    while [[ ${s} == [[:space:]]* ]]; do s=${s#?}; done
+    while [[ ${s} == *[[:space:]] ]]; do s=${s%?}; done
+    REPLY=${s}
 }
 
 # ---------------------------------------------------------------------------
@@ -112,9 +112,9 @@ function cfmu_baseline_of {     # TACT_NR -> REPLY, the CFMUTEST baseline or ""
     # the baselines -- the TACT one too.
     typeset answer re='/CFMUTEST/CFMUTEST_CONFIG[!.][^/[:space:]]+$'
     REPLY=""
-    print -r -- "/cm/ot/TACT/TACT_CONFIG.$1" | Psort -b 2>/dev/null |
+    print -r -- "/cm/ot/TACT/TACT_CONFIG.${1}" | Psort -b 2>/dev/null |
     while read -r answer; do
-        if [[ $answer =~ $re ]]; then
+        if [[ ${answer} =~ ${re} ]]; then
             print -r -- "${answer##*/CFMUTEST_CONFIG[.\!]}"
             break
         fi
@@ -122,34 +122,34 @@ function cfmu_baseline_of {     # TACT_NR -> REPLY, the CFMUTEST baseline or ""
 }
 
 function user_branch {          # NAME -> REPLY: NAME if somebody's branch, else ""
-    typeset name=$1 sync='^[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.[0-9]'
+    typeset name=${1} sync='^[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.[0-9]'
     REPLY=""
-    [[ $name =~ $sync ]] && return          # CFMUTEST.CFMUTEST_CONFIG.30.0.0.104
-    [[ $name == *.* ]] || return
+    [[ ${name} =~ ${sync} ]] && return          # CFMUTEST.CFMUTEST_CONFIG.30.0.0.104
+    [[ ${name} == *.* ]] || return
     [[ ${name%%.*} == *adm ]] && return     # testadm.integration_30
-    REPLY=$name
+    REPLY=${name}
 }
 
 function review_of {            # LINE -> REPLY: "dpt, gru on 260922.151702" or ""
     typeset re='review-ok: [[:alnum:]_]+; reviewed-by: [^;]*; review-date: [^;]*;'
     typeset ok by date rest
     REPLY=""
-    [[ $1 =~ $re ]] || return
+    [[ ${1} =~ ${re} ]] || return
     rest=${1#*review-ok: };     ok=${rest%%;*}
     rest=${rest#*reviewed-by: }; by=${rest%%;*}
     rest=${rest#*review-date: }; date=${rest%%;*}
-    trim "$by";   by=$REPLY
-    trim "$date"; date=$REPLY
-    REPLY="$by on $date"
-    [[ $ok == yes ]] || REPLY="$REPLY (review-ok: $ok)"
+    trim "${by}";   by=${REPLY}
+    trim "${date}"; date=${REPLY}
+    REPLY="${by} on ${date}"
+    [[ ${ok} == yes ]] || REPLY="${REPLY} (review-ok: ${ok})"
 }
 
 function tickets_of {           # LINE -> REPLY: its RELATED_CHANGES tickets
     typeset re='RELATED_CHANGES="[^"]*"' q='"'
     REPLY=""
-    [[ $1 =~ $re ]] || return
-    typeset rest=${1#*RELATED_CHANGES=$q}
-    set -- ${rest%%$q*}
+    [[ ${1} =~ ${re} ]] || return
+    typeset rest=${1#*RELATED_CHANGES=${q}}
+    set -- ${rest%%${q}*}
     REPLY=$*
 }
 
@@ -165,20 +165,20 @@ function new_section {
 }
 
 function credit {               # TICKETS NEAREST -> REPLY, the branch credited
-    typeset tickets=$1 covering="" sharing="" t
+    typeset tickets=${1} covering="" sharing="" t
     typeset -i k all any ncov=0 nshare=0
-    REPLY=$2
-    [[ -z $tickets ]] && return
+    REPLY=${2}
+    [[ -z ${tickets} ]] && return
     for ((k = 0; k < S_n; k++)); do
         all=1 any=0
-        for t in $tickets; do
-            if [[ " ${S_tix[k]} " == *" $t "* ]]; then any=1; else all=0; fi
+        for t in ${tickets}; do
+            if [[ " ${S_tix[k]} " == *" ${t} "* ]]; then any=1; else all=0; fi
         done
         ((all)) && { ((ncov++)); covering=${S_names[k]}; }
         ((any)) && { ((nshare++)); sharing=${S_names[k]}; }
     done
-    if ((ncov == 1)); then REPLY=$covering
-    elif ((nshare == 1)); then REPLY=$sharing
+    if ((ncov == 1)); then REPLY=${covering}
+    elif ((nshare == 1)); then REPLY=${sharing}
     fi
 }
 
@@ -194,21 +194,25 @@ typeset -A MERGE_REVIEWS        # merge sha -> its review
 UNATTRIBUTED=""                 # entries with no branch merged above them
 
 function new_entry {            # KIND FILE -> REPLY, the new entry's index
-    E_kind[N]=$1 E_file[N]=$2 E_commits[N]="" E_tickets[N]="" E_reviews[N]=""
-    E_from[N]=$S_from E_to[N]=$S_to
-    REPLY=$N
+    E_kind[N]=${1}
+    E_file[N]=${2}
+    E_commits[N]=""
+    E_tickets[N]=""
+    E_reviews[N]=""
+    E_from[N]=${S_from} E_to[N]=${S_to}
+    REPLY=${N}
     ((N++))
 }
 
 function add_to_entry {         # I SHA TICKETS REVIEW
-    typeset -i i=$1
+    typeset -i i=${1}
     typeset t nl=$'\n'
-    [[ " ${E_commits[i]} " == *" $2 "* ]] || E_commits[i]=${E_commits[i]:+${E_commits[i]} }$2
-    for t in $3; do
-        [[ " ${E_tickets[i]} " == *" $t "* ]] || E_tickets[i]=${E_tickets[i]:+${E_tickets[i]} }$t
+    [[ " ${E_commits[i]} " == *" ${2} "* ]] || E_commits[i]=${E_commits[i]:+${E_commits[i]} }${2}
+    for t in ${3}; do
+        [[ " ${E_tickets[i]} " == *" ${t} "* ]] || E_tickets[i]=${E_tickets[i]:+${E_tickets[i]} }${t}
     done
-    if [[ -n $4 && "$nl${E_reviews[i]}$nl" != *"$nl$4$nl"* ]]; then
-        E_reviews[i]=${E_reviews[i]:+${E_reviews[i]}$nl}$4
+    if [[ -n ${4} && "${nl}${E_reviews[i]}${nl}" != *"${nl}${4}${nl}"* ]]; then
+        E_reviews[i]=${E_reviews[i]:+${E_reviews[i]}${nl}}${4}
     fi
 }
 
@@ -218,64 +222,64 @@ function read_changes {         # REPORT
     typeset re_merge='^Merge from <- [^[:space:]]+ [^[:space:]]+'
     typeset re_change='^(changed|added|removed|deleted)[[:space:]]+[0-9a-f]+:[^[:space:]]+'
     while read -r line; do      # read strips the line's surrounding blanks
-        if [[ $line =~ $re_diff ]]; then
-            set -- $line        # ===== Differences between A and B
+        if [[ ${line} =~ ${re_diff} ]]; then
+            set -- ${line}        # ===== Differences between A and B
             # "IFPS.CUA_IDL.30.0.0.122" -> 30.0.0.122
             S_from=${4#*.*.} S_to=${6#*.*.}
             new_section
-        elif [[ $line == =====* ]]; then
+        elif [[ ${line} == =====* ]]; then
             new_section         # the baselines are the last ones named
-        elif [[ $line =~ $re_merge ]]; then
-            set -- $line        # Merge from <- SHA SOURCE ...
-            sha=$4 source=$5
-            review_of "$line"
-            [[ -n $REPLY ]] && MERGE_REVIEWS[$sha]=$REPLY
-            user_branch "$source"; merged=$REPLY
-            if [[ -n $merged ]]; then
-                S_branch=$merged
-                tickets_of "$line"
-                S_names[S_n]=$merged S_tix[S_n]=$REPLY
+        elif [[ ${line} =~ ${re_merge} ]]; then
+            set -- ${line}        # Merge from <- SHA SOURCE ...
+            sha=${4} source=${5}
+            review_of "${line}"
+            [[ -n ${REPLY} ]] && MERGE_REVIEWS[${sha}]=${REPLY}
+            user_branch "${source}"; merged=${REPLY}
+            if [[ -n ${merged} ]]; then
+                S_branch=${merged}
+                tickets_of "${line}"
+                S_names[S_n]=${merged} S_tix[S_n]=${REPLY}
                 ((S_n++))
             elif [[ ${source%%.*} == *adm ]]; then
                 S_branch=""     # an integration merge: what follows is nobody's yet
             fi
-        elif [[ $line =~ $re_change ]]; then
-            set -- $line        # VERB SHA:FILE ...
-            verb=$1 sha=${2%%:*} file=${2#*:}
-            case $verb in
+        elif [[ ${line} =~ ${re_change} ]]; then
+            set -- ${line}        # VERB SHA:FILE ...
+            verb=${1} sha=${2%%:*} file=${2#*:}
+            case ${verb} in
             changed) kind=CHANGED ;;
             added)   kind=ADDED ;;
             *)       kind=DELETED ;;
             esac
-            tickets_of "$line"; tickets=$REPLY
+            tickets_of "${line}"; tickets=${REPLY}
             # a merge's review, for the change its own commit makes
-            review_of "$line"; review=$REPLY
-            [[ -z $review ]] && review=${MERGE_REVIEWS[$sha]}
-            credit "$tickets" "$S_branch"; owner=$REPLY
-            if [[ -z $owner ]]; then
-                new_entry "$kind" "$file"
-                add_to_entry "$REPLY" "$sha" "$tickets" "$review"
-                UNATTRIBUTED=${UNATTRIBUTED:+$UNATTRIBUTED }$REPLY
+            review_of "${line}"; review=${REPLY}
+            [[ -z ${review} ]] && review=${MERGE_REVIEWS[${sha}]}
+            credit "${tickets}" "${S_branch}"; owner=${REPLY}
+            if [[ -z ${owner} ]]; then
+                new_entry "${kind}" "${file}"
+                add_to_entry "${REPLY}" "${sha}" "${tickets}" "${review}"
+                UNATTRIBUTED=${UNATTRIBUTED:+${UNATTRIBUTED} }${REPLY}
                 continue
             fi
             who=${owner%%.*}
-            if [[ -z ${BRANCHES[$who]+set} ]]; then
-                COMMITTERS+=("$who")
-                BRANCHES[$who]=""
+            if [[ -z ${BRANCHES[${who}]+set} ]]; then
+                COMMITTERS+=("${who}")
+                BRANCHES[${who}]=""
             fi
-            if [[ -z ${ENTRIES[$owner]+set} ]]; then
-                BRANCHES[$who]=${BRANCHES[$who]:+${BRANCHES[$who]} }$owner
-                ENTRIES[$owner]=""
+            if [[ -z ${ENTRIES[${owner}]+set} ]]; then
+                BRANCHES[${who}]=${BRANCHES[${who}]:+${BRANCHES[${who}]} }${owner}
+                ENTRIES[${owner}]=""
             fi
-            key="$owner|$kind|$file"
-            if [[ -z ${SEEN[$key]+set} ]]; then
-                new_entry "$kind" "$file"
-                SEEN[$key]=$REPLY
-                ENTRIES[$owner]=${ENTRIES[$owner]:+${ENTRIES[$owner]} }$REPLY
+            key="${owner}|${kind}|${file}"
+            if [[ -z ${SEEN[${key}]+set} ]]; then
+                new_entry "${kind}" "${file}"
+                SEEN[${key}]=${REPLY}
+                ENTRIES[${owner}]=${ENTRIES[${owner}]:+${ENTRIES[${owner}]} }${REPLY}
             fi
-            add_to_entry "${SEEN[$key]}" "$sha" "$tickets" "$review"
+            add_to_entry "${SEEN[${key}]}" "${sha}" "${tickets}" "${review}"
         fi
-    done < "$1"
+    done < "${1}"
 }
 
 # ---------------------------------------------------------------------------
@@ -283,50 +287,50 @@ function read_changes {         # REPORT
 # ---------------------------------------------------------------------------
 
 function elisp_string {         # TEXT -> REPLY, as an Emacs Lisp string literal
-    typeset s=$1 bs='\' q='"'
-    s=${s//"$bs"/"$bs$bs"}
-    s=${s//"$q"/"$bs$q"}
-    REPLY="\"$s\""
+    typeset s=${1} bs='\' q='"'
+    s=${s//"${bs}"/"${bs}${bs}"}
+    s=${s//"${q}"/"${bs}${q}"}
+    REPLY="\"${s}\""
 }
 
 function nm_cache {             # -> REPLY: where the diff links clone NM's
     # repositories, from Bitbucket, when there is no workspace
-    REPLY=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
+    REPLY=${TCHECK_NM_CACHE:-${HOME}/Downloads/.cache/tcheck/NM}
 }
 
 function split_file {           # FILE -> SUB REST: its submodule, the path in it
     # <system>/<subsystem> is a submodule of the NM workspace -- or, without
     # one, a repository of the cache standing in for it
     nm_cache
-    typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-$REPLY}
-    if [[ $1 == */*/* ]]; then
+    typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-${REPLY}}
+    if [[ ${1} == */*/* ]]; then
         typeset system=${1%%/*} rest=${1#*/}
-        SUB=$root/$system/${rest%%/*} REST=${rest#*/}
+        SUB=${root}/${system}/${rest%%/*} REST=${rest#*/}
     else
-        SUB="" REST=$1
+        SUB="" REST=${1}
     fi
 }
 
 function diff_link {            # FILE REV1 REV2 KIND -> REPLY, the #emacs: link,
     # checking the file out first when it needs to be
     typeset file link
-    split_file "$1"
-    if [[ -n $DIFF_TOOL ]]; then
-        elisp_string "git ${SUB:+-C $SUB }difftool -y -t $DIFF_TOOL $2 $3 -- $REST"
-        REPLY="#emacs:(call-process-shell-command $REPLY nil 0)"
+    split_file "${1}"
+    if [[ -n ${DIFF_TOOL} ]]; then
+        elisp_string "git ${SUB:+-C ${SUB} }difftool -y -t ${DIFF_TOOL} ${2} ${3} -- ${REST}"
+        REPLY="#emacs:(call-process-shell-command ${REPLY} nil 0)"
     else
-        typeset path=${SUB:+$SUB/}$REST
-        elisp_string "$path"; file=$REPLY
-        [[ $path == *'$'* ]] && file="(substitute-in-file-name $file)"
-        elisp_string "$2"; typeset rev1=$REPLY
-        elisp_string "$3"
-        REPLY="#emacs:(vc-version-ediff (list $file) $rev1 $REPLY)"
+        typeset path=${SUB:+${SUB}/}${REST}
+        elisp_string "${path}"; file=${REPLY}
+        [[ ${path} == *'$'* ]] && file="(substitute-in-file-name ${file})"
+        elisp_string "${2}"; typeset rev1=${REPLY}
+        elisp_string "${3}"
+        REPLY="#emacs:(vc-version-ediff (list ${file}) ${rev1} ${REPLY})"
     fi
     link=${REPLY#'#emacs:'}
-    checkout_command "$1" "$4" "$2" "$3"
-    [[ -z $REPLY ]] && { REPLY="#emacs:$link"; return 0; }
-    elisp_string "$REPLY"
-    REPLY="#emacs:(when (eql 0 (shell-command $REPLY)) $link)"
+    checkout_command "${1}" "${4}" "${2}" "${3}"
+    [[ -z ${REPLY} ]] && { REPLY="#emacs:${link}"; return 0; }
+    elisp_string "${REPLY}"
+    REPLY="#emacs:(when (eql 0 (shell-command ${REPLY})) ${link})"
 }
 
 function checkout_command {     # FILE KIND REV1 REV2 -> REPLY: the Tcheckout
@@ -335,20 +339,20 @@ function checkout_command {     # FILE KIND REV1 REV2 -> REPLY: the Tcheckout
     # sparsely without it -- "" otherwise; without a workspace, always, in
     # the cache -- which fetches REV1 and REV2 when it lacks them
     typeset root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
-    split_file "$1"
+    split_file "${1}"
     REPLY=""
-    [[ -n $SUB ]] || return 0
-    if [[ -z $root ]]; then
+    [[ -n ${SUB} ]] || return 0
+    if [[ -z ${root} ]]; then
         nm_cache
-        REPLY="Tcheckout -cache $REPLY -rev $4 -rev $3 $1"
+        REPLY="Tcheckout -cache ${REPLY} -rev ${4} -rev ${3} ${1}"
         return 0
     fi
-    if [[ -e $SUB/.git ]]; then
-        [[ $2 == DELETED || -e $SUB/$REST ]] && return 0
+    if [[ -e ${SUB}/.git ]]; then
+        [[ ${2} == DELETED || -e ${SUB}/${REST} ]] && return 0
         # missing from a checkout: only a sparse one can take it in
-        [[ $(git -C "$SUB" config --bool core.sparseCheckout 2>/dev/null) == true ]] || return 0
+        [[ $(git -C "${SUB}" config --bool core.sparseCheckout 2>/dev/null) == true ]] || return 0
     fi
-    REPLY="Tcheckout -root $root $1"
+    REPLY="Tcheckout -root ${root} ${1}"
 }
 
 # ---------------------------------------------------------------------------
@@ -356,110 +360,110 @@ function checkout_command {     # FILE KIND REV1 REV2 -> REPLY: the Tcheckout
 # ---------------------------------------------------------------------------
 
 function display_file {         # I: FILE <KIND>: <dir>/<base>.<ext>, commits, ...
-    typeset -i i=$1
+    typeset -i i=${1}
     typeset file=${E_file[i]} parent name c r
-    if [[ $file == */* ]]; then parent=${file%/*} name=${file##*/}
-    else parent=. name=$file
+    if [[ ${file} == */* ]]; then parent=${file%/*} name=${file##*/}
+    else parent=. name=${file}
     fi
-    printf 'FILE %s: %s/' "${E_kind[i]}" "$parent"
-    if [[ $name == *.* && -n ${name%.*} ]]; then
+    printf 'FILE %s: %s/' "${E_kind[i]}" "${parent}"
+    if [[ ${name} == *.* && -n ${name%.*} ]]; then
         cechon Ky "${name%.*}"
         printf '.'
         cecho Wb "${name##*.}"
     else
-        cecho Ky "$name"
+        cecho Ky "${name}"
     fi
     print -r -- "COMMITS     : ${E_commits[i]}"
     [[ -n ${E_tickets[i]} ]] && print -r -- "TICKETS     : ${E_tickets[i]}"
     if [[ -n ${E_reviews[i]} ]]; then
         print -r -- "${E_reviews[i]}" | while read -r r; do
-            print -r -- "REVIEWED BY : $r"
+            print -r -- "REVIEWED BY : ${r}"
         done
     fi
     for c in ${E_commits[i]}; do
-        diff_link "$file" "$c^" "$c" "${E_kind[i]}"
-        print -r -- "DIFF        : $REPLY"
+        diff_link "${file}" "${c}^" "${c}" "${E_kind[i]}"
+        print -r -- "DIFF        : ${REPLY}"
     done
     set -- ${E_commits[i]}
     if (($# > 1)) && [[ -n ${E_from[i]} && -n ${E_to[i]} ]]; then
-        diff_link "$file" "${E_from[i]}" "${E_to[i]}" "${E_kind[i]}"
-        print -r -- "NET DIFF    : $REPLY"
+        diff_link "${file}" "${E_from[i]}" "${E_to[i]}" "${E_kind[i]}"
+        print -r -- "NET DIFF    : ${REPLY}"
     fi
 }
 
 function newest {               # DIR PATTERN -> REPLY: newest match, or ""
     set +o noglob
     # stderr closed in the subshell: zsh reports an unmatched pattern itself
-    REPLY=$(exec 2>/dev/null; ls -dt "$1"/$2 | head -n 1)
+    REPLY=$(exec 2>/dev/null; ls -dt "${1}"/${2} | head -n 1)
     set -o noglob
 }
 
 function echo_ediff {           # A B: the Emacs ediff of two files
-    print -r -- "(ediff-files \"$1\" \"$2\")"
+    print -r -- "(ediff-files \"${1}\" \"${2}\")"
 }
 
 function echo_emacs {           # FILE: an #emacs: link opening it
     cecho sBw "Look for details in:"
-    print -r -- "#emacs:(progn(find-file \"$1\"))"
+    print -r -- "#emacs:(progn(find-file \"${1}\"))"
 }
 
 function view_build_of {        # BRANCH -> REPLY: its view build, or ""
     typeset who=${1%%.*} name=${1#*.}
-    typeset -u WHO=$who NAME=$name
-    newest "$TACT_ROOT/TACT_CONFIG.$WHO.$NAME" "build_*"
+    typeset -u WHO=${who} NAME=${name}
+    newest "${TACT_ROOT}/TACT_CONFIG.${WHO}.${NAME}" "build_*"
 }
 
 function display_branch_info {  # BRANCH REFERENCE
     typeset who=${1%%.*} name=${1#*.} view ref
-    typeset -u WHO=$who NAME=$name
+    typeset -u WHO=${who} NAME=${name}
     printf 'FROM BRANCH : '
-    cechon Wb "$who"
+    cechon Wb "${who}"
     printf '.'
-    cecho Ky "$name"
+    cecho Ky "${name}"
     # the view build: the build of TACT_CONFIG.<USER>.<BRANCH>
-    view_build_of "$1"; view=$REPLY
-    if [[ -z $view ]]; then
+    view_build_of "${1}"; view=${REPLY}
+    if [[ -z ${view} ]]; then
         print -r -- "NO VIEW BUILD FOUND FOR THIS BRANCH"
     else
-        print -r -- "VIEW BUILD DIR: $view"
+        print -r -- "VIEW BUILD DIR: ${view}"
     fi
     # its test reports, next to the reference baseline's
-    newest "$TACT_ROOT/test_reports" "TACT.TACT_CONFIG.$WHO.$NAME-G!31.*"; view=$REPLY
-    newest "$TACT_ROOT/test_reports" "$2-G!31.*"; ref=$REPLY
+    newest "${TACT_ROOT}/test_reports" "TACT.TACT_CONFIG.${WHO}.${NAME}-G!31.*"; view=${REPLY}
+    newest "${TACT_ROOT}/test_reports" "${2}-G!31.*"; ref=${REPLY}
     # the reference baseline's build: the one its test reports are named
     # after -- ...30.0.0.132-G!31.IP.L8-<host>-<date> for build_G!31.IP.L8 --
     # or without reports its newest build_G!31.*
     typeset tag ref_build=""
-    if [[ -n $ref ]]; then
-        tag=${ref##*/}; tag=${tag#"$2"-}; tag=${tag%%-*}
-        ref_build=$TACT_ROOT/${2#TACT.}/build_$tag
+    if [[ -n ${ref} ]]; then
+        tag=${ref##*/}; tag=${tag#"${2}"-}; tag=${tag%%-*}
+        ref_build=${TACT_ROOT}/${2#TACT.}/build_${tag}
     else
-        newest "$TACT_ROOT/${2#TACT.}" "build_G!31.*"; ref_build=$REPLY
+        newest "${TACT_ROOT}/${2#TACT.}" "build_G!31.*"; ref_build=${REPLY}
     fi
-    if [[ -n $ref_build && -d $ref_build ]]; then
-        print -r -- "REFERENCE BUILD DIR: $ref_build"
+    if [[ -n ${ref_build} && -d ${ref_build} ]]; then
+        print -r -- "REFERENCE BUILD DIR: ${ref_build}"
     else
         print -r -- "NO REFERENCE BUILD FOUND"
     fi
-    if [[ -z $view ]]; then
+    if [[ -z ${view} ]]; then
         print -r -- "NO TEST REPORTS FOUND FOR THIS BRANCH"
     else
-        print -r -- "VIEW TEST REPORTS DIR: $view"
-        print -r -- "REFERENCE BASELINE DIR: $ref"
-        echo_ediff "${ref:+$ref/}general.results.failed-in" "$view/general.results.failed-in"
+        print -r -- "VIEW TEST REPORTS DIR: ${view}"
+        print -r -- "REFERENCE BASELINE DIR: ${ref}"
+        echo_ediff "${ref:+${ref}/}general.results.failed-in" "${view}/general.results.failed-in"
     fi
 }
 
 function changes_report {       # BASELINE -> REPLY: its changes report, or ""
     typeset cfmu                # after a warning saying why there is none
-    cfmu_baseline_of "$1"; cfmu=$REPLY
-    if [[ -z $cfmu ]]; then
-        cecho sWb "WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.$1"
+    cfmu_baseline_of "${1}"; cfmu=${REPLY}
+    if [[ -z ${cfmu} ]]; then
+        cecho sWb "WARNING: Psort -b names no CFMUTEST baseline for TACT_CONFIG.${1}"
         REPLY=""; return 1
     fi
-    REPLY=$CFMUTEST_ROOT/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.$cfmu.changes_report
-    if [[ ! -r $REPLY ]]; then
-        cecho sWb "WARNING: no changes report for CFMUTEST_CONFIG $cfmu: $REPLY"
+    REPLY=${CFMUTEST_ROOT}/baseline_reports/CFMUTEST.CFMUTEST_CONFIG.${cfmu}.changes_report
+    if [[ ! -r ${REPLY} ]]; then
+        cecho sWb "WARNING: no changes report for CFMUTEST_CONFIG ${cfmu}: ${REPLY}"
         REPLY=""; return 1
     fi
 }
@@ -467,7 +471,7 @@ function changes_report {       # BASELINE -> REPLY: its changes report, or ""
 function extension_of {         # FILE -> REPLY: after its name's last dot, or ""
     typeset name=${1##*/}
     REPLY=""
-    [[ $name == *.* && -n ${name%.*} ]] && REPLY=${name##*.}
+    [[ ${name} == *.* && -n ${name%.*} ]] && REPLY=${name##*.}
 }
 
 function files_by_type {        # ENTRY... -> COUNT, its files; REPLY "2 adb, 2 ads"
@@ -477,24 +481,24 @@ function files_by_type {        # ENTRY... -> COUNT, its files; REPLY "2 adb, 2 
     COUNT=0
     for i in "$@"; do
         f=${E_file[i]}
-        [[ $files == *" $f "* ]] && continue
-        files="$files$f " COUNT=$((COUNT + 1))
-        extension_of "$f"
-        exts=$exts$REPLY$nl
+        [[ ${files} == *" ${f} "* ]] && continue
+        files="${files}${f} " COUNT=$((COUNT + 1))
+        extension_of "${f}"
+        exts=${exts}${REPLY}${nl}
     done
-    printf '%s' "$exts" |
+    printf '%s' "${exts}" |
     awk '{ n[$0]++ } END { for (e in n) printf "%d\t%s\n", n[e], e }' |
-    LC_ALL=C sort -t "$tab" -k1,1nr -k2,2 |
-    while IFS=$tab read -r n e; do
-        by_type=${by_type:+$by_type, }"$n ${e:-(no extension)}"
+    LC_ALL=C sort -t "${tab}" -k1,1nr -k2,2 |
+    while IFS=${tab} read -r n e; do
+        by_type=${by_type:+${by_type}, }"${n} ${e:-(no extension)}"
     done
-    REPLY=$by_type
+    REPLY=${by_type}
 }
 
 function count_line {           # COUNT WIDTH TYPES: "  4 files: 2 adb, 2 ads"
     typeset noun=files
-    (($1 == 1)) && noun="file "
-    printf '  %*s %s: %s\n' "$2" "$1" "$noun" "$3"
+    ((${1} == 1)) && noun="file "
+    printf '  %*s %s: %s\n' "${2}" "${1}" "${noun}" "${3}"
 }
 
 # ---------------------------------------------------------------------------
@@ -531,7 +535,7 @@ function tlog_failures {        # TLOG: "REF\t<its reference>", then "T\t<test>"
         printf "REF\t%s\n", ref
         for (i = 1; i <= n_new; i++) printf "T\t%s\n", new_[i]
         for (i = 1; i <= n_crashed; i++) printf "T\t%s\n", crashed[i]
-    }' "$1"
+    }' "${1}"
 }
 
 function list_new_failures {    # BASELINE
@@ -540,48 +544,48 @@ function list_new_failures {    # BASELINE
     typeset -A where
     typeset -i width=0
     set +o noglob
-    for build in "$TACT_ROOT/TACT_CONFIG.$1"/build_G!*; do
-        [[ -d $build ]] || continue
+    for build in "${TACT_ROOT}/TACT_CONFIG.${1}"/build_G!*; do
+        [[ -d ${build} ]] || continue
         name=${build##*/}
         # as Tcheck_tact: not these builds, and IP, OP or SIP ones only
-        [[ $name == *92* || $name == *94* || $name == *95* || $name == *98* || $name == *30* ]] && continue
-        case $name in
+        [[ ${name} == *92* || ${name} == *94* || ${name} == *95* || ${name} == *98* || ${name} == *30* ]] && continue
+        case ${name} in
         *.IP.*)  type=IP ;;
         *.OP.*)  type=OP ;;
         *.SIP.*) type=SIP ;;
         *)       continue ;;
         esac
-        for sub in $SUBTYPES; do
-            tlog=$build/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-$sub.log
-            [[ -f $tlog ]] || continue
+        for sub in ${SUBTYPES}; do
+            tlog=${build}/saved_logs/tacot_corico.LATEST/TACT_REGRESS_LOGS/LATEST/Tlog-${sub}.log
+            [[ -f ${tlog} ]] || continue
             # the loop, last in the pipeline, runs in this shell: ksh93 and zsh
-            tlog_failures "$tlog" | while IFS=$tab read -r kind value; do
-                if [[ $kind == REF ]]; then
-                    [[ -n $value && ", $against, " != *", $value, "* ]] && against=${against:+$against, }$value
+            tlog_failures "${tlog}" | while IFS=${tab} read -r kind value; do
+                if [[ ${kind} == REF ]]; then
+                    [[ -n ${value} && ", ${against}, " != *", ${value}, "* ]] && against=${against:+${against}, }${value}
                     continue
                 fi
-                if [[ -z ${where[$value]+set} ]]; then
-                    tests="$tests $value"
-                    where[$value]="$type $sub"
+                if [[ -z ${where[${value}]+set} ]]; then
+                    tests="${tests} ${value}"
+                    where[${value}]="${type} ${sub}"
                     ((${#value} > width)) && width=${#value}
-                elif [[ ", ${where[$value]}, " != *", $type $sub, "* ]]; then
-                    where[$value]="${where[$value]}, $type $sub"
+                elif [[ ", ${where[${value}]}, " != *", ${type} ${sub}, "* ]]; then
+                    where[${value}]="${where[${value}]}, ${type} ${sub}"
                 fi
             done
         done
     done
     set -o noglob
-    [[ -n $against ]] && vs=" vs $against"
-    cecho sWr "NEWLY FAILED TESTS$vs"
-    if [[ -z $tests ]]; then
-        cecho sKg "  No new failures${against:+ compared to $against}"
+    [[ -n ${against} ]] && vs=" vs ${against}"
+    cecho sWr "NEWLY FAILED TESTS${vs}"
+    if [[ -z ${tests} ]]; then
+        cecho sKg "  No new failures${against:+ compared to ${against}}"
         print
         return
     fi
-    for test in $tests; do
+    for test in ${tests}; do
         printf '  '
-        cechon sWr "$test"
-        printf '%*s  %s\n' $((width - ${#test})) "" "${where[$test]}"
+        cechon sWr "${test}"
+        printf '%*s  %s\n' $((width - ${#test})) "" "${where[${test}]}"
     done
     print
 }
@@ -596,74 +600,74 @@ function list_changes {         # BASELINE: by committer, the most first, their 
     typeset -a counts types
     hr
     cecho sWr "CHANGES BY COMMITTER"
-    if ! changes_report "$1"; then
+    if ! changes_report "${1}"; then
         print                   # after the warning
-        list_new_failures "$1"
+        list_new_failures "${1}"
         return 1
     fi
-    REPORT=$REPLY
-    read_changes "$REPORT"
-    if [[ -n $USER_ONLY ]]; then
+    REPORT=${REPLY}
+    read_changes "${REPORT}"
+    if [[ -n ${USER_ONLY} ]]; then
         # only theirs: the changes credited to no branch are nobody's
         typeset all
         all=$(IFS=,; print -r -- "${COMMITTERS[*]}")
         UNATTRIBUTED=""
-        if [[ -z ${BRANCHES[$USER_ONLY]+set} ]]; then
+        if [[ -z ${BRANCHES[${USER_ONLY}]+set} ]]; then
             COMMITTERS=()
-            cecho sWb "No changes by $USER_ONLY; by: ${all//,/, }"
+            cecho sWb "No changes by ${USER_ONLY}; by: ${all//,/, }"
             print
-            list_new_failures "$1"
+            list_new_failures "${1}"
             return
         fi
-        COMMITTERS=("$USER_ONLY")
+        COMMITTERS=("${USER_ONLY}")
     fi
     for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
         who=${COMMITTERS[k]}
         entries=""
-        for branch in ${BRANCHES[$who]}; do
-            entries="$entries ${ENTRIES[$branch]}"
+        for branch in ${BRANCHES[${who}]}; do
+            entries="${entries} ${ENTRIES[${branch}]}"
         done
-        files_by_type $entries
-        counts[k]=$COUNT types[k]=$REPLY
+        files_by_type ${entries}
+        counts[k]=${COUNT} types[k]=${REPLY}
         ((${#who} > width)) && width=${#who}
         ((${#COUNT} > count_width)) && count_width=${#COUNT}
     done
     # the most files first; as they first appear in the report when as many
     for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
-        print -r -- "${counts[k]} $k"
+        print -r -- "${counts[k]} ${k}"
     done | sort -k1,1nr -k2,2n | while read -r line; do
         k=${line#* }
         who=${COMMITTERS[k]}
-        cechon Wb "$who"
+        cechon Wb "${who}"
         printf '%*s' $((width - ${#who})) ""
-        count_line "${counts[k]}" $count_width "${types[k]}"
+        count_line "${counts[k]}" ${count_width} "${types[k]}"
     done
     print
     # the branches not built yet, in the order of the table
     typeset unbuilt=""
     for ((k = 0; k < ${#COMMITTERS[@]}; k++)); do
-        print -r -- "${counts[k]} $k"
+        print -r -- "${counts[k]} ${k}"
     done | sort -k1,1nr -k2,2n | while read -r line; do
         k=${line#* }
         for branch in ${BRANCHES[${COMMITTERS[k]}]}; do
-            view_build_of "$branch"
-            [[ -z $REPLY ]] && unbuilt="$unbuilt $branch"
+            view_build_of "${branch}"
+            [[ -z ${REPLY} ]] && unbuilt="${unbuilt} ${branch}"
         done
     done
-    if [[ -n $unbuilt ]]; then
+    if [[ -n ${unbuilt} ]]; then
         cecho sWb "NO VIEW BUILD FOUND FOR THESE BRANCHES"
-        for branch in $unbuilt; do
-            print -r -- "  $branch"
+        for branch in ${unbuilt}; do
+            print -r -- "  ${branch}"
         done
         print
     fi
-    list_new_failures "$1"
+    list_new_failures "${1}"
 }
 
 function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
-    typeset reference who branch i report=$REPORT
+    typeset reference who branch i report=${REPORT}
     # no change by the -user: list_changes has said so
-    [[ -n $USER_ONLY && ${#COMMITTERS[@]} -eq 0 ]] && return
+    [[ -n ${USER_ONLY} && ${#COMMITTERS[@]} -eq 0 ]] && return
     hr
     cecho sWr "LIST OF CHANGES"
     # a branch's build is compared with the baseline before this one
@@ -679,28 +683,28 @@ function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
     print
     for who in "${COMMITTERS[@]}"; do
         printf '%s' "===================================== Files committed by user "
-        cechon Wb "$who"
+        cechon Wb "${who}"
         print -r -- " ====================================="
-        for branch in ${BRANCHES[$who]}; do
+        for branch in ${BRANCHES[${who}]}; do
             print -r -- "---------------------------------"
-            display_branch_info "$branch" "$reference"
-            for i in ${ENTRIES[$branch]}; do
+            display_branch_info "${branch}" "${reference}"
+            for i in ${ENTRIES[${branch}]}; do
                 print -r -- "---------------------------------"
-                display_file "$i"
+                display_file "${i}"
             done
         done
         print
         print
     done
-    if [[ -n $UNATTRIBUTED ]]; then
+    if [[ -n ${UNATTRIBUTED} ]]; then
         print -r -- "===================================== Files with no branch merged above them ====================================="
-        for i in $UNATTRIBUTED; do
-            display_file "$i"
+        for i in ${UNATTRIBUTED}; do
+            display_file "${i}"
         done
         print
     fi
     print
-    echo_emacs "$report"
+    echo_emacs "${report}"
     print
 }
 
@@ -709,7 +713,7 @@ function list_detailed_changes { # BASELINE: each file, its commits, ..., diffs
 # ---------------------------------------------------------------------------
 
 while (($# > 0)); do
-    case $1 in
+    case ${1} in
     -no-color) COLORED=false ;;
     -c)        COLORED=true ;;
     -batch)    BATCH=1 ;;
@@ -719,34 +723,34 @@ while (($# > 0)); do
         (($# > 1)) || die "-tool requires the name of a diff tool, e.g. -tool meld"
         shift
         # it goes into a shell command: a tool's name, not a command line
-        [[ $1 == +([A-Za-z0-9_.+-]) ]] || die "-tool: not a diff tool's name: $1"
-        DIFF_TOOL=$1 ;;
+        [[ ${1} == +([A-Za-z0-9_.+-]) ]] || die "-tool: not a diff tool's name: ${1}"
+        DIFF_TOOL=${1} ;;
     -user)
         (($# > 1)) || die "-user requires a committer's name, e.g. -user alice"
         shift
-        USER_ONLY=$1 ;;
+        USER_ONLY=${1} ;;
     -h|-help|--help) usage ;;
-    -*)        die "unknown option: $1" ;;
-    *)         [[ -z $BASELINE ]] || die "one baseline only: $BASELINE and $1"
-               BASELINE=$1 ;;
+    -*)        die "unknown option: ${1}" ;;
+    *)         [[ -z ${BASELINE} ]] || die "one baseline only: ${BASELINE} and ${1}"
+               BASELINE=${1} ;;
     esac
     shift
 done
-[[ -n $BASELINE ]] || usage
-[[ $BASELINE == +([0-9]).+([0-9.]) ]] || die "not a baseline number: $BASELINE"
+[[ -n ${BASELINE} ]] || usage
+[[ ${BASELINE} == +([0-9]).+([0-9.]) ]] || die "not a baseline number: ${BASELINE}"
 ((BATCH)) && DIFF_TOOL=""
 
 # some utilities -- the original Tcheck_tact.ksh's, \033 for its \e: echo -e
 # and printf '%b' understand \e in zsh, not in ksh93, and \033 in both
 if "${COLORED}"; then
-  function c { printf "$1" | sed 's/\(.\)/\1;/g;s/\([SDIUFNHT]\)/2\1/g;s/\([KRGYBMCW]\)/3\1/g;s/\([krgybmcw]\)/4\1/g;y/SDIUFNHTsdiufnhtKRGYBMCWkrgybmcw/12345789123457890123456701234567/;s/^\(.*\);$/\\033[\1m/g'; }
-  function cecho { echo -e "$(c $1)$2\033[0m"; }
-  function cechon { echo -n -e "$(c $1)$2\033[0m"; } # same as cecho but no newline
+  function c { printf "${1}" | sed 's/\(.\)/\1;/g;s/\([SDIUFNHT]\)/2\1/g;s/\([KRGYBMCW]\)/3\1/g;s/\([krgybmcw]\)/4\1/g;y/SDIUFNHTsdiufnhtKRGYBMCWkrgybmcw/12345789123457890123456701234567/;s/^\(.*\);$/\\033[\1m/g'; }
+  function cecho { echo -e "$(c ${1})${2}\033[0m"; }
+  function cechon { echo -n -e "$(c ${1})${2}\033[0m"; } # same as cecho but no newline
 else
-  function cecho  { echo    "$2"; }
-  function cechon { echo -n "$2"; }
+  function cecho  { echo    "${2}"; }
+  function cechon { echo -n "${2}"; }
 fi
 
 # the files per committer by type, then -- unless -short -- each file's changes
-list_changes "$BASELINE" || exit 1
-((SHORT)) || list_detailed_changes "$BASELINE"
+list_changes "${BASELINE}" || exit 1
+((SHORT)) || list_detailed_changes "${BASELINE}"
