@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""Test: map_utils.ady, the cases of test_hek_map_utils.py (the pytest file beside it)
+"""Test: map_base.ady, map_flat.ady and map_geo.ady, the cases of test_hek_map_utils.py (the pytest file beside it)
 -- the same checks, in the same order, one section for each of its test classes.
 
 What does not carry over, and why:
@@ -7,17 +7,16 @@ What does not carry over, and why:
     p.x and p.latitude are the way in.
   * isinstance(...) and `is not None` checks: the types say so; a Position plus a
     Vector cannot be anything else than a Position.
-  * the capsys checks that + and - print nothing: nothing in map_utils.ady prints
+  * the capsys checks that + and - print nothing: nothing in the three parts prints
     except the demo.
   * test_construct_from_name: it looks an aerodrome up in my_aerodromes, which is
     not translated.
   * f"{p:h}" and f"{p:d}": `p.human()` and `p.decimal()`.
 """
 from math nimport degToRad
-from map_utils import Axis_T, LATITUDE, LONGITUDE
-from map_utils import Meters_T, Kilometers_T, Degrees_T, Latitude_T, Longitude_T, SquareMeters_T
-from map_utils import GeoFailure_T, LatLong_T, GeoVector, GeoPoint, Vector, Position
-from map_utils import dms2dec, dd2dms, human2dec_degree, human_latlong2dec, dec2human_latlong, cos
+from map_base import Axis_T, Degrees_T, GeoFailure_T, Kilometers_T, LATITUDE, LONGITUDE, LatLong_T, Latitude_T, Longitude_T, Meters_T, SquareMeters_T, cos, dd2dms, dec2human_latlong, dms2dec, human2dec_degree, human_latlong2dec
+from map_flat import Position, Vector
+from map_geo import GeoPoint, GeoVector
 
 def near(actual: float, expected: float, tol: float) -> bool:
     abs(actual - expected) <= tol

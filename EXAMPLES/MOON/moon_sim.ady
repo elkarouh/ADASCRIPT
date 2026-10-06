@@ -22,7 +22,7 @@ Fidelity notes
   * Not modelled: Moon rotation, mascons, Earth tides in lunar orbit,
     3-D plane changes, ascent/return.
 
-The geometry is MAP_UTILS/map_utils.ady's flat plane: a `Position` is a point,
+The geometry is MAP_UTILS/map_flat.ady's flat plane: a `Position` is a point,
 a `Vector` a displacement, a `Velocity` has its parts in m/s and an `Acceleration` in
 m/s^2, and `Meters_T`, `Degrees_T`, `Duration_T`, `Speed_T` and `Accel_T` are its units.
 A time turns one into the next: `velocity * t` is a `Vector`, `vector / t` a `Velocity`,
@@ -30,17 +30,17 @@ A time turns one into the next: `velocity * t` is a `Vector`, `vector / t` a `Ve
 
 Usage:  moon_sim [--seed N] [--show] [--out moon_mission.png]
 
-Nim only (map_utils is):  ady2nim c -r moon_sim.ady
+Nim only (map_flat is):  ady2nim c -r moon_sim.ady
 """
 
 from math nimport sqrt, exp, ln, PI
-from MAP_UTILS/map_utils import Meters_T, SquareMeters_T, Degrees_T, Duration_T, Speed_T, Accel_T
-from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, Kilometers_T, Radians_T, modulo, sin, cos
+from MAP_UTILS/map_base import Accel_T, Degrees_T, Duration_T, Kilometers_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, cos, modulo, sin
+from MAP_UTILS/map_flat import Acceleration, Position, Vector, Velocity
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
 # ============================================================
-# UNITS -- map_utils has lengths, angles, time, speed and acceleration; these are the rest
+# UNITS -- map_base has lengths, angles, time, speed and acceleration; these are the rest
 # ============================================================
 
 type Mass_T        is distinct float                # kg

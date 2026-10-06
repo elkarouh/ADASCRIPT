@@ -222,7 +222,7 @@ def callsign(text: str) -> Callsign_T | !CallsignFailure_T:
         return Callsign_T(text)
     return CallsignFailure_T(f"'{text}' is not a callsign")
 ```
-It is a convention the compiler does not check. For a rule that has to hold wherever a value is made, make it a class that asserts in `__init__` (`GeoPoint` in `EXAMPLES/MAP_UTILS/map_utils.ady` does); a class cannot inherit from `str` on Nim, so a validated string cannot also be accepted where a `str` is -- pass it on with `str(c)`. See `callsign` and `test_geo_server.ady` in `EXAMPLES/GEO_SERVER/`.
+It is a convention the compiler does not check. For a rule that has to hold wherever a value is made, make it a class that asserts in `__init__` (`GeoPoint` in `EXAMPLES/MAP_UTILS/map_geo.ady` does); a class cannot inherit from `str` on Nim, so a validated string cannot also be accepted where a `str` is -- pass it on with `str(c)`. See `callsign` and `test_geo_server.ady` in `EXAMPLES/GEO_SERVER/`.
 
 **No bare `float` for a quantity that has a meaning.** A distance, a time, an angle each get a type (`EXAMPLES/GEO_SERVER/geo_server.ady`). What a quantity cannot be goes in a subrange, which an alias does not mix up but does bound; what it cannot be mixed with goes in `distinct`:
 ```adascript

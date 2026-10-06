@@ -66,7 +66,9 @@ STANDALONE := \
     dijkstra.ady \
     GEO_SERVER/geo_server.ady \
     GEO_SERVER/test_geo_server.ady \
-    MAP_UTILS/map_utils.ady \
+    MAP_UTILS/map_base.ady \
+    MAP_UTILS/map_flat.ady \
+    MAP_UTILS/map_geo.ady \
     MAP_UTILS/test_map_utils.ady \
     MAP_UTILS/test_hek_map_utils.ady \
     MAP_UTILS/route_check.ady \
@@ -531,7 +533,7 @@ test-kilo:
 	$(kilo_tests)
 
 # -----------------------------------------------------------------------
-# The moon tests: MOON/moon_sim.ady (Nim only: it builds on MAP_UTILS/map_utils.ady). The
+# The moon tests: MOON/moon_sim.ady (Nim only: it builds on MAP_UTILS/map_base.ady and map_flat.ady). The
 # deterministic half of the mission is checked against the Python original's numbers, to the
 # digit, and the lander must have landed. It plots with matplotlib (pyimport), so it SKIPs
 # without it. Shared by `test` and by `test-moon`.

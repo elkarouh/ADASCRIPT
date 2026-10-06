@@ -1,0 +1,258 @@
+#!/usr/bin/env ady2nim
+"""
+map_flat -- flat-plane geometry of map_utils: Vector, Position, Velocity, Acceleration
+=====================================================================================
+The second of three parts (map_base, map_flat, map_geo) of the translation of
+map_utils.py; the notes on what changed in the translation are in map_geo.ady.
+Distances are in metres, angles in degrees; a time turns a Vector into a Velocity
+and a Velocity into an Acceleration, by `/`, and back by `*`.
+"""
+
+from map_base import Accel_T, Degrees_T, Duration_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
+nimport math
+from math nimport floor, sqrt, round, hypot
+
+# ---------------------------------------------------------------------------
+# Flat-plane geometry -- Vector
+# ---------------------------------------------------------------------------
+
+class Vector:
+    """A 2-D vector.
+
+    Made, as in the original, from a length in metres and an angle in degrees
+    counter-clockwise from the positive x axis (the usual convention); the parts
+    are kept as x and y.  Vector(x, y), from its parts, is the other way to make one.
+    """
+    var x: Meters_T
+    var y: Meters_T
+
+    def __init__(self, length: Meters_T, angle: Degrees_T) -> None:
+        let radians: float = float(Radians_T(angle))
+        self.x = Meters_T(float(length) * cos(radians))
+        self.y = Meters_T(float(length) * sin(radians))
+
+    # -- components ----------------------------------------------------------
+
+    def __init__(self, x: Meters_T, y: Meters_T) -> None:
+        self.x = x
+        self.y = y
+
+    def length(self) -> Meters_T:
+        """Magnitude of the vector."""
+        Meters_T(hypot(float(self.x), float(self.y)))
+
+    def angle(self) -> Degrees_T:
+        """Direction of the vector."""
+        Degrees_T(arctan2(float(self.y), float(self.x)))
+
+    # -- transformations -----------------------------------------------------
+
+    def rotated_by(self, relative_angle: Degrees_T) -> Vector:
+        """A new vector rotated counter-clockwise by the given angle."""
+        Vector(self.length(), self.angle() + relative_angle)
+
+    def shortened_by(self, delta: Meters_T) -> Vector:
+        """A new vector with its length reduced by DELTA."""
+        Vector(self.length() - delta, self.angle())
+
+    def unit(self) -> Vector:
+        """The unit vector (length 1 metre) in the same direction. A zero vector has
+        no direction and is returned as it is."""
+        if float(self.length()) == 0.0:
+            return self
+        return self / float(self.length())
+
+    def normal(self) -> Vector:
+        """The unit normal: the unit vector turned 90 degrees counter-clockwise."""
+        self.unit().rotated_by(Degrees_T(90.0))
+
+    # -- products / projections ----------------------------------------------
+
+    def __mul__(self, other: Vector) -> SquareMeters_T:
+        self.x * other.x + self.y * other.y
+
+    def cross(self, other: Vector) -> SquareMeters_T:
+        """Z-component of the 3-D cross product: the signed area of the parallelogram."""
+        self.x * other.y - self.y * other.x
+
+    def cos_theta(self, other: Vector) -> float:
+        """Cosine of the angle between SELF and OTHER."""
+        (self * other) / (self.length() * other.length())
+
+    def projection(self, onto: Vector) -> Vector:
+        """SELF projected onto ONTO."""
+        let u: Vector = onto.unit()
+        u * float(self * u)          # u is 1 m long: the dot product, in metres
+
+    def __truediv__(self, t: Duration_T) -> Velocity:
+        """The velocity that covers this vector in the time T."""
+        Velocity(self.x / t, self.y / t)
+
+    def triangle_area(self, other: Vector) -> SquareMeters_T:
+        """Signed area of the triangle formed by SELF and OTHER."""
+        self.cross(other) / 2.0
+
+    # -- arithmetic operators ------------------------------------------------
+
+    def __add__(self, other: Vector) -> Vector:
+        Vector(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Vector) -> Vector:
+        Vector(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, scale: float) -> Vector:
+        Vector(self.length() * scale, self.angle())
+
+    def __truediv__(self, scale: float) -> Vector:
+        Vector(self.length() / scale, self.angle())
+
+    def __str__(self) -> str:
+        f"{self.length():.2f} m, {self.angle():.2f} degrees"
+
+# ---------------------------------------------------------------------------
+# Flat-plane geometry -- Position
+# ---------------------------------------------------------------------------
+
+class Position:
+    """A point in a 2-D orthonormal coordinate system.
+
+    A Position plus a Vector is a Position; one Position minus another is the
+    Vector between them.
+    """
+    var x: Meters_T
+    var y: Meters_T
+
+    def __init__(self, x: Meters_T, y: Meters_T) -> None:
+        self.x = x
+        self.y = y
+
+    def __add__(self, other: Vector) -> Position:
+        Position(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Position) -> Vector:
+        """The displacement vector from OTHER to SELF."""
+        Vector(self.x - other.x, self.y - other.y)
+
+    def rotate_around_point(self, pivot: Position, angle: Degrees_T) -> Position:
+        """This position rotated counter-clockwise around PIVOT."""
+        let vec: Vector = (self - pivot).rotated_by(angle)
+        pivot + vec
+
+    def __str__(self) -> str:
+        f"Position(x={self.x}, y={self.y})"
+
+# ---------------------------------------------------------------------------
+# Flat-plane geometry -- Velocity and Acceleration
+# ---------------------------------------------------------------------------
+# A Vector is metres.  How fast a Position moves, and how fast that changes, are
+# not metres: a Velocity has its parts in Speed_T and an Acceleration in Accel_T,
+# so that a Velocity cannot be added to a Vector.  The time is what turns one into
+# the next, by `*` and `/` -- the same operators that scale by a plain number, chosen
+# by the type of the right-hand side:
+#
+#     Vector / t -> Velocity      Velocity * t -> Vector
+#     Velocity / t -> Acceleration   Acceleration * t -> Velocity
+
+class Velocity:
+    """A 2-D velocity: a speed and a direction, kept as parts in m/s."""
+    var x: Speed_T
+    var y: Speed_T
+
+    def __init__(self, speed: Speed_T, angle: Degrees_T) -> None:
+        let radians: float = float(Radians_T(angle))
+        self.x = Speed_T(float(speed) * cos(radians))
+        self.y = Speed_T(float(speed) * sin(radians))
+
+    def __init__(self, x: Speed_T, y: Speed_T) -> None:
+        self.x = x
+        self.y = y
+
+    def speed(self) -> Speed_T:
+        """Magnitude of the velocity."""
+        Speed_T(hypot(float(self.x), float(self.y)))
+
+    def angle(self) -> Degrees_T:
+        """Direction of the velocity, counter-clockwise from the x axis."""
+        Degrees_T(arctan2(float(self.y), float(self.x)))
+
+    def rotated_by(self, relative_angle: Degrees_T) -> Velocity:
+        Velocity(self.speed(), self.angle() + relative_angle)
+
+    def direction(self) -> Vector:
+        """The unit Vector (1 m) it points along."""
+        Vector(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
+
+    def __mul__(self, t: Duration_T) -> Vector:
+        """The displacement in the time T."""
+        Vector(self.x * t, self.y * t)
+
+    def __truediv__(self, t: Duration_T) -> Acceleration:
+        """The acceleration that changes it by this much in the time T."""
+        Acceleration(self.x / t, self.y / t)
+
+    def __mul__(self, other: Velocity) -> float:
+        """The scalar product, in (m/s)^2."""
+        float(self.x) * float(other.x) + float(self.y) * float(other.y)
+
+    def cross(self, other: Velocity) -> float:
+        """Z-component of the cross product, in (m/s)^2."""
+        float(self.x) * float(other.y) - float(self.y) * float(other.x)
+
+    def __add__(self, other: Velocity) -> Velocity:
+        Velocity(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Velocity) -> Velocity:
+        Velocity(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, scale: float) -> Velocity:
+        Velocity(self.x * scale, self.y * scale)
+
+    def __truediv__(self, scale: float) -> Velocity:
+        Velocity(self.x / scale, self.y / scale)
+
+    def __str__(self) -> str:
+        f"{self.speed():.2f} m/s, {self.angle():.2f} degrees"
+
+
+class Acceleration:
+    """A 2-D acceleration: a magnitude and a direction, kept as parts in m/s^2."""
+    var x: Accel_T
+    var y: Accel_T
+
+    def __init__(self, magnitude: Accel_T, angle: Degrees_T) -> None:
+        let radians: float = float(Radians_T(angle))
+        self.x = Accel_T(float(magnitude) * cos(radians))
+        self.y = Accel_T(float(magnitude) * sin(radians))
+
+    def __init__(self, x: Accel_T, y: Accel_T) -> None:
+        self.x = x
+        self.y = y
+
+    def magnitude(self) -> Accel_T:
+        Accel_T(hypot(float(self.x), float(self.y)))
+
+    def angle(self) -> Degrees_T:
+        Degrees_T(arctan2(float(self.y), float(self.x)))
+
+    def direction(self) -> Vector:
+        """The unit Vector (1 m) it points along."""
+        Vector(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
+
+    def __mul__(self, t: Duration_T) -> Velocity:
+        """The change of velocity in the time T."""
+        Velocity(self.x * t, self.y * t)
+
+    def __add__(self, other: Acceleration) -> Acceleration:
+        Acceleration(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Acceleration) -> Acceleration:
+        Acceleration(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, scale: float) -> Acceleration:
+        Acceleration(self.x * scale, self.y * scale)
+
+    def __truediv__(self, scale: float) -> Acceleration:
+        Acceleration(self.x / scale, self.y / scale)
+
+    def __str__(self) -> str:
+        f"{self.magnitude():.4f} m/s^2, {self.angle():.2f} degrees"

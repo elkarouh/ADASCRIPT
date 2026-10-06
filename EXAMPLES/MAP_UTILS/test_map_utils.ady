@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""Test: map_utils.ady against map_utils.py.
+"""Test: map_base.ady, map_flat.ady and map_geo.ady against map_utils.py.
 
 The expected numbers are what the Python original (the file beside it) printed for
 the same inputs, so a value here is a value the original agrees with; they are
@@ -11,12 +11,9 @@ that does not parse is a failure value -- and the two methods the original got
 wrong (Vector.normal raised TypeError; Vector.projection returned a plain
 complex).
 """
-from map_utils import Axis_T, LATITUDE, LONGITUDE, GeoErr_T, BAD_DMS, BAD_COORDINATE_PAIR, OUT_OF_RANGE
-from map_utils import Meters_T, Kilometers_T, Degrees_T, Bearing_T, Latitude_T, Longitude_T, SquareMeters_T
-from map_utils import GeoFailure_T, LatLong_T, GeoVector, GeoPoint, Vector, Position
-from map_utils import dms2dec, dd2dms, human_latlong2dec, dec2human_latlong, geo_point_from_dms
-from map_utils import geo_vector_from_components, modulo
-from map_utils import Duration_T, Speed_T, Accel_T, Velocity, Acceleration
+from map_base import Accel_T, Axis_T, BAD_COORDINATE_PAIR, BAD_DMS, Bearing_T, Degrees_T, Duration_T, GeoErr_T, GeoFailure_T, Kilometers_T, LATITUDE, LONGITUDE, LatLong_T, Latitude_T, Longitude_T, Meters_T, OUT_OF_RANGE, Speed_T, SquareMeters_T, dd2dms, dec2human_latlong, dms2dec, human_latlong2dec, modulo
+from map_flat import Acceleration, Position, Vector, Velocity
+from map_geo import GeoPoint, GeoVector, geo_point_from_dms, geo_vector_from_components
 
 def close(actual: float, expected: float, tol: float = 1e-9) -> bool:
     abs(actual - expected) <= tol

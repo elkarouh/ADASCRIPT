@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""route_check -- a flight route checked with map_utils.
+"""route_check -- a flight route checked with map_geo.
 
     route_check
 
@@ -23,9 +23,9 @@ A route through four airports is flown over a restricted area.  The program:
 and checks what it printed: the legs add up, the pattern is a circle, the plane is
 the distance to the side it was put at.
 """
-from map_utils import GeoPoint, GeoVector, Vector, Position, GeoFailure_T, LatLong_T
-from map_utils import Kilometers_T, Meters_T, Degrees_T, Bearing_T, SquareMeters_T
-from map_utils import geo_point_from_dms, human_latlong2dec, must
+from map_base import Bearing_T, Degrees_T, GeoFailure_T, Kilometers_T, LatLong_T, Meters_T, SquareMeters_T, human_latlong2dec
+from map_flat import Position, Vector
+from map_geo import GeoPoint, GeoVector, geo_point_from_dms, must
 from regions import Region, Circle, Sector, Polygon, HalfAngle_T
 
 # ---- the data ------------------------------------------------------------------

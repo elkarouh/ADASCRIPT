@@ -5,8 +5,11 @@ flat-plane `Vector` / `Position`, and the geodetic `GeoVector` / `GeoPoint` with
 the Vincenty direct and inverse formulae, so that `GeoPoint + GeoVector` and
 `GeoPoint - GeoPoint` work like their flat-plane counterparts.
 
-`map_utils.ady` is the same module in Adascript (Nim backend: it uses `math`).
-What it changes is listed at the top of the file: no bare floats (`Meters_T`,
+`map_base.ady`, `map_flat.ady` and `map_geo.ady` are the same module in Adascript (Nim backend: it uses
+`math`), in three parts that import one another in that order: `map_base` has the units, the
+trigonometry on `Radians_T` and the DMS conversions, `map_flat` the flat-plane `Vector`, `Position`,
+`Velocity` and `Acceleration`, and `map_geo` Vincenty, `GeoVector`, `GeoPoint` and the demo.
+What they change is listed at the top of `map_geo.ady`: no bare floats (`Meters_T`,
 `Kilometers_T`, `Degrees_T`, `Bearing_T`, `Latitude_T` and `Longitude_T`, `Degrees_T` narrowed to -90 .. 90 and -180 .. 180),
 enums where the original had strings and a flag (`Axis_T` for latitude or
 longitude, `Hemisphere_T` for the letter a DMS string ends in, `DmsPart_T` for
@@ -21,10 +24,10 @@ the module's older name here), and `test_hek_map_utils.ady` is its cases in
 Adascript, class for class; its header lists the few that do not carry over.
 Against `map_utils.py` the pytest file passes 52 of 55: `construct_from_name`
 needs the author's `my_aerodromes` module, and two `str()` tests look for the word
-"degrees" where `map_utils.py` prints the degree sign (`map_utils.ady` spells it
-out, and passes them). It also imports `human2dec_degree`, which `map_utils.py`
-does not have; `map_utils.ady` does.
-Running `map_utils` prints the original's demo, without its folium map.
+"degrees" where `map_utils.py` prints the degree sign (the Adascript parts spell it
+out, and pass them). It also imports `human2dec_degree`, which `map_utils.py`
+does not have; `map_base.ady` does.
+Running `map_geo` prints the original's demo, without its folium map.
 
 `regions.ady` is the Region algebra of `GEO_SERVER/geo_server.ady` -- circles, wedges,
 polygons and rings, composed with `&`, `|` and `~` and tested with `in` -- on the
@@ -41,7 +44,7 @@ is in, the zones, the airports, two planes off their track and the holding patte
 layer -- as the original demo drew its points. It needs `pip install folium` for the
 Python that nimpy loads, so `make test` only compiles it.
 
-    ady2nim c map_utils.ady && ./map_utils
+    ady2nim c map_geo.ady && ./map_geo
     ady2nim c -r test_map_utils.ady
     ady2nim c -r test_hek_map_utils.ady
     ady2nim c -r test_regions.ady

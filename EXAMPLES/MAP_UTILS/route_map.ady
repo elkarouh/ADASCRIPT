@@ -28,7 +28,8 @@ It needs the folium package for the Python that nimpy embeds (`pip install foliu
 """
 pyimport folium
 
-from map_utils import GeoPoint, GeoVector, Kilometers_T, Degrees_T, Bearing_T, geo_point_from_dms, must
+from map_base import Bearing_T, Degrees_T, Kilometers_T
+from map_geo import GeoPoint, GeoVector, geo_point_from_dms, must
 from regions import Region, HalfAngle_T
 from route_check import Airport_T, ROUTE, R2_CENTRE, R2_RADIUS, FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE
 from route_check import HOLD_RADIUS, HOLD_POINTS, CRUISE, Hours_T, Fix_T, Airspace_T

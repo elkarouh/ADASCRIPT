@@ -8,12 +8,12 @@ with Python's own operators:
     Annulus = ~Circle(center, inner) & Circle(center, outer)
     p in region
 
-This is the same algebra over map_utils' `GeoPoint`, so that a zone can be given in
+This is the same algebra over map_geo's `GeoPoint`, so that a zone can be given in
 latitudes and longitudes and a point tested against it is anywhere on the globe:
 
   * `Circle`   every point within a distance (kilometres, along the geodesic) of a centre;
   * `Sector`   a wedge: within a distance of a centre and within an angle of a bearing;
-  * `Polygon`  inside a closed outline of GeoPoints (map_utils' ray casting: the edges
+  * `Polygon`  inside a closed outline of GeoPoints (map_geo's ray casting: the edges
                are straight in latitude and longitude, not great circles, so it is for
                outlines of tens or a few hundred kilometres);
   * `Annulus`  a ring, made of two circles;
@@ -25,7 +25,8 @@ of `GeoPoint - GeoPoint`, the Vincenty inverse formula, where geo_server's flat 
 used Pythagoras and `arctan2`.
 """
 nimport math                                # a float `%` is math's `mod`
-from map_utils import GeoPoint, GeoVector, Kilometers_T, Bearing_T
+from map_base import Bearing_T, Kilometers_T
+from map_geo import GeoPoint, GeoVector
 
 # How far a wedge reaches to each side of the bearing it is aimed along: at most half
 # a circle.

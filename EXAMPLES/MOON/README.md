@@ -7,8 +7,8 @@ IMU -> Navigation -> Guidance -> Autopilot -> Propulsion) written in Adascript.
     ady2nim c -r moon_sim.ady --out moon_mission.png      # about 2.5 s
     make test-moon
 
-**Nim only**: it imports `MAP_UTILS/map_utils.ady` for its flat-plane geometry and units, and that
-file is Nim only (it does `from math nimport ...`; `ady2py` cannot run it). The first version of this
+**Nim only**: it imports `MAP_UTILS/map_base.ady` and `map_flat.ady` for its units and flat-plane geometry, and those
+files are Nim only (they do `from math nimport ...`; `ady2py` cannot run it). The first version of this
 example had its own `Vec2` and ran on both backends, with identical output; this one trades that for
 the shared types.
 
@@ -25,7 +25,7 @@ the six plots have the same shape as `moon_mission.png`. Matplotlib is needed to
 |-------------|------|
 | `scipy.integrate.solve_ivp(..., method="DOP853", events=...)` | `integrate`: an adaptive Dormand-Prince 5(4) with terminal events, found by bisection. scipy cannot be called from Nim with a callback, and writing it in Adascript made the Nim build possible. Same tolerances (rtol 1e-10, atol 1e-3, max step 1800 s / 30 s); the orbit comes out the same to the printed digits |
 | `scipy.optimize.brentq` | `brentq`, Brent's method, ported |
-| numpy arrays | map_utils' `Position` (a point) and `Vector` (a displacement); `State_T` is a position and a velocity, `Delta_T` what it changes by per second. numpy is not imported at all |
+| numpy arrays | map_flat's `Position` (a point) and `Vector` (a displacement); `State_T` is a position and a velocity, `Delta_T` what it changes by per second. numpy is not imported at all |
 | `np.random.default_rng(seed)` | `Rng`, L'Ecuyer's combined generator with Box-Muller, so the Python and Nim runs draw the same noise. The descent's noise therefore differs from numpy's for the same seed |
 | `Stage` dataclass, `Spacecraft` | `Stage_T`, a record whose fields are `Mass_T`, `Duration_T` and `Force_T`, held by `Spacecraft`. The original shares one `Stage` object between the stack, the burn and `Propulsion`; here a stage is found by its `StageId_T`, so nothing is shared |
 | `dict(...)` for orbital elements, gates, telemetry | records: `Elements_T`, `Gate_T`, `Target_T`, `Telemetry_T`, `Result_T` |
@@ -39,7 +39,7 @@ the six plots have the same shape as `moon_mission.png`. Matplotlib is needed to
 
 ## Units
 
-No bare floats in signatures. From map_utils: `Meters_T`, `Degrees_T`, `SquareMeters_T`, `Vector`,
+No bare floats in signatures. From map_base and map_flat: `Meters_T`, `Degrees_T`, `SquareMeters_T`, `Vector`,
 `Position`, `Kilometers_T` and `Radians_T` (scaled units: `Kilometers_T(m)`, `Degrees_T(r)`), `modulo`, and `rotated_by` / `angle` / `unit` / `cross` for the rotations and
 signs the original did with `rot`, `arctan2` and `np.sign`. Declared here: `Mass_T`, `Duration_T`
 (distinct), `Speed_T`, `Accel_T`, `Force_T`, `Mu_T` (a body's GM), `AngularRate_T` and `AngMom_T` (derived).
@@ -51,7 +51,7 @@ Two places still go through plain floats, inside a function that has typed param
 `sqrt`, `exp`, `ln` and `**` (`vis_viva`, `half_period`, the Moon's mean motion), and the arithmetic of
 the integrator and Brent's method, which is on dimensionless step fractions.
 
-Velocities and accelerations are map_utils' `Velocity` (`Speed_T` along a bearing) and
+Velocities and accelerations are map_flat's `Velocity` (`Speed_T` along a bearing) and
 `Acceleration` (`Accel_T` along a bearing), with `Vector / t -> Velocity`,
 `Velocity * t -> Vector`, `Velocity / t -> Acceleration` and `Acceleration * t -> Velocity` (`*` and `/` are
 overloaded on the type of the right-hand side: a plain number scales, a `Duration_T` changes the unit);
@@ -95,5 +95,5 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 * **`math.atan`, `atan2`, `asin`, `acos` and one-argument `math.log`** are Python's names, not Nim's
   (`arctan`, `arctan2`, `arcsin`, `arccos`, `ln`). They are now refused with what Nim calls them, and
   `math.arctan` and the others run on the Python backend too.
-* **map_utils cannot be imported from a sibling directory by name**; `from MAP_UTILS/map_utils import`
+* **map_base and map_flat cannot be imported from a sibling directory by name**; `from MAP_UTILS/map_base import`
   works because the parent of this directory is searched.

@@ -1,0 +1,250 @@
+#!/usr/bin/env ady2nim
+"""
+map_base -- the units, the angles and the coordinate text of map_utils
+=====================================================================
+The first of three parts (map_base, map_flat, map_geo) of the translation of
+map_utils.py; the notes on what changed in the translation are in map_geo.ady.
+
+  * the units: Meters_T, Kilometers_T, Degrees_T, Radians_T, Duration_T, Speed_T,
+    Accel_T, Bearing_T, Latitude_T, Longitude_T
+  * sin, cos, tan, arctan2, arctan, arcsin on Radians_T, and modulo
+  * the failure type of a coordinate (GeoFailure_T) and the DMS <-> decimal
+    degrees conversions: dms2dec / dd2dms / human_latlong2dec / dec2human_latlong
+"""
+
+nimport math
+from math nimport floor, sqrt, round, hypot
+
+# ---------------------------------------------------------------------------
+# Units
+# ---------------------------------------------------------------------------
+
+type Meters_T       is distinct float
+type Kilometers_T   is 1000.0 * Meters_T      # a km is 1000 m: Kilometers_T(m) and Meters_T(km) convert
+type SquareMeters_T is Meters_T * Meters_T       # a dot or cross product, a triangle's area
+type Degrees_T      is distinct float            # an angle of any size and sign
+type Radians_T      is 57.29577951308232 * Degrees_T   # a radian is 180/pi degrees: Radians_T(d), Degrees_T(r)
+type Duration_T     is distinct float            # seconds
+type Speed_T        is Meters_T / Duration_T     # metres per second
+type Accel_T        is Speed_T / Duration_T      # metres per second squared
+
+# A direction clockwise from true north.  360 is the same direction as 0 and is
+# allowed, so that rounding at the seam cannot fail.
+type Bearing_T   is float range 0.0 .. 360.0
+
+# Latitude and longitude are Degrees_T narrowed to what each may be, 90 and 180
+# either way. Each goes up to a Degrees_T as it is, comes down from one by
+# Latitude_T(d), which checks the range, and does not stand for the other, so
+# that GeoPoint(lon, lat) is a compile error.
+type Latitude_T  is Degrees_T range -90 .. 90
+type Longitude_T is Degrees_T range -180 .. 180
+
+# Which of the two a coordinate is: it decides the width of a DMS string.
+type Axis_T is enum LATITUDE, LONGITUDE
+
+const DEGREE_DIGITS: [Axis_T]int = [LATITUDE: 2, LONGITUDE: 3]
+
+# The side of the equator or of the prime meridian a coordinate is on: the letter
+# a DMS string ends in.
+type Hemisphere_T is enum NORTH, SOUTH, EAST, WEST
+const LETTER: [Hemisphere_T]str = [NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W"]
+
+# The parts of a DMS string, for saying which of them did not parse.
+type DmsPart_T is enum DEGREES, MINUTES, SECONDS
+const PART_NAME: [DmsPart_T]str = [DEGREES: "degrees", MINUTES: "minutes", SECONDS: "seconds"]
+
+# Why a coordinate was refused.
+type GeoErr_T is enum BAD_DMS, BAD_COORDINATE_PAIR, OUT_OF_RANGE
+
+type GeoFailure_T is record:
+    kind:   GeoErr_T
+    detail: str
+
+def geo_fail(kind: GeoErr_T, detail: str) -> GeoFailure_T:
+    GeoFailure_T(kind=kind, detail=detail)
+
+
+def modulo(x: float, period: float) -> float:
+    """Python's x % period: the result has the sign of PERIOD."""
+    x - period * floor(x / period)
+
+# A sine or a cosine is between -1 and 1.
+type Unit_T is float range -1.0 .. 1.0
+
+# The trigonometry of an angle takes and gives Radians_T, so that an angle is never a bare
+# number: sin(az), and `let az: Radians_T = arctan2(y, x)`, with no conversion to write.
+# sin, cos and tan of a plain float are here too, so that one import gives both.
+def sin(x: float) -> Unit_T:
+    math.sin(x)
+
+def cos(x: float) -> Unit_T:
+    math.cos(x)
+
+def tan(x: float) -> float:
+    math.tan(x)
+
+def sin(a: Radians_T) -> Unit_T:
+    sin(float(a))
+
+def cos(a: Radians_T) -> Unit_T:
+    cos(float(a))
+
+def tan(a: Radians_T) -> float:
+    tan(float(a))
+
+def arctan2(y: float, x: float) -> Radians_T:
+    """The angle of the point (x, y), counter-clockwise from the x axis."""
+    Radians_T(math.arctan2(y, x))
+
+def arctan(x: float) -> Radians_T:
+    Radians_T(math.arctan(x))
+
+def arcsin(x: Unit_T) -> Radians_T:
+    Radians_T(math.arcsin(x))
+
+# ---------------------------------------------------------------------------
+# Coordinate conversion helpers
+# ---------------------------------------------------------------------------
+
+def digits_of(text: str, part: DmsPart_T, whole: str) -> int | !GeoFailure_T:
+    let n: int | !ParseFailure_T = parse_int(text)
+    if n is ParseFailure_T:
+        return geo_fail(BAD_DMS, f"{PART_NAME[part]} '{text}' in '{whole}'")
+    return n
+
+def seconds_of(text: str, whole: str) -> float | !GeoFailure_T:
+    let s: float | !ParseFailure_T = parse_float(text)
+    if s is ParseFailure_T:
+        return geo_fail(BAD_DMS, f"{PART_NAME[SECONDS]} '{text}' in '{whole}'")
+    return s
+
+def hemisphere_of(letter: str, axis: Axis_T) -> Hemisphere_T | !GeoFailure_T:
+    """The side a DMS string's last character names: N or S on a latitude, E or W
+    on a longitude.  A trailing '-' is the negative side, S or W, as in the original."""
+    case axis:
+        when LATITUDE:
+            case letter:
+                when "N": return NORTH
+                when "S" | "-": return SOUTH
+                when others: return geo_fail(BAD_DMS, f"'{letter}' is not N or S")
+        when LONGITUDE:
+            case letter:
+                when "E": return EAST
+                when "W" | "-": return WEST
+                when others: return geo_fail(BAD_DMS, f"'{letter}' is not E or W")
+
+def is_negative(side: Hemisphere_T) -> bool:
+    """South and west are negative."""
+    case side:
+        when SOUTH | WEST: True
+        when others: False
+
+def side_of(value: float, axis: Axis_T) -> Hemisphere_T:
+    """The side of the equator (LATITUDE) or the prime meridian (LONGITUDE) a signed value is on."""
+    case axis:
+        when LATITUDE: NORTH if value >= 0 else SOUTH
+        when LONGITUDE: EAST if value >= 0 else WEST
+
+def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
+    """A DMS string as decimal degrees.
+
+    The direction letter must be the *last* character: N or S on a latitude, E or W on
+    a longitude (a letter of the other axis, or any other, is refused).  A latitude has
+    2 digits of degrees, a longitude 3, then 2 of minutes, then the seconds, with
+    or without a decimal point:
+
+        dms2dec("043304N", LATITUDE)     ->   4.551111...   (04 degrees 33' 04")
+        dms2dec("0395649E", LONGITUDE)   ->  39.946944...
+    """
+    if len(pos_in_dms) == 0:
+        return geo_fail(BAD_DMS, "empty")
+    let pos: str = pos_in_dms[:len(pos_in_dms) - 1]
+    let letter: str = pos_in_dms[len(pos_in_dms) - 1:]
+    let width: int = DEGREE_DIGITS[axis]
+    let degrees_part: str = pos[0:width]
+    let minutes_part: str = pos[width:width + 2]
+    var seconds_part: str = pos[width + 2:]
+
+    # Normalise the seconds: put a decimal point in, with at least one digit on
+    # each side, so the parse never sees a bare '.'.
+    if "." not in seconds_part:
+        let whole_s: str = seconds_part[:2] if len(seconds_part) >= 2 else seconds_part.zfill(2)
+        let frac_s: str = seconds_part[2:] if len(seconds_part) > 2 else "0"
+        seconds_part = whole_s + "." + frac_s
+
+    do:
+        side <- hemisphere_of(letter, axis)
+        deg <- digits_of(degrees_part, DEGREES, pos_in_dms)
+        mins <- digits_of(minutes_part, MINUTES, pos_in_dms)
+        secs <- seconds_of(seconds_part, pos_in_dms)
+    let dd: float = float(deg) + float(mins) / 60.0 + secs / 3600.0
+    return Degrees_T(-dd if is_negative(side) else dd)
+
+def human2dec_degree(text: str) -> Degrees_T | !GeoFailure_T:
+    """An angle written DDDMMSS[.ss] -- a bearing, with no direction letter -- as decimal degrees.
+
+        human2dec_degree("3065205.37")     ->  306.868...    (306 degrees 52' 05.37")
+    """
+    return dms2dec(text + "E", LONGITUDE)          # three digits of degrees, like a longitude
+
+def dms2lat(text: str) -> Latitude_T | !GeoFailure_T:
+    """A DMS latitude, which has to be on the globe."""
+    do:
+        dd <- dms2dec(text, LATITUDE)
+    if not -90.0 <= float(dd) <= 90.0:
+        return geo_fail(OUT_OF_RANGE, f"latitude '{text}' is not between 90S and 90N")
+    return Latitude_T(dd)
+
+def dms2lon(text: str) -> Longitude_T | !GeoFailure_T:
+    """A DMS longitude, which has to be on the globe."""
+    do:
+        dd <- dms2dec(text, LONGITUDE)
+    if not -180.0 <= float(dd) <= 180.0:
+        return geo_fail(OUT_OF_RANGE, f"longitude '{text}' is not between 180W and 180E")
+    return Longitude_T(dd)
+
+
+def dd2dms(deg: Degrees_T, axis: Axis_T) -> str:
+    """Decimal degrees as a DMS string with a cardinal-direction suffix.
+
+    DEG is positive for N or E and negative for S or W.  The string is
+    zero-padded: dd2dms(50.9013889, LATITUDE) is "505405N", and
+    dd2dms(4.4844444, LONGITUDE) is "0042904E".
+    """
+    let value: float = float(deg)
+    var d: int = int(value)
+    let md: float = abs(value - float(d)) * 60.0
+    var m: int = int(md)
+    var sd: int = int(round((md - float(m)) * 60.0))
+
+    # Carry over when rounding pushes the seconds to 60
+    if sd == 60:
+        sd = 0
+        m += 1
+        if m == 60:
+            m = 0
+            d += 1
+
+    let suffix: str = LETTER[side_of(value, axis)]
+    case axis:
+        when LATITUDE: f"{abs(d):02d}{m:02d}{sd:02d}{suffix}"
+        when LONGITUDE: f"{abs(d):03d}{m:02d}{sd:02d}{suffix}"
+
+
+type LatLong_T is tuple:
+    latitude:  Latitude_T
+    longitude: Longitude_T
+
+def human_latlong2dec(latlong: str) -> LatLong_T | !GeoFailure_T:
+    """A space-separated 'DDMMSSN DDDMMSSE' string as (latitude, longitude) in decimal degrees."""
+    let fields: []str = latlong.split()
+    if len(fields) != 2:
+        return geo_fail(BAD_COORDINATE_PAIR, f"'{latlong}' is not 'DDMMSSN DDDMMSSE'")
+    do:
+        lat <- dms2lat(fields[0])
+        lon <- dms2lon(fields[1])
+    return LatLong_T(lat, lon)
+
+def dec2human_latlong(lat: Latitude_T, lon: Longitude_T) -> str:
+    """Decimal (latitude, longitude) as a human-readable DMS string."""
+    f"{dd2dms(lat, LATITUDE)} {dd2dms(lon, LONGITUDE)}"

@@ -703,5 +703,5 @@ and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a funct
 Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
 
 - [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).
-- [ ] `from MAP_UTILS/map_utils import` works from a sibling directory only because the
-      parent is searched. (map_utils itself stays Nim-only, by decision.)
+- [ ] `from MAP_UTILS/map_base import` works from a sibling directory only because the
+      parent is searched. (The map_* modules stay Nim-only, by decision.)

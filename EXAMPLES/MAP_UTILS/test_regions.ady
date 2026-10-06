@@ -2,7 +2,8 @@
 """Test: regions.ady -- circles, sectors, polygons and rings on the Earth's surface, and
 the algebra of `&`, `|`, `~` and `in` that composes them.
 """
-from map_utils import GeoPoint, GeoVector, Kilometers_T, Degrees_T
+from map_base import Degrees_T, Kilometers_T
+from map_geo import GeoPoint, GeoVector
 from regions import Region, Circle, Sector, Polygon, Annulus, angular_gap
 
 let centre: GeoPoint = GeoPoint(50.0, 4.0)
