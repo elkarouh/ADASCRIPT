@@ -1,0 +1,51 @@
+# A narrowed type, `type N is P range LO .. HI`: a P that is only ever in the range, and a
+# type of its own. It goes up to P as it is, comes down from P by N(x), which checks the
+# range, and does not stand for a sibling narrowed from the same P.
+
+type Degrees_T is distinct float
+type Latitude_T is Degrees_T range -90 .. 90
+type Longitude_T is Degrees_T range -180 .. 180
+type Count_T is distinct int
+type Digit_T is Count_T range 0 .. 9
+
+def show(d: Degrees_T):
+    print(f"{float(d):.1f}")
+
+def lat_of(d: Degrees_T) -> Latitude_T:
+    return Latitude_T(d)
+
+def north(lat: Latitude_T) -> bool:
+    return lat > Latitude_T(0.0)
+
+def try_lat(x: float) -> str:
+    try:
+        let l: Latitude_T = Latitude_T(x)
+        return f"{float(l):.1f}"
+    except AssertionError:
+        return "out of range"
+
+def main():
+    let lat: Latitude_T = Latitude_T(45.5)
+    let wide: Degrees_T = lat                  # up to the parent: no cast
+    show(lat)
+    show(wide)
+    let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
+    show(sum)
+    let back: Latitude_T = Latitude_T(sum)     # down: checked
+    print(int(lat < back), int(lat == lat), int(north(lat)))
+    print(f"{lat:.2f} {float(lat * 2.0):.1f}")
+    let lat2: Latitude_T = 12.5                # a literal takes the declared type
+    print(float(lat2), float(lat_of(Degrees_T(-30.0))))
+    let lon: Longitude_T = Longitude_T(Degrees_T(120.0))
+    print(float(lon))
+    print(try_lat(90.0), try_lat(90.5), try_lat(-90.0), try_lat(-91.0))
+    let d: Digit_T = Digit_T(7)
+    let n: Count_T = d + Count_T(2)
+    print(int(d), int(n), int(Digit_T(n - Count_T(3))))
+    try:
+        let bad: Digit_T = Digit_T(n + Count_T(1))
+        print(int(bad))
+    except AssertionError:
+        print("not a digit")
+
+main()

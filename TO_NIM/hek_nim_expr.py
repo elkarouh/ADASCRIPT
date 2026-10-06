@@ -1495,7 +1495,8 @@ def _nim_atom_unit(e):
         return called
     if called and called.startswith("to_") and called[3:] in (
             getattr(ParserState, "scaled_units", None) or {}).keys() | {
-            b for _, b in (getattr(ParserState, "scaled_units", None) or {}).values()}:
+            b for _, b in (getattr(ParserState, "scaled_units", None) or {}).values()} | set(
+            getattr(ParserState, "narrowed_types", None) or {}):
         return called[3:]                 # `Distance_T(k)`, emitted as to_Distance_T
     if called in ("float", "int"):
         return UNIT_PLAIN
@@ -2971,7 +2972,20 @@ def _scaled_conversion(node, name):
         return None
     arg = trailers[0][1:-1]
     unit = _unit_of(arg)
-    if unit and is_distinct(unit) and unit != name and unit not in (sources or ()):
+    from ady_declarations import narrowed_parent, narrow_ancestors
+    if narrowed_parent(name) is not None:
+        # a narrowed type: from its parents, or one narrowed from it, or itself
+        if (unit and is_distinct(unit) and unit != name and unit not in narrow_ancestors(name)
+                and name not in narrow_ancestors(unit)):
+            raise SyntaxError(
+                f"{name}({arg}): a {unit} does not convert to a {name} -- a {name} "
+                f"is narrowed from {narrowed_parent(name)}; go through the plain "
+                f"number, float(...) or int(...), to say that the units are meant")
+        return f"to_{name}{trailers[0]}" + "".join(trailers[1:])
+    if unit and name in narrow_ancestors(unit):
+        unit = name                         # up to the parent: always allowed
+    if unit and is_distinct(unit) and unit != name and unit not in (sources or ()) and not any(
+            a in (sources or ()) for a in narrow_ancestors(unit)):
         raise SyntaxError(
             f"{name}({arg}): a {unit} does not convert to a {name} -- "
             + ("a " + name + " converts from "

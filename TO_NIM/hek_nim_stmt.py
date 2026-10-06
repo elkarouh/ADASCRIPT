@@ -2202,6 +2202,13 @@ def to_nim(self, prec=None):
     return ""
 
 
+@method(narrowed_def)
+def to_nim(self, prec=None):
+    """narrowed_def: IDENTIFIER 'range' BOUND '..' BOUND; type_stmt renders it,
+    from the declaration scan."""
+    return ""
+
+
 @method(float_range_def)
 def to_nim(self):
     """float_range_def: 'float' 'range' BOUND ('..'|'..<') BOUND -> lo..hi as strings"""
@@ -2387,6 +2394,8 @@ def to_nim(self, indent=0):
         ParserState.symbol_table.add(name, "float", "type")
         _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
         return f"{_ind(indent)}type {name}{_exp}{params} = float"
+    elif rhs_type == "narrowed_def":
+        return _narrowed_type_nim(name, params, indent)
     elif rhs_type == "distinct_float_range_def":
         fr = rhs.nodes[0]
         lo = _float_bound_text(fr.nodes[2])
@@ -2541,6 +2550,39 @@ def _derived_type_nim(name, params, indent):
     return "\n".join(lines)
 
 
+def _narrowed_type_nim(name, params, indent):
+    """`type N is P range LO .. HI` -> a distinct type N that orders and
+    prints as P's numbers do, and has no arithmetic of its own: a converter
+    takes it up to P, so `n + 1.0` is a P. `N(x)` is `to_N(x)`, which takes a
+    plain number, a P, or an N and checks the range."""
+    from ady_declarations import distinct_kind, parse_narrowed
+    parent, lo, hi, excl = parse_narrowed(ParserState.ady_type_decls[name])
+    kind = distinct_kind(name)
+    base = _DISTINCT_BASE_NIM[kind]
+    if kind == "float":
+        lo, hi = (b if any(c in b for c in ".eE") else b + ".0" for b in (lo, hi))
+    ParserState.symbol_table.add(name, name, "type")
+    _top = ParserState.symbol_table.depth() <= 2
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and _top else ""
+    ind = _ind(indent)
+    ParserState.nim_imports.update(("hashes", "strformat"))
+    lines = [f"{ind}type {name}{_exp}{params} = distinct {base}"]
+    lines += [ind + p.format(e=_exp, t=name) for p in _DISTINCT_ORDERED]
+    lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
+                 f"specifier: string) = formatValue(result, {base}(value), specifier)")
+    upper = "<" if excl else "<="
+    shown = f"[{lo}, {hi}{')' if excl else ']'}"
+    lines += [
+        f"{ind}proc to_{name}{_exp}(x: {base}): {name} = (doAssert(x >= {lo} and x {upper} {hi}, "
+        f"\"{name} value \" & $x & \" out of range {shown}\"); {name}(x))"]
+    if kind == "float":
+        lines.append(f"{ind}proc to_{name}{_exp}(x: int): {name} = to_{name}(float(x))")
+    lines += [f"{ind}proc to_{name}{_exp}(x: {name}): {name} = x",
+              f"{ind}proc to_{name}{_exp}(x: {parent}): {name} = to_{name}({base}(x))",
+              f"{ind}converter up_{name}{_exp}(x: {name}): {parent} = {parent}({base}(x))"]
+    return "\n".join(lines)
+
+
 @method(scaled_def)
 def to_nim(self, prec=None):
     """scaled_def: NUMBER '*' IDENTIFIER -- a multiple of a unit; type_stmt
@@ -2617,7 +2659,10 @@ def _wrap_distinct_literal(value, nim_type):
         t = t[4:].strip()
     v = (value or "").strip()
     if is_distinct(t):
-        return f"{t}({v})" if _is_nim_literal(v) else value
+        if not _is_nim_literal(v):
+            return value
+        from ady_declarations import narrowed_parent
+        return f"to_{t}({v})" if narrowed_parent(t) else f"{t}({v})"   # a range is checked
     if t.startswith("(") and t.endswith(")") and v.startswith("(") and v.endswith(")"):
         # `return (v, 0.0)` for `-> (Vector, Force_T)`: each element takes its own type
         ts, vs = _split_top_level_commas(t[1:-1]), _split_top_level_commas(v[1:-1])

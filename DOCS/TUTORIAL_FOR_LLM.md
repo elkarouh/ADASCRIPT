@@ -173,6 +173,8 @@ w *= 2.0                                     # * and / by a plain number SCALE
 - money: `distinct int` in cents. `price * 3` scales; `price * qty` needs `type Total_T is Cents_T * Qty_T`;
 - Nim: `distinct float` + borrowed procs + one small proc per relation; Python: `class Velocity_T(float)`. Nim checks everything; Python works out the unit of arithmetic over typed names and refuses declarations, assignments and operators it can see.
 
+**A narrowed unit**: `type Latitude_T is Degrees_T range -90 .. 90` (P a distinct float or int; bounds may be negative; `..<` excludes the top). A type of its own with a parent: it goes UP to `Degrees_T` with no cast (assignment, argument, `Radians_T(lat)`), comes DOWN only by `Latitude_T(d)`, which checks the range (raises `AssertionError`; Nim `AssertionDefect`), and is refused beside a SIBLING (`let l: Latitude_T = lon`, `Latitude_T(lon)`, `at(lon)`). Arithmetic is the parent's (`lat + lat` is a `Degrees_T`: convert back to store it); a literal is checked where the type is declared. Prefer it to `distinct float range` whenever a parent unit exists, and never write `Degrees_T(float(lat))`. Both backends; `EXAMPLES/test_narrowed_type.ady`.
+
 **A derived unit combines exactly TWO units**; a chain is built by naming the middle:
 ```adascript
 type Momentum_T is Mass_T * Speed_T          # kg m/s

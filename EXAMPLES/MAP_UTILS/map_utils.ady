@@ -70,10 +70,12 @@ type Accel_T        is Speed_T / Duration_T      # metres per second squared
 # allowed, so that rounding at the seam cannot fail.
 type Bearing_T   is float range 0.0 .. 360.0
 
-# Latitude and longitude are different types, so that GeoPoint(lon, lat) is a
-# compile error, and each says what it may be: 90 and 180 either way.
-type Latitude_T  is distinct float range -90.0 .. 90.0
-type Longitude_T is distinct float range -180.0 .. 180.0
+# Latitude and longitude are Degrees_T narrowed to what each may be, 90 and 180
+# either way. Each goes up to a Degrees_T as it is, comes down from one by
+# Latitude_T(d), which checks the range, and does not stand for the other, so
+# that GeoPoint(lon, lat) is a compile error.
+type Latitude_T  is Degrees_T range -90 .. 90
+type Longitude_T is Degrees_T range -180 .. 180
 
 # Which of the two a coordinate is: it decides the width of a DMS string.
 type Axis_T is enum LATITUDE, LONGITUDE
@@ -129,8 +131,8 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let b: float = float(WGS84_B)
     let f: float = WGS84_F
     let dist_m: float = float(dist)
-    let lat1_rad: float = float(Radians_T(Degrees_T(float(lat1))))
-    let lon1_rad: float = float(Radians_T(Degrees_T(float(lon1))))
+    let lat1_rad: float = float(Radians_T(lat1))
+    let lon1_rad: float = float(Radians_T(lon1))
     let az1_rad: float = float(Radians_T(az1))
 
     let tan_u1: float = (1 - f) * tan(lat1_rad)
@@ -182,7 +184,7 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let lon2: float = lon1_rad + big_l
     let az2: float = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
 
-    Direct_T(Latitude_T(float(Degrees_T(Radians_T(lat2)))), Degrees_T(Radians_T(lon2)), Bearing_T(modulo(float(Degrees_T(Radians_T(az2))) + 360.0, 360.0)))
+    Direct_T(Latitude_T(Degrees_T(Radians_T(lat2))), Degrees_T(Radians_T(lon2)), Bearing_T(modulo(float(Degrees_T(Radians_T(az2))) + 360.0, 360.0)))
 
 
 # ---------------------------------------------------------------------------
@@ -204,10 +206,10 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
     if abs(float(lat1 - lat2)) < 1e-10 and abs(float(lon1 - lon2)) < 1e-10:
         return Inverse_T(0.0, 0.0, 0.0)               # coincident points
 
-    let u1: float = arctan((1 - f) * tan(float(Radians_T(Degrees_T(float(lat1))))))
-    let u2: float = arctan((1 - f) * tan(float(Radians_T(Degrees_T(float(lat2))))))
+    let u1: float = arctan((1 - f) * tan(float(Radians_T(lat1))))
+    let u2: float = arctan((1 - f) * tan(float(Radians_T(lat2))))
 
-    let omega: float = float(Radians_T(Degrees_T(float(lon2 - lon1))))
+    let omega: float = float(Radians_T(lon2 - lon1))
     var lon: float = omega
 
     var alpha: float = 0.0
@@ -345,7 +347,7 @@ def dms2lat(text: str) -> Latitude_T | !GeoFailure_T:
         dd <- dms2dec(text, LATITUDE)
     if not -90.0 <= float(dd) <= 90.0:
         return geo_fail(OUT_OF_RANGE, f"latitude '{text}' is not between 90S and 90N")
-    return Latitude_T(float(dd))
+    return Latitude_T(dd)
 
 def dms2lon(text: str) -> Longitude_T | !GeoFailure_T:
     """A DMS longitude, which has to be on the globe."""
@@ -353,7 +355,7 @@ def dms2lon(text: str) -> Longitude_T | !GeoFailure_T:
         dd <- dms2dec(text, LONGITUDE)
     if not -180.0 <= float(dd) <= 180.0:
         return geo_fail(OUT_OF_RANGE, f"longitude '{text}' is not between 180W and 180E")
-    return Longitude_T(float(dd))
+    return Longitude_T(dd)
 
 
 def dd2dms(deg: Degrees_T, axis: Axis_T) -> str:
@@ -399,7 +401,7 @@ def human_latlong2dec(latlong: str) -> LatLong_T | !GeoFailure_T:
 
 def dec2human_latlong(lat: Latitude_T, lon: Longitude_T) -> str:
     """Decimal (latitude, longitude) as a human-readable DMS string."""
-    f"{dd2dms(Degrees_T(float(lat)), LATITUDE)} {dd2dms(Degrees_T(float(lon)), LONGITUDE)}"
+    f"{dd2dms(lat, LATITUDE)} {dd2dms(lon, LONGITUDE)}"
 
 
 # ---------------------------------------------------------------------------
@@ -755,8 +757,6 @@ class GeoPoint:
     var longitude: Longitude_T
 
     def __init__(self, latitude: Latitude_T, longitude: Longitude_T) -> None:
-        assert -90.0 <= float(latitude) <= 90.0, f"latitude {latitude} is not on the globe"
-        assert -180.0 <= float(longitude) <= 180.0, f"longitude {longitude} is not on the globe"
         self.latitude  = latitude
         self.longitude = longitude
 

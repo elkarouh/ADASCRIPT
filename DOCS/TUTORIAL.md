@@ -469,6 +469,32 @@ is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
 `int` for a product. Nim gets a small proc per relation, so it costs nothing
 at run time.
 
+### A unit narrowed to a range
+
+A distinct type can be narrowed to part of its values, in the manner of an Ada subtype, with `type N is P range lo .. hi` -- `P` any distinct float or int, the bounds negative if need be. The result is a type of its own, with a relation to its parent: it goes up, comes down only by an explicit conversion that checks the range, and does not stand for a sibling:
+
+```python
+type Degrees_T is distinct float
+type Latitude_T is Degrees_T range -90 .. 90
+type Longitude_T is Degrees_T range -180 .. 180
+
+let lat: Latitude_T = Latitude_T(45.5)
+let wide: Degrees_T = lat                  # up to the parent: no cast
+let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
+let back: Latitude_T = Latitude_T(sum)     # down: checked
+let lat2: Latitude_T = 12.5                # a literal takes the declared type, checked
+```
+
+- A narrowed type goes up to its parent, and to the parent's parents, wherever the parent is wanted -- a `Degrees_T` parameter takes a `Latitude_T`, and `Radians_T(lat)` of a scaled unit converts it. `Degrees_T(lat)` is allowed too, if you like to say so.
+- It comes down by `Latitude_T(d)`, from a `Degrees_T` or a plain number: out of range, that raises `AssertionError` (Nim: `AssertionDefect`, which `except AssertionError` catches). It is never silent, and never skipped in a release build.
+- It does not stand for a sibling: `let l: Latitude_T = lon` and `Latitude_T(lon)` are refused, and so is a `Longitude_T` passed where a `Latitude_T` is declared -- the point of two types, that `GeoPoint(lon, lat)` is an error.
+- Arithmetic leaves the range, so it is the parent's: `lat + lat` is a `Degrees_T`, to be converted back to be stored in a `Latitude_T`. Comparisons, `min`, `max`, `print` and f-string formats work on the narrowed type as they do on its parent.
+- Python: `class Latitude_T(Degrees_T)`, whose constructor checks the range. Nim: a `distinct float` with a converter up and a checking `to_Latitude_T` that `Latitude_T(x)` is emitted as.
+
+It is a unit with a range, where `distinct float range lo .. hi` (below) is a unit of its own that has no parent. Use the narrowing when there is a parent to go up to.
+
+<!-- tested by EXAMPLES/test_narrowed_type.ady -->
+
 ### A unit made from a unit: momentum and energy
 
 Energy is mass times velocity times velocity, but a derived unit combines
@@ -1175,7 +1201,7 @@ type Age is int range 0..100   # same as: type Age is 0..100
 
 ### Float subranges
 
-For floating-point ranges use `float range lo .. hi` (the bounds may be negative). It is a float with a stated range, and still mixes with floats. Write `distinct float range lo .. hi` when it should also be a unit of its own, as `Latitude_T` (`-90.0 .. 90.0`) and `Longitude_T` (`-180.0 .. 180.0`) are: they do not mix with each other or with a float.
+For floating-point ranges use `float range lo .. hi` (the bounds may be negative). It is a float with a stated range, and still mixes with floats. Write `distinct float range lo .. hi` when it should also be a unit of its own: it does not mix with a float, or with another range. When the range narrows a unit that already exists -- a latitude is a `Degrees_T` in `-90 .. 90` -- say so with `type Latitude_T is Degrees_T range -90 .. 90` (see *A unit narrowed to a range*): it goes up to its parent without a cast.
 
 ```python
 type Temperature is float range 0.0 .. 100.0

@@ -83,6 +83,7 @@ def to_py(self):
             _reject_str_to_path(parts[0], "Path", parts[-1])
         if isinstance(_t, dict) and _t.get("type"):
             _reject_distinct_mix(parts[0], _t["type"], parts[-1])
+            parts[-1] = _wrap_narrowed_literal(parts[-1], _t["type"])
         # `m = {...}` on a [K]V map keeps it one
         if isinstance(_t, dict) and _t.get("type"):
             parts[-1] = _wrap_for_ordered_array(parts[-1], _t["type"])
@@ -125,6 +126,7 @@ def to_py(self):
                 value = seq.nodes[1].to_py()
                 _reject_str_to_path(name, annotation, value)
                 _reject_distinct_mix(name, annotation, value)
+                value = _wrap_narrowed_literal(value, annotation)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
@@ -261,6 +263,13 @@ def to_py(self, prec=None):
     return "float"
 
 
+@method(narrowed_def)
+def to_py(self, prec=None):
+    """narrowed_def: IDENTIFIER 'range' BOUND '..' BOUND -> the parent; the
+    class is built by type_stmt"""
+    return self.nodes[0].to_py()
+
+
 @method(distinct_def)
 def to_py(self, prec=None):
     """distinct_def: 'distinct' type_annotation -> the base type; the class
@@ -352,6 +361,16 @@ def _py_atom_unit(e):
     return UNIT_PLAIN if t in _PY_PLAIN_TYPES else None
 
 
+def _wrap_narrowed_literal(value, annotation):
+    """A number given where a narrowed type is declared is of it, and its
+    range is checked: `let lat: Latitude_T = 45.0` is `Latitude_T(45.0)`."""
+    from ady_declarations import narrowed_parent
+    t = _py_resolve_alias((annotation or "").strip())
+    if narrowed_parent(t) and _PY_NUMBER.match((value or "").strip()):
+        return f"{t}({value.strip()})"
+    return value
+
+
 def _reject_distinct_mix(name, annotation, value):
     """Refuse a value of one type where a distinct type is declared, or a
     distinct value where another type is: `let d: Distance_T = v` over a
@@ -363,11 +382,13 @@ def _reject_distinct_mix(name, annotation, value):
     is worked out as the Nim backend's operators would. A literal takes the
     declared type, as it does on Nim; what cannot be told is left to Nim,
     which still refuses everything this lets through."""
-    from ady_declarations import expr_unit, is_distinct, UNIT_PLAIN
+    from ady_declarations import expr_unit, is_distinct, narrow_ancestors, UNIT_PLAIN
     target = _py_resolve_alias((annotation or "").strip())
     source = expr_unit(value, _py_atom_unit)
     if not source or source == target:
         return
+    if target in narrow_ancestors(source):
+        return                          # a narrowed type is its parent's value
     v = value.strip()
     if is_distinct(source):
         pass
@@ -594,6 +615,7 @@ def to_py(self):
                 value = seq.nodes[1].to_py()
                 _reject_str_to_path(name, annotation, value)
                 _reject_distinct_mix(name, annotation, value)
+                value = _wrap_narrowed_literal(value, annotation)
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
@@ -1289,6 +1311,25 @@ def to_py(self, indent=0):
         _note_alias(name, name)
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
         return f"{_ind(indent)}class {name}({base}): __slots__ = ()"
+    if rhs_type == 'narrowed_def':
+        # a subclass of the parent, so it goes up without a cast; a new one
+        # is made only from a number in range
+        from ady_declarations import distinct_kind, parse_narrowed
+        parent, lo, hi, excl = parse_narrowed(ParserState.ady_type_decls[name])
+        base = _DISTINCT_BASES.get(distinct_kind(name), "float")
+        if base == "float" and not any(c in lo + hi for c in ".eE"):
+            lo, hi = lo + ".0", hi + ".0"
+        _note_alias(name, name)
+        ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+        ind = _ind(indent)
+        shown = f"[{lo}, {hi}{')' if excl else ']'}"
+        return "\n".join([
+            f"{ind}class {name}({parent}):",
+            f"{ind}    __slots__ = ()",
+            f"{ind}    def __new__(cls, x):",
+            f"{ind}        if not ({lo} <= x {'<' if excl else '<='} {hi}):",
+            f'{ind}            raise AssertionError(f"{name} value {{x}} out of range {shown}")',
+            f"{ind}        return super().__new__(cls, {base}(x))"])
     if rhs_type == 'distinct_float_range_def':
         fr = rhs.nodes[0]
         lo = "".join(str(getattr(n, "node", n)) for n in (fr.nodes[2].nodes if getattr(fr.nodes[2], "nodes", None) else [fr.nodes[2]]))

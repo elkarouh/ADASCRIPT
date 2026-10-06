@@ -682,7 +682,76 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
                 f"type {name} is {a} {op} {b}: {bad} is not a distinct "
                 f"numeric type -- a derived unit is made from two of them, "
                 f"declared `type {bad} is distinct float`")
+    narrowed = narrowed_types(decls)
+    pending = dict(narrowed)
+    while pending:
+        moved = False
+        for name, parent in list(pending.items()):
+            if parent in out and parent not in pending:
+                if out[parent] not in ("float", "int"):
+                    raise SyntaxError(
+                        f"type {name} is {parent} range ...: {parent} is made of "
+                        f"{out[parent]} -- only a distinct float or int can be narrowed")
+                out[name] = out[parent]
+                del pending[name]
+                moved = True
+        if not moved:
+            name, parent = next(iter(pending.items()))
+            raise SyntaxError(
+                f"type {name} is {parent} range ...: {parent} is not a distinct "
+                f"float or int -- a range of a type narrows it, and only a unit "
+                f"can be: declare `type {parent} is distinct float`")
     return out
+
+
+# --- narrowed types -------------------------------------------------------------
+# `type Latitude_T is Degrees_T range -90 .. 90` is a Degrees_T that is only
+# ever in that range, and a type of its own. It goes up to its parent without
+# a cast (a Latitude_T is where a Degrees_T is wanted), is refused beside a
+# sibling (a Longitude_T is not a Latitude_T, whatever the range), and comes
+# down from the parent by an explicit conversion, `Latitude_T(d)`, which
+# checks the range. Arithmetic on one is arithmetic on its parent: `lat + 1.0`
+# is a Degrees_T, and has to be converted to be stored in a Latitude_T.
+
+_NARROWED = _re_du.compile(
+    r"^([A-Za-z_]\w*)[ \t]+range[ \t]+(-?[\d_.eE+]+)[ \t]*(\.\.<?)[ \t]*(-?[\d_.eE+]+)$")
+
+
+def parse_narrowed(rhs):
+    """(parent, lo, hi, exclusive) for a declaration `type N is P range LO ..
+    HI` whose P is a type name -- `float range` and `int range` are not
+    narrowings -- else None. EXCLUSIVE is whether it was written `..<`."""
+    m = _NARROWED.match((rhs or "").strip())
+    if not m or m.group(1) in ("float", "int"):
+        return None
+    return m.group(1), m.group(2), m.group(4), m.group(3) == "..<"
+
+
+def narrowed_types(decls):
+    """{name: parent} for every `type N is P range LO .. HI` in DECLS."""
+    return {n: p[0] for n, r in decls.items() if r is not None
+            for p in [parse_narrowed(r)] if p}
+
+
+def narrowed_parent(name):
+    """The type NAME is narrowed from, or None."""
+    from hek_parsec import ParserState
+    return (getattr(ParserState, "narrowed_types", None) or {}).get(name)
+
+
+def narrow_ancestors(name):
+    """The types NAME is narrowed from, nearest first."""
+    out, p = [], narrowed_parent(name)
+    while p and p not in out:
+        out.append(p)
+        p = narrowed_parent(p)
+    return out
+
+
+def narrow_root(name):
+    """NAME, or the widest type it is narrowed from."""
+    anc = narrow_ancestors(name) if name else []
+    return anc[-1] if anc else name
 
 
 # --- scaled units --------------------------------------------------------------
@@ -947,7 +1016,9 @@ def expr_unit(expr, atom):
 
 def unit_result(lu, op, ru):
     """The unit of `l op r` given the units of l and r, or None if it has
-    none (or the backend cannot tell)."""
+    none (or the backend cannot tell). A narrowed type is its widest parent
+    here: arithmetic leaves the range."""
+    lu, ru = narrow_root(lu), narrow_root(ru)
     ld = bool(lu) and is_distinct(lu)
     rd = bool(ru) and is_distinct(ru)
     if not (ld or rd):
@@ -974,6 +1045,7 @@ def unit_mix_error(lu, op, ru):
     """None, or why `l op r` is refused, given the units of l and r. What
     it cannot judge -- a side of unknown unit -- it leaves to the Nim
     compiler, which refuses every one of these itself."""
+    lu, ru = narrow_root(lu), narrow_root(ru)
     ld = bool(lu) and is_distinct(lu)
     rd = bool(ru) and is_distinct(ru)
     if not (ld or rd):
