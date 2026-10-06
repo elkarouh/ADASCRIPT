@@ -1,0 +1,16 @@
+# An integer range may start below zero: `type Sense_T is int range -1 .. 1`.
+
+type Sense_T is int range -1 .. 1
+type Level_T is int range -5 .. 5
+
+def flip(q: Sense_T) -> Sense_T:
+    return -q
+
+def main():
+    var q: Sense_T = 1
+    q = flip(q)
+    print(q, Sense_T'First, Sense_T'Last)
+    let m: Level_T = -5
+    print(m, Level_T'First, Level_T'Last)
+
+main()

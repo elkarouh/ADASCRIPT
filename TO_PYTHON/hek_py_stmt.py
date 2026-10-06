@@ -1229,11 +1229,18 @@ def to_py(self):
     return "# nimport " + ", ".join(parts)
 
 
+def _bound_text(node):
+    """The text of a subrange bound: `3`, `N`, `N - 1`, `-1`."""
+    if hasattr(node, "nodes") and node.nodes:
+        return "".join(_bound_text(n) for n in node.nodes)
+    return str(getattr(node, "node", node))
+
+
 @method(subrange_def)
 def to_py(self):
     """subrange_def: INTEGER ('..' | '..<') INTEGER -> Python range()"""
-    lo = str(self.nodes[0].node)
-    hi = str(self.nodes[2].node)
+    lo = _bound_text(self.nodes[0])
+    hi = _bound_text(self.nodes[2])
     is_exclusive = getattr(self.nodes[1], 'node', None) == "..<"
     if is_exclusive:
         return f"range({lo}, {hi})"
@@ -1361,20 +1368,20 @@ def to_py(self, indent=0):
         return f"{_ind(indent)}{name} = float  # range {lo} .. {hi}"
     if rhs_type == 'int_range_def':
         sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
-        lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
+        lo = _bound_text(sr.nodes[0])
+        hi = _bound_text(sr.nodes[2])   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'constrained_subrange_def':
         sr = rhs.nodes[1]  # the subrange_def inside
-        lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
+        lo = _bound_text(sr.nodes[0])
+        hi = _bound_text(sr.nodes[2])   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'subrange_def':
         # Register First/Last for tick attributes (Name'First, Name'Last)
-        lo = rhs.nodes[0].node
-        hi = rhs.nodes[2].node  # [lo, range_op, hi]
+        lo = _bound_text(rhs.nodes[0])
+        hi = _bound_text(rhs.nodes[2])  # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
         return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'enum_def':

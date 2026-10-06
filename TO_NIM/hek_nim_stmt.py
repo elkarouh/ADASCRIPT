@@ -2159,9 +2159,9 @@ def to_nim(self):
 
 def _subrange_bound_str(node):
     """Return the Nim string for a subrange_bound node (INTEGER, IDENTIFIER, or IDENT±INT)."""
-    if hasattr(node, 'nodes') and len(node.nodes) == 3:
-        return f"{node.nodes[0].node}{node.nodes[1].node}{node.nodes[2].node}"
-    return str(node.node)
+    if hasattr(node, 'nodes') and node.nodes:
+        return "".join(_subrange_bound_str(n) for n in node.nodes)
+    return str(getattr(node, "node", node))
 
 
 @method(subrange_def)
@@ -2379,18 +2379,18 @@ def to_nim(self, indent=0):
             for m in members:
                 ParserState.symbol_table.add(m, name, "let")
     elif rhs_type == "subrange_def":
-        lo = str(rhs.nodes[0].node)
-        hi = str(rhs.nodes[2].node)  # [lo, range_op, hi]
+        lo = _subrange_bound_str(rhs.nodes[0])
+        hi = _subrange_bound_str(rhs.nodes[2])  # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "constrained_subrange_def":
         sr = rhs.nodes[1]  # the subrange_def inside
-        lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
+        lo = _subrange_bound_str(sr.nodes[0])
+        hi = _subrange_bound_str(sr.nodes[2])   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "int_range_def":
         sr = rhs.nodes[2]  # the subrange_def inside (nodes[0]=int, nodes[1]=range)
-        lo = str(sr.nodes[0].node)
-        hi = str(sr.nodes[2].node)   # [lo, range_op, hi]
+        lo = _subrange_bound_str(sr.nodes[0])
+        hi = _subrange_bound_str(sr.nodes[2])   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
     elif rhs_type == "distinct_def":
         return _distinct_type_nim(name, params, rhs, indent)
