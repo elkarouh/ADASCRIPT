@@ -5140,7 +5140,8 @@ def to_nim(self, indent=0):
         if _pyc_m:
             _root = _pyc_m.group(1)
             _sym = ParserState.symbol_table.lookup(_root)
-            if _sym and str(_sym.get("type", "")).startswith("_py_module:"):
+            _stype = str(_sym.get("type", "")) if _sym else ""
+            if _stype.startswith("_py_module:") or _stype == "PyObject":
                 result = f"discard {result}"
     # Nim builtins that return a non-void value — must discard when used as a
     # statement.  Only when the call *is* the statement: `xs.pop()` alone

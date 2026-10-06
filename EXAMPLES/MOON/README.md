@@ -79,8 +79,9 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 * **`{x:,.0f}` and `{x:+.0f}` in an f-string**: Nim had no `,` flag, and `+.0f` left a stray `.`
   (`-456396.`). Fixed in the transpiler, with a width and alignment too (`{x:15,.1f}`); the source
   writes them as Python does. `\n` in an f-string was fixed some time before.
-* **A call on a `PyObject` variable standing alone is not discarded on Nim** (`ax.plot(...)`: "has to
-  be used"); only calls on a pyimported module are. Written `let _: PyObject = ax.plot(...)`.
+* **A call on a `PyObject` variable standing alone (`ax.plot(...)`) was "has to be used" on Nim**
+  (only a call on a pyimported module was discarded). Fixed in the transpiler; the plots are written
+  as plain calls.
 * **`Record(a, b, None)` with a positional `None` for a `?T` field emitted `nil` on Nim, and
   `opt == value` / `opt != value` on a `?Enum` did not compile.** Fixed in the transpiler (the field is
   lifted to `none(T)` or `some(v)`, positional or by name; the value beside `==` is lifted to

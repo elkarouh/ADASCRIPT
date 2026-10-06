@@ -1238,35 +1238,35 @@ def make_plots(m: Mission, path: str, show: bool):
     # 1 - Earth frame
     let a1: PyObject = fig.add_subplot(2, 3, 1)
     let t_end: Duration_T = m.earth_ts[len(m.earth_ts) - 1]
-    let _: PyObject = a1.plot(plot_xs(m.earth_track, mega), plot_ys(m.earth_track, mega),
+    a1.plot(plot_xs(m.earth_track, mega), plot_ys(m.earth_track, mega),
                               lw=1.2, label="spacecraft")
     let ring: []Position = [ORIGIN + Vector(MOON_DISTANCE, Degrees_T(360.0 * float(i) / 399.0)) for i in 0 ..< 400]
-    let _: PyObject = a1.plot(plot_xs(ring, mega), plot_ys(ring, mega),
+    a1.plot(plot_xs(ring, mega), plot_ys(ring, mega),
                               "k:", lw=0.6, label="Moon orbit")
     let moon_path: []Position = [m.moon_ephem.position(t_end * (float(i) / 199.0)) for i in 0 ..< 200]
-    let _: PyObject = a1.plot(plot_xs(moon_path, mega), plot_ys(moon_path, mega),
+    a1.plot(plot_xs(moon_path, mega), plot_ys(moon_path, mega),
                               "gray", lw=2, label="Moon path")
     let mr: Position = m.moon_ephem.position(t_end)
-    let _: PyObject = a1.add_patch(plt.Circle((float(mr.x / mega), float(mr.y / mega)), float(SOI_MOON / mega),
+    a1.add_patch(plt.Circle((float(mr.x / mega), float(mr.y / mega)), float(SOI_MOON / mega),
                                               fill=False, ls="--", color="gray"))
-    let _: PyObject = a1.add_patch(plt.Circle((0.0, 0.0), float(R_EARTH / mega),
+    a1.add_patch(plt.Circle((0.0, 0.0), float(R_EARTH / mega),
                                               color="tab:blue", alpha=0.5))
-    let _: PyObject = a1.set_aspect("equal")
-    let _: PyObject = a1.set_title("Trans-lunar trajectory (Earth-centred, inertial)")
-    let _: PyObject = a1.set_xlabel("x [10^3 km]")
-    let _: PyObject = a1.set_ylabel("y [10^3 km]")
-    let _: PyObject = a1.legend(fontsize=7)
+    a1.set_aspect("equal")
+    a1.set_title("Trans-lunar trajectory (Earth-centred, inertial)")
+    a1.set_xlabel("x [10^3 km]")
+    a1.set_ylabel("y [10^3 km]")
+    a1.legend(fontsize=7)
 
     # 2 - Moon frame orbits
     let a2: PyObject = fig.add_subplot(2, 3, 2)
     for tr in m.moon_tracks:
-        let _: PyObject = a2.plot(plot_xs(tr.pts, kilo), plot_ys(tr.pts, kilo), lw=1, label=tr.label)
-    let _: PyObject = a2.add_patch(plt.Circle((0.0, 0.0), float(R_MOON / kilo), color="lightgray"))
-    let _: PyObject = a2.set_aspect("equal")
-    let _: PyObject = a2.set_title("Lunar approach, orbit and descent (Moon-centred)")
-    let _: PyObject = a2.set_xlabel("x [km]")
-    let _: PyObject = a2.set_ylabel("y [km]")
-    let _: PyObject = a2.legend(fontsize=7)
+        a2.plot(plot_xs(tr.pts, kilo), plot_ys(tr.pts, kilo), lw=1, label=tr.label)
+    a2.add_patch(plt.Circle((0.0, 0.0), float(R_MOON / kilo), color="lightgray"))
+    a2.set_aspect("equal")
+    a2.set_title("Lunar approach, orbit and descent (Moon-centred)")
+    a2.set_xlabel("x [km]")
+    a2.set_ylabel("y [km]")
+    a2.legend(fontsize=7)
 
     let d: []Telemetry_T = m.descent
     let tt: []float = [float(x.t) for x in d]
@@ -1280,48 +1280,48 @@ def make_plots(m: Mission, path: str, show: bool):
 
     # 3 - altitude
     let a3: PyObject = fig.add_subplot(2, 3, 3)
-    let _: PyObject = a3.plot(tt, alt)
+    a3.plot(tt, alt)
     for i in 1 ..< len(d):
         if d[i].mode != d[i - 1].mode:
-            let _: PyObject = a3.axvline(tt[i], color="k", ls=":", lw=0.8)
-            let _: PyObject = a3.text(tt[i], max(alt) * 0.9, f"{d[i].mode}"[0:3], rotation=90, fontsize=8)
-    let _: PyObject = a3.set_title("Powered descent: altitude")
-    let _: PyObject = a3.set_xlabel("time since PDI [s]")
-    let _: PyObject = a3.set_ylabel("altitude [km]")
+            a3.axvline(tt[i], color="k", ls=":", lw=0.8)
+            a3.text(tt[i], max(alt) * 0.9, f"{d[i].mode}"[0:3], rotation=90, fontsize=8)
+    a3.set_title("Powered descent: altitude")
+    a3.set_xlabel("time since PDI [s]")
+    a3.set_ylabel("altitude [km]")
 
     # 4 - velocities
     let a4: PyObject = fig.add_subplot(2, 3, 4)
-    let _: PyObject = a4.plot(tt, vh, label="horizontal")
-    let _: PyObject = a4.plot(tt, vv, label="vertical")
-    let _: PyObject = a4.set_title("Powered descent: velocity")
-    let _: PyObject = a4.set_xlabel("time since PDI [s]")
-    let _: PyObject = a4.set_ylabel("m/s")
-    let _: PyObject = a4.legend()
+    a4.plot(tt, vh, label="horizontal")
+    a4.plot(tt, vv, label="vertical")
+    a4.set_title("Powered descent: velocity")
+    a4.set_xlabel("time since PDI [s]")
+    a4.set_ylabel("m/s")
+    a4.legend()
 
     # 5 - throttle / fuel
     let a5: PyObject = fig.add_subplot(2, 3, 5)
-    let _: PyObject = a5.plot(tt, thr, color="tab:red", label="throttle [%]")
-    let _: PyObject = a5.set_ylabel("throttle [%]")
-    let _: PyObject = a5.set_xlabel("time since PDI [s]")
+    a5.plot(tt, thr, color="tab:red", label="throttle [%]")
+    a5.set_ylabel("throttle [%]")
+    a5.set_xlabel("time since PDI [s]")
     let b5: PyObject = a5.twinx()
-    let _: PyObject = b5.plot(tt, fuel, color="tab:green", label="descent prop")
-    let _: PyObject = b5.set_ylabel("propellant [kg]")
-    let _: PyObject = a5.set_title("Throttle and propellant")
+    b5.plot(tt, fuel, color="tab:green", label="descent prop")
+    b5.set_ylabel("propellant [kg]")
+    a5.set_title("Throttle and propellant")
 
     # 6 - nav error
     let a6: PyObject = fig.add_subplot(2, 3, 6)
-    let _: PyObject = a6.plot(tt, pe, label="position error [m]")
-    let _: PyObject = a6.plot(tt, ve, label="velocity error [cm/s]")
-    let _: PyObject = a6.set_title("Navigation error (estimate vs truth)")
-    let _: PyObject = a6.set_xlabel("time since PDI [s]")
-    let _: PyObject = a6.legend()
+    a6.plot(tt, pe, label="position error [m]")
+    a6.plot(tt, ve, label="velocity error [cm/s]")
+    a6.set_title("Navigation error (estimate vs truth)")
+    a6.set_xlabel("time since PDI [s]")
+    a6.legend()
 
-    let _: PyObject = plt.tight_layout()
-    let _: PyObject = fig.savefig(path, dpi=130)
+    plt.tight_layout()
+    fig.savefig(path, dpi=130)
     print
     print f"Plot saved to {path}"
     if show:
-        let _: PyObject = plt.show()
+        plt.show()
 
 # ============================================================
 # MAIN
@@ -1358,7 +1358,7 @@ if expect != NOTHING:
     die(f"usage: {PROG} [--seed N] [--show] [--out FILE]", code = 2)
 
 if not show:
-    let _: PyObject = matplotlib.use("Agg")
+    matplotlib.use("Agg")
 
 var m: Mission = Mission(seed)
 m.run()

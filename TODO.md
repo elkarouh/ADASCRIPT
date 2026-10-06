@@ -704,8 +704,6 @@ Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
 
 - [ ] `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list
       concatenation on Nim (`&`).
-- [ ] a call on a `PyObject` *variable* standing alone (`ax.plot(...)`) is not discarded
-      on Nim ("has to be used"); only a call on a pyimported module is.
 - [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_utils import` works from a sibling directory only because the
       parent is searched; map_utils itself is Nim-only (`from math nimport`), so

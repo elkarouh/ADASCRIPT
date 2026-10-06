@@ -24,4 +24,14 @@ assert x == 3.0
 let parsed: PyObject = json.loads("{\"name\": \"ady\"}")
 let name: str = parsed.get("name")
 assert name == "ady"
+# A call on a PyObject *variable* standing alone as a statement: its value is dropped
+# (`ax.plot(...)` was "has to be used" on Nim).
+pyimport random
+let rng: PyObject = random.Random(1)
+rng.seed(2)
+let items: PyObject = json.loads("[3, 1, 2]")
+items.sort()
+let first: int = items[0]
+assert first == 1
+
 print "test_pyobject_calls OK"
