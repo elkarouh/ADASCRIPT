@@ -1846,6 +1846,32 @@ proc append_to(xs: var seq[int]) =
     xs.add(99)                  # var: the mutation reaches the caller
 ```
 
+### Overloads
+
+A function, or a method, may be defined more than once under one name if the parameters differ in their types. The call picks the def from the types of its arguments, as in Ada and in Nim:
+
+```python
+def describe(n: int) -> str:
+    return f"int {n}"
+
+def describe(s: str) -> str:
+    return f"str {s}"
+
+def describe(d: Duration_T) -> str:
+    return f"duration {float(d):.1f}"
+
+def describe(n: int, s: str) -> str:
+    return f"{n} of {s}"
+```
+
+This is what makes an operator work on more than one type: `Velocity` has `__mul__(self, scale: float) -> Velocity`, which scales, and `__mul__(self, t: Duration_T) -> Vector`, which turns a speed into a distance, so `v * 2.0` and `v * t` are both written as they read. A distinct type is its own type here: a `Duration_T` finds the overload that names it, not the one that names `float`.
+
+- Two defs with the same parameter types are one name defined twice, and refused.
+- Nim overloads natively. On Python the defs are renamed and a def of the name dispatches on the types of the arguments, the exact type first, then what each is an instance of; a type it cannot test (a union, a generic) matches anything. Call overloads by position.
+- Decorated defs, and defs with `*args` or `**kwargs`, are left as they are.
+
+<!-- tested by EXAMPLES/test_overload_types.ady -->
+
 ### Nested functions / closures
 
 ```python

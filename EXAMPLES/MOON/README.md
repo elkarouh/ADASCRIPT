@@ -52,10 +52,11 @@ Two places still go through plain floats, inside a function that has typed param
 the integrator and Brent's method, which is on dimensionless step fractions.
 
 Velocities and accelerations are map_utils' `Velocity` (`Speed_T` along a bearing) and
-`Acceleration` (`Accel_T` along a bearing), with `Vector.per(t) -> Velocity`,
-`Velocity.over(t) -> Vector`, `Velocity.per(t) -> Acceleration` and `Acceleration.over(t) -> Velocity`;
+`Acceleration` (`Accel_T` along a bearing), with `Vector / t -> Velocity`,
+`Velocity * t -> Vector`, `Velocity / t -> Acceleration` and `Acceleration * t -> Velocity` (`*` and `/` are
+overloaded on the type of the right-hand side: a plain number scales, a `Duration_T` changes the unit);
 the integrator's state is a `Position` and a `Velocity`, and a step of it is a `Vector` and a `Velocity`.
-So `r + v.over(dt)` checks, and `r + v` does not.
+So `r + v * dt` checks, and `r + v` does not.
 
 ## Transpiler gaps met on the way
 

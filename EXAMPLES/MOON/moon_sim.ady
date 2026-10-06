@@ -25,8 +25,8 @@ Fidelity notes
 The geometry is MAP_UTILS/map_utils.ady's flat plane: a `Position` is a point,
 a `Vector` a displacement, a `Velocity` has its parts in m/s and an `Acceleration` in
 m/s^2, and `Meters_T`, `Degrees_T`, `Duration_T`, `Speed_T` and `Accel_T` are its units.
-A time turns one into the next: `velocity.over(t)` is a `Vector`, `vector.per(t)` a `Velocity`,
-`acceleration.over(t)` a `Velocity`, `velocity.per(t)` an `Acceleration`.
+A time turns one into the next: `velocity * t` is a `Vector`, `vector / t` a `Velocity`,
+`acceleration * t` a `Velocity`, `velocity / t` an `Acceleration`.
 
 Usage:  moon_sim [--seed N] [--show] [--out moon_mission.png]
 
@@ -317,9 +317,9 @@ class Delta_T:
     def __mul__(self, k: float) -> Delta_T:
         return Delta_T(self.dr * k, self.dv * k)
 
-    def over(self, t: Duration_T) -> Increment_T:
+    def __mul__(self, t: Duration_T) -> Increment_T:
         """What it comes to in the time T."""
-        return Increment_T(self.dr.over(t), self.dv.over(t))
+        return Increment_T(self.dr * t, self.dv * t)
 
 class State_T:
     """Position and velocity: what the integrator advances."""
@@ -444,25 +444,25 @@ type Step_T is record:
     err: Increment_T         # the error estimate
 
 def dp_step(dyn: Dynamics, t: Duration_T, y: State_T, k1: Delta_T, step: Duration_T) -> Step_T:
-    let k2: Delta_T = dyn.rhs(t + step * (1.0 / 5.0), y.advance((k1 * (1.0 / 5.0)).over(step)))
+    let k2: Delta_T = dyn.rhs(t + step * (1.0 / 5.0), y.advance((k1 * (1.0 / 5.0)) * step))
     let k3: Delta_T = dyn.rhs(t + step * (3.0 / 10.0),
-                              y.advance((k1 * (3.0 / 40.0) + k2 * (9.0 / 40.0)).over(step)))
+                              y.advance((k1 * (3.0 / 40.0) + k2 * (9.0 / 40.0)) * step))
     let k4: Delta_T = dyn.rhs(t + step * (4.0 / 5.0),
                               y.advance((k1 * (44.0 / 45.0) + k2 * (-56.0 / 15.0)
-                                         + k3 * (32.0 / 9.0)).over(step)))
+                                         + k3 * (32.0 / 9.0)) * step))
     let k5: Delta_T = dyn.rhs(t + step * (8.0 / 9.0),
                               y.advance((k1 * (19372.0 / 6561.0) + k2 * (-25360.0 / 2187.0)
-                                         + k3 * (64448.0 / 6561.0) + k4 * (-212.0 / 729.0)).over(step)))
+                                         + k3 * (64448.0 / 6561.0) + k4 * (-212.0 / 729.0)) * step))
     let k6: Delta_T = dyn.rhs(t + step,
                               y.advance((k1 * (9017.0 / 3168.0) + k2 * (-355.0 / 33.0)
                                          + k3 * (46732.0 / 5247.0) + k4 * (49.0 / 176.0)
-                                         + k5 * (-5103.0 / 18656.0)).over(step)))
+                                         + k5 * (-5103.0 / 18656.0)) * step))
     let y1: State_T = y.advance((k1 * (35.0 / 384.0) + k3 * (500.0 / 1113.0)
                                  + k4 * (125.0 / 192.0) + k5 * (-2187.0 / 6784.0)
-                                 + k6 * (11.0 / 84.0)).over(step))
+                                 + k6 * (11.0 / 84.0)) * step)
     let k7: Delta_T = dyn.rhs(t + step, y1)
     let err: Increment_T = (k1 * DP_E1 + k3 * DP_E3 + k4 * DP_E4
-                            + k5 * DP_E5 + k6 * DP_E6 + k7 * DP_E7).over(step)
+                            + k5 * DP_E5 + k6 * DP_E6 + k7 * DP_E7) * step
     return Step_T(y1, k7, err)
 
 def scaled(e: float, a: float, b: float, rtol: float, atol: float) -> float:
@@ -608,15 +608,15 @@ def rk4_step(r: Position, v: Velocity, a_ext: Acceleration, dt: Duration_T) -> (
     let half: Duration_T = dt * 0.5
     let k1r: Velocity = v
     let k1v: Acceleration = lunar_accel(r, a_ext)
-    let k2r: Velocity = v + k1v.over(half)
-    let k2v: Acceleration = lunar_accel(r + k1r.over(half), a_ext)
-    let k3r: Velocity = v + k2v.over(half)
-    let k3v: Acceleration = lunar_accel(r + k2r.over(half), a_ext)
-    let k4r: Velocity = v + k3v.over(dt)
-    let k4v: Acceleration = lunar_accel(r + k3r.over(dt), a_ext)
+    let k2r: Velocity = v + k1v * half
+    let k2v: Acceleration = lunar_accel(r + k1r * half, a_ext)
+    let k3r: Velocity = v + k2v * half
+    let k3v: Acceleration = lunar_accel(r + k2r * half, a_ext)
+    let k4r: Velocity = v + k3v * dt
+    let k4v: Acceleration = lunar_accel(r + k3r * dt, a_ext)
     let sixth: Duration_T = dt / 6.0
-    return (r + (k1r + k2r * 2.0 + k3r * 2.0 + k4r).over(sixth),
-            v + (k1v + k2v * 2.0 + k3v * 2.0 + k4v).over(sixth))
+    return (r + (k1r + k2r * 2.0 + k3r * 2.0 + k4r) * sixth,
+            v + (k1v + k2v * 2.0 + k3v * 2.0 + k4v) * sixth)
 
 # ============================================================
 # APOLLO-STYLE GNC LAYER
@@ -761,11 +761,11 @@ class Guidance:
             let fade: float = clip(float(alt) / 30.0, 0.0, 1.0)
             let v_des: Velocity = (Velocity(Speed_T(clip(0.1 * float(dx), -2.0, 2.0) * fade), east.angle())
                                    + Velocity(Speed_T(-clip(0.1 * float(alt), 1.0, 3.0)), up.angle()))
-            a_total = (v_des - v).per(Duration_T(1.5))
+            a_total = (v_des - v) / Duration_T(1.5)
         else:
             let big_t: Duration_T = max(self.t_go, Duration_T(3.0))
-            a_total = ((aim.r - r).per(big_t).per(big_t) * 6.0
-                       - (v * 4.0 + aim.v * 2.0).per(big_t))
+            a_total = ((aim.r - r) / big_t / big_t * 6.0
+                       - (v * 4.0 + aim.v * 2.0) / big_t)
         return a_total - g          # thrust must cancel gravity
 
 class Autopilot:

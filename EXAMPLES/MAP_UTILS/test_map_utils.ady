@@ -237,14 +237,14 @@ let ten_seconds: Duration_T = 10.0
 let heading: Velocity = Velocity(5.0, 90.0)                              # 5 m/s, due +y
 assert close(float(heading.speed()), 5.0) and close(float(heading.angle()), 90.0)
 assert close(float(heading.x), 0.0, 1e-9) and close(float(heading.y), 5.0)
-let covered: Vector = heading.over(ten_seconds)                          # speed * time is a distance
+let covered: Vector = heading * ten_seconds                          # speed * time is a distance
 assert close(float(covered.length()), 50.0) and close(float(covered.angle()), 90.0)
-let recovered: Velocity = covered.per(ten_seconds)                       # and a distance over time a speed
+let recovered: Velocity = covered / ten_seconds                       # and a distance over time a speed
 assert close(float(recovered.speed()), 5.0) and close(float(recovered.angle()), 90.0)
 let push: Acceleration = Acceleration(2.0, 0.0)                          # 2 m/s^2 along +x
-let gained: Velocity = push.over(ten_seconds)
+let gained: Velocity = push * ten_seconds
 assert close(float(gained.x), 20.0) and close(float(gained.y), 0.0, 1e-9)
-assert close(float(gained.per(ten_seconds).magnitude()), 2.0)
+assert close(float((gained / ten_seconds).magnitude()), 2.0)
 let combined: Velocity = heading + gained * 0.5 - velocity_xy(1.0, 1.0)
 assert close(float(combined.x), 9.0) and close(float(combined.y), 4.0)
 assert close(float(acceleration_xy(3.0, 4.0).magnitude()), 5.0)

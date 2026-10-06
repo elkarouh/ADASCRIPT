@@ -416,6 +416,8 @@ def translate(code):
     _rename_math_for_python(output)
     _add_stdlib_module_imports(output)
     _drop_type_applications(output)
+    from hek_py_overload import overload_defs
+    output[:] = overload_defs("\n".join(output), 0).split("\n")
     # Annotations are not evaluated where they are written, so one may name
     # a class defined further down -- `def builds(self) -> list[Build]` in a
     # class above Build raised NameError. Definition order does not matter

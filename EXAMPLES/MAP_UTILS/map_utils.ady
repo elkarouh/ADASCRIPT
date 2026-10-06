@@ -469,7 +469,7 @@ class Vector:
         let u: Vector = onto.unit()
         u * float(self.dot_product(u))          # u is 1 m long: the dot product, in metres
 
-    def per(self, t: Duration_T) -> Velocity:
+    def __truediv__(self, t: Duration_T) -> Velocity:
         """The velocity that covers this vector in the time T."""
         velocity_xy(self.x / t, self.y / t)
 
@@ -538,11 +538,12 @@ class Position:
 # ---------------------------------------------------------------------------
 # A Vector is metres.  How fast a Position moves, and how fast that changes, are
 # not metres: a Velocity has its parts in Speed_T and an Acceleration in Accel_T,
-# so that `v * t` is a Vector only through `over`, and a Velocity cannot be added
-# to a Vector.  The time is what turns one into the next:
+# so that a Velocity cannot be added to a Vector.  The time is what turns one into
+# the next, by `*` and `/` -- the same operators that scale by a plain number, chosen
+# by the type of the right-hand side:
 #
-#     Vector.per(t) -> Velocity      Velocity.over(t) -> Vector
-#     Velocity.per(t) -> Acceleration   Acceleration.over(t) -> Velocity
+#     Vector / t -> Velocity      Velocity * t -> Vector
+#     Velocity / t -> Acceleration   Acceleration * t -> Velocity
 
 class Velocity:
     """A 2-D velocity: a speed and a direction, kept as parts in m/s."""
@@ -569,11 +570,11 @@ class Velocity:
         """The unit Vector (1 m) it points along."""
         vector_xy(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
 
-    def over(self, t: Duration_T) -> Vector:
+    def __mul__(self, t: Duration_T) -> Vector:
         """The displacement in the time T."""
         vector_xy(self.x * t, self.y * t)
 
-    def per(self, t: Duration_T) -> Acceleration:
+    def __truediv__(self, t: Duration_T) -> Acceleration:
         """The acceleration that changes it by this much in the time T."""
         acceleration_xy(self.x / t, self.y / t)
 
@@ -626,7 +627,7 @@ class Acceleration:
         """The unit Vector (1 m) it points along."""
         vector_xy(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
 
-    def over(self, t: Duration_T) -> Velocity:
+    def __mul__(self, t: Duration_T) -> Velocity:
         """The change of velocity in the time T."""
         velocity_xy(self.x * t, self.y * t)
 

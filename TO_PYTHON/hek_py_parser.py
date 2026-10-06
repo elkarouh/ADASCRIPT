@@ -2353,6 +2353,8 @@ def to_py(self, indent=0):
         type_scope_pop()
         _stmt.CLASS_BODY_DEPTH = _outer_class_depth
         _pyexpr.DEFINING_CLASS = _outer_defining
+    from hek_py_overload import overload_defs
+    body = overload_defs(body, indent + 1)
     if "dataclass" not in decos:        # a dataclass makes its own __init__
         body = _per_instance_fields(body, indent)
     return f"{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"

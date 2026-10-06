@@ -824,6 +824,10 @@ A type argument is a name or a tuple (`first_of[Row_T]`, `first_of[(int, str)]`)
 
 ---
 
+## Overloads
+
+One name, several defs, differing in parameter TYPES: the call picks by the types of its arguments (Ada, Nim). Works for functions and methods, operators included -- `__mul__(self, scale: float)` and `__mul__(self, t: Duration_T)` side by side, so `v * 2.0` scales and `v * t` is a displacement. Prefer this to `over(t)` / `per(t)` helper methods. Same parameter types twice is an error (a name defined twice). Python: defs are renamed, a dispatcher picks by exact type, then isinstance (a distinct type is its own); call by position. Unions and generics match anything. `EXAMPLES/test_overload_types.ady`.
+
 ## Generic Classes
 
 ```adascript

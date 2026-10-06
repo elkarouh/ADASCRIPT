@@ -1,0 +1,49 @@
+# A name defined more than once, with different parameter types, is an overload: the call picks
+# the def by the types of its arguments, as it does in Ada and in Nim. On Python the defs
+# are renamed and a def of the name dispatches on the types.
+
+type Duration_T is distinct float
+type Distance_T is distinct float
+type Speed_T is distinct float
+
+class Spot:
+    var x: Distance_T
+    var v: Speed_T
+
+    def __init__(self, x: Distance_T, v: Speed_T) -> None:
+        self.x = x
+        self.v = v
+
+    def __mul__(self, scale: float) -> Spot:
+        return Spot(self.x * scale, self.v * scale)
+
+    def __mul__(self, t: Duration_T) -> Distance_T:
+        return Distance_T(float(self.v) * float(t))
+
+    def __mul__(self, other: Spot) -> float:
+        return float(self.x) * float(other.x)
+
+def describe(n: int) -> str:
+    return f"int {n}"
+
+def describe(s: str) -> str:
+    return f"str {s}"
+
+def describe(d: Duration_T) -> str:
+    return f"duration {float(d):.1f}"
+
+def describe(x: float) -> str:
+    return f"float {x:.1f}"
+
+def describe(n: int, s: str) -> str:
+    return f"{n} of {s}"
+
+def main():
+    let p: Spot = Spot(Distance_T(10.0), Speed_T(2.0))
+    let scaled: Spot = p * 3.0
+    print(float(scaled.x), float(scaled.v))
+    print(float(p * Duration_T(4.0)))
+    print(p * p)
+    print(describe(7), describe("seven"), describe(Duration_T(7.0)), describe(7.5), describe(3, "cats"))
+
+main()

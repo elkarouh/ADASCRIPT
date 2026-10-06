@@ -152,6 +152,7 @@ STANDALONE := \
     test_seq_field_concat.ady \
     test_distinct_float_range.ady \
     test_narrowed_type.ady \
+    test_overload_types.ady \
     test_slice_semantics.ady \
     test_money.ady \
     test_scaled_units.ady \
@@ -301,7 +302,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_distinct_float_range test_narrowed_type test_slice_semantics test_money \
+    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_distinct_float_range test_narrowed_type test_overload_types test_slice_semantics test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat
@@ -847,6 +848,12 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_refuse_[0-9]*.ady $(TMPDIR)/ady_refuse.out
+	@# a name defined twice with the same parameter types is no overload (Nim says redefinition)
+	@printf 'def f(x: float) -> float:\n    return x\n\ndef f(x: float) -> float:\n    return x + 1.0\nprint f(1.0)\n' > $(TMPDIR)/ady_overload_dup.ady
+	@printf '  %-42s' "an overload that repeats its types (ady2py)"; \
+	    if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_overload_dup.ady > $(TMPDIR)/ady_overload.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	    grep -q "is defined twice with the parameter types" $(TMPDIR)/ady_overload.out && echo OK || { echo FAIL; cat $(TMPDIR)/ady_overload.out; exit 1; }
+	@rm -f $(TMPDIR)/ady_overload_dup.ady $(TMPDIR)/ady_overload.out
 	@# nimport is Python's too: `nimport math` binds math, so a bare sqrt is refused, and so
 	@# is a name left out of `from math nimport floor`; both backends say so, with the line
 	@# and what to write. Only the common Nim modules are known to the check; the rest Nim refuses.
