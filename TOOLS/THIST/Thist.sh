@@ -40,9 +40,11 @@ command -v git   >/dev/null || die "git is not installed"
 command -v meld  >/dev/null || die "meld is not installed"
 
 # A file in a git work tree is used as it is. Otherwise a file of NM -- <system>/
-# <subsystem>/<path>, or a path below the NM workspace, whose submodule is not
-# checked out -- is checked out alone first, by Tcheckout, as Treport's diff links
-# do. The places Tcheckout uses: the workspace, else the cache of the diff links.
+# <subsystem>/<path>, a path below the NM workspace, or a build-context path
+# (where_ada's: .../cm/ot/<system>/<subsystem>!<baseline>/<build_X>/<path>) --
+# whose submodule is not checked out -- is checked out alone first, by
+# Tcheckout, as Treport's diff links do. The places Tcheckout uses: the
+# workspace, else the cache of the diff links.
 nm_root() {
   echo "${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}}"
 }
@@ -58,6 +60,8 @@ if ! { [[ -e $FILE ]] && inside_git "$FILE"; }; then
     target=${FILE#"$nmroot"/}
   elif [[ $FILE != /* && $FILE != .* && $FILE == */*/* ]]; then
     target=$FILE
+  elif [[ $FILE =~ /cm/ot/([A-Za-z0-9_]+)/([A-Za-z0-9_]+)[!.][^/]+/[^/]+/(.+)$ ]]; then
+    target=${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}
   fi
   if [[ -z $target ]]; then
     [[ -e $FILE ]] || die "File not found: $FILE"
