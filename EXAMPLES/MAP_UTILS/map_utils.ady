@@ -107,22 +107,25 @@ def modulo(x: float, period: float) -> float:
     """Python's x % period: the result has the sign of PERIOD."""
     x - period * floor(x / period)
 
+# A sine or a cosine is between -1 and 1.
+type Unit_T is float range -1.0 .. 1.0
+
 # The trigonometry of an angle takes and gives Radians_T, so that an angle is never a bare
 # number: sin(az), and `let az: Radians_T = arctan2(y, x)`, with no conversion to write.
 # sin, cos and tan of a plain float are here too, so that one import gives both.
-def sin(x: float) -> float:
+def sin(x: float) -> Unit_T:
     math.sin(x)
 
-def cos(x: float) -> float:
+def cos(x: float) -> Unit_T:
     math.cos(x)
 
 def tan(x: float) -> float:
     math.tan(x)
 
-def sin(a: Radians_T) -> float:
+def sin(a: Radians_T) -> Unit_T:
     sin(float(a))
 
-def cos(a: Radians_T) -> float:
+def cos(a: Radians_T) -> Unit_T:
     cos(float(a))
 
 def tan(a: Radians_T) -> float:
@@ -135,7 +138,7 @@ def arctan2(y: float, x: float) -> Radians_T:
 def arctan(x: float) -> Radians_T:
     Radians_T(math.arctan(x))
 
-def arcsin(x: float) -> Radians_T:
+def arcsin(x: Unit_T) -> Radians_T:
     Radians_T(math.arcsin(x))
 
 # ---------------------------------------------------------------------------
