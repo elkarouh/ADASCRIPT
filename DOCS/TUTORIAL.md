@@ -529,7 +529,7 @@ class Ring:
 
     def push(self, x: int):
         self.items[self.head] = x
-        self.head = self.head + Index_T(1)
+        self.head += 1                 # a literal is an Index_T; it comes round at CAPACITY
         if self.count < CAPACITY:
             self.count += 1
 
