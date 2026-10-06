@@ -17,8 +17,8 @@ class Ring:
         if self.count < CAPACITY:
             self.count += 1
 
-    def latest(self, back: int) -> int:
-        return self.items[self.head - Index_T(1 + back)]
+    def latest(self, back: Index_T) -> int:
+        return self.items[self.head - 1 - back]     # back = 0 is the newest
 
 def main():
     var r: Ring = Ring()
