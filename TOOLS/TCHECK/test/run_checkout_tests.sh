@@ -168,6 +168,13 @@ check "...another file: added"                       "a 2 b 2" "$(cat "$csub/sou
 out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.3 -rev 30.0.0.2 TACT/UIF/sources/c.adb 2>&1) || { echo "$out"; exit 1; }
 check "...one only a newer revision has: moved there" "c 3 $(git -C "$up" rev-parse 30.0.0.3)" "$(cat "$csub/sources/c.adb") $(git -C "$csub" rev-parse HEAD)"
 check "...the others still there"                    "a 2 b 3" "$(cat "$csub/sources/a.adb" "$csub/sources/b.adb" | tr '\n' ' ' | sed 's/ $//')"
+# no revision named at all (Thist's own call): a new baseline that appeared
+# on Bitbucket after the cache was already populated must still show up
+printf 'b 4\n' > "$up/sources/b.adb"
+git -C "$up" commit -qam four
+out=$("$TCHECKOUT" -cache "$C" TACT/UIF/sources/b.adb 2>&1) || { echo "$out"; exit 1; }
+check "...no revision named: fetched, moved to the tip" "b 4 $(git -C "$up" rev-parse HEAD)" \
+    "$(cat "$csub/sources/b.adb") $(git -C "$csub" rev-parse HEAD)"
 rc=0; out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.9 TACT/UIF/sources/b.adb 2>&1) || rc=$?
 check "...a revision Bitbucket lacks: said so"       "1 1" "$rc $(printf '%s\n' "$out" | grep -c 'no 30.0.0.9 in')"
 check "...-l: the files in the cache"                "TACT/UIF/sources/b.adb TACT/UIF/sources/a.adb TACT/UIF/sources/c.adb" \

@@ -48,8 +48,10 @@ another server.
 cache is DIR, else, with no workspace either, $TCHECK_NM_CACHE (default
 ~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, in
 full, from Bitbucket, into DIR/<system>/<subsystem> -- the file checked
-out at the first REV that has it; a REV not yet in the clone's history is
-fetched: the cache keeps up with Bitbucket. The repository is
+out at the first REV that has it. With REVs given (Treport's diff links),
+one not yet in the clone's history is fetched; with none (Thist's full
+history), the clone is fetched every time and moved to Bitbucket's tip --
+either way the cache keeps up with Bitbucket. The repository is
 $TCHECK_NM_URL/<system>.<subsystem>.git, in lower case; TCHECK_NM_URL
 defaults to https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
 -l and -u work there too; -u of a repository's last file removes the
@@ -137,11 +139,14 @@ def take_out(work: Path, f: File_T) -> bool | !Failure_T:
     print f"{PROG}: {f.target} taken out"
     False
 
-def check_out(work: Path, rev: Rev_T, f: File_T) -> None | !Failure_T:
+def check_out(work: Path, rev: Rev_T) -> None | !Failure_T:
     # forced: a deinitialised submodule's index still lists the files its
     # emptied directory lacks, which a plain checkout keeps as deletions
-    do:
-        git_checked(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
+    git_checked(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
+
+def verify_present(work: Path, rev: Rev_T, f: File_T) -> None | !Failure_T:
+    """FILE really is at REV -- not just the submodule checked out "fine" at
+    a commit that happens to lack it (a wrong path, usually)."""
     return Failure_T(message=f"no such file: {f.target} is not in {f.sub} at {rev}") if not git_ok(work, ["cat-file", "-e", rev + ":" + f.file])
 
 # --- where files are checked out: the workspace, or the cache -----------------
@@ -258,7 +263,8 @@ class Workspace(Checkouts):
             let rc: int = shell: git -C {!work} fetch --tags origin
             return Failure_T(message=f"could not fetch {f.sub}") if rc != 0
         do:
-            check_out(work, commit, f)
+            check_out(work, commit)
+            verify_present(work, commit, f)
         print f"{PROG}: {f.target} checked out ({f.sub} at {commit[:8]}, this file only)"
 
 # --- the cache, for no workspace at all ----------------------------------------
@@ -301,24 +307,40 @@ class Cache(Checkouts):
             return Failure_T(message=f"could not clone {url}") if rc != 0
             do:
                 git_checked(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")
-        # the revisions compared, fetched when missing
-        let missing: []Rev_T = [rev for rev in revs if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])]
-        if missing != []:
-            print f"{PROG}: fetching {f.sub}, for {missing[0]}"
+        if revs != []:
+            # explicit revisions compared (Treport's diff links), fetched
+            # when missing: which one ends up checked out does not matter
+            # below, since the diff itself reads blobs by revision, not the
+            # working tree
+            let missing: []Rev_T = [rev for rev in revs if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])]
+            if missing != []:
+                print f"{PROG}: fetching {f.sub}, for {missing[0]}"
+                do:
+                    git_checked(work, ["fetch", "-q", "--tags", "origin"], f"could not fetch {url}")
+            for rev in missing:
+                return Failure_T(message=f"no {rev} in {url}") if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])
+        elif not fresh:
+            # no revision named (Thist's full history): fetched every time
+            # and moved to the tip below, so a new baseline on Bitbucket
+            # shows up instead of a frozen, first-cloned one
+            print f"{PROG}: fetching {f.sub}, to keep up with {url}"
             do:
                 git_checked(work, ["fetch", "-q", "--tags", "origin"], f"could not fetch {url}")
-        for rev in missing:
-            return Failure_T(message=f"no {rev} in {url}") if not git_ok(work, ["rev-parse", "-q", "--verify", rev + "^{commit}"])
         if "/" + f.file not in sparse_list(work):
             do:
                 git_checked(work, ["sparse-checkout", "add", "/" + f.file], f"could not add {f.file} to {work}")
-        # the file, known to git: in HEAD, else at the first revision that has it
-        return if not fresh and git_ok(work, ["cat-file", "-e", "HEAD:" + f.file])
+        # a named revision already checked out: nothing more to do (see
+        # above); otherwise, the file at the first named revision that has
+        # it, else at the tip
+        return if revs != [] and not fresh and git_ok(work, ["cat-file", "-e", "HEAD:" + f.file])
         let having: []Rev_T = [rev for rev in revs if git_ok(work, ["cat-file", "-e", rev + ":" + f.file])]
         let at: Rev_T = having[0] if having != [] else git_out(work, ["rev-parse", "-q", "--verify", "origin/HEAD"])
         return Failure_T(message=f"{f.file} is at none of:" + "".join([" " + r for r in revs])) if at == ""
+        if at != git_out(work, ["rev-parse", "-q", "--verify", "HEAD"]):
+            do:
+                check_out(work, at)
         do:
-            check_out(work, at, f)
+            verify_present(work, at, f)
         print f"{PROG}: {f.target} checked out in {self.dir} (at {at})"
 
 # --- main ----------------------------------------------------------------------

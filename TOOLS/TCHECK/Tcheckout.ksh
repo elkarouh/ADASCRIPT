@@ -46,8 +46,10 @@
 # cache is DIR, else, with no workspace either, $TCHECK_NM_CACHE (default
 # ~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, in
 # full, from Bitbucket, into DIR/<system>/<subsystem> -- the file checked
-# out at the first REV that has it; a REV not yet in the clone's history is
-# fetched: the cache keeps up with Bitbucket. The repository is
+# out at the first REV that has it. With REVs given (Treport's diff links),
+# one not yet in the clone's history is fetched; with none (Thist's full
+# history), the clone is fetched every time and moved to Bitbucket's tip --
+# either way the cache keeps up with Bitbucket. The repository is
 # $TCHECK_NM_URL/<system>.<subsystem>.git, in lower case; TCHECK_NM_URL
 # defaults to https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
 # -l and -u work there too; -u of a repository's last file removes the
@@ -146,20 +148,32 @@ if [[ -n "${cache}" ]]; then
     git -C "${work}" sparse-checkout set --no-cone "/${file}" || die "could not set up the sparse checkout"
     fresh=1
   fi
-  # the revisions compared, fetched when missing
-  for rev in ${revs}; do
-    git -C "${work}" rev-parse -q --verify "${rev}${peel}" >/dev/null && continue
-    echo "${PROG}: fetching ${sub}, for ${rev}"
+  if [[ -n "${revs}" ]]; then
+    # explicit revisions compared (Treport's diff links), fetched when
+    # missing: which one ends up checked out does not matter below, since
+    # the diff itself reads blobs by revision, not the working tree
+    for rev in ${revs}; do
+      git -C "${work}" rev-parse -q --verify "${rev}${peel}" >/dev/null && continue
+      echo "${PROG}: fetching ${sub}, for ${rev}"
+      git -C "${work}" fetch -q --tags origin || die "could not fetch ${url}"
+      break
+    done
+    for rev in ${revs}; do
+      git -C "${work}" rev-parse -q --verify "${rev}${peel}" >/dev/null || die "no ${rev} in ${url}"
+    done
+  elif [[ -z "${fresh}" ]]; then
+    # no revision named (Thist's full history): fetched every time and
+    # moved to the tip below, so a new baseline on Bitbucket shows up
+    # instead of a frozen, first-cloned one
+    echo "${PROG}: fetching ${sub}, to keep up with ${url}"
     git -C "${work}" fetch -q --tags origin || die "could not fetch ${url}"
-    break
-  done
-  for rev in ${revs}; do
-    git -C "${work}" rev-parse -q --verify "${rev}${peel}" >/dev/null || die "no ${rev} in ${url}"
-  done
+  fi
   git -C ${work} sparse-checkout list | grep -qxF "/${file}" ||
     git -C ${work} sparse-checkout add "/${file}" || die "could not add ${file} to ${work}"
-  # the file, known to git: in HEAD, else at the first revision that has it
-  if [[ -z "${fresh}" ]] && git -C "${work}" cat-file -e "HEAD:${file}" 2>/dev/null; then
+  # a named revision already checked out: nothing more to do (see above);
+  # otherwise, the file at the first named revision that has it, else at
+  # the tip
+  if [[ -n "${revs}" ]] && [[ -z "${fresh}" ]] && git -C "${work}" cat-file -e "HEAD:${file}" 2>/dev/null; then
     exit 0
   fi
   at=""
@@ -168,7 +182,9 @@ if [[ -n "${cache}" ]]; then
   done
   [[ -n "${at}" ]] || at=$(git -C "${work}" rev-parse -q --verify origin/HEAD) || at=""
   [[ -n "${at}" ]] || die "${file} is at none of:${revs}"
-  git -C "${work}" -c advice.detachedHead=false checkout -q -f "${at}" || die "could not check out ${at} in ${work}"
+  if [[ "${at}" != "$(git -C "${work}" rev-parse -q --verify HEAD 2>/dev/null)" ]]; then
+    git -C "${work}" -c advice.detachedHead=false checkout -q -f "${at}" || die "could not check out ${at} in ${work}"
+  fi
   git -C "${work}" cat-file -e "${at}:${file}" 2>/dev/null || die "no such file: ${target} is not in ${sub} at ${at}"
   echo "${PROG}: ${target} checked out in ${cache} (at ${at})"
   exit 0

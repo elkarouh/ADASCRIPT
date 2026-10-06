@@ -311,6 +311,9 @@ repository from Bitbucket into it in full, and every later click fetches the
 commits and tags compared when the cache lacks them -- it keeps up with
 Bitbucket. The clone is full (not a partial, blob-less one) so that
 comparing any two revisions later needs no further network access.
+`Thist`, which names no revision, instead fetches and moves to Bitbucket's
+tip on every run, so a new baseline shows up without anyone asking for it
+by name.
 
 ```
 DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache /home/me/Downloads/.cache/tcheck/NM -rev c3fb81031 -rev c3fb81031^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/home/me/Downloads/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031"))
