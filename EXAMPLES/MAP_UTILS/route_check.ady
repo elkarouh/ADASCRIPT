@@ -25,7 +25,7 @@ the distance to the side it was put at.
 """
 from map_utils import GeoPoint, GeoVector, Vector, Position, GeoFailure_T, LatLong_T
 from map_utils import Kilometers_T, Meters_T, Degrees_T, Bearing_T, SquareMeters_T
-from map_utils import geo_point_from_dms, human_latlong2dec, vector_xy, must
+from map_utils import geo_point_from_dms, human_latlong2dec, must
 from regions import Region, Circle, Sector, Polygon, HalfAngle_T
 
 # ---- the data ------------------------------------------------------------------
@@ -142,9 +142,9 @@ def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
     """Where PLANE is, as seen from a leg that starts at START: on a flat plane, with the
     east and north of the leg and of the way from START to the plane as the x and y.
     Good for tens of kilometres, which is all a leg's neighbourhood is."""
-    let track: Vector = vector_xy(leg.east, leg.north)
+    let track: Vector = Vector(leg.east, leg.north)
     let off: GeoVector = plane - start
-    let offset: Vector = vector_xy(off.east, off.north)
+    let offset: Vector = Vector(off.east, off.north)
     let cross: SquareMeters_T = track.cross(offset)
     let dot: SquareMeters_T = track * offset
     let length: Meters_T = track.length()

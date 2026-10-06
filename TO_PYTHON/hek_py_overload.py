@@ -7,7 +7,10 @@ compiles there. Python has no such thing: the second def replaces the first.
 Here each is renamed, and a def of the common name chooses between them from
 the types of the arguments at the call -- the exact type first, so that a
 Duration_T, which is a float in Python, finds the overload that names it
-before the one that names float, and then what the argument is an instance of.
+before the one that names float, then what the argument is an instance of,
+and last a plain number for a distinct type of numbers: arithmetic on a
+distinct value gives the base type in Python, so `Meters_T(a.x + b.x)` is the
+way to say which one a sum is when overloads differ only in such types.
 Two defs with the same parameter types are one name defined twice, and
 refused. Calls are by position: the dispatcher has no parameter names.
 """
@@ -81,7 +84,7 @@ def _signature(line, pad):
     return m.group(1), params
 
 
-def _check(arg, typ, exact):
+def _check(arg, typ, mode):
     """A Python test that ARG is a TYP, or None if it cannot say (a union, a
     generic, a function type, no type at all)."""
     t = typ.strip().strip('"').strip("'")
@@ -96,10 +99,17 @@ def _check(arg, typ, exact):
     if not _IDENT.match(t) or (len(t) == 1 and t.isupper()):
         return None
     t = _BUILTIN.get(t, t)
-    if exact:
+    if mode == 0:
         return f"type({arg}) is {t}"
     if t in ("float", "int"):
         return f"isinstance({arg}, (float, int)) and not isinstance({arg}, bool)"
+    if mode == 2:
+        # arithmetic on a distinct type gives the base type in Python: a plain
+        # number is taken for the distinct type its base is
+        from ady_declarations import distinct_kind
+        base = {"float": "(float, int)", "int": "int", "str": "str", "bool": "bool"}.get(distinct_kind(t) or "")
+        if base:
+            return f"isinstance({arg}, {base}) and not isinstance({arg}, bool)" if base != "bool" else f"isinstance({arg}, bool)"
     return f"isinstance({arg}, {t})"
 
 
@@ -170,13 +180,13 @@ def overload_defs(text, indent):
         owner = "self." if method else ""
         head = "self, *args" if method else "*args"
         out = [f"{pad}def {name}({head}):", f"{pad}    n = len(args)"]
-        for exact in (True, False):
+        for mode in (0, 1, 2):
             for k, (start, end, params) in enumerate(group):
                 ps = params[1:] if method else params
                 lo = sum(1 for p in ps if not p[2])
                 conds = [f"{lo} <= n <= {len(ps)}"]
                 for j, (_pn, typ, _d) in enumerate(ps):
-                    c = _check(f"args[{j}]", typ, exact)
+                    c = _check(f"args[{j}]", typ, mode)
                     if c:
                         conds.append(c)
                 out.append(f"{pad}    if {' and '.join(conds)}: return {owner}_ov{k}_{name}(*args)")

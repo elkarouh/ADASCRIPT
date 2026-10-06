@@ -1866,8 +1866,10 @@ def describe(n: int, s: str) -> str:
 
 This is what makes an operator work on more than one type: `Velocity` has `__mul__(self, scale: float) -> Velocity`, which scales, and `__mul__(self, t: Duration_T) -> Vector`, which turns a speed into a distance, so `v * 2.0` and `v * t` are both written as they read. A distinct type is its own type here: a `Duration_T` finds the overload that names it, not the one that names `float`.
 
+- A constructor overloads the same way: `Vector(length, angle)` and `Vector(x, y)` are two `__init__`s, told apart by the types of the arguments (`Degrees_T` against `Meters_T`).
+- A literal is no argument of any type, so one given to an overloaded name is refused on Nim -- `Vector(3.0, 4.0)` could be either -- and written with its type: `Vector(Meters_T(3.0), Meters_T(4.0))`.
 - Two defs with the same parameter types are one name defined twice, and refused.
-- Nim overloads natively. On Python the defs are renamed and a def of the name dispatches on the types of the arguments, the exact type first, then what each is an instance of; a type it cannot test (a union, a generic) matches anything. Call overloads by position.
+- Nim overloads natively. On Python the defs are renamed and a def of the name dispatches on the types of the arguments, the exact type first, then what each is an instance of; a type it cannot test (a union, a generic) matches anything. Arithmetic on a distinct value is a plain number in Python, so as a last resort a plain number matches a distinct type of numbers; write `Meters_T(a + b)` where overloads differ only in such types. Call overloads by position.
 - Decorated defs, and defs with `*args` or `**kwargs`, are left as they are.
 
 <!-- tested by EXAMPLES/test_overload_types.ady -->

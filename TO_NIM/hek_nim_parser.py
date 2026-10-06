@@ -106,6 +106,16 @@ _REVERSED_DUNDERS = {
 }
 
 
+
+def _note_param_types(key, types):
+    """Record the parameter types of the proc or constructor KEY, and that it is
+    overloaded if an earlier def of the name took other types: a literal given
+    where they differ in a distinct type cannot be converted by guessing."""
+    old = ParserState.proc_param_types.get(key)
+    if old is not None and old != types:
+        ParserState.overloaded_procs.add(key)
+    ParserState.proc_param_types[key] = types
+
 def _nim_ident(name):
     """Escape a user identifier that happens to be a Nim keyword."""
     from hek_nim_expr import _nim_user_ident
@@ -2950,7 +2960,7 @@ def _func_def_to_nim_inner(self, indent=0):
         if _cur.strip():
             _m = _re_fpt.match(r'\s*\w+\s*:\s*(.+?)(?:\s*=.*)?$', _cur.strip())
             _ptypes.append(_m.group(1).strip() if _m else "")
-        ParserState.proc_param_types[name] = _ptypes
+        _note_param_types(name, _ptypes)
     ParserState.symbol_table.push_scope(name or "<func>")
     hc = _block_inline_header_comment(block_node) if block_node else ""
     # A @contextmanager is a Nim template, where fmt cannot see the
@@ -5282,7 +5292,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
         import re as _re2
         m2 = _re2.match(r'\w+\s*:\s*(.+?)(?:\s*=.*)?$', ps.strip())
         param_types_list.append(m2.group(1).strip() if m2 else "")
-    ParserState.proc_param_types[new_name_key] = param_types_list
+    _note_param_types(new_name_key, param_types_list)
     # Store full param strings (name: type = default) for forwarding constructors
     ParserState.proc_param_types_full[new_name_key] = list(param_strs)
 

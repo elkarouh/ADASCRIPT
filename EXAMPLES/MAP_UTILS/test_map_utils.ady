@@ -15,8 +15,8 @@ from map_utils import Axis_T, LATITUDE, LONGITUDE, GeoErr_T, BAD_DMS, BAD_COORDI
 from map_utils import Meters_T, Kilometers_T, Degrees_T, Bearing_T, Latitude_T, Longitude_T, SquareMeters_T
 from map_utils import GeoFailure_T, LatLong_T, GeoVector, GeoPoint, Vector, Position
 from map_utils import dms2dec, dd2dms, human_latlong2dec, dec2human_latlong, geo_point_from_dms
-from map_utils import vector_xy, geo_vector_from_components, modulo
-from map_utils import Duration_T, Speed_T, Accel_T, Velocity, Acceleration, velocity_xy, acceleration_xy
+from map_utils import geo_vector_from_components, modulo
+from map_utils import Duration_T, Speed_T, Accel_T, Velocity, Acceleration
 
 def close(actual: float, expected: float, tol: float = 1e-9) -> bool:
     abs(actual - expected) <= tol
@@ -113,8 +113,8 @@ assert decimal("0042904-", LONGITUDE) < 0
 
 # ---- flat-plane geometry ------------------------------------------------------
 
-let v1: Vector = Vector(1.0, 30.0) * 5.0
-let v2: Vector = Vector(2.0, 40.0) * 5.0
+let v1: Vector = Vector(Meters_T(1.0), Degrees_T(30.0)) * 5.0
+let v2: Vector = Vector(Meters_T(2.0), Degrees_T(40.0)) * 5.0
 assert close(float(v1.x), 4.330127018922194) and close(float(v1.y), 2.4999999999999996)
 assert close(float(v1.length()), 5.0) and close(float(v1.angle()), 30.0)
 assert close(float(v2.x), 7.660444431189779) and close(float(v2.y), 6.427876096865392)
@@ -145,7 +145,7 @@ let onto: Vector = v1.projection(v2)
 assert close(float(onto.x), 3.7720325336774443) and close(float(onto.y), 3.1651111077974443)
 assert close(float(onto.angle()), float(v2.angle()))                     # along v2
 
-let from_xy: Vector = vector_xy(3.0, 4.0)
+let from_xy: Vector = Vector(Meters_T(3.0), Meters_T(4.0))
 assert close(float(from_xy.length()), 5.0) and close(float(from_xy.angle()), 53.13010235415597)
 
 let a: Position = Position(1.0, 2.0)
@@ -153,7 +153,7 @@ let b: Position = Position(4.0, 6.0)
 let ab: Vector = b - a
 assert close(float(ab.x), 3.0) and close(float(ab.y), 4.0)
 assert close(float(ab.length()), 5.0) and close(float(ab.angle()), 53.13010235415597)
-let moved: Position = a + Vector(10.0, 90.0)
+let moved: Position = a + Vector(Meters_T(10.0), Degrees_T(90.0))
 assert close(float(moved.x), 1.0) and close(float(moved.y), 12.0)
 let corner: Position = Position(5.0, 5.0)
 let pivot: Position = Position(1.0, 1.0)
@@ -234,20 +234,20 @@ assert close(modulo(360.0, 360.0), 0.0)
 # ---- velocity and acceleration: the metres of a Vector, over time ------------
 
 let ten_seconds: Duration_T = 10.0
-let heading: Velocity = Velocity(5.0, 90.0)                              # 5 m/s, due +y
+let heading: Velocity = Velocity(Speed_T(5.0), Degrees_T(90.0))                              # 5 m/s, due +y
 assert close(float(heading.speed()), 5.0) and close(float(heading.angle()), 90.0)
 assert close(float(heading.x), 0.0, 1e-9) and close(float(heading.y), 5.0)
 let covered: Vector = heading * ten_seconds                          # speed * time is a distance
 assert close(float(covered.length()), 50.0) and close(float(covered.angle()), 90.0)
 let recovered: Velocity = covered / ten_seconds                       # and a distance over time a speed
 assert close(float(recovered.speed()), 5.0) and close(float(recovered.angle()), 90.0)
-let push: Acceleration = Acceleration(2.0, 0.0)                          # 2 m/s^2 along +x
+let push: Acceleration = Acceleration(Accel_T(2.0), Degrees_T(0.0))                          # 2 m/s^2 along +x
 let gained: Velocity = push * ten_seconds
 assert close(float(gained.x), 20.0) and close(float(gained.y), 0.0, 1e-9)
 assert close(float((gained / ten_seconds).magnitude()), 2.0)
-let combined: Velocity = heading + gained * 0.5 - velocity_xy(1.0, 1.0)
+let combined: Velocity = heading + gained * 0.5 - Velocity(Speed_T(1.0), Speed_T(1.0))
 assert close(float(combined.x), 9.0) and close(float(combined.y), 4.0)
-assert close(float(acceleration_xy(3.0, 4.0).magnitude()), 5.0)
+assert close(float(Acceleration(Accel_T(3.0), Accel_T(4.0)).magnitude()), 5.0)
 assert close(float(heading.direction().length()), 1.0) and close(float(heading.direction().angle()), 90.0)
 assert close(float(push.direction().angle()), 0.0)
 assert close(heading * gained, 0.0, 1e-9) and close(gained.cross(heading), 100.0)

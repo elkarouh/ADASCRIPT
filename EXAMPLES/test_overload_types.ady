@@ -23,6 +23,22 @@ class Spot:
     def __mul__(self, other: Spot) -> float:
         return float(self.x) * float(other.x)
 
+class Pair:
+    var a: Distance_T
+    var b: Distance_T
+
+    def __init__(self, a: Distance_T, b: Distance_T) -> None:
+        self.a = a
+        self.b = b
+
+    def __init__(self, a: Distance_T, v: Speed_T, t: Duration_T) -> None:
+        self.a = a
+        self.b = Distance_T(float(v) * float(t))
+
+    def __init__(self, both: Distance_T) -> None:
+        self.a = both
+        self.b = both
+
 def describe(n: int) -> str:
     return f"int {n}"
 
@@ -44,6 +60,11 @@ def main():
     print(float(scaled.x), float(scaled.v))
     print(float(p * Duration_T(4.0)))
     print(p * p)
+    let d: Distance_T = Distance_T(3.0)
+    let q1: Pair = Pair(d, d + d)                  # a sum is a Distance_T on Nim, a float on Python
+    let q2: Pair = Pair(d, Speed_T(2.0), Duration_T(5.0))
+    let q3: Pair = Pair(d)
+    print(float(q1.a), float(q1.b), float(q2.b), float(q3.b))
     print(describe(7), describe("seven"), describe(Duration_T(7.0)), describe(7.5), describe(3, "cats"))
 
 main()

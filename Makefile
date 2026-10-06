@@ -879,7 +879,7 @@ test: compile
 	@# an operator between two typed names -- and leaves a wrong argument to
 	@# Nim, whose signature it does not record.
 	@echo "=== distinct types do not mix, both backends ==="
-	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\ntype Dollar_T is distinct float\ntype Euro_T is distinct float\ntype FX_T is Euro_T / Dollar_T\nvar usd: Dollar_T = 10.0\nvar eur: Euro_T = 9.0\nvar fx: FX_T = 0.9\nvar n: int = 3\ntype Lat_T is distinct float range -90.0 .. 90.0\ntype Lon_T is distinct float range -180.0 .. 180.0\nvar lat: Lat_T = 10.0\nvar lon: Lon_T = 20.0\ntype Deg_T is distinct float\ntype Nlat_T is Deg_T range -90 .. 90\ntype Nlon_T is Deg_T range -180 .. 180\nvar deg: Deg_T = 5.0\nvar nlat: Nlat_T = Nlat_T(10.0)\nvar nlon: Nlon_T = Nlon_T(20.0)\ndef at(l: Nlat_T) -> Nlat_T:\n    return l\n' \
+	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\ntype Dollar_T is distinct float\ntype Euro_T is distinct float\ntype FX_T is Euro_T / Dollar_T\nvar usd: Dollar_T = 10.0\nvar eur: Euro_T = 9.0\nvar fx: FX_T = 0.9\nvar n: int = 3\ntype Lat_T is distinct float range -90.0 .. 90.0\ntype Lon_T is distinct float range -180.0 .. 180.0\nvar lat: Lat_T = 10.0\nvar lon: Lon_T = 20.0\ntype Deg_T is distinct float\ntype Nlat_T is Deg_T range -90 .. 90\ntype Nlon_T is Deg_T range -180 .. 180\nvar deg: Deg_T = 5.0\nvar nlat: Nlat_T = Nlat_T(10.0)\nvar nlon: Nlon_T = Nlon_T(20.0)\ndef at(l: Nlat_T) -> Nlat_T:\n    return l\nclass Pt:\n    var a: Distance_T\n    def __init__(self, d: Distance_T, v: Velocity_T) -> None:\n        self.a = d\n    def __init__(self, d: Distance_T, e: Distance_T) -> None:\n        self.a = d\n' \
 	    > $(TMPDIR)/ady_distinct_hdr.ady
 	@# `*` and `/` scale, so the product of two units is refused unless a
 	@# derived unit says what it makes; a unit made of two others gives its
@@ -910,14 +910,15 @@ test: compile
 	          "24:py:arithmetic given back, unconverted:let e: Nlat_T = nlat + nlat" \
 	          "25:nim:passed for a sibling:let w: Nlat_T = at(nlon)" \
 	          "26:nim:passed its parent:let w: Nlat_T = at(deg)" \
-	          "27:nim:converted from a sibling:let e: Nlat_T = Nlat_T(nlon)"; do \
+	          "27:nim:converted from a sibling:let e: Nlat_T = Nlat_T(nlon)" \
+	          "28:nim:a literal for an overloaded constructor:let pt: Pt = Pt(d, 2.0)"; do \
 	    n=$${c%%:*}; rest=$${c#*:}; who=$${rest%%:*}; rest=$${rest#*:}; \
 	    what=$${rest%%:*}; line=$${rest#*:}; \
 	    { cat $(TMPDIR)/ady_distinct_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_distinct_$$n.ady; \
 	    printf '  %-42s' "$$what (ady2nim)"; \
 	    if (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_distinct_cache $(ADY2NIM) c ady_distinct_$$n.ady) \
 	            > $(TMPDIR)/ady_distinct.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
-	    grep -q "type mismatch\|does not convert" $(TMPDIR)/ady_distinct.out \
+	    grep -q "type mismatch\|does not convert\|overloaded name" $(TMPDIR)/ady_distinct.out \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_distinct.out; exit 1; }; \
 	    if [ "$$who" = py ]; then \
 	        printf '  %-42s' "$$what (ady2py)"; \

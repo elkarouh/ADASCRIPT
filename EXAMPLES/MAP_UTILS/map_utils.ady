@@ -445,7 +445,7 @@ class Vector:
 
     Made, as in the original, from a length in metres and an angle in degrees
     counter-clockwise from the positive x axis (the usual convention); the parts
-    are kept as x and y.  vector_xy makes one from its parts.
+    are kept as x and y.  Vector(x, y), from its parts, is the other way to make one.
     """
     var x: Meters_T
     var y: Meters_T
@@ -456,6 +456,10 @@ class Vector:
         self.y = Meters_T(float(length) * sin(radians))
 
     # -- components ----------------------------------------------------------
+
+    def __init__(self, x: Meters_T, y: Meters_T) -> None:
+        self.x = x
+        self.y = y
 
     def length(self) -> Meters_T:
         """Magnitude of the vector."""
@@ -503,7 +507,7 @@ class Vector:
 
     def __truediv__(self, t: Duration_T) -> Velocity:
         """The velocity that covers this vector in the time T."""
-        velocity_xy(self.x / t, self.y / t)
+        Velocity(self.x / t, self.y / t)
 
     def triangle_area(self, other: Vector) -> SquareMeters_T:
         """Signed area of the triangle formed by SELF and OTHER."""
@@ -512,10 +516,10 @@ class Vector:
     # -- arithmetic operators ------------------------------------------------
 
     def __add__(self, other: Vector) -> Vector:
-        vector_xy(self.x + other.x, self.y + other.y)
+        Vector(self.x + other.x, self.y + other.y)
 
     def __sub__(self, other: Vector) -> Vector:
-        vector_xy(self.x - other.x, self.y - other.y)
+        Vector(self.x - other.x, self.y - other.y)
 
     def __mul__(self, scale: float) -> Vector:
         Vector(self.length() * scale, self.angle())
@@ -525,11 +529,6 @@ class Vector:
 
     def __str__(self) -> str:
         f"{self.length():.2f} m, {self.angle():.2f} degrees"
-
-
-def vector_xy(x: Meters_T, y: Meters_T) -> Vector:
-    """The vector with these parts."""
-    Vector(Meters_T(hypot(float(x), float(y))), Degrees_T(arctan2(float(y), float(x))))
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +553,7 @@ class Position:
 
     def __sub__(self, other: Position) -> Vector:
         """The displacement vector from OTHER to SELF."""
-        vector_xy(self.x - other.x, self.y - other.y)
+        Vector(self.x - other.x, self.y - other.y)
 
     def rotate_around_point(self, pivot: Position, angle: Degrees_T) -> Position:
         """This position rotated counter-clockwise around PIVOT."""
@@ -587,6 +586,10 @@ class Velocity:
         self.x = Speed_T(float(speed) * cos(radians))
         self.y = Speed_T(float(speed) * sin(radians))
 
+    def __init__(self, x: Speed_T, y: Speed_T) -> None:
+        self.x = x
+        self.y = y
+
     def speed(self) -> Speed_T:
         """Magnitude of the velocity."""
         Speed_T(hypot(float(self.x), float(self.y)))
@@ -600,15 +603,15 @@ class Velocity:
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""
-        vector_xy(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
+        Vector(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
 
     def __mul__(self, t: Duration_T) -> Vector:
         """The displacement in the time T."""
-        vector_xy(self.x * t, self.y * t)
+        Vector(self.x * t, self.y * t)
 
     def __truediv__(self, t: Duration_T) -> Acceleration:
         """The acceleration that changes it by this much in the time T."""
-        acceleration_xy(self.x / t, self.y / t)
+        Acceleration(self.x / t, self.y / t)
 
     def __mul__(self, other: Velocity) -> float:
         """The scalar product, in (m/s)^2."""
@@ -619,24 +622,19 @@ class Velocity:
         float(self.x) * float(other.y) - float(self.y) * float(other.x)
 
     def __add__(self, other: Velocity) -> Velocity:
-        velocity_xy(self.x + other.x, self.y + other.y)
+        Velocity(self.x + other.x, self.y + other.y)
 
     def __sub__(self, other: Velocity) -> Velocity:
-        velocity_xy(self.x - other.x, self.y - other.y)
+        Velocity(self.x - other.x, self.y - other.y)
 
     def __mul__(self, scale: float) -> Velocity:
-        velocity_xy(self.x * scale, self.y * scale)
+        Velocity(self.x * scale, self.y * scale)
 
     def __truediv__(self, scale: float) -> Velocity:
-        velocity_xy(self.x / scale, self.y / scale)
+        Velocity(self.x / scale, self.y / scale)
 
     def __str__(self) -> str:
         f"{self.speed():.2f} m/s, {self.angle():.2f} degrees"
-
-
-def velocity_xy(x: Speed_T, y: Speed_T) -> Velocity:
-    """The velocity with these parts."""
-    Velocity(Speed_T(hypot(float(x), float(y))), Degrees_T(arctan2(float(y), float(x))))
 
 
 class Acceleration:
@@ -649,6 +647,10 @@ class Acceleration:
         self.x = Accel_T(float(magnitude) * cos(radians))
         self.y = Accel_T(float(magnitude) * sin(radians))
 
+    def __init__(self, x: Accel_T, y: Accel_T) -> None:
+        self.x = x
+        self.y = y
+
     def magnitude(self) -> Accel_T:
         Accel_T(hypot(float(self.x), float(self.y)))
 
@@ -657,31 +659,26 @@ class Acceleration:
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""
-        vector_xy(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
+        Vector(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
 
     def __mul__(self, t: Duration_T) -> Velocity:
         """The change of velocity in the time T."""
-        velocity_xy(self.x * t, self.y * t)
+        Velocity(self.x * t, self.y * t)
 
     def __add__(self, other: Acceleration) -> Acceleration:
-        acceleration_xy(self.x + other.x, self.y + other.y)
+        Acceleration(self.x + other.x, self.y + other.y)
 
     def __sub__(self, other: Acceleration) -> Acceleration:
-        acceleration_xy(self.x - other.x, self.y - other.y)
+        Acceleration(self.x - other.x, self.y - other.y)
 
     def __mul__(self, scale: float) -> Acceleration:
-        acceleration_xy(self.x * scale, self.y * scale)
+        Acceleration(self.x * scale, self.y * scale)
 
     def __truediv__(self, scale: float) -> Acceleration:
-        acceleration_xy(self.x / scale, self.y / scale)
+        Acceleration(self.x / scale, self.y / scale)
 
     def __str__(self) -> str:
         f"{self.magnitude():.4f} m/s^2, {self.angle():.2f} degrees"
-
-
-def acceleration_xy(x: Accel_T, y: Accel_T) -> Acceleration:
-    """The acceleration with these parts."""
-    Acceleration(Accel_T(hypot(float(x), float(y))), Degrees_T(arctan2(float(y), float(x))))
 
 
 # ---------------------------------------------------------------------------
@@ -934,8 +931,8 @@ def demo():
     print "All point-in-region assertions passed."
 
     # -- flat-plane Vector demo ----------------------------------------------
-    let v1: Vector = Vector(1.0, 30.0) * 5.0
-    let v2: Vector = Vector(2.0, 40.0) * 5.0
+    let v1: Vector = Vector(Meters_T(1.0), Degrees_T(30.0)) * 5.0
+    let v2: Vector = Vector(Meters_T(2.0), Degrees_T(40.0)) * 5.0
     print ""
     print f"v1 = {v1}"
     print f"v2 = {v2}"

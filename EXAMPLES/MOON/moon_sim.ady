@@ -35,7 +35,7 @@ Nim only (map_utils is):  ady2nim c -r moon_sim.ady
 
 from math nimport sqrt, exp, ln, PI
 from MAP_UTILS/map_utils import Meters_T, SquareMeters_T, Degrees_T, Duration_T, Speed_T, Accel_T
-from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, vector_xy, velocity_xy, acceleration_xy, Kilometers_T, Radians_T, modulo, sin, cos
+from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, Kilometers_T, Radians_T, modulo, sin, cos
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
@@ -198,17 +198,17 @@ class Rng:
         """A vector whose parts are each drawn from N(0, sigma)."""
         let a: float = self.normal(float(sigma))
         let b: float = self.normal(float(sigma))
-        return vector_xy(Meters_T(a), Meters_T(b))
+        return Vector(Meters_T(a), Meters_T(b))
 
     def speeds(self, sigma: Speed_T) -> Velocity:
         let a: float = self.normal(float(sigma))
         let b: float = self.normal(float(sigma))
-        return velocity_xy(Speed_T(a), Speed_T(b))
+        return Velocity(Speed_T(a), Speed_T(b))
 
     def accels(self, sigma: Accel_T) -> Acceleration:
         let a: float = self.normal(float(sigma))
         let b: float = self.normal(float(sigma))
-        return acceleration_xy(Accel_T(a), Accel_T(b))
+        return Acceleration(Accel_T(a), Accel_T(b))
 
 # ============================================================
 # SPACECRAFT (stack of stages)
@@ -649,7 +649,7 @@ class Navigation:
     def __init__(self, rng: Rng):
         self.rng = rng
         self.r = ORIGIN
-        self.v = velocity_xy(0.0, 0.0)
+        self.v = Velocity(Speed_T(0.0), Speed_T(0.0))
 
     def initialize(self, r: Position, v: Velocity):
         """State handed over from the pre-PDI ground/orbit solution (with error)."""
@@ -729,7 +729,7 @@ class Guidance:
         let from_moon: Vector = r - ORIGIN
         let g: Acceleration = pull_toward(from_moon, MU_MOON / (from_moon.length() * from_moon.length()))
         let alt: Meters_T = from_moon.length() - R_MOON
-        var aim: Target_T = Target_T(ORIGIN, velocity_xy(0.0, 0.0))
+        var aim: Target_T = Target_T(ORIGIN, Velocity(Speed_T(0.0), Speed_T(0.0)))
 
         if self.has_t_go:
             self.t_go = self.t_go - elapsed
@@ -752,7 +752,7 @@ class Guidance:
                 self.mode = P65
                 self.has_t_go = False
 
-        var a_total: Acceleration = acceleration_xy(0.0, 0.0)
+        var a_total: Acceleration = Acceleration(Accel_T(0.0), Accel_T(0.0))
         if self.mode == P65:
             let up: Vector = unit_vec(from_moon)
             let east: Vector = perp(up) * self.s
@@ -802,7 +802,7 @@ class Propulsion:
         """Returns thrust acceleration; burns propellant."""
         let st: Stage_T = self.sc.stage(self.id)
         if st.prop <= 0.0:
-            return (acceleration_xy(0.0, 0.0), Force_T(0.0))
+            return (Acceleration(Accel_T(0.0), Accel_T(0.0)), Force_T(0.0))
         let mass: Mass_T = self.sc.mass()
         let force: Force_T = st.max_thrust * throttle
         let exhaust: Speed_T = st.isp * G0
@@ -915,7 +915,7 @@ class Mission:
         self.lander = Spacecraft([])
         self.t = 0.0
         self.r = ORIGIN
-        self.v = velocity_xy(0.0, 0.0)
+        self.v = Velocity(Speed_T(0.0), Speed_T(0.0))
         self.phase = LEO
         self.earth_ts = []
         self.earth_track = []
@@ -924,7 +924,7 @@ class Mission:
         self.descent = []
         self.result = Result_T(False, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         self.tli_r = ORIGIN
-        self.tli_v = velocity_xy(0.0, 0.0)
+        self.tli_v = Velocity(Speed_T(0.0), Speed_T(0.0))
         self.phase_nominal = 0.0
         self.t_max = 0.0
 
@@ -937,10 +937,10 @@ class Mission:
         let a_t: Meters_T = (r0 + MOON_DISTANCE) / 2.0
         let v_c: Speed_T = circular_velocity(MU_EARTH, r0)
         let v_t: Speed_T = vis_viva(MU_EARTH, r0, a_t)
-        self.tli_r = ORIGIN + Vector(r0, 0.0)
-        self.tli_v = Velocity(v_t, 90.0)
+        self.tli_r = ORIGIN + Vector(r0, Degrees_T(0.0))
+        self.tli_v = Velocity(v_t, Degrees_T(90.0))
         let dv: Speed_T = v_t - v_c
-        self.sc.burn(Velocity(dv, 90.0), S_IVB, TLI)
+        self.sc.burn(Velocity(dv, Degrees_T(90.0)), S_IVB, TLI)
         self.sc.separate(S_IVB)
         print f"  TLI dv = {dv:.1f} m/s  (S-IVB jettisoned, stack = {float(self.sc.mass()):,.0f} kg)"
 
@@ -1104,7 +1104,7 @@ class Mission:
         var next_guid: Duration_T = 0.0
         var next_radar: Duration_T = 0.0
         var next_tm: Duration_T = 0.0
-        var a_cmd: Acceleration = acceleration_xy(0.0, 0.0)
+        var a_cmd: Acceleration = Acceleration(Accel_T(0.0), Accel_T(0.0))
         var last_cycle: Duration_T = 0.0
         var touched_down: bool = False
         var last_mode: Mode_T = P63

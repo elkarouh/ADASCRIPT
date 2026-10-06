@@ -4129,6 +4129,11 @@ def _wrap_option_args(expr):
             new_args.append(kw_prefix + _result_wrap(arg, ptype))
             changed = True
         elif _is_distinct_param(ptype) and _is_literal_arg(arg):
+            if proc_name in ParserState.overloaded_procs:
+                raise SyntaxError(
+                    f"{proc_name}(...): the literal {arg.strip()} is passed to an overloaded "
+                    f"name, so there is no one type to give it -- write it with the type it "
+                    f"is, T({arg.strip()})")
             # a literal passed where a distinct type is expected is of it
             from hek_nim_stmt import _wrap_distinct_literal
             new_args.append(kw_prefix + _wrap_distinct_literal(arg, ptype))

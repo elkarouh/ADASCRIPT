@@ -66,7 +66,7 @@ _nimport_tuple_field_order: dict = {}
 # its module-level names with their types: globals and type aliases. Each is
 # (ParserState attribute, merged into the importer's at its reset).
 _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
-                    "scaled_units", "narrowed_types",
+                    "scaled_units", "narrowed_types", "overloaded_procs",
                     "generic_funcs",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
@@ -112,6 +112,7 @@ def _nim_reset():
     ParserState.unit_relations = {}
     ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
     ParserState.narrowed_types = {}     # `type N is P range ..`: name -> P
+    ParserState.overloaded_procs = set()  # procs defined more than once, with other types
     ParserState._scaled_bases_done = set()   # bases whose to_B is emitted
     ParserState.generic_funcs = {}      # generic function -> its type parameters
     ParserState.class_field_types = {}

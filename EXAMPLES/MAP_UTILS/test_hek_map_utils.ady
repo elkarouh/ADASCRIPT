@@ -79,54 +79,54 @@ assert near(float(original.longitude), float(again.longitude), 0.01)
 
 # ---- TestVector ----------------------------------------------------------------
 
-let along: Vector = Vector(10.0, 0.0)
+let along: Vector = Vector(Meters_T(10.0), Degrees_T(0.0))
 assert near(float(along.length()), 10.0, 1e-9) and near(float(along.angle()), 0.0, 1e-9)
 assert near(float(along.x), 10.0, 1e-9) and near(float(along.y), 0.0, 1e-6)
 
-let unit_x: Vector = Vector(1.0, 0.0)
+let unit_x: Vector = Vector(Meters_T(1.0), Degrees_T(0.0))
 let quarter: Vector = unit_x.rotated_by(90.0)
 assert near(float(quarter.angle()), 90.0, 1e-9) and near(float(quarter.length()), 1.0, 1e-9)
 
-let ten: Vector = Vector(10.0, 45.0)
+let ten: Vector = Vector(Meters_T(10.0), Degrees_T(45.0))
 let shorter: Vector = ten.shortened_by(3.0)
 assert near(float(shorter.length()), 7.0, 1e-9) and near(float(shorter.angle()), 45.0, 1e-9)
 
-let east_1: Vector = Vector(1.0, 0.0)
-let north_1: Vector = Vector(1.0, 90.0)
+let east_1: Vector = Vector(Meters_T(1.0), Degrees_T(0.0))
+let north_1: Vector = Vector(Meters_T(1.0), Degrees_T(90.0))
 assert near(float(east_1 * north_1), 0.0, 1e-9)               # perpendicular
-assert near(float(Vector(3.0, 0.0) * Vector(4.0, 0.0)), 12.0, 1e-9)
+assert near(float(Vector(Meters_T(3.0), Degrees_T(0.0)) * Vector(Meters_T(4.0), Degrees_T(0.0))), 12.0, 1e-9)
 assert near(float(east_1.cross(north_1)), 1.0, 1e-9)
 
-assert near(Vector(5.0, 30.0).cos_theta(Vector(3.0, 30.0)), 1.0, 1e-9)   # same direction
+assert near(Vector(Meters_T(5.0), Degrees_T(30.0)).cos_theta(Vector(Meters_T(3.0), Degrees_T(30.0))), 1.0, 1e-9)   # same direction
 assert near(east_1.cos_theta(north_1), 0.0, 1e-9)
-assert near(east_1.cos_theta(Vector(1.0, 180.0)), -1.0, 1e-9)            # opposite
+assert near(east_1.cos_theta(Vector(Meters_T(1.0), Degrees_T(180.0))), -1.0, 1e-9)            # opposite
 
-let five: Vector = Vector(5.0, 30.0)
+let five: Vector = Vector(Meters_T(5.0), Degrees_T(30.0))
 assert near(float(five.unit().length()), 1.0, 1e-9)
 
-let slanted: Vector = Vector(5.0, 45.0)
+let slanted: Vector = Vector(Meters_T(5.0), Degrees_T(45.0))
 let shadow: Vector = slanted.projection(east_1)                          # onto the x axis
 assert near(float(shadow.length()), 5.0 * cos(degToRad(45.0)), 1e-6)
 
-let sum_3_4: Vector = Vector(3.0, 0.0) + Vector(4.0, 0.0)
+let sum_3_4: Vector = Vector(Meters_T(3.0), Degrees_T(0.0)) + Vector(Meters_T(4.0), Degrees_T(0.0))
 assert near(float(sum_3_4.length()), 7.0, 1e-6)
-let diff_7_3: Vector = Vector(7.0, 0.0) - Vector(3.0, 0.0)
+let diff_7_3: Vector = Vector(Meters_T(7.0), Degrees_T(0.0)) - Vector(Meters_T(3.0), Degrees_T(0.0))
 assert near(float(diff_7_3.length()), 4.0, 1e-6)
 
-let scaled: Vector = Vector(3.0, 45.0) * 2.0
+let scaled: Vector = Vector(Meters_T(3.0), Degrees_T(45.0)) * 2.0
 assert near(float(scaled.length()), 6.0, 1e-9) and near(float(scaled.angle()), 45.0, 1e-9)
 
-let shown: str = f"{Vector(10.0, 45.0)}"
+let shown: str = f"{Vector(Meters_T(10.0), Degrees_T(45.0))}"
 assert "m" in shown and "degrees" in shown
 
-assert near(float(Vector(3.0, 0.0).triangle_area(Vector(4.0, 90.0))), 6.0, 1e-9)
+assert near(float(Vector(Meters_T(3.0), Degrees_T(0.0)).triangle_area(Vector(Meters_T(4.0), Degrees_T(90.0)))), 6.0, 1e-9)
 
 # ---- TestPosition --------------------------------------------------------------
 
 let at_3_4: Position = Position(3.0, 4.0)
 assert float(at_3_4.x) == 3.0 and float(at_3_4.y) == 4.0
 
-let one_on: Position = Position(1.0, 0.0) + Vector(1.0, 0.0)             # 1 unit along x
+let one_on: Position = Position(1.0, 0.0) + Vector(Meters_T(1.0), Degrees_T(0.0))             # 1 unit along x
 assert near(float(one_on.x), 2.0, 1e-6) and near(float(one_on.y), 0.0, 1e-6)
 
 let gap: Vector = Position(5.0, 5.0) - Position(2.0, 1.0)
