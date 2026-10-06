@@ -131,7 +131,7 @@ assert close(float(shorter.length()), 3.5) and close(float(shorter.angle()), 30.
 let unit: Vector = v1.unit()
 assert close(float(unit.length()), 1.0) and close(float(unit.angle()), 30.0)
 
-assert close(float(v1.dot_product(v2)), 49.240387650610394)
+assert close(float(v1 * v2), 49.240387650610394)
 assert close(float(v1.cross(v2)), 8.682408883346518)
 assert close(v1.cos_theta(v2), 0.984807753012208)
 assert close(float(v1.triangle_area(v2)), 4.341204441673259)
@@ -140,7 +140,7 @@ assert close(float(v1.triangle_area(v2)), 4.341204441673259)
 let normal: Vector = v1.normal()
 assert close(float(normal.length()), 1.0) and close(float(normal.angle()), 120.0)
 assert close(float(normal.x), -0.4999999999999998) and close(float(normal.y), 0.8660254037844387)
-assert close(float(v1.dot_product(normal)), 0.0, 1e-9)                   # at a right angle
+assert close(float(v1 * normal), 0.0, 1e-9)                   # at a right angle
 let onto: Vector = v1.projection(v2)
 assert close(float(onto.x), 3.7720325336774443) and close(float(onto.y), 3.1651111077974443)
 assert close(float(onto.angle()), float(v2.angle()))                     # along v2
@@ -204,7 +204,7 @@ assert close(float(turn30.magnitude()), 100.0) and close(float(turn30.phase()), 
 
 let g10: GeoVector = GeoVector(10.0, 30.0)
 let g20: GeoVector = GeoVector(20.0, 80.0)
-assert close(float(g10.dot_product(g20)), 128557521.93730786, 1e-3)
+assert close(float(g10 * g20), 128557521.93730786, 1e-3)
 assert close(float(g10.cross_product(g20)), 153208888.6237956, 1e-3)
 
 let spun_geo: GeoPoint = p2.rotate_around_point(p1, 90.0)
@@ -250,6 +250,6 @@ assert close(float(combined.x), 9.0) and close(float(combined.y), 4.0)
 assert close(float(acceleration_xy(3.0, 4.0).magnitude()), 5.0)
 assert close(float(heading.direction().length()), 1.0) and close(float(heading.direction().angle()), 90.0)
 assert close(float(push.direction().angle()), 0.0)
-assert close(heading.dot_product(gained), 0.0, 1e-9) and close(gained.cross(heading), 100.0)
+assert close(heading * gained, 0.0, 1e-9) and close(gained.cross(heading), 100.0)
 
 print "test_map_utils OK"

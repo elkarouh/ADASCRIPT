@@ -51,7 +51,8 @@ What changed in the translation
   demo.  The demo's assertions and the flat-plane prints are kept.
 """
 
-from math nimport sin, floor, tan, sqrt, cos, arctan2, arctan, arcsin, round, hypot
+nimport math
+from math nimport floor, sqrt, round, hypot
 
 # ---------------------------------------------------------------------------
 # Units
@@ -106,6 +107,37 @@ def modulo(x: float, period: float) -> float:
     """Python's x % period: the result has the sign of PERIOD."""
     x - period * floor(x / period)
 
+# The trigonometry of an angle takes and gives Radians_T, so that an angle is never a bare
+# number: sin(az), and `let az: Radians_T = arctan2(y, x)`, with no conversion to write.
+# sin, cos and tan of a plain float are here too, so that one import gives both.
+def sin(x: float) -> float:
+    math.sin(x)
+
+def cos(x: float) -> float:
+    math.cos(x)
+
+def tan(x: float) -> float:
+    math.tan(x)
+
+def sin(a: Radians_T) -> float:
+    sin(float(a))
+
+def cos(a: Radians_T) -> float:
+    cos(float(a))
+
+def tan(a: Radians_T) -> float:
+    tan(float(a))
+
+def arctan2(y: float, x: float) -> Radians_T:
+    """The angle of the point (x, y), counter-clockwise from the x axis."""
+    Radians_T(math.arctan2(y, x))
+
+def arctan(x: float) -> Radians_T:
+    Radians_T(math.arctan(x))
+
+def arcsin(x: float) -> Radians_T:
+    Radians_T(math.arcsin(x))
+
 # ---------------------------------------------------------------------------
 # WGS-84 ellipsoid parameters
 # ---------------------------------------------------------------------------
@@ -131,9 +163,9 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let b: float = float(WGS84_B)
     let f: float = WGS84_F
     let dist_m: float = float(dist)
-    let lat1_rad: float = float(Radians_T(lat1))
-    let lon1_rad: float = float(Radians_T(lon1))
-    let az1_rad: float = float(Radians_T(az1))
+    let lat1_rad: Radians_T = Radians_T(lat1)
+    let lon1_rad: Radians_T = Radians_T(lon1)
+    let az1_rad: Radians_T = Radians_T(az1)
 
     let tan_u1: float = (1 - f) * tan(lat1_rad)
     let cos_u1: float = 1 / sqrt(1 + tan_u1 ** 2)
@@ -141,50 +173,50 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
 
     let sin_az1: float = sin(az1_rad)
     let cos_az1: float = cos(az1_rad)
-    let sigma1: float = arctan2(tan_u1, cos_az1)
+    let sigma1: Radians_T = arctan2(tan_u1, cos_az1)
     let sin_alpha: float = cos_u1 * sin_az1
     let cos2_alpha: float = 1 - sin_alpha ** 2
     let u2: float = cos2_alpha * (a ** 2 - b ** 2) / b ** 2
     let big_a: float = 1 + u2 / 16384 * (4096 + u2 * (-768 + u2 * (320 - 175 * u2)))
     let big_b: float = u2 / 1024 * (256 + u2 * (-128 + u2 * (74 - 47 * u2)))
 
-    var sigma: float = dist_m / (b * big_a)
+    var sigma: Radians_T = Radians_T(dist_m / (b * big_a))
     for _ in range(100):
-        let cos2sm: float = cos(2 * sigma1 + sigma)
+        let cos2sm: float = cos(sigma1 * 2.0 + sigma)
         let sin_sigma: float = sin(sigma)
         let cos_sigma: float = cos(sigma)
-        let d_sigma: float = big_b * sin_sigma * (
+        let d_sigma: Radians_T = Radians_T(big_b * sin_sigma * (
             cos2sm + big_b / 4 * (
                 cos_sigma * (-1 + 2 * cos2sm ** 2)
                 - big_b / 6 * cos2sm * (-3 + 4 * sin_sigma ** 2) * (-3 + 4 * cos2sm ** 2)
             )
-        )
-        let sigma_new: float = dist_m / (b * big_a) + d_sigma
+        ))
+        let sigma_new: Radians_T = Radians_T(dist_m / (b * big_a)) + d_sigma
         if abs(sigma_new - sigma) < 1e-12:
             sigma = sigma_new
             break
         sigma = sigma_new
 
-    let cos2sm: float = cos(2 * sigma1 + sigma)
+    let cos2sm: float = cos(sigma1 * 2.0 + sigma)
     let sin_sigma: float = sin(sigma)
     let cos_sigma: float = cos(sigma)
 
-    let lat2: float = arctan2(
+    let lat2: Radians_T = arctan2(
         sin_u1 * cos_sigma + cos_u1 * sin_sigma * cos_az1,
         (1 - f) * sqrt(sin_alpha ** 2 + (sin_u1 * sin_sigma - cos_u1 * cos_sigma * cos_az1) ** 2),
     )
-    let lam: float = arctan2(
+    let lam: Radians_T = arctan2(
         sin_sigma * sin_az1,
         cos_u1 * cos_sigma - sin_u1 * sin_sigma * cos_az1,
     )
     let c: float = f / 16 * cos2_alpha * (4 + f * (4 - 3 * cos2_alpha))
-    let big_l: float = lam - (1 - c) * f * sin_alpha * (
-        sigma + c * sin_sigma * (cos2sm + c * cos_sigma * (-1 + 2 * cos2sm ** 2))
+    let big_l: Radians_T = lam - (1 - c) * f * sin_alpha * (
+        sigma + Radians_T(c * sin_sigma * (cos2sm + c * cos_sigma * (-1 + 2 * cos2sm ** 2)))
     )
-    let lon2: float = lon1_rad + big_l
-    let az2: float = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
+    let lon2: Radians_T = lon1_rad + big_l
+    let az2: Radians_T = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
 
-    Direct_T(Latitude_T(Degrees_T(Radians_T(lat2))), Degrees_T(Radians_T(lon2)), Bearing_T(modulo(float(Degrees_T(Radians_T(az2))) + 360.0, 360.0)))
+    Direct_T(Latitude_T(Degrees_T(lat2)), Degrees_T(lon2), Bearing_T(modulo(float(Degrees_T(az2)) + 360.0, 360.0)))
 
 
 # ---------------------------------------------------------------------------
@@ -206,14 +238,14 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
     if abs(float(lat1 - lat2)) < 1e-10 and abs(float(lon1 - lon2)) < 1e-10:
         return Inverse_T(0.0, 0.0, 0.0)               # coincident points
 
-    let u1: float = arctan((1 - f) * tan(float(Radians_T(lat1))))
-    let u2: float = arctan((1 - f) * tan(float(Radians_T(lat2))))
+    let u1: Radians_T = arctan((1 - f) * tan(Radians_T(lat1)))
+    let u2: Radians_T = arctan((1 - f) * tan(Radians_T(lat2)))
 
-    let omega: float = float(Radians_T(lon2 - lon1))
-    var lon: float = omega
+    let omega: Radians_T = Radians_T(lon2 - lon1)
+    var lon: Radians_T = omega
 
-    var alpha: float = 0.0
-    var sigma: float = 0.0
+    var alpha: Radians_T = Radians_T(0.0)
+    var sigma: Radians_T = Radians_T(0.0)
     var cos2sm: float = 0.0
     for _ in range(1000):
         let sin_sigma: float = sqrt(
@@ -227,10 +259,10 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
         alpha = arcsin((cos(u1) * cos(u2) * sin(lon)) / sin_sigma)
         cos2sm = cos(sigma) - 2 * sin(u1) * sin(u2) / cos(alpha) ** 2
         let c: float = f / 16 * cos(alpha) ** 2 * (4 + f * (4 - 3 * cos(alpha) ** 2))
-        let new_lon: float = omega + (1 - c) * f * sin(alpha) * (
-            sigma + c * sin(sigma) * (
+        let new_lon: Radians_T = omega + (1 - c) * f * sin(alpha) * (
+            sigma + Radians_T(c * sin(sigma) * (
                 cos2sm + c * cos(sigma) * (-1 + 2 * cos2sm ** 2)
-            )
+            ))
         )
         if abs(new_lon - lon) < 1e-12:
             lon = new_lon
@@ -240,20 +272,20 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
     let u2_sq: float = cos(alpha) ** 2 * (a ** 2 - b ** 2) / b ** 2
     let big_a: float = 1 + u2_sq / 16384 * (4096 + u2_sq * (-768 + u2_sq * (320 - 175 * u2_sq)))
     let big_b: float = u2_sq / 1024 * (256 + u2_sq * (-128 + u2_sq * (74 - 47 * u2_sq)))
-    let d_sigma: float = big_b * sin(sigma) * (
+    let d_sigma: Radians_T = Radians_T(big_b * sin(sigma) * (
         cos2sm + big_b / 4 * (
             cos(sigma) * (-1 + 2 * cos2sm ** 2)
             - big_b / 6 * cos2sm * (-3 + 4 * sin(sigma) ** 2) * (-3 + 4 * cos2sm ** 2)
         )
-    )
-    let dist_m: float = b * big_a * (sigma - d_sigma)
+    ))
+    let dist_m: float = b * big_a * float(sigma - d_sigma)
 
-    var az1: float = float(Degrees_T(Radians_T(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))))
+    var az1: Degrees_T = Degrees_T(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))
     if az1 < 0:
         az1 += 360
-    let az2: float = float(Degrees_T(Radians_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))))) + 180
+    let az2: Degrees_T = Degrees_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
 
-    Inverse_T(Meters_T(dist_m), Bearing_T(az1), Bearing_T(az2))
+    Inverse_T(Meters_T(dist_m), Bearing_T(float(az1)), Bearing_T(float(az2)))
 
 
 # ---------------------------------------------------------------------------
@@ -431,7 +463,7 @@ class Vector:
 
     def angle(self) -> Degrees_T:
         """Direction of the vector."""
-        Degrees_T(Radians_T(arctan2(float(self.y), float(self.x))))
+        Degrees_T(arctan2(float(self.y), float(self.x)))
 
     # -- transformations -----------------------------------------------------
 
@@ -453,7 +485,7 @@ class Vector:
 
     # -- products / projections ----------------------------------------------
 
-    def dot_product(self, other: Vector) -> SquareMeters_T:
+    def __mul__(self, other: Vector) -> SquareMeters_T:
         self.x * other.x + self.y * other.y
 
     def cross(self, other: Vector) -> SquareMeters_T:
@@ -462,12 +494,12 @@ class Vector:
 
     def cos_theta(self, other: Vector) -> float:
         """Cosine of the angle between SELF and OTHER."""
-        self.dot_product(other) / (self.length() * other.length())
+        (self * other) / (self.length() * other.length())
 
     def projection(self, onto: Vector) -> Vector:
         """SELF projected onto ONTO."""
         let u: Vector = onto.unit()
-        u * float(self.dot_product(u))          # u is 1 m long: the dot product, in metres
+        u * float(self * u)          # u is 1 m long: the dot product, in metres
 
     def __truediv__(self, t: Duration_T) -> Velocity:
         """The velocity that covers this vector in the time T."""
@@ -497,7 +529,7 @@ class Vector:
 
 def vector_xy(x: Meters_T, y: Meters_T) -> Vector:
     """The vector with these parts."""
-    Vector(Meters_T(hypot(float(x), float(y))), Degrees_T(Radians_T(arctan2(float(y), float(x)))))
+    Vector(Meters_T(hypot(float(x), float(y))), Degrees_T(arctan2(float(y), float(x))))
 
 
 # ---------------------------------------------------------------------------
@@ -561,7 +593,7 @@ class Velocity:
 
     def angle(self) -> Degrees_T:
         """Direction of the velocity, counter-clockwise from the x axis."""
-        Degrees_T(Radians_T(arctan2(float(self.y), float(self.x))))
+        Degrees_T(arctan2(float(self.y), float(self.x)))
 
     def rotated_by(self, relative_angle: Degrees_T) -> Velocity:
         Velocity(self.speed(), self.angle() + relative_angle)
@@ -578,7 +610,7 @@ class Velocity:
         """The acceleration that changes it by this much in the time T."""
         acceleration_xy(self.x / t, self.y / t)
 
-    def dot_product(self, other: Velocity) -> float:
+    def __mul__(self, other: Velocity) -> float:
         """The scalar product, in (m/s)^2."""
         float(self.x) * float(other.x) + float(self.y) * float(other.y)
 
@@ -604,7 +636,7 @@ class Velocity:
 
 def velocity_xy(x: Speed_T, y: Speed_T) -> Velocity:
     """The velocity with these parts."""
-    Velocity(Speed_T(hypot(float(x), float(y))), Degrees_T(Radians_T(arctan2(float(y), float(x)))))
+    Velocity(Speed_T(hypot(float(x), float(y))), Degrees_T(arctan2(float(y), float(x))))
 
 
 class Acceleration:
@@ -621,7 +653,7 @@ class Acceleration:
         Accel_T(hypot(float(self.x), float(self.y)))
 
     def angle(self) -> Degrees_T:
-        Degrees_T(Radians_T(arctan2(float(self.y), float(self.x))))
+        Degrees_T(arctan2(float(self.y), float(self.x)))
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""
@@ -649,7 +681,7 @@ class Acceleration:
 
 def acceleration_xy(x: Accel_T, y: Accel_T) -> Acceleration:
     """The acceleration with these parts."""
-    Acceleration(Accel_T(hypot(float(x), float(y))), Degrees_T(Radians_T(arctan2(float(y), float(x)))))
+    Acceleration(Accel_T(hypot(float(x), float(y))), Degrees_T(arctan2(float(y), float(x))))
 
 
 # ---------------------------------------------------------------------------
@@ -687,7 +719,7 @@ class GeoVector:
 
     def heading(self) -> Degrees_T:
         """The bearing as the arctangent gives it: between -180 and 180."""
-        Degrees_T(Radians_T(arctan2(float(self.east), float(self.north))))
+        Degrees_T(arctan2(float(self.east), float(self.north)))
 
     def phase(self) -> Bearing_T:
         """Bearing, clockwise from north, in [0, 360)."""
@@ -706,7 +738,7 @@ class GeoVector:
         let bearing: Bearing_T = self.phase()
         GeoVector(km, Degrees_T(float(bearing)) + angle)
 
-    def dot_product(self, other: GeoVector) -> SquareMeters_T:
+    def __mul__(self, other: GeoVector) -> SquareMeters_T:
         self.north * other.north + self.east * other.east
 
     def cross_product(self, other: GeoVector) -> SquareMeters_T:
@@ -738,7 +770,7 @@ def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVe
     let n: float = float(north) * 1000.0
     let e: float = float(east) * 1000.0
     let distance: float = hypot(n, e) / 1000.0
-    let bearing: float = modulo(float(Degrees_T(Radians_T(arctan2(e, n)))), 360.0)
+    let bearing: float = modulo(float(Degrees_T(arctan2(e, n))), 360.0)
     GeoVector(Kilometers_T(distance), Degrees_T(bearing))
 
 

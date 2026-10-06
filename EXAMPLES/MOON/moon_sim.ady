@@ -33,9 +33,9 @@ Usage:  moon_sim [--seed N] [--show] [--out moon_mission.png]
 Nim only (map_utils is):  ady2nim c -r moon_sim.ady
 """
 
-from math nimport sqrt, sin, cos, exp, ln, PI
+from math nimport sqrt, exp, ln, PI
 from MAP_UTILS/map_utils import Meters_T, SquareMeters_T, Degrees_T, Duration_T, Speed_T, Accel_T
-from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, vector_xy, velocity_xy, acceleration_xy, Kilometers_T, Radians_T, modulo
+from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, vector_xy, velocity_xy, acceleration_xy, Kilometers_T, Radians_T, modulo, sin, cos
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
@@ -81,7 +81,7 @@ def unit_vec(v: Vector) -> Vector:
 
 def dot(a: Vector, b: Vector) -> float:
     """The scalar product, in the product of the two vectors' units."""
-    return float(a.dot_product(b))
+    return float(a * b)
 
 def along(v: Velocity, direction: Vector) -> Speed_T:
     """The part of V in the direction of DIRECTION."""
@@ -90,7 +90,7 @@ def along(v: Velocity, direction: Vector) -> Speed_T:
 
 def along_vec(v: Vector, direction: Vector) -> Meters_T:
     """The part of V in the direction of DIRECTION."""
-    return Meters_T(float(v.dot_product(unit_vec(direction))))
+    return Meters_T(float(v * unit_vec(direction)))
 
 def radial_rate(r: Vector, v: Velocity) -> float:
     """r . v, in m^2/s: zero at periapsis and apoapsis, positive going out."""

@@ -366,6 +366,9 @@ def refuse_bare_nim_names(code, is_ady):
                         if not text[:u.start()].rstrip().endswith(("def", "class", "type"))), None)
             if not use or _binds(text, name):
                 continue               # unused, or a name of the file's own
+            if any(name in names for other, names in imports.items()
+                   if other != module and names is not STAR):
+                continue               # another module's: `from geo import cos` beside `nimport math`
             line = text.count("\n", 0, use.start()) + 1
             from_list = f"`from {module} nimport {', '.join(sorted(set(listed) | {name}))}`"
             fix = (f"write {module}.{name}, or add {name} to {from_list}" if bare else

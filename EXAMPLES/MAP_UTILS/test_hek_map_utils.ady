@@ -13,11 +13,11 @@ What does not carry over, and why:
     not translated.
   * f"{p:h}" and f"{p:d}": `p.human()` and `p.decimal()`.
 """
-from math nimport cos, degToRad
+from math nimport degToRad
 from map_utils import Axis_T, LATITUDE, LONGITUDE
 from map_utils import Meters_T, Kilometers_T, Degrees_T, Latitude_T, Longitude_T, SquareMeters_T
 from map_utils import GeoFailure_T, LatLong_T, GeoVector, GeoPoint, Vector, Position
-from map_utils import dms2dec, dd2dms, human2dec_degree, human_latlong2dec, dec2human_latlong
+from map_utils import dms2dec, dd2dms, human2dec_degree, human_latlong2dec, dec2human_latlong, cos
 
 def near(actual: float, expected: float, tol: float) -> bool:
     abs(actual - expected) <= tol
@@ -93,8 +93,8 @@ assert near(float(shorter.length()), 7.0, 1e-9) and near(float(shorter.angle()),
 
 let east_1: Vector = Vector(1.0, 0.0)
 let north_1: Vector = Vector(1.0, 90.0)
-assert near(float(east_1.dot_product(north_1)), 0.0, 1e-9)               # perpendicular
-assert near(float(Vector(3.0, 0.0).dot_product(Vector(4.0, 0.0))), 12.0, 1e-9)
+assert near(float(east_1 * north_1), 0.0, 1e-9)               # perpendicular
+assert near(float(Vector(3.0, 0.0) * Vector(4.0, 0.0)), 12.0, 1e-9)
 assert near(float(east_1.cross(north_1)), 1.0, 1e-9)
 
 assert near(Vector(5.0, 30.0).cos_theta(Vector(3.0, 30.0)), 1.0, 1e-9)   # same direction
@@ -148,7 +148,7 @@ assert near(float(turned.magnitude()), 50.0, 1e-6) and near(float(turned.phase()
 
 let gnorth: GeoVector = GeoVector(1.0, 0.0)
 let geast: GeoVector = GeoVector(1.0, 90.0)
-assert near(float(gnorth.dot_product(geast)), 0.0, 1.0)                  # square metres: 1 km vectors
+assert near(float(gnorth * geast), 0.0, 1.0)                  # square metres: 1 km vectors
 assert near(float(gnorth.cross_product(geast)), 1000000.0, 1e-3)         # 1 km x 1 km, in m2
 
 let gshown: str = f"{GeoVector(100.0, 45.0)}"

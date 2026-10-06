@@ -146,7 +146,7 @@ def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
     let off: GeoVector = plane - start
     let offset: Vector = vector_xy(off.east, off.north)
     let cross: SquareMeters_T = track.cross(offset)
-    let dot: SquareMeters_T = track.dot_product(offset)
+    let dot: SquareMeters_T = track * offset
     let length: Meters_T = track.length()
     let across: Meters_T = cross / length                    # a square over a length: a length
     let along: Meters_T = dot / length
