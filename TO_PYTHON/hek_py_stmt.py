@@ -270,6 +270,19 @@ def to_py(self, prec=None):
     return self.nodes[0].to_py()
 
 
+@method(mod_def)
+def to_py(self, prec=None):
+    """mod_def: 'mod' NUMBER; the class is built by type_stmt"""
+    return "int"
+
+
+@method(parent_mod_def)
+def to_py(self, prec=None):
+    """parent_mod_def: IDENTIFIER 'mod' NUMBER -> the parent; the class is
+    built by type_stmt"""
+    return self.nodes[0].to_py()
+
+
 @method(distinct_def)
 def to_py(self, prec=None):
     """distinct_def: 'distinct' type_annotation -> the base type; the class
@@ -364,9 +377,9 @@ def _py_atom_unit(e):
 def _wrap_narrowed_literal(value, annotation):
     """A number given where a narrowed type is declared is of it, and its
     range is checked: `let lat: Latitude_T = 45.0` is `Latitude_T(45.0)`."""
-    from ady_declarations import narrowed_parent
+    from ady_declarations import wraps_or_checks
     t = _py_resolve_alias((annotation or "").strip())
-    if narrowed_parent(t) and _PY_NUMBER.match((value or "").strip()):
+    if wraps_or_checks(t) and _PY_NUMBER.match((value or "").strip()):
         return f"{t}({value.strip()})"
     return value
 
@@ -1330,6 +1343,8 @@ def to_py(self, indent=0):
             f"{ind}        if not ({lo} <= x {'<' if excl else '<='} {hi}):",
             f'{ind}            raise AssertionError(f"{name} value {{x}} out of range {shown}")',
             f"{ind}        return super().__new__(cls, {base}(x))"])
+    if rhs_type in ('mod_def', 'parent_mod_def'):
+        return _py_mod_class(name, indent)
     if rhs_type == 'distinct_float_range_def':
         fr = rhs.nodes[0]
         lo = "".join(str(getattr(n, "node", n)) for n in (fr.nodes[2].nodes if getattr(fr.nodes[2], "nodes", None) else [fr.nodes[2]]))
@@ -1369,6 +1384,35 @@ def to_py(self, indent=0):
     value = rhs.to_py()
     _note_alias(name, value)
     return f"{_ind(indent)}{name} = {value}"
+
+
+def _py_mod_class(name, indent):
+    """`type N is mod M` / `type N is P mod M` -> a class whose every value is
+    wrapped into 0 .. M by `%`, which takes the sign of M on both backends. The
+    operators give an N again, so a sum or a scaled N wraps; N / N is a ratio."""
+    from ady_declarations import distinct_kind, parse_mod
+    parent, mod = parse_mod(ParserState.ady_type_decls[name])
+    base = _DISTINCT_BASES.get(distinct_kind(name), "float")
+    if base == "float" and not any(c in mod for c in ".eE"):
+        mod += ".0"
+    _note_alias(name, name)
+    ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+    ind = _ind(indent)
+    ops = ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__"]
+    lines = [f"{ind}class {name}({parent or base}):",
+             f"{ind}    __slots__ = ()",
+             f"{ind}    def __new__(cls, x):",
+             f"{ind}        return super().__new__(cls, {base}(x) % {mod})"]
+    for op in ops:
+        lines.append(f"{ind}    def {op}(self, o): return {name}({base}.{op}(self, o))")
+    lines.append(f"{ind}    def __neg__(self): return {name}(-{base}(self))")
+    if base == "float":
+        lines += [f"{ind}    def __truediv__(self, o):",
+                  f"{ind}        r = float.__truediv__(self, o)",
+                  f"{ind}        return r if isinstance(o, {name}) else {name}(r)"]
+    else:
+        lines.append(f"{ind}    def __floordiv__(self, o): return {name}(int.__floordiv__(self, o))")
+    return "\n".join(lines)
 
 
 def _note_alias(name, value):

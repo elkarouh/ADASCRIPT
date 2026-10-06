@@ -154,6 +154,7 @@ STANDALONE := \
     test_seq_field_concat.ady \
     test_distinct_float_range.ady \
     test_narrowed_type.ady \
+    test_mod_type.ady \
     test_overload_types.ady \
     test_slice_semantics.ady \
     test_money.ady \
@@ -304,7 +305,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_distinct_float_range test_narrowed_type test_overload_types test_slice_semantics test_money \
+    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_overload_types test_slice_semantics test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat
@@ -881,7 +882,7 @@ test: compile
 	@# an operator between two typed names -- and leaves a wrong argument to
 	@# Nim, whose signature it does not record.
 	@echo "=== distinct types do not mix, both backends ==="
-	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\ntype Dollar_T is distinct float\ntype Euro_T is distinct float\ntype FX_T is Euro_T / Dollar_T\nvar usd: Dollar_T = 10.0\nvar eur: Euro_T = 9.0\nvar fx: FX_T = 0.9\nvar n: int = 3\ntype Lat_T is distinct float range -90.0 .. 90.0\ntype Lon_T is distinct float range -180.0 .. 180.0\nvar lat: Lat_T = 10.0\nvar lon: Lon_T = 20.0\ntype Deg_T is distinct float\ntype Nlat_T is Deg_T range -90 .. 90\ntype Nlon_T is Deg_T range -180 .. 180\nvar deg: Deg_T = 5.0\nvar nlat: Nlat_T = Nlat_T(10.0)\nvar nlon: Nlon_T = Nlon_T(20.0)\ndef at(l: Nlat_T) -> Nlat_T:\n    return l\nclass Pt:\n    var a: Distance_T\n    def __init__(self, d: Distance_T, v: Velocity_T) -> None:\n        self.a = d\n    def __init__(self, d: Distance_T, e: Distance_T) -> None:\n        self.a = d\n' \
+	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\ntype Dollar_T is distinct float\ntype Euro_T is distinct float\ntype FX_T is Euro_T / Dollar_T\nvar usd: Dollar_T = 10.0\nvar eur: Euro_T = 9.0\nvar fx: FX_T = 0.9\nvar n: int = 3\ntype Lat_T is distinct float range -90.0 .. 90.0\ntype Lon_T is distinct float range -180.0 .. 180.0\nvar lat: Lat_T = 10.0\nvar lon: Lon_T = 20.0\ntype Deg_T is distinct float\ntype Nlat_T is Deg_T range -90 .. 90\ntype Nlon_T is Deg_T range -180 .. 180\nvar deg: Deg_T = 5.0\nvar nlat: Nlat_T = Nlat_T(10.0)\nvar nlon: Nlon_T = Nlon_T(20.0)\ndef at(l: Nlat_T) -> Nlat_T:\n    return l\nclass Pt:\n    var a: Distance_T\n    def __init__(self, d: Distance_T, v: Velocity_T) -> None:\n        self.a = d\n    def __init__(self, d: Distance_T, e: Distance_T) -> None:\n        self.a = d\ntype Slot_T is mod 8\ntype Bear_T is Deg_T mod 360\nvar slot: Slot_T = Slot_T(1)\nvar bear: Bear_T = Bear_T(10.0)\n' \
 	    > $(TMPDIR)/ady_distinct_hdr.ady
 	@# `*` and `/` scale, so the product of two units is refused unless a
 	@# derived unit says what it makes; a unit made of two others gives its
@@ -913,7 +914,12 @@ test: compile
 	          "25:nim:passed for a sibling:let w: Nlat_T = at(nlon)" \
 	          "26:nim:passed its parent:let w: Nlat_T = at(deg)" \
 	          "27:nim:converted from a sibling:let e: Nlat_T = Nlat_T(nlon)" \
-	          "28:nim:a literal for an overloaded constructor:let pt: Pt = Pt(d, 2.0)"; do \
+	          "28:nim:a literal for an overloaded constructor:let pt: Pt = Pt(d, 2.0)" \
+	          "29:py:a mod type given its parent:let e: Bear_T = deg" \
+	          "30:py:a mod type plus a plain number:let e: Bear_T = bear + f" \
+	          "31:py:a mod int given a plain int:let e: Slot_T = n" \
+	          "32:nim:a mod type converted from a sibling:let e: Bear_T = Bear_T(nlat)" \
+	          "33:nim:a mod int converted from a unit:let e: Slot_T = Slot_T(d)"; do \
 	    n=$${c%%:*}; rest=$${c#*:}; who=$${rest%%:*}; rest=$${rest#*:}; \
 	    what=$${rest%%:*}; line=$${rest#*:}; \
 	    { cat $(TMPDIR)/ady_distinct_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_distinct_$$n.ady; \

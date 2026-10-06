@@ -495,6 +495,34 @@ It is a unit with a range, where `distinct float range lo .. hi` (below) is a un
 
 <!-- tested by EXAMPLES/test_narrowed_type.ady -->
 
+### A type that wraps: `mod`
+
+Where a range type refuses a value outside it, a mod type wraps it back in. `type Slot_T is mod 8` is a whole number that is always 0 .. 7, and `type Bearing_T is Degrees_T mod 360` is a `Degrees_T` that is always 0 .. 360 -- a compass bearing, an angle, a clock hand, a ring-buffer index. Making one, and `+`, `-` and `*` on it, wrap:
+
+```python
+type Slot_T is mod 8
+type Degrees_T is distinct float
+type Bearing_T is Degrees_T mod 360
+
+var s: Slot_T = Slot_T(6)
+s = s + Slot_T(1)                          # 7
+s = s + Slot_T(1)                          # 8 wraps to 0
+print(int(Slot_T(-1)))                     # 7
+
+let b: Bearing_T = Bearing_T(-10.0)        # 350.0
+let turned: Bearing_T = b + Degrees_T(30.0)   # 380 wraps to 20.0
+let wide: Degrees_T = b                    # up to the parent: no cast
+```
+
+- The value wraps with the sign of the modulus, as Python's `%` does, on both backends: `Slot_T(-1)` is 7, not -1.
+- `Slot_T` has no parent: it is a type of its own, and a plain `int` is given to it by `Slot_T(n)`. `Bearing_T` has `Degrees_T`: a `Bearing_T` goes up to it without a cast, `bearing + degrees` is a `Bearing_T`, and a `Degrees_T` comes down only by `Bearing_T(d)`, which wraps it. A literal takes the declared type, wrapped: `let c: Bearing_T = 400.0` is 40.0.
+- `*` by a plain number gives the same type, wrapped; `/` by a plain number does too, and `Bearing_T / Bearing_T` is a plain ratio. Comparisons compare the wrapped values.
+- It is refused beside a sibling, as a narrowed type is, and `bearing + 1.0` mixes a unit with a plain number as it does for any unit.
+- A mod type wraps and never raises. Use `range` when a value outside should be an error, and `mod` when it should come round.
+- Python: `class Bearing_T(Degrees_T)`, whose `__new__` and operators wrap. Nim: a `distinct float` with a `to_Bearing_T` that wraps with `floorMod`, wrapping operators, and a converter up.
+
+<!-- tested by EXAMPLES/test_mod_type.ady -->
+
 ### A unit made from a unit: momentum and energy
 
 Energy is mass times velocity times velocity, but a derived unit combines

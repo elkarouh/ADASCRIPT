@@ -2209,6 +2209,18 @@ def to_nim(self, prec=None):
     return ""
 
 
+@method(mod_def)
+def to_nim(self, prec=None):
+    """mod_def: 'mod' NUMBER; type_stmt renders it, from the declaration scan."""
+    return ""
+
+
+@method(parent_mod_def)
+def to_nim(self, prec=None):
+    """parent_mod_def: IDENTIFIER 'mod' NUMBER; type_stmt renders it."""
+    return ""
+
+
 @method(float_range_def)
 def to_nim(self):
     """float_range_def: 'float' 'range' BOUND ('..'|'..<') BOUND -> lo..hi as strings"""
@@ -2396,6 +2408,8 @@ def to_nim(self, indent=0):
         return f"{_ind(indent)}type {name}{_exp}{params} = float"
     elif rhs_type == "narrowed_def":
         return _narrowed_type_nim(name, params, indent)
+    elif rhs_type in ("mod_def", "parent_mod_def"):
+        return _mod_type_nim(name, params, indent)
     elif rhs_type == "distinct_float_range_def":
         fr = rhs.nodes[0]
         lo = _float_bound_text(fr.nodes[2])
@@ -2583,6 +2597,68 @@ def _narrowed_type_nim(name, params, indent):
     return "\n".join(lines)
 
 
+def _mod_type_nim(name, params, indent):
+    """`type N is mod M` or `type N is P mod M` -> a distinct type whose every
+    value is wrapped into 0 .. M, with the sign of M as Python's `%` has it: `N(x)`
+    is `to_N(x)`, and `+`, `-`, `*` and `/` by a plain number give an N that is
+    wrapped again. Beside its parent P, `+` and `-` give an N, and a converter
+    takes an N up to P."""
+    from ady_declarations import distinct_kind, parse_mod
+    parent, mod = parse_mod(ParserState.ady_type_decls[name])
+    kind = distinct_kind(name)
+    base = _DISTINCT_BASE_NIM[kind]
+    if kind == "float" and not any(c in mod for c in ".eE"):
+        mod += ".0"
+    ParserState.symbol_table.add(name, name, "type")
+    _top = ParserState.symbol_table.depth() <= 2
+    _e = "*" if getattr(ParserState, 'export_symbols', False) and _top else ""
+    ind = _ind(indent)
+    ParserState.nim_imports.update(("hashes", "strformat"))
+    lines = [f"{ind}type {name}{_e}{params} = distinct {base}"]
+    lines += [ind + p.format(e=_e, t=name) for p in _DISTINCT_ORDERED]
+    lines.append(f"{ind}proc formatValue{_e}(result: var string; value: {name}; "
+                 f"specifier: string) = formatValue(result, {base}(value), specifier)")
+    if kind == "float":
+        ParserState.nim_imports.add("math")
+        wrap = f"{name}(floorMod(x, {mod}))"
+    else:
+        wrap = f"{name}(((x mod {mod}) + {mod}) mod {mod})"
+    lines.append(f"{ind}proc to_{name}{_e}(x: {base}): {name} = {wrap}")
+    if kind == "float":
+        lines.append(f"{ind}proc to_{name}{_e}(x: int): {name} = to_{name}(float(x))")
+    lines += [f"{ind}proc to_{name}{_e}(x: {name}): {name} = x"]
+    t = name
+    lines += [
+        f"{ind}proc `+`{_e}(a, b: {t}): {t} = to_{t}({base}(a) + {base}(b))",
+        f"{ind}proc `-`{_e}(a, b: {t}): {t} = to_{t}({base}(a) - {base}(b))",
+        f"{ind}proc `-`{_e}(a: {t}): {t} = to_{t}(-{base}(a))",
+        f"{ind}proc `+=`{_e}(a: var {t}, b: {t}) = a = a + b",
+        f"{ind}proc `-=`{_e}(a: var {t}, b: {t}) = a = a - b",
+        f"{ind}proc `*`{_e}(a, b: {t}): {t} = to_{t}({base}(a) * {base}(b))",
+        f"{ind}proc `*`{_e}(a: {t}, b: {base}): {t} = to_{t}({base}(a) * b)",
+        f"{ind}proc `*`{_e}(a: {base}, b: {t}): {t} = to_{t}(a * {base}(b))"]
+    if kind == "float":
+        lines += [
+            f"{ind}proc `*`{_e}(a: {t}, b: int): {t} = to_{t}(float(a) * float(b))",
+            f"{ind}proc `*`{_e}(a: int, b: {t}): {t} = to_{t}(float(a) * float(b))",
+            f"{ind}proc `/`{_e}(a: {t}, b: float): {t} = to_{t}(float(a) / b)",
+            f"{ind}proc `/`{_e}(a, b: {t}): float = float(a) / float(b)",
+            f"{ind}proc `/`{_e}(a: {t}, b: int): {t} = to_{t}(float(a) / float(b))"]
+    else:
+        lines += [f"{ind}proc `div`{_e}(a: {t}, b: int): {t} = to_{t}(int(a) div b)"]
+    if parent:
+        lines += [
+            f"{ind}proc to_{name}{_e}(x: {parent}): {name} = to_{name}({base}(x))",
+            f"{ind}proc `+`{_e}(a: {t}, b: {parent}): {t} = to_{t}({base}(a) + {base}(b))",
+            f"{ind}proc `+`{_e}(a: {parent}, b: {t}): {t} = to_{t}({base}(a) + {base}(b))",
+            f"{ind}proc `-`{_e}(a: {t}, b: {parent}): {t} = to_{t}({base}(a) - {base}(b))",
+            f"{ind}proc `-`{_e}(a: {parent}, b: {t}): {t} = to_{t}({base}(a) - {base}(b))",
+            f"{ind}proc `+=`{_e}(a: var {t}, b: {parent}) = a = a + b",
+            f"{ind}proc `-=`{_e}(a: var {t}, b: {parent}) = a = a - b",
+            f"{ind}converter up_{name}{_e}(x: {name}): {parent} = {parent}({base}(x))"]
+    return "\n".join(lines)
+
+
 @method(scaled_def)
 def to_nim(self, prec=None):
     """scaled_def: NUMBER '*' IDENTIFIER -- a multiple of a unit; type_stmt
@@ -2661,8 +2737,8 @@ def _wrap_distinct_literal(value, nim_type):
     if is_distinct(t):
         if not _is_nim_literal(v):
             return value
-        from ady_declarations import narrowed_parent
-        return f"to_{t}({v})" if narrowed_parent(t) else f"{t}({v})"   # a range is checked
+        from ady_declarations import wraps_or_checks
+        return f"to_{t}({v})" if wraps_or_checks(t) else f"{t}({v})"   # a range is checked, a mod wraps
     if t.startswith("(") and t.endswith(")") and v.startswith("(") and v.endswith(")"):
         # `return (v, 0.0)` for `-> (Vector, Force_T)`: each element takes its own type
         ts, vs = _split_top_level_commas(t[1:-1]), _split_top_level_commas(v[1:-1])

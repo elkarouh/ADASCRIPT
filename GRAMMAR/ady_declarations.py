@@ -682,6 +682,9 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
                 f"type {name} is {a} {op} {b}: {bad} is not a distinct "
                 f"numeric type -- a derived unit is made from two of them, "
                 f"declared `type {bad} is distinct float`")
+    for name, (parent, modulus) in mod_types(decls).items():
+        if parent is None:
+            out[name] = "float" if any(c in modulus for c in ".eE") else "int"
     narrowed = narrowed_types(decls)
     pending = dict(narrowed)
     while pending:
@@ -728,9 +731,49 @@ def parse_narrowed(rhs):
 
 
 def narrowed_types(decls):
-    """{name: parent} for every `type N is P range LO .. HI` in DECLS."""
-    return {n: p[0] for n, r in decls.items() if r is not None
-            for p in [parse_narrowed(r)] if p}
+    """{name: parent} for every `type N is P range LO .. HI` and every
+    `type N is P mod M` in DECLS: a type narrowed from, or wrapped within, its
+    parent goes up to it without a cast."""
+    out = {n: p[0] for n, r in decls.items() if r is not None
+           for p in [parse_narrowed(r)] if p}
+    out.update({n: p[0] for n, r in decls.items() if r is not None
+                for p in [parse_mod(r)] if p and p[0]})
+    return out
+
+
+# --- mod types ------------------------------------------------------------------
+# `type Slot_T is mod 8` is a whole number that wraps: 7 + 1 is 0 and -1 is 7.
+# `type Bearing_T is Degrees_T mod 360` is a Degrees_T that wraps the same way:
+# Bearing_T(-10.0) is 350.0, and a Bearing_T plus a Degrees_T is a Bearing_T. A
+# range checks and refuses; a mod type wraps, with the sign of the modulus, as
+# Python's `%` does. It is a type of its own, as a narrowed one is.
+
+_MOD = _re_du.compile(r"^(?:([A-Za-z_]\w*)[ \t]+)?mod[ \t]+(\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][-+]?\d+)?)$")
+
+
+def parse_mod(rhs):
+    """(parent or None, modulus) for a declaration `type N is mod M` or `type
+    N is P mod M`, else None."""
+    m = _MOD.match((rhs or "").strip())
+    return (m.group(1), m.group(2).replace("_", "")) if m else None
+
+
+def mod_types(decls):
+    """{name: (parent or None, modulus text)} for every mod type in DECLS."""
+    return {n: p for n, r in decls.items() if r is not None
+            for p in [parse_mod(r)] if p}
+
+
+def mod_type_of(name):
+    """(parent or None, modulus) when NAME is a mod type, else None."""
+    from hek_parsec import ParserState
+    return (getattr(ParserState, "mod_types", None) or {}).get(name)
+
+
+def wraps_or_checks(name):
+    """NAME is a type whose `N(x)` is a proc of its own -- one that checks a
+    range or wraps -- rather than a plain conversion."""
+    return narrowed_parent(name) is not None or mod_type_of(name) is not None
 
 
 def narrowed_parent(name):
@@ -1014,10 +1057,37 @@ def expr_unit(expr, atom):
     return unit_result(expr_unit(left, atom), op, expr_unit(right, atom))
 
 
+def _mod_result(lu, op, ru):
+    """The mod type `l op r` is when one side is one -- it wraps, so the sum of a
+    Bearing_T and a Degrees_T is a Bearing_T, and a Bearing_T scaled by a plain
+    number is one -- or None."""
+    ml, mr = mod_type_of(lu) is not None, mod_type_of(ru) is not None
+    if not (ml or mr):
+        return None
+    n = lu if ml else ru
+    other = ru if ml else lu
+    if op in ("+", "-", "%", "mod"):
+        if op in ("%", "mod"):
+            return None
+        if other == n or other in narrow_ancestors(n) or other == UNIT_LIT:
+            return n
+        if ml and mr and (lu in narrow_ancestors(ru) or ru in narrow_ancestors(lu)):
+            return lu if lu in narrow_ancestors(ru) else ru
+        return None
+    if op == "*" and (other in (UNIT_LIT, UNIT_PLAIN) or (ml and mr and lu == ru)):
+        return n
+    if op in ("/", "div", "//") and ml and ru in (UNIT_LIT, UNIT_PLAIN):
+        return n
+    return None
+
+
 def unit_result(lu, op, ru):
     """The unit of `l op r` given the units of l and r, or None if it has
     none (or the backend cannot tell). A narrowed type is its widest parent
     here: arithmetic leaves the range."""
+    wrapped = _mod_result(lu, op, ru)
+    if wrapped:
+        return wrapped
     lu, ru = narrow_root(lu), narrow_root(ru)
     ld = bool(lu) and is_distinct(lu)
     rd = bool(ru) and is_distinct(ru)
@@ -1045,6 +1115,8 @@ def unit_mix_error(lu, op, ru):
     """None, or why `l op r` is refused, given the units of l and r. What
     it cannot judge -- a side of unknown unit -- it leaves to the Nim
     compiler, which refuses every one of these itself."""
+    if _mod_result(lu, op, ru):
+        return None
     lu, ru = narrow_root(lu), narrow_root(ru)
     ld = bool(lu) and is_distinct(lu)
     rd = bool(ru) and is_distinct(ru)

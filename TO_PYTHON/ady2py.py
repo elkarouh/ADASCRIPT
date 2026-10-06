@@ -129,6 +129,7 @@ def _py_reset():
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
     ParserState.narrowed_types = {}
+    ParserState.mod_types = {}
     ParserState.record_types = set()
     ParserState.py_type_aliases = {}
     ParserState.py_top_decls = []
@@ -344,8 +345,9 @@ def translate(code):
             f"type {_name} is {_k} * {_b}: a scaled unit is built by ady2nim "
             f"only -- its conversions depend on the type of their argument, "
             f"which the Python backend cannot always see")
-    from ady_declarations import narrowed_types
+    from ady_declarations import narrowed_types, mod_types
     _PS_rp.narrowed_types = narrowed_types(_PS_rp.ady_type_decls)
+    _PS_rp.mod_types = mod_types(_PS_rp.ady_type_decls)
     _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls)
     _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
     # a generic function must be called with its type arguments written out

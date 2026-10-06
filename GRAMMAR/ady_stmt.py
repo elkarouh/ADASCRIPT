@@ -812,6 +812,13 @@ distinct_float_range_def = ikw("distinct") + float_range_def
 # an explicit, range-checked `Latitude_T(d)`. See ady_declarations.narrowed_types.
 narrowed_def = fw("narrowed_def")
 narrowed_def = IDENTIFIER + literal("range") + float_bound + (RANGE_EXCL_OP | RANGE_OP) + float_bound
+# mod_def: mod M -- a whole number that wraps, `type Slot_T is mod 8`; and
+# `P mod M`, a distinct type P that wraps, `type Bearing_T is Degrees_T mod 360`.
+# See ady_declarations.mod_types.
+mod_def = fw("mod_def")
+mod_def = ikw("mod") + NUMBER
+parent_mod_def = fw("parent_mod_def")
+parent_mod_def = IDENTIFIER + ikw("mod") + NUMBER
 # derived_def: A / B, A * B -- a unit made from two distinct ones, whose
 # arithmetic is then defined: `type Velocity_T is Distance_T / Duration_T`
 # says a Distance_T over a Duration_T is a Velocity_T, and so a Velocity_T
@@ -837,7 +844,7 @@ elem_type.parsers.insert(0, subrange_def)
 from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_float_range_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | narrowed_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_float_range_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | narrowed_def | mod_def | parent_mod_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.
