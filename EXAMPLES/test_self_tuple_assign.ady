@@ -1,0 +1,35 @@
+# `(self.r, self.v) = f()` writes to self, so the method takes `var self`.
+def pair(n: int) -> (int, float):
+    return (n, 2.5 * float(n))
+
+class P:
+    var r: int
+    var v: float
+    var tag: int
+
+    def __init__(self):
+        self.r = 0
+        self.v = 0.0
+        self.tag = 0
+
+    def step(self, n: int):
+        (self.r, self.v) = pair(n)
+
+    def mixed(self, n: int):
+        local: int = 0
+        (local, self.v) = pair(n)
+        self.tag = local
+
+    def swap_fields(self):
+        self.r, self.tag = self.tag, self.r
+
+    def show(self):
+        print self.r, self.v, self.tag
+
+var p: P = P()
+p.step(3)
+p.show()
+p.mixed(5)
+p.show()
+p.swap_fields()
+p.show()

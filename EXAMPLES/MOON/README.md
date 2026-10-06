@@ -65,8 +65,8 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
   Nim** (`var (a, b) = ...`) and left the outer ones as they were. Silent: guidance flew to a
   target of zeros and the lander hit the Moon at 300 m/s. Fixed in the transpiler; the source still
   returns a record and assigns (`Guidance.compute`'s `aim`).
-* **`(self.r, self.v) = f()` is not seen as a write to `self`**: the method gets a plain `self` and
-  Nim refuses to compile it (`Navigation.propagate`).
+* **`(self.r, self.v) = f()` was not seen as a write to `self`**: the method got a plain `self` and
+  Nim refused to compile it. Fixed in the transpiler; `Navigation.propagate` still assigns one at a time.
 * **Methods in a `record` body were dropped without a word**, on both backends; both now refuse
   them and say to write a function or use a class. The first version's vector had to be a class.
 * **Classes are values on Nim, references on Python** (chapter 13): `Rng` and `Spacecraft` are shared,

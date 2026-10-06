@@ -5511,7 +5511,14 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             'peek', 'group', 'strip', 'split', 'join', 'replace', 'upper', 'lower',
             'format', 'encode', 'decode', 'keys', 'values', 'items',
         }
+        # `(self.r, self.v) = f()`, and `a, self.v = f()`: a tuple of targets
+        # with a field of self among them.
+        _SELF_TUPLE_TARGET = _re.compile(
+            r"^[ \t]*\(?[^\n=()]*\bself\.\w+[^\n=()]*,[^\n=()]*\)?[ \t]*=(?!=)"
+            r"|\bswap\([^)]*\bself\.\w+", _re.M)
         def _body_has_self_mutation(body_text):
+            if _SELF_TUPLE_TARGET.search(body_text):
+                return True
             # Direct field mutation
             if _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", body_text):
                 return True
@@ -5546,7 +5553,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         def _purity_evidence(body_text):
             """(may_mutate, sibling_calls) for the pure-method fixpoint."""
             may_mutate = bool(
-                _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", body_text)
+                _SELF_TUPLE_TARGET.search(body_text)
+                or _re.search(r"self\.\w+\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", body_text)
                 or _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/&]?=(?!=)", body_text))
             sibling_calls = set()
             for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
