@@ -79,10 +79,6 @@ def unit_vec(v: Vector) -> Vector:
         return v
     return v.unit()
 
-def dot(a: Vector, b: Vector) -> float:
-    """The scalar product, in the product of the two vectors' units."""
-    return float(a * b)
-
 def along(v: Velocity, direction: Vector) -> Speed_T:
     """The part of V in the direction of DIRECTION."""
     let d: Vector = unit_vec(direction)
