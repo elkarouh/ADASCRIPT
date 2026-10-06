@@ -528,13 +528,13 @@ class Ring:
     var count: Count_T
 
     def push(self, x: int):
-        self.items[self.head] = x
         self.head += 1                 # a literal is an Index_T; it comes round at CAPACITY
+        self.items[self.head] = x      # head is the newest slot
         if self.count < CAPACITY:
             self.count += 1
 
     def latest(self, back: Index_T) -> int:
-        return self.items[self.head - 1 - back]     # back = 0 is the newest
+        return self.items[self.head - back]         # back = 0 is the newest
 ```
 
   After six pushes of 10, 20, ... 60 into this four-slot ring, `latest(0)` is 60 and `latest(3)` is 30. The count is not an `Index_T`: it runs from 0 to `CAPACITY`, one more value than an index has, so it is an `int range 0 .. CAPACITY`. `CAPACITY` appears twice, in the two types, there is no `% CAPACITY` anywhere, and `head - Index_T(1)` is the newest slot even when `head` is 0. This is `EXAMPLES/test_ring_buffer.ady`.
