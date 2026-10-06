@@ -32,7 +32,7 @@ C5DIR  := $(TOOLDIR)/C500
 # Prepend choosenim's bin dir so Nim 2.x is used instead of any system Nim 1.x.
 export PATH := /root/.nimble/bin:$(HOME)/.nimble/bin:$(HOME)/Downloads:$(PATH)
 
-.PHONY: test test-vi test-kilo compile clean install uninstall
+.PHONY: test test-vi test-kilo test-moon compile clean install uninstall
 
 # Where 'make install' puts the ady2nim / ady2py launchers.
 # Override with: make install PREFIX=$HOME/.local
@@ -258,11 +258,13 @@ ADA_INDENT_TESTS := \
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
 #   tsp.ady         — matplotlib not installed by default (pyimport)
+#   MOON/moon_sim.ady — the same; run by moon_tests below when matplotlib is there
 #   MAP_UTILS/route_map.ady — folium not installed by default (pyimport)
 #   BENCH_SEARCH/bench_search.ady — a timing program: its output is the clock
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
+    MOON/moon_sim.ady \
     MAP_UTILS/route_map.ady \
     test_input.ady \
     VI/vi_curses.ady \
@@ -304,7 +306,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
 # -----------------------------------------------------------------------
 nim_has = $(shell d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
-NEEDS_NIMPY := pyimport_similar.ady test_pyobject_calls.ady tsp.ady MAP_UTILS/route_map.ady
+NEEDS_NIMPY := pyimport_similar.ady test_pyobject_calls.ady tsp.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
 NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
 SKIPPED :=
 ifeq ($(call nim_has,nimpy),)
@@ -514,6 +516,41 @@ test-kilo:
 	    $(EXDIR)/test_kilo_editor > $(TMPDIR)/ady_kilo_editor.out 2>&1 \
 	        && echo OK || { echo FAIL; tail -n 8 $(TMPDIR)/ady_kilo_editor.out; exit 1; }
 	$(kilo_tests)
+
+# -----------------------------------------------------------------------
+# The moon tests: MOON/moon_sim.ady, run on both backends, which must print the same
+# mission -- the real check, the numbers are the same to the last digit -- and the
+# lander must have landed. It plots with matplotlib (pyimport), so it SKIPs without it.
+# Shared by `test` and by `test-moon`.
+# -----------------------------------------------------------------------
+define moon_tests
+	@echo "=== moon_sim, the Earth-Moon landing, both backends: MOON/moon_sim.ady ==="
+	@printf '  %-62s' "EXAMPLES/MOON/moon_sim.ady (nim, python: same mission, landed)"; \
+	    if ! $(PYTHON) -c 'import matplotlib' 2>/dev/null; then echo "SKIP (no matplotlib)"; \
+	    elif [ ! -x $(EXDIR)/MOON/moon_sim ]; then echo "SKIP (no nimpy)"; else \
+	    $(EXDIR)/MOON/moon_sim --out $(TMPDIR)/ady_moon_nim.png 2>&1 \
+	        | grep -v -e '^Plot saved' -e '^Testing libpython' > $(TMPDIR)/ady_moon_nim.out; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/MOON/moon_sim.ady > $(TMPDIR)/ady_moon.py; \
+	    $(PYTHON) $(TMPDIR)/ady_moon.py --out $(TMPDIR)/ady_moon_py.png 2>&1 \
+	        | grep -v '^Plot saved' > $(TMPDIR)/ady_moon_py.out; \
+	    grep -q '^Final phase  : LANDED' $(TMPDIR)/ady_moon_nim.out \
+	        && cmp -s $(TMPDIR)/ady_moon_nim.out $(TMPDIR)/ady_moon_py.out \
+	        && [ -s $(TMPDIR)/ady_moon_nim.png ] && [ -s $(TMPDIR)/ady_moon_py.png ] \
+	        && echo OK || { echo FAIL; diff $(TMPDIR)/ady_moon_nim.out $(TMPDIR)/ady_moon_py.out | head -20; \
+	                        tail -n 8 $(TMPDIR)/ady_moon_nim.out; exit 1; }; fi
+	@rm -f $(TMPDIR)/ady_moon.py $(TMPDIR)/ady_moon_*.png $(TMPDIR)/ady_moon_*.out
+endef
+
+# -----------------------------------------------------------------------
+# test-moon — the moon tests alone: build moon_sim.ady, then run it on both backends
+# -----------------------------------------------------------------------
+test-moon:
+	@mkdir -p $(TMPDIR)
+	@if $(PYTHON) -c 'import matplotlib' 2>/dev/null && [ -n "$(filter MOON/moon_sim.ady,$(ALL_COMPILE))" ]; then \
+	    $(ADY2NIM) c $(EXDIR)/MOON/moon_sim.ady >/dev/null 2>&1 \
+	    || { echo "  EXAMPLES/MOON/moon_sim.ady                    FAIL (does not build)"; \
+	         $(ADY2NIM) c $(EXDIR)/MOON/moon_sim.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; }; fi
+	$(moon_tests)
 
 # -----------------------------------------------------------------------
 # test — compile everything, then run the runnable subset
@@ -1022,6 +1059,7 @@ test: compile
 	$(vi_tests)
 
 	$(kilo_tests)
+	$(moon_tests)
 
 	@# lispy wants a terminal for its prompt, but it can be run without one.
 	@echo "=== lispy ==="
