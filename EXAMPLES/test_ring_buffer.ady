@@ -3,12 +3,13 @@
 
 const CAPACITY: int = 4
 type Index_T is mod CAPACITY
+type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY, one more than an index
 type Slot_T is mod 8
 
 class Ring:
     var items: [Index_T]int
     var head: Index_T                  # a mod type starts at 0
-    var count: int = 0
+    var count: Count_T
 
     def push(self, x: int):
         self.items[self.head] = x

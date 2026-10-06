@@ -591,6 +591,10 @@ def _zero_value(annotation, _depth=0):
                     return f"_EnumArray(({_m}, {_ez}) for {_m} in {_domain})"
                 break
         return "_EnumArray()"
+    # an integer subrange, `type Count_T is int range 0 .. N`, is a range()
+    # here and zeroes to 0, as Nim's does
+    if ann.startswith("range(") and ann.endswith(")"):
+        return "0"
     for prefix, empty in (("_EnumArray[", "_EnumArray()"),
                           ("list[", "[]"), ("dict[", "{}"), ("set[", "set()"),
                           ("frozenset[", "frozenset()"), ("tuple[", "()"),
@@ -1383,18 +1387,21 @@ def to_py(self, indent=0):
         lo = _bound_text(sr.nodes[0])
         hi = _bound_text(sr.nodes[2])   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
+        _note_alias(name, rhs.to_py())
         return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'constrained_subrange_def':
         sr = rhs.nodes[1]  # the subrange_def inside
         lo = _bound_text(sr.nodes[0])
         hi = _bound_text(sr.nodes[2])   # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
+        _note_alias(name, rhs.to_py())
         return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'subrange_def':
         # Register First/Last for tick attributes (Name'First, Name'Last)
         lo = _bound_text(rhs.nodes[0])
         hi = _bound_text(rhs.nodes[2])  # [lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi}
+        _note_alias(name, rhs.to_py())
         return f"{_ind(indent)}{name} = {rhs.to_py()}"
     if rhs_type == 'enum_def':
         members = rhs.to_py()

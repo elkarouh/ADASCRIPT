@@ -520,11 +520,12 @@ let wide: Degrees_T = b                    # up to the parent: no cast
 ```python
 const CAPACITY: int = 4
 type Index_T is mod CAPACITY
+type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY, one more than an index
 
 class Ring:
     var items: [Index_T]int
     var head: Index_T                  # a mod type starts at 0
-    var count: int = 0
+    var count: Count_T
 
     def push(self, x: int):
         self.items[self.head] = x
@@ -536,7 +537,7 @@ class Ring:
         return self.items[self.head - Index_T(1 + back)]
 ```
 
-  After six pushes of 10, 20, ... 60 into this four-slot ring, `latest(0)` is 60 and `latest(3)` is 30. `CAPACITY` appears once, in the type, there is no `% CAPACITY` anywhere, and `head - Index_T(1)` is the newest slot even when `head` is 0. This is `EXAMPLES/test_ring_buffer.ady`.
+  After six pushes of 10, 20, ... 60 into this four-slot ring, `latest(0)` is 60 and `latest(3)` is 30. The count is not an `Index_T`: it runs from 0 to `CAPACITY`, one more value than an index has, so it is an `int range 0 .. CAPACITY`. `CAPACITY` appears twice, in the two types, there is no `% CAPACITY` anywhere, and `head - Index_T(1)` is the newest slot even when `head` is 0. This is `EXAMPLES/test_ring_buffer.ady`.
 - The value wraps with the sign of the modulus, as Python's `%` does, on both backends: `Slot_T(-1)` is 7, not -1.
 - `Slot_T` has no parent: it is a type of its own, and a plain `int` is given to it by `Slot_T(n)`. `Bearing_T` has `Degrees_T`: a `Bearing_T` goes up to it without a cast, `bearing + degrees` is a `Bearing_T`, and a `Degrees_T` comes down only by `Bearing_T(d)`, which wraps it. A literal takes the declared type, wrapped: `let c: Bearing_T = 400.0` is 40.0.
 - `*` by a plain number gives the same type, wrapped; `/` by a plain number does too, and `Bearing_T / Bearing_T` is a plain ratio. Comparisons compare the wrapped values.
@@ -2018,7 +2019,7 @@ another — and emits
 
 ```python
 class Counter:
-    var count: int = 0
+    var count: Count_T
 
     def increment(self):
         self.count += 1   # → proc increment(self: var Counter) in Nim
