@@ -1,22 +1,23 @@
-# A ring buffer: the index is a mod type, so it comes round by itself, and the
-# array is a fixed-size field, zeroed on both backends.
+# A ring buffer: the index is a mod type, so it comes round by itself, and it
+# is also the array's index type: `[Index_T]int` has CAPACITY slots, 0 .. CAPACITY-1.
 
 const CAPACITY: int = 4
 type Index_T is mod CAPACITY
+type Slot_T is mod 8
 
 class Ring:
-    var items: [CAPACITY]int
+    var items: [Index_T]int
     var head: Index_T = Index_T(0)
     var count: int = 0
 
     def push(self, x: int):
-        self.items[int(self.head)] = x
+        self.items[self.head] = x
         self.head = self.head + Index_T(1)
         if self.count < CAPACITY:
             self.count += 1
 
     def latest(self, back: int) -> int:
-        return self.items[int(self.head - Index_T(1 + back))]
+        return self.items[self.head - Index_T(1 + back)]
 
 def main():
     var r: Ring = Ring()
@@ -24,4 +25,11 @@ def main():
         r.push(x * 10)
     print(r.count, r.latest(0), r.latest(1), r.latest(3))
 
+def tally() -> int:
+    var seen: [Slot_T]int          # a mod type written as a number is an index too
+    for k in 0 ..< 20:
+        seen[Slot_T(k * 3)] += 1
+    return seen[Slot_T(0)] * 100 + seen[Slot_T(1)]
+
 main()
+print(tally())

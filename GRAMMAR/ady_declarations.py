@@ -524,6 +524,8 @@ def _name_is_ordered_map_key(name, decls, seen):
     if name in seen:
         return None
     seen = seen | {name}
+    if int_mod_size(name) is not None:
+        return False                      # a whole-number mod type: M slots, 0 .. M-1
     if name in decls:
         rhs = decls[name]
         if rhs is None:                   # a class
@@ -782,6 +784,21 @@ def mod_modulus(modulus, kind):
     if kind == "float" and modulus[:1].isdigit() and not any(c in modulus for c in ".eE"):
         return modulus + ".0"
     return modulus
+
+
+def int_mod_size(name):
+    """The number of slots (the modulus, a number or a const's name) of an
+    array indexed by NAME, when NAME is a mod type of whole numbers; else None.
+    Such a type is an index: it runs 0 .. M-1."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, "ady_type_decls", None) or {}
+    info = mod_types(decls).get(name) if name in decls else mod_type_of(name)
+    if not info:
+        return None
+    kinds = getattr(ParserState, "distinct_types", None) or {}
+    if kinds.get(name) != "int":
+        return None
+    return info[1]
 
 
 def mod_type_of(name):

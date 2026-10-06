@@ -622,6 +622,11 @@ def to_py(self, prec=None):
     # subranges by their bounds -- and not plain constants, which is exactly
     # the line to draw. `[Prisoner_T]Box_T` over `1 .. 100` is a mapping and
     # cannot be a list: its domain does not start at 0.
+    from ady_declarations import int_mod_size
+    _size = int_mod_size(idx)
+    if _size is not None:
+        _ensure_fixed_alias()
+        return f"_Fixed[{_size}, {elem}]"       # a mod type of whole numbers: M slots
     _info = getattr(ParserState, "tick_types", {}).get(idx)
     _is_ordinal_domain = _info is not None or idx in ("str", "bool")
     if not _is_ordinal_domain:

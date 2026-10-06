@@ -433,6 +433,10 @@ def to_nim(self, prec=None):
         ParserState.nim_imports.add("tables")
         _ensure_ordered_table_items()
         return f"OrderedTable[{idx}, {elem}]"
+    from ady_declarations import int_mod_size
+    _size = int_mod_size(idx)
+    if _size is not None:
+        return f"array[{_size}, {elem}]"        # a mod type of whole numbers: M slots
     return f"array[{idx}, {elem}]"
 
 

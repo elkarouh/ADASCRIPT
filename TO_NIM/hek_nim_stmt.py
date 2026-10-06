@@ -2645,6 +2645,11 @@ def _mod_type_nim(name, params, indent):
             f"{ind}proc `/`{_e}(a: {t}, b: int): {t} = to_{t}(float(a) / float(b))"]
     else:
         lines += [f"{ind}proc `div`{_e}(a: {t}, b: int): {t} = to_{t}(int(a) div b)"]
+        # the type is an index: `[N]T` is indexed by an N, which runs 0 .. M-1
+        lines += [
+            f"{ind}proc `[]`{_e}[T](a: openArray[T], i: {t}): T = a[int(i)]",
+            f"{ind}proc `[]`{_e}[T](a: var openArray[T], i: {t}): var T = a[int(i)]",
+            f"{ind}proc `[]=`{_e}[T](a: var openArray[T], i: {t}, v: T) = a[int(i)] = v"]
     if parent:
         lines += [
             f"{ind}proc to_{name}{_e}(x: {parent}): {name} = to_{name}({base}(x))",
