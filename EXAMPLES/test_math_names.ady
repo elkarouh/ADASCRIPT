@@ -1,0 +1,5 @@
+# Nim's names for the inverse trig functions and the natural logarithm run on both
+# backends; Python's (atan, asin, one-argument log) are refused, below in the Makefile.
+nimport math
+let x: float = 0.5
+print math.arctan(x), math.arctan2(1.0, 2.0), math.arcsin(x), math.arccos(x), math.ln(2.0), math.log(8.0, 2.0)

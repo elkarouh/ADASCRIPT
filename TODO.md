@@ -702,8 +702,6 @@ and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a funct
 
 Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
 
-- [ ] Nim has no mapping for `math.atan`, `atan2`, `asin`, `acos` (`arctan`, `arctan2`, ...),
-      and `math.log(x)` with one argument (Nim's `log` wants a base; `ln`).
 - [ ] f-string format specs on Nim: no `,` flag (`{x:,.0f}`), and `{x:+.0f}` leaves a
       stray `.` (`-456396.`).
 - [ ] `\n` inside an f-string is not an escape on Nim (`fmt"..."` is raw).

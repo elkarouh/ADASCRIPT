@@ -145,6 +145,7 @@ STANDALONE := \
     test_units_fields.ady \
     test_tuple_assign_block.ady \
     test_self_tuple_assign.ady \
+    test_math_names.ady \
     test_money.ady \
     test_scaled_units.ady \
     test_cents.ady \
@@ -293,7 +294,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_money \
+    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat
@@ -785,6 +786,9 @@ test: compile
 	@printf "type K is enum A = 0, B = 2\nlet v: K = A\nprint v'Next\n" > $(TMPDIR)/ady_refuse_34.ady
 	@# a record has fields only: a method in its body was dropped without a word
 	@printf 'type Pt is record:\n    x: float\n\n    def norm(self) -> float:\n        return self.x\nprint 1\n' > $(TMPDIR)/ady_refuse_37.ady
+	@# Python's math names are not Nim's: say what Nim calls them
+	@printf 'nimport math\nprint math.atan(0.5)\n' > $(TMPDIR)/ady_refuse_38.ady
+	@printf 'nimport math\nprint math.log(2.0)\n' > $(TMPDIR)/ady_refuse_39.ady
 	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
 	    for c in "1:members no one can tell apart:cannot be told apart" \
 	             "2:a dropped failure:drops a failure" \
@@ -822,7 +826,9 @@ test: compile
 	             "32:a gapped enum as an array index:cannot be used as an array index" \
 	             "33:a gapped enum iterated:cannot be iterated" \
 	             "34:'Next of a gapped enum:cannot be stepped" \
-	             "37:a method in a record body:a record has fields only"; do \
+	             "37:a method in a record body:a record has fields only" \
+	             "38:Python's atan on nimport math:it is 'arctan'" \
+	             "39:one-argument log on nimport math:the natural logarithm is 'ln'"; do \
 	        n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; want=$${rest#*:}; \
 	        printf '  %-42s' "$$what ($$(basename $$tr .py))"; \
 	        if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_refuse_$$n.ady > $(TMPDIR)/ady_refuse.out 2>&1; then \

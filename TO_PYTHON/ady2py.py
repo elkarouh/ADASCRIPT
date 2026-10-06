@@ -269,6 +269,24 @@ def _drop_type_applications(output):
             output[i] = pat.sub(r'\1(', line)
 
 
+# What Nim's math calls what Python's calls something else: a file `nimport`s math
+# and writes Nim's names, so `math.arctan(x)` has to become `math.atan(x)` here.
+_MATH_FOR_PYTHON = {
+    "arcsin": "asin", "arccos": "acos", "arctan": "atan", "arctan2": "atan2",
+    "arcsinh": "asinh", "arccosh": "acosh", "arctanh": "atanh",
+    "ln": "log", "degToRad": "radians", "radToDeg": "degrees",
+}
+
+
+def _rename_math_for_python(output):
+    """`math.arctan(x)` -> `math.atan(x)`, and the other names above."""
+    import re as _re_rm
+    pat = _re_rm.compile(r'(?<![\w.])math\.(' + "|".join(_MATH_FOR_PYTHON) + r')\b')
+    for i, line in enumerate(output):
+        if "math." in line:
+            output[i] = pat.sub(lambda m: "math." + _MATH_FOR_PYTHON[m.group(1)], line)
+
+
 def _add_stdlib_module_imports(output):
     """Import a stdlib module the generated code actually calls into."""
     import re as _re_ai
@@ -392,6 +410,7 @@ def translate(code):
 
     # Insert auto-collected imports at the top (after leading comments)
     from hek_parsec import ParserState
+    _rename_math_for_python(output)
     _add_stdlib_module_imports(output)
     _drop_type_applications(output)
     # Annotations are not evaluated where they are written, so one may name
@@ -472,6 +491,8 @@ def include_ady_modules(code, search_dir, _seen=None):
     code = normalize_imports(code, lambda name: find_checked(name) is not None)
     from ady_modules import refuse_bare_nim_names
     refuse_bare_nim_names(code, lambda name: find_checked(name) is not None)
+    from ady_modules import refuse_python_math_names
+    refuse_python_math_names(code, lambda name: find_checked(name) is not None)
     for mod, listed in import_map(code).items():
         path = find_checked(mod)
         if path:

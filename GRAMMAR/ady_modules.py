@@ -298,6 +298,54 @@ _NIM_NAMES = {
 }
 
 
+# Python's names for what Nim's math module calls something else. A file that
+# `nimport`s math writes Nim's: Python's `atan` is Nim's `arctan`, and one-argument
+# `log` is `ln` (Nim's `log` wants the base too).
+_MATH_RENAMED = {"atan": "arctan", "atan2": "arctan2", "asin": "arcsin", "acos": "arccos",
+                 "asinh": "arcsinh", "acosh": "arccosh", "atanh": "arctanh"}
+
+
+def _call_args(text, open_paren):
+    """The number of top-level arguments of the call whose '(' is at OPEN_PAREN."""
+    depth, n, seen = 0, 0, False
+    for ch in text[open_paren:]:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return n + 1 if seen else 0
+        elif ch == "," and depth == 1:
+            n += 1
+        elif depth >= 1 and not ch.isspace():
+            seen = True
+    return n + 1
+
+
+def refuse_python_math_names(code, is_ady):
+    """`math.atan(x)` and `math.log(x)` on a `nimport math`: Python's names, which
+    Nim's math does not have. Say what Nim calls them, on the line, rather than
+    leaving it to Nim's compiler."""
+    imports = import_map(code)
+    if "math" not in imports or is_ady("math"):
+        return
+    text = _blank(code)
+    listed = imports["math"]
+    star = listed is STAR
+    has = lambda n: star or (listed and n in listed)
+    for m in re.finditer(r'(?<![\w.$])(?:math\.)?(\w+)[ \t]*\(', text):
+        name = m.group(1)
+        line = text.count("\n", 0, m.start()) + 1
+        if name in _MATH_RENAMED and (m.group(0).startswith("math.") or has(name)):
+            raise SyntaxError(
+                f"line {line}: Nim's math has no '{name}': it is '{_MATH_RENAMED[name]}'")
+        if name == "log" and (m.group(0).startswith("math.") or has("log")) \
+                and _call_args(text, m.end() - 1) == 1:
+            raise SyntaxError(
+                f"line {line}: Nim's math 'log' takes the base too, log(x, base): "
+                f"the natural logarithm is 'ln'")
+
+
 def refuse_bare_nim_names(code, is_ady):
     """Refuse a bare use of a name of a Nim module the file `nimport`s -- in the
     normalized form, where `import M` of an .ady module is `nimport M` too, IS_ADY(name)

@@ -675,6 +675,8 @@ def _resolved_imports(code, search_dir):
         code = normalize_imports(code, lambda mod: find(mod) is not None)
         from ady_modules import refuse_bare_nim_names
         refuse_bare_nim_names(code, lambda mod: find(mod) is not None)
+        from ady_modules import refuse_python_math_names
+        refuse_python_math_names(code, lambda mod: find(mod) is not None)
         # which of the `nimport`s are .ady modules, for the translation that reads them
         import hek_nim_stmt as _hns
         _hns.ADY_MODULES.update(m for m in import_map(code) if find(m))

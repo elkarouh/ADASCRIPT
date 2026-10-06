@@ -86,6 +86,8 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
   `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
 * **`min(a, b, c)` with three arguments does not compile on Nim.**
 * **`raise NotImplementedError()` does not compile on Nim** (`newException` needs a message).
-* **On Python**, `math.atan`/`atan2` and one-argument `math.log` are not mapped to Nim.
+* **`math.atan`, `atan2`, `asin`, `acos` and one-argument `math.log`** are Python's names, not Nim's
+  (`arctan`, `arctan2`, `arcsin`, `arccos`, `ln`). They are now refused with what Nim calls them, and
+  `math.arctan` and the others run on the Python backend too.
 * **map_utils cannot be imported from a sibling directory by name**; `from MAP_UTILS/map_utils import`
   works because the parent of this directory is searched.
