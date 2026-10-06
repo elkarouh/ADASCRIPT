@@ -74,19 +74,14 @@ let ORIGIN: Position = Position(0.0, 0.0)                # the body being orbite
 def radius_of(p: Position) -> Meters_T:
     return (p - ORIGIN).length()
 
-def unit_vec(v: Vector) -> Vector:
-    if float(v.length()) == 0.0:
-        return v
-    return v.unit()
-
 def along(v: Velocity, direction: Vector) -> Speed_T:
     """The part of V in the direction of DIRECTION."""
-    let d: Vector = unit_vec(direction)
+    let d: Vector = direction.unit()
     return v.x * float(d.x) + v.y * float(d.y)
 
 def along_vec(v: Vector, direction: Vector) -> Meters_T:
     """The part of V in the direction of DIRECTION."""
-    return Meters_T(float(v * unit_vec(direction)))
+    return Meters_T(float(v * direction.unit()))
 
 def radial_rate(r: Vector, v: Velocity) -> float:
     """r . v, in m^2/s: zero at periapsis and apoapsis, positive going out."""
@@ -113,7 +108,7 @@ def wrapped(a: Degrees_T) -> Degrees_T:
 
 def tangent_along(r: Position, v: Velocity) -> Vector:
     """Unit tangent at r, in the direction of motion v."""
-    let t: Vector = unit_vec(perp(r - ORIGIN))
+    let t: Vector = perp(r - ORIGIN).unit()
     if float(along(v, t)) < 0.0:
         return t * -1.0
     return t
@@ -664,7 +659,7 @@ class Navigation:
         let alt_true: Meters_T = radius_of(true_r) - R_MOON
         let z_alt: Meters_T = alt_true + Meters_T(self.rng.normal(2.0 + 0.005 * float(alt_true)))
         let z_vel: Velocity = true_v + self.rng.speeds(Speed_T(0.3))
-        let radial: Vector = unit_vec(self.r - ORIGIN)
+        let radial: Vector = (self.r - ORIGIN).unit()
         let d_alt: Meters_T = z_alt - (radius_of(self.r) - R_MOON)
         self.r = self.r + radial * (0.5 * float(d_alt))   # position (radial only)
         self.v = self.v + (z_vel - self.v) * 0.3          # velocity (full vector)
@@ -750,7 +745,7 @@ class Guidance:
 
         var a_total: Acceleration = Acceleration(Accel_T(0.0), Accel_T(0.0))
         if self.mode == P65:
-            let up: Vector = unit_vec(from_moon)
+            let up: Vector = from_moon.unit()
             let east: Vector = perp(up) * self.s
             let dx: Meters_T = along_vec(self.site - r, east)
             # horizontal velocity is nulled as the surface approaches
@@ -772,7 +767,7 @@ class Autopilot:
     var tmax: float
 
     def __init__(self, direction: Vector):
-        self.dir = unit_vec(direction)
+        self.dir = direction.unit()
         self.max_rate = 10.0
         self.tmin = 0.10
         self.tmax = 1.0
@@ -1079,7 +1074,7 @@ class Mission:
         var r: Position = self.r
         var v: Velocity = self.v
         let s: float = sense(r, v)
-        let site_up: Vector = rot(unit_vec(r - ORIGIN), self.DESCENT_ARC * s)
+        let site_up: Vector = rot((r - ORIGIN).unit(), self.DESCENT_ARC * s)
 
         var imu: IMU = IMU(self.rng)
         var nav: Navigation = Navigation(self.rng)
@@ -1121,7 +1116,7 @@ class Mission:
             let (a_thrust, force) = prop.thrust(direction, throttle, dt)
 
             if float(t) >= float(next_tm) - 1e-9:
-                let up: Vector = unit_vec(r - ORIGIN)
+                let up: Vector = (r - ORIGIN).unit()
                 let east: Vector = perp(up) * s
                 self.descent.append(Telemetry_T(
                     t, radius_of(r) - R_MOON, along(v, up), along(v, east),
@@ -1149,7 +1144,7 @@ class Mission:
                 nav.radar_update(r, v)
                 next_radar = next_radar + 1.0
 
-        let up: Vector = unit_vec(r - ORIGIN)
+        let up: Vector = (r - ORIGIN).unit()
         let east: Vector = perp(up) * s
         let vv: Speed_T = along(v, up)
         let vh: Speed_T = along(v, east)

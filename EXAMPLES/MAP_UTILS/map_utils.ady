@@ -483,8 +483,11 @@ class Vector:
         Vector(self.length() - delta, self.angle())
 
     def unit(self) -> Vector:
-        """The unit vector (length 1 metre) in the same direction."""
-        self / float(self.length())
+        """The unit vector (length 1 metre) in the same direction. A zero vector has
+        no direction and is returned as it is."""
+        if float(self.length()) == 0.0:
+            return self
+        return self / float(self.length())
 
     def normal(self) -> Vector:
         """The unit normal: the unit vector turned 90 degrees counter-clockwise."""
