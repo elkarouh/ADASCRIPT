@@ -174,8 +174,8 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let cos_u1: float = 1 / sqrt(1 + tan_u1 ** 2)
     let sin_u1: float = tan_u1 * cos_u1
 
-    let sin_az1: float = sin(az1_rad)
-    let cos_az1: float = cos(az1_rad)
+    let sin_az1: Unit_T = sin(az1_rad)
+    let cos_az1: Unit_T = cos(az1_rad)
     let sigma1: Radians_T = arctan2(tan_u1, cos_az1)
     let sin_alpha: float = cos_u1 * sin_az1
     let cos2_alpha: float = 1 - sin_alpha ** 2
@@ -185,9 +185,9 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
 
     var sigma: Radians_T = Radians_T(dist_m / (b * big_a))
     for _ in range(100):
-        let cos2sm: float = cos(sigma1 * 2.0 + sigma)
-        let sin_sigma: float = sin(sigma)
-        let cos_sigma: float = cos(sigma)
+        let cos2sm: Unit_T = cos(sigma1 * 2.0 + sigma)
+        let sin_sigma: Unit_T = sin(sigma)
+        let cos_sigma: Unit_T = cos(sigma)
         let d_sigma: Radians_T = Radians_T(big_b * sin_sigma * (
             cos2sm + big_b / 4 * (
                 cos_sigma * (-1 + 2 * cos2sm ** 2)
@@ -200,9 +200,9 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
             break
         sigma = sigma_new
 
-    let cos2sm: float = cos(sigma1 * 2.0 + sigma)
-    let sin_sigma: float = sin(sigma)
-    let cos_sigma: float = cos(sigma)
+    let cos2sm: Unit_T = cos(sigma1 * 2.0 + sigma)
+    let sin_sigma: Unit_T = sin(sigma)
+    let cos_sigma: Unit_T = cos(sigma)
 
     let lat2: Radians_T = arctan2(
         sin_u1 * cos_sigma + cos_u1 * sin_sigma * cos_az1,
