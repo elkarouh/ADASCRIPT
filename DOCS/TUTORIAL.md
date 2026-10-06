@@ -2019,7 +2019,7 @@ another — and emits
 
 ```python
 class Counter:
-    var count: Count_T
+    var count: int = 0
 
     def increment(self):
         self.count += 1   # → proc increment(self: var Counter) in Nim
