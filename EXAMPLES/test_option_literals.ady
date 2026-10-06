@@ -1,0 +1,19 @@
+# A record literal with None (or a plain value) for an ?T field, positional or by
+# name, and `opt == value` / `opt != value` on an ?Enum or ?int, field or variable.
+type Color is enum RED, GREEN
+type Rec is record:
+    a: int
+    hit: ?int
+    c: ?Color
+
+def yes(b: bool) -> int:
+    return 1 if b else 0
+
+let r: Rec = Rec(1, None, None)
+let r2: Rec = Rec(1, hit=None, c=GREEN)
+let r3: Rec = Rec(2, 7, RED)
+print yes(r.hit == None), yes(r2.hit == None), yes(r2.c == GREEN), yes(r2.c != GREEN), yes(r.c == GREEN)
+print yes(r3.hit == 7), yes(r3.hit != 7), yes(r3.c == RED), yes(r3.c != RED)
+let o: ?Color = GREEN
+let p: ?int = 4
+print yes(o == GREEN), yes(o != RED), yes(o == None), yes(p == 4), yes(p != 5)

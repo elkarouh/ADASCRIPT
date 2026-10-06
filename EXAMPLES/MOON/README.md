@@ -81,9 +81,11 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 * **`\n` inside an f-string is not an escape on Nim** (`f"\nPlot saved"` printed no blank line).
 * **A call on a `PyObject` variable standing alone is not discarded on Nim** (`ax.plot(...)`: "has to
   be used"); only calls on a pyimported module are. Written `let _: PyObject = ax.plot(...)`.
-* **`Record(a, b, None)` with a positional `None` for a `?T` field emits `nil` on Nim**; named
-  (`hit=None`) is right. **`opt == value` and `opt != value` on a `?Enum` do not compile on Nim**, and
-  `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
+* **`Record(a, b, None)` with a positional `None` for a `?T` field emitted `nil` on Nim, and
+  `opt == value` / `opt != value` on a `?Enum` did not compile.** Fixed in the transpiler (the field is
+  lifted to `none(T)` or `some(v)`, positional or by name; the value beside `==` is lifted to
+  `some(v)`). One left: `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list
+  concatenation.
 * **`min(a, b, c)` with three arguments, and `raise NotImplementedError()` without a message,
   did not compile on Nim.** Fixed in the transpiler (nested two-argument calls; the exception's name
   as its message, and `except NotImplementedError` catches it).

@@ -3055,7 +3055,24 @@ def to_nim(self, prec=None):
                     ftype_map = ParserState.class_field_types.get(raw_name, {})
                     pairs_parts = []
                     for fn, av in zip(named_fields, args):
+                        # `Rec(1, 2.0, hit=None)`: the positional ones first, then
+                        # fields by name
+                        _kw = _re_ctor.match(r'^(\w+) = (.+)$', av, _re_ctor.DOTALL)
+                        if _kw and _kw.group(1) in named_fields:
+                            fn, av = _kw.group(1), _kw.group(2)
                         ftype = ftype_map.get(fn, "")
+                        # An Option field given None or a plain value is lifted, as
+                        # a typed declaration does
+                        if ftype.startswith("Option["):
+                            _asym = ParserState.symbol_table.lookup(av.strip())
+                            _atyp = (_asym.get("type") or "") if _asym else ""
+                            if av == "nil":
+                                av = f"none({ftype[7:-1]})"
+                                ParserState.nim_imports.add("options")
+                            elif not (_atyp.startswith("Option[") or av.startswith(("some(", "none(", "some["))
+                                      or _expr_is_option(av)):
+                                av = f"some[{ftype[7:-1]}]({av})"
+                                ParserState.nim_imports.add("options")
                         if av == "initHashSet()" and ftype.startswith("HashSet["):
                             av = f"initHashSet[{ftype[8:-1]}]()"
                         # If field type is a ref object class, cast to that type for proper subtype coercion
@@ -5184,6 +5201,13 @@ def to_nim(self, prec=None):
                     else:
                         chain = f"{chain}.isNone"
                     continue
+            # `opt == value`, `opt != value`: an Option is only equal to an Option,
+            # so the value is lifted; None gives False for ==, as in Python.
+            if (nim_op in ("==", "!=") and right != "nil"
+                    and _expr_is_option(chain) and not _expr_is_option(right)
+                    and not right.startswith(("some(", "none(", "some["))):
+                ParserState.nim_imports.add("options")
+                right = f"some({right})"
             # `d.get(k) is None` asks whether the key is there. It emits as
             # `d.getOrDefault(k)`, and comparing that to nil is not legal
             # Nim for a string-valued table -- `usage of '==' is an
