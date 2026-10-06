@@ -518,31 +518,30 @@ test-kilo:
 	$(kilo_tests)
 
 # -----------------------------------------------------------------------
-# The moon tests: MOON/moon_sim.ady, run on both backends, which must print the same
-# mission -- the real check, the numbers are the same to the last digit -- and the
-# lander must have landed. It plots with matplotlib (pyimport), so it SKIPs without it.
-# Shared by `test` and by `test-moon`.
+# The moon tests: MOON/moon_sim.ady (Nim only: it builds on MAP_UTILS/map_utils.ady). The
+# deterministic half of the mission is checked against the Python original's numbers, to the
+# digit, and the lander must have landed. It plots with matplotlib (pyimport), so it SKIPs
+# without it. Shared by `test` and by `test-moon`.
 # -----------------------------------------------------------------------
 define moon_tests
-	@echo "=== moon_sim, the Earth-Moon landing, both backends: MOON/moon_sim.ady ==="
-	@printf '  %-62s' "EXAMPLES/MOON/moon_sim.ady (nim, python: same mission, landed)"; \
+	@echo "=== moon_sim, the Earth-Moon landing: MOON/moon_sim.ady ==="
+	@printf '  %-62s' "EXAMPLES/MOON/moon_sim.ady (the original's burns, landed)"; \
 	    if ! $(PYTHON) -c 'import matplotlib' 2>/dev/null; then echo "SKIP (no matplotlib)"; \
 	    elif [ ! -x $(EXDIR)/MOON/moon_sim ]; then echo "SKIP (no nimpy)"; else \
-	    $(EXDIR)/MOON/moon_sim --out $(TMPDIR)/ady_moon_nim.png 2>&1 \
-	        | grep -v -e '^Plot saved' -e '^Testing libpython' > $(TMPDIR)/ady_moon_nim.out; \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/MOON/moon_sim.ady > $(TMPDIR)/ady_moon.py; \
-	    $(PYTHON) $(TMPDIR)/ady_moon.py --out $(TMPDIR)/ady_moon_py.png 2>&1 \
-	        | grep -v '^Plot saved' > $(TMPDIR)/ady_moon_py.out; \
-	    grep -q '^Final phase  : LANDED' $(TMPDIR)/ady_moon_nim.out \
-	        && cmp -s $(TMPDIR)/ady_moon_nim.out $(TMPDIR)/ady_moon_py.out \
-	        && [ -s $(TMPDIR)/ady_moon_nim.png ] && [ -s $(TMPDIR)/ady_moon_py.png ] \
-	        && echo OK || { echo FAIL; diff $(TMPDIR)/ady_moon_nim.out $(TMPDIR)/ady_moon_py.out | head -20; \
-	                        tail -n 8 $(TMPDIR)/ady_moon_nim.out; exit 1; }; fi
-	@rm -f $(TMPDIR)/ady_moon.py $(TMPDIR)/ady_moon_*.png $(TMPDIR)/ady_moon_*.out
+	    $(EXDIR)/MOON/moon_sim --out $(TMPDIR)/ady_moon.png > $(TMPDIR)/ady_moon.out 2>&1; \
+	    grep -q '^Final phase  : LANDED' $(TMPDIR)/ady_moon.out \
+	        && grep -q '^TLI  *S-IVB  *3133.1  *67913$$' $(TMPDIR)/ady_moon.out \
+	        && grep -q '^LOI-1  *CSM  *770.6  *9786$$' $(TMPDIR)/ady_moon.out \
+	        && grep -q '^LOI-2  *CSM  *41.6  *462$$' $(TMPDIR)/ady_moon.out \
+	        && grep -q '^DOI  *LM  *19.5  *97$$' $(TMPDIR)/ady_moon.out \
+	        && grep -q '^  Speed    = 2446.1 m/s$$' $(TMPDIR)/ady_moon.out \
+	        && [ -s $(TMPDIR)/ady_moon.png ] \
+	        && echo OK || { echo FAIL; tail -n 12 $(TMPDIR)/ady_moon.out; exit 1; }; fi
+	@rm -f $(TMPDIR)/ady_moon.png $(TMPDIR)/ady_moon.out
 endef
 
 # -----------------------------------------------------------------------
-# test-moon — the moon tests alone: build moon_sim.ady, then run it on both backends
+# test-moon — the moon tests alone: build moon_sim.ady, then run it
 # -----------------------------------------------------------------------
 test-moon:
 	@mkdir -p $(TMPDIR)
