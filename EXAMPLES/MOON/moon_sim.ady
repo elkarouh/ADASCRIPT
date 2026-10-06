@@ -23,10 +23,10 @@ Fidelity notes
     3-D plane changes, ascent/return.
 
 The geometry is MAP_UTILS/map_utils.ady's flat plane: a `Position` is a point,
-a `Vector` a displacement, and `Meters_T`, `Degrees_T` and `SquareMeters_T` are its
-units. A velocity is carried in a `Vector` as the distance it covers in one second,
-an acceleration as the distance in one second squared (`speed_of`, `accel_of` read
-them back as a `Speed_T`, an `Accel_T`).
+a `Vector` a displacement, a `Velocity` has its parts in m/s and an `Acceleration` in
+m/s^2, and `Meters_T`, `Degrees_T`, `Duration_T`, `Speed_T` and `Accel_T` are its units.
+A time turns one into the next: `velocity.over(t)` is a `Vector`, `vector.per(t)` a `Velocity`,
+`acceleration.over(t)` a `Velocity`, `velocity.per(t)` an `Acceleration`.
 
 Usage:  moon_sim [--seed N] [--show] [--out moon_mission.png]
 
@@ -34,18 +34,16 @@ Nim only (map_utils is):  ady2nim c -r moon_sim.ady
 """
 
 from math nimport sqrt, sin, cos, exp, ln, degToRad, radToDeg, PI
-from MAP_UTILS/map_utils import Meters_T, SquareMeters_T, Degrees_T, Vector, Position, vector_xy, to_km, modulo
+from MAP_UTILS/map_utils import Meters_T, SquareMeters_T, Degrees_T, Duration_T, Speed_T, Accel_T
+from MAP_UTILS/map_utils import Vector, Position, Velocity, Acceleration, vector_xy, velocity_xy, acceleration_xy, to_km, modulo
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
 # ============================================================
-# UNITS -- map_utils has the lengths and angles; these are the rest
+# UNITS -- map_utils has lengths, angles, time, speed and acceleration; these are the rest
 # ============================================================
 
 type Mass_T        is distinct float                # kg
-type Duration_T    is distinct float                # s
-type Speed_T       is Meters_T / Duration_T         # m/s
-type Accel_T       is Speed_T / Duration_T          # m/s^2
 type Force_T       is Mass_T * Accel_T              # N
 type Mu_T          is Accel_T * SquareMeters_T      # a body's GM, m^3/s^2
 type AngularRate_T is Degrees_T / Duration_T        # deg/s
@@ -76,12 +74,6 @@ let ORIGIN: Position = Position(0.0, 0.0)                # the body being orbite
 def radius_of(p: Position) -> Meters_T:
     return (p - ORIGIN).length()
 
-def speed_of(v: Vector) -> Speed_T:
-    return Speed_T(float(v.length()))
-
-def accel_of(a: Vector) -> Accel_T:
-    return Accel_T(float(a.length()))
-
 def unit_vec(v: Vector) -> Vector:
     if float(v.length()) == 0.0:
         return v
@@ -91,9 +83,26 @@ def dot(a: Vector, b: Vector) -> float:
     """The scalar product, in the product of the two vectors' units."""
     return float(a.dot_product(b))
 
-def along(v: Vector, direction: Vector) -> float:
-    """The part of V in the direction of DIRECTION, in V's own units."""
-    return float(v.dot_product(unit_vec(direction)))
+def along(v: Velocity, direction: Vector) -> Speed_T:
+    """The part of V in the direction of DIRECTION."""
+    let d: Vector = unit_vec(direction)
+    return v.x * float(d.x) + v.y * float(d.y)
+
+def along_vec(v: Vector, direction: Vector) -> Meters_T:
+    """The part of V in the direction of DIRECTION."""
+    return Meters_T(float(v.dot_product(unit_vec(direction))))
+
+def radial_rate(r: Vector, v: Velocity) -> float:
+    """r . v, in m^2/s: zero at periapsis and apoapsis, positive going out."""
+    return float(r.x) * float(v.x) + float(r.y) * float(v.y)
+
+def sense(r: Position, v: Velocity) -> float:
+    """+1 counter-clockwise about the origin, -1 clockwise."""
+    return sign(float(r.x) * float(v.y) - float(r.y) * float(v.x))
+
+def pull_toward(from_body: Vector, pull: Accel_T) -> Acceleration:
+    """The acceleration of size PULL toward a body that FROM_BODY points away from."""
+    return Acceleration(pull, from_body.angle() + Degrees_T(180.0))
 
 def perp(v: Vector) -> Vector:
     """90 deg counter-clockwise rotation."""
@@ -106,10 +115,10 @@ def wrapped(a: Degrees_T) -> Degrees_T:
     """An angle in (-180, 180]."""
     return Degrees_T(modulo(float(a) + 180.0, 360.0) - 180.0)
 
-def tangent_along(r: Position, v: Vector) -> Vector:
+def tangent_along(r: Position, v: Velocity) -> Vector:
     """Unit tangent at r, in the direction of motion v."""
     let t: Vector = unit_vec(perp(r - ORIGIN))
-    if dot(t, v) < 0.0:
+    if float(along(v, t)) < 0.0:
         return t * -1.0
     return t
 
@@ -142,14 +151,16 @@ type Elements_T is record:
     e: float
     periapsis: Meters_T
 
-def orbital_elements(r: Position, v: Vector, mu: Mu_T) -> Elements_T:
+def orbital_elements(r: Position, v: Velocity, mu: Mu_T) -> Elements_T:
     let rv: Vector = r - ORIGIN
     let rmag: float = float(rv.length())
-    let vmag: float = float(v.length())
+    let vmag: float = float(v.speed())
     let m: float = float(mu)
-    let h: float = float(rv.cross(v))
-    let evec: Vector = (rv * (vmag * vmag - m / rmag) - v * dot(rv, v)) / m
-    let e: float = float(evec.length())
+    let h: float = float(rv.x) * float(v.y) - float(rv.y) * float(v.x)
+    let rdotv: float = radial_rate(rv, v)
+    let ex: float = ((vmag * vmag - m / rmag) * float(rv.x) - rdotv * float(v.x)) / m
+    let ey: float = ((vmag * vmag - m / rmag) * float(rv.y) - rdotv * float(v.y)) / m
+    let e: float = sqrt(ex * ex + ey * ey)
     return Elements_T(Meters_T(rmag), Speed_T(vmag), AngMom_T(h), e,
                       Meters_T(h * h / (m * (1.0 + e))))
 
@@ -202,11 +213,21 @@ class Rng:
         let u2: float = self.uniform()
         return sigma * sqrt(-2.0 * ln(u1)) * cos(2.0 * PI * u2)
 
-    def vector(self, sigma: float) -> Vector:
-        """A vector whose parts are each drawn from N(0, sigma), in sigma's units."""
-        let a: float = self.normal(sigma)
-        let b: float = self.normal(sigma)
+    def meters(self, sigma: Meters_T) -> Vector:
+        """A vector whose parts are each drawn from N(0, sigma)."""
+        let a: float = self.normal(float(sigma))
+        let b: float = self.normal(float(sigma))
         return vector_xy(Meters_T(a), Meters_T(b))
+
+    def speeds(self, sigma: Speed_T) -> Velocity:
+        let a: float = self.normal(float(sigma))
+        let b: float = self.normal(float(sigma))
+        return velocity_xy(Speed_T(a), Speed_T(b))
+
+    def accels(self, sigma: Accel_T) -> Acceleration:
+        let a: float = self.normal(float(sigma))
+        let b: float = self.normal(float(sigma))
+        return acceleration_xy(Accel_T(a), Accel_T(b))
 
 # ============================================================
 # SPACECRAFT (stack of stages)
@@ -264,16 +285,16 @@ class Spacecraft:
         let i: int = self.index_of(id)
         self.stages[i].prop = self.stages[i].prop - used
 
-    def burn(self, dv_vec: Vector, id: StageId_T, label: Burn_T) -> Vector:
+    def burn(self, dv_vec: Velocity, id: StageId_T, label: Burn_T) -> Velocity:
         """Impulsive burn with the rocket equation. Clips if out of propellant."""
         let st: Stage_T = self.stage(id)
-        var dv: Speed_T = speed_of(dv_vec)
+        var dv: Speed_T = dv_vec.speed()
         if dv <= 0.0:
             return dv_vec
         let m0: Mass_T = self.mass()
         let ve: Speed_T = st.isp * G0
         var used: Mass_T = m0 * (1.0 - exp(-(dv / ve)))
-        var out: Vector = dv_vec
+        var out: Velocity = dv_vec
         if used > st.prop:
             used = st.prop
             let dv_act: Speed_T = ve * ln(m0 / (m0 - used))
@@ -288,12 +309,24 @@ class Spacecraft:
 # STATE AND EARTH-FRAME / MOON-FRAME DYNAMICS
 # ============================================================
 
+class Increment_T:
+    """How a state has changed over a time: a displacement and a change of velocity."""
+    var dr: Vector
+    var dv: Velocity
+
+    def __init__(self, dr: Vector, dv: Velocity):
+        self.dr = dr
+        self.dv = dv
+
+    def __add__(self, o: Increment_T) -> Increment_T:
+        return Increment_T(self.dr + o.dr, self.dv + o.dv)
+
 class Delta_T:
     """How a state changes per second: the velocity and the acceleration."""
-    var dr: Vector
-    var dv: Vector
+    var dr: Velocity
+    var dv: Acceleration
 
-    def __init__(self, dr: Vector, dv: Vector):
+    def __init__(self, dr: Velocity, dv: Acceleration):
         self.dr = dr
         self.dv = dv
 
@@ -303,17 +336,20 @@ class Delta_T:
     def __mul__(self, k: float) -> Delta_T:
         return Delta_T(self.dr * k, self.dv * k)
 
+    def over(self, t: Duration_T) -> Increment_T:
+        """What it comes to in the time T."""
+        return Increment_T(self.dr.over(t), self.dv.over(t))
+
 class State_T:
     """Position and velocity: what the integrator advances."""
     var r: Position
-    var v: Vector
+    var v: Velocity
 
-    def __init__(self, r: Position, v: Vector):
+    def __init__(self, r: Position, v: Velocity):
         self.r = r
         self.v = v
 
-    def advance(self, d: Delta_T) -> State_T:
-        """The state after D, a Delta_T already multiplied by the time it ran."""
+    def advance(self, d: Increment_T) -> State_T:
         return State_T(self.r + d.dr, self.v + d.dv)
 
 class MoonEphemeris:
@@ -329,9 +365,9 @@ class MoonEphemeris:
     def position(self, t: Duration_T) -> Position:
         return ORIGIN + Vector(MOON_DISTANCE, self.phase0 + self.n * t)
 
-    def velocity(self, t: Duration_T) -> Vector:
+    def velocity(self, t: Duration_T) -> Velocity:
         let speed: Speed_T = Speed_T(float(MOON_DISTANCE) * degToRad(float(self.n)))
-        return Vector(Meters_T(float(speed)), self.phase0 + self.n * t + Degrees_T(90.0))
+        return Velocity(speed, self.phase0 + self.n * t + Degrees_T(90.0))
 
 # What a coast can stop on. Each is a function of the state that changes sign
 # there; the direction is the way it must be going when it does.
@@ -367,9 +403,9 @@ class EarthDynamics(Dynamics):
         let pull_earth: Accel_T = MU_EARTH / (from_earth.length() * from_earth.length())
         let pull_moon: Accel_T = MU_MOON / (from_moon.length() * from_moon.length())
         let pull_indirect: Accel_T = MU_MOON / (moon_from_earth.length() * moon_from_earth.length())
-        let a: Vector = (unit_vec(from_earth) * -float(pull_earth)
-                         + unit_vec(from_moon) * -float(pull_moon)
-                         + unit_vec(moon_from_earth) * -float(pull_indirect))
+        let a: Acceleration = (pull_toward(from_earth, pull_earth)
+                               + pull_toward(from_moon, pull_moon)
+                               + pull_toward(moon_from_earth, pull_indirect))
         return Delta_T(y.v, a)
 
     def watching(self) -> []Event_T:
@@ -389,7 +425,7 @@ class MoonDynamics(Dynamics):
     def rhs(self, t: Duration_T, y: State_T) -> Delta_T:
         let from_moon: Vector = y.r - ORIGIN
         let pull: Accel_T = MU_MOON / (from_moon.length() * from_moon.length())
-        return Delta_T(y.v, unit_vec(from_moon) * -float(pull))
+        return Delta_T(y.v, pull_toward(from_moon, pull))
 
     def watching(self) -> []Event_T:
         return self.kinds
@@ -397,7 +433,7 @@ class MoonDynamics(Dynamics):
     def event_value(self, kind: Event_T, t: Duration_T, y: State_T) -> float:
         case kind:
             when PERILUNE | APOLUNE:
-                return dot(y.r - ORIGIN, y.v)
+                return radial_rate(y.r - ORIGIN, y.v)
             when IMPACT:
                 return float(radius_of(y.r) - R_MOON)
             when others:
@@ -424,40 +460,39 @@ const DP_E7: float = -1.0 / 40.0
 type Step_T is record:
     y: State_T               # the state at t + h
     f: Delta_T               # its derivative (first stage of the next step)
-    err: Delta_T             # the error estimate, already multiplied by h
+    err: Increment_T         # the error estimate
 
 def dp_step(dyn: Dynamics, t: Duration_T, y: State_T, k1: Delta_T, step: Duration_T) -> Step_T:
-    let h: float = float(step)
-    let k2: Delta_T = dyn.rhs(t + step * (1.0 / 5.0), y.advance(k1 * (h / 5.0)))
+    let k2: Delta_T = dyn.rhs(t + step * (1.0 / 5.0), y.advance((k1 * (1.0 / 5.0)).over(step)))
     let k3: Delta_T = dyn.rhs(t + step * (3.0 / 10.0),
-                              y.advance(k1 * (h * 3.0 / 40.0) + k2 * (h * 9.0 / 40.0)))
+                              y.advance((k1 * (3.0 / 40.0) + k2 * (9.0 / 40.0)).over(step)))
     let k4: Delta_T = dyn.rhs(t + step * (4.0 / 5.0),
-                              y.advance(k1 * (h * 44.0 / 45.0) + k2 * (-h * 56.0 / 15.0)
-                                        + k3 * (h * 32.0 / 9.0)))
+                              y.advance((k1 * (44.0 / 45.0) + k2 * (-56.0 / 15.0)
+                                         + k3 * (32.0 / 9.0)).over(step)))
     let k5: Delta_T = dyn.rhs(t + step * (8.0 / 9.0),
-                              y.advance(k1 * (h * 19372.0 / 6561.0) + k2 * (-h * 25360.0 / 2187.0)
-                                        + k3 * (h * 64448.0 / 6561.0) + k4 * (-h * 212.0 / 729.0)))
+                              y.advance((k1 * (19372.0 / 6561.0) + k2 * (-25360.0 / 2187.0)
+                                         + k3 * (64448.0 / 6561.0) + k4 * (-212.0 / 729.0)).over(step)))
     let k6: Delta_T = dyn.rhs(t + step,
-                              y.advance(k1 * (h * 9017.0 / 3168.0) + k2 * (-h * 355.0 / 33.0)
-                                        + k3 * (h * 46732.0 / 5247.0) + k4 * (h * 49.0 / 176.0)
-                                        + k5 * (-h * 5103.0 / 18656.0)))
-    let y1: State_T = y.advance(k1 * (h * 35.0 / 384.0) + k3 * (h * 500.0 / 1113.0)
-                                + k4 * (h * 125.0 / 192.0) + k5 * (-h * 2187.0 / 6784.0)
-                                + k6 * (h * 11.0 / 84.0))
+                              y.advance((k1 * (9017.0 / 3168.0) + k2 * (-355.0 / 33.0)
+                                         + k3 * (46732.0 / 5247.0) + k4 * (49.0 / 176.0)
+                                         + k5 * (-5103.0 / 18656.0)).over(step)))
+    let y1: State_T = y.advance((k1 * (35.0 / 384.0) + k3 * (500.0 / 1113.0)
+                                 + k4 * (125.0 / 192.0) + k5 * (-2187.0 / 6784.0)
+                                 + k6 * (11.0 / 84.0)).over(step))
     let k7: Delta_T = dyn.rhs(t + step, y1)
-    let err: Delta_T = (k1 * (h * DP_E1) + k3 * (h * DP_E3) + k4 * (h * DP_E4)
-                        + k5 * (h * DP_E5) + k6 * (h * DP_E6) + k7 * (h * DP_E7))
+    let err: Increment_T = (k1 * DP_E1 + k3 * DP_E3 + k4 * DP_E4
+                            + k5 * DP_E5 + k6 * DP_E6 + k7 * DP_E7).over(step)
     return Step_T(y1, k7, err)
 
-def scaled(e: Meters_T, a: Meters_T, b: Meters_T, rtol: float, atol: float) -> float:
-    return (float(e) / (atol + rtol * max(abs(float(a)), abs(float(b))))) ** 2
+def scaled(e: float, a: float, b: float, rtol: float, atol: float) -> float:
+    return (e / (atol + rtol * max(abs(a), abs(b)))) ** 2
 
 def error_ratio(s: Step_T, y: State_T, rtol: float, atol: float) -> float:
     """RMS over the four components of error / tolerance; below 1 is accepted."""
-    let total: float = (scaled(s.err.dr.x, y.r.x, s.y.r.x, rtol, atol)
-                        + scaled(s.err.dr.y, y.r.y, s.y.r.y, rtol, atol)
-                        + scaled(s.err.dv.x, y.v.x, s.y.v.x, rtol, atol)
-                        + scaled(s.err.dv.y, y.v.y, s.y.v.y, rtol, atol))
+    let total: float = (scaled(float(s.err.dr.x), float(y.r.x), float(s.y.r.x), rtol, atol)
+                        + scaled(float(s.err.dr.y), float(y.r.y), float(s.y.r.y), rtol, atol)
+                        + scaled(float(s.err.dv.x), float(y.v.x), float(s.y.v.x), rtol, atol)
+                        + scaled(float(s.err.dv.y), float(y.v.y), float(s.y.v.y), rtol, atol))
     return sqrt(total / 4.0)
 
 def crossed(kind: Event_T, g_old: float, g_new: float) -> bool:
@@ -583,24 +618,24 @@ def brentq(f: Scalar_Fn, a: float, b: float, xtol: float) -> float:
         fcur = f.value(xcur)
     return xcur
 
-def lunar_accel(r: Position, a_ext: Vector) -> Vector:
+def lunar_accel(r: Position, a_ext: Acceleration) -> Acceleration:
     let from_moon: Vector = r - ORIGIN
-    let pull: Accel_T = MU_MOON / (from_moon.length() * from_moon.length())
-    return unit_vec(from_moon) * -float(pull) + a_ext
+    return pull_toward(from_moon, MU_MOON / (from_moon.length() * from_moon.length())) + a_ext
 
-def rk4_step(r: Position, v: Vector, a_ext: Vector, dt: Duration_T) -> (Position, Vector):
+def rk4_step(r: Position, v: Velocity, a_ext: Acceleration, dt: Duration_T) -> (Position, Velocity):
     """One RK4 step of lunar two-body gravity + constant external accel."""
-    let h: float = float(dt)
-    let k1r: Vector = v
-    let k1v: Vector = lunar_accel(r, a_ext)
-    let k2r: Vector = v + k1v * (0.5 * h)
-    let k2v: Vector = lunar_accel(r + k1r * (0.5 * h), a_ext)
-    let k3r: Vector = v + k2v * (0.5 * h)
-    let k3v: Vector = lunar_accel(r + k2r * (0.5 * h), a_ext)
-    let k4r: Vector = v + k3v * h
-    let k4v: Vector = lunar_accel(r + k3r * h, a_ext)
-    return (r + (k1r + k2r * 2.0 + k3r * 2.0 + k4r) * (h / 6.0),
-            v + (k1v + k2v * 2.0 + k3v * 2.0 + k4v) * (h / 6.0))
+    let half: Duration_T = dt * 0.5
+    let k1r: Velocity = v
+    let k1v: Acceleration = lunar_accel(r, a_ext)
+    let k2r: Velocity = v + k1v.over(half)
+    let k2v: Acceleration = lunar_accel(r + k1r.over(half), a_ext)
+    let k3r: Velocity = v + k2v.over(half)
+    let k3v: Acceleration = lunar_accel(r + k2r.over(half), a_ext)
+    let k4r: Velocity = v + k3v.over(dt)
+    let k4v: Acceleration = lunar_accel(r + k3r.over(dt), a_ext)
+    let sixth: Duration_T = dt / 6.0
+    return (r + (k1r + k2r * 2.0 + k3r * 2.0 + k4r).over(sixth),
+            v + (k1v + k2v * 2.0 + k3v * 2.0 + k4v).over(sixth))
 
 # ============================================================
 # APOLLO-STYLE GNC LAYER
@@ -611,47 +646,47 @@ def rk4_step(r: Position, v: Vector, a_ext: Vector, dt: Duration_T) -> (Position
 class IMU:
     """Accelerometers measure specific force (thrust accel, NOT gravity)."""
     var rng: Rng
-    var bias: Vector
+    var bias: Acceleration
     var walk: Accel_T
     var noise: Accel_T
 
     def __init__(self, rng: Rng):
         self.rng = rng
-        self.bias = self.rng.vector(3e-4)
+        self.bias = self.rng.accels(Accel_T(3e-4))
         self.walk = 1e-6
         self.noise = 2e-4
 
-    def measure(self, specific_force: Vector, dt: Duration_T) -> Vector:
-        self.bias = self.bias + self.rng.vector(float(self.walk)) * sqrt(float(dt))
-        return specific_force + self.bias + self.rng.vector(float(self.noise))
+    def measure(self, specific_force: Acceleration, dt: Duration_T) -> Acceleration:
+        self.bias = self.bias + self.rng.accels(self.walk) * sqrt(float(dt))
+        return specific_force + self.bias + self.rng.accels(self.noise)
 
 class Navigation:
     var rng: Rng
     var r: Position
-    var v: Vector
+    var v: Velocity
 
     def __init__(self, rng: Rng):
         self.rng = rng
         self.r = ORIGIN
-        self.v = vector_xy(0.0, 0.0)
+        self.v = velocity_xy(0.0, 0.0)
 
-    def initialize(self, r: Position, v: Vector):
+    def initialize(self, r: Position, v: Velocity):
         """State handed over from the pre-PDI ground/orbit solution (with error)."""
         let pos_sigma: Meters_T = 100.0
         let vel_sigma: Speed_T = 0.1
-        self.r = r + self.rng.vector(float(pos_sigma))
-        self.v = v + self.rng.vector(float(vel_sigma))
+        self.r = r + self.rng.meters(pos_sigma)
+        self.v = v + self.rng.speeds(vel_sigma)
 
-    def propagate(self, measured_specific_force: Vector, dt: Duration_T):
+    def propagate(self, measured_specific_force: Acceleration, dt: Duration_T):
         let (r, v) = rk4_step(self.r, self.v, measured_specific_force, dt)
         self.r = r
         self.v = v
 
-    def radar_update(self, true_r: Position, true_v: Vector):
+    def radar_update(self, true_r: Position, true_v: Velocity):
         """Landing radar: altitude + Doppler velocity (valid below ~10 km)."""
         let alt_true: Meters_T = radius_of(true_r) - R_MOON
         let z_alt: Meters_T = alt_true + Meters_T(self.rng.normal(2.0 + 0.005 * float(alt_true)))
-        let z_vel: Vector = true_v + self.rng.vector(0.3)
+        let z_vel: Velocity = true_v + self.rng.speeds(Speed_T(0.3))
         let radial: Vector = unit_vec(self.r - ORIGIN)
         let d_alt: Meters_T = z_alt - (radius_of(self.r) - R_MOON)
         self.r = self.r + radial * (0.5 * float(d_alt))   # position (radial only)
@@ -668,7 +703,7 @@ type Gate_T is record:
 
 type Target_T is record:                 # where guidance is aiming
     r: Position
-    v: Vector
+    v: Velocity
 
 # target gates
 const HIGH_GATE: Gate_T = Gate_T(2000.0, 7000.0, 85.0, -25.0)
@@ -702,18 +737,18 @@ class Guidance:
         let up: Vector = rot(self.site_up, behind * -self.s)
         let east: Vector = perp(up) * self.s
         return Target_T(ORIGIN + up * float(R_MOON + gate.alt),
-                        east * float(gate.vh) + up * float(gate.vv))
+                        Velocity(gate.vh, east.angle()) + Velocity(gate.vv, up.angle()))
 
-    def estimate_tgo(self, r: Position, v: Vector, t: Target_T) -> Duration_T:
+    def estimate_tgo(self, r: Position, v: Velocity, t: Target_T) -> Duration_T:
         let dist: Meters_T = (t.r - r).length()
-        return max(Duration_T(15.0), 2.0 * dist / (speed_of(v) + speed_of(t.v) + Speed_T(1e-9)))
+        return max(Duration_T(15.0), 2.0 * dist / (v.speed() + t.v.speed() + Speed_T(1e-9)))
 
-    def compute(self, r: Position, v: Vector, elapsed: Duration_T) -> Vector:
-        """Return commanded THRUST acceleration vector (m/s^2)."""
+    def compute(self, r: Position, v: Velocity, elapsed: Duration_T) -> Acceleration:
+        """Return commanded THRUST acceleration."""
         let from_moon: Vector = r - ORIGIN
-        let g: Vector = unit_vec(from_moon) * -float(MU_MOON / (from_moon.length() * from_moon.length()))
+        let g: Acceleration = pull_toward(from_moon, MU_MOON / (from_moon.length() * from_moon.length()))
         let alt: Meters_T = from_moon.length() - R_MOON
-        var aim: Target_T = Target_T(ORIGIN, vector_xy(0.0, 0.0))
+        var aim: Target_T = Target_T(ORIGIN, velocity_xy(0.0, 0.0))
 
         if self.has_t_go:
             self.t_go = self.t_go - elapsed
@@ -736,20 +771,20 @@ class Guidance:
                 self.mode = P65
                 self.has_t_go = False
 
-        var a_total: Vector = vector_xy(0.0, 0.0)
+        var a_total: Acceleration = acceleration_xy(0.0, 0.0)
         if self.mode == P65:
             let up: Vector = unit_vec(from_moon)
             let east: Vector = perp(up) * self.s
-            let dx: float = along(self.site - r, east)
+            let dx: Meters_T = along_vec(self.site - r, east)
             # horizontal velocity is nulled as the surface approaches
             let fade: float = clip(float(alt) / 30.0, 0.0, 1.0)
-            let v_des: Vector = (east * (clip(0.1 * dx, -2.0, 2.0) * fade)
-                                 - up * clip(0.1 * float(alt), 1.0, 3.0))
-            a_total = (v_des - v) / 1.5
+            let v_des: Velocity = (Velocity(Speed_T(clip(0.1 * float(dx), -2.0, 2.0) * fade), east.angle())
+                                   + Velocity(Speed_T(-clip(0.1 * float(alt), 1.0, 3.0)), up.angle()))
+            a_total = (v_des - v).per(Duration_T(1.5))
         else:
-            let big_t: float = max(float(self.t_go), 3.0)
-            a_total = ((aim.r - r) * (6.0 / (big_t * big_t))
-                       - (v * 4.0 + aim.v * 2.0) / big_t)
+            let big_t: Duration_T = max(self.t_go, Duration_T(3.0))
+            a_total = ((aim.r - r).per(big_t).per(big_t) * 6.0
+                       - (v * 4.0 + aim.v * 2.0).per(big_t))
         return a_total - g          # thrust must cancel gravity
 
 class Autopilot:
@@ -765,11 +800,10 @@ class Autopilot:
         self.tmin = 0.10
         self.tmax = 1.0
 
-    def command(self, a_cmd: Vector, mass: Mass_T, max_thrust: Force_T, dt: Duration_T) -> (Vector, float):
-        let mag: Accel_T = accel_of(a_cmd)
+    def command(self, a_cmd: Acceleration, mass: Mass_T, max_thrust: Force_T, dt: Duration_T) -> (Vector, float):
+        let mag: Accel_T = a_cmd.magnitude()
         if mag > 0.0:
-            let want: Vector = unit_vec(a_cmd)
-            let ang: Degrees_T = wrapped(want.angle() - self.dir.angle())
+            let ang: Degrees_T = wrapped(a_cmd.angle() - self.dir.angle())
             let limit: Degrees_T = self.max_rate * dt
             self.dir = rot(self.dir, Degrees_T(clip(float(ang), -float(limit), float(limit))))
         let raw: float = mag * mass / max_thrust
@@ -783,18 +817,18 @@ class Propulsion:
         self.sc = spacecraft
         self.id = id
 
-    def thrust(self, direction: Vector, throttle: float, dt: Duration_T) -> (Vector, Force_T):
+    def thrust(self, direction: Vector, throttle: float, dt: Duration_T) -> (Acceleration, Force_T):
         """Returns thrust acceleration; burns propellant."""
         let st: Stage_T = self.sc.stage(self.id)
         if st.prop <= 0.0:
-            return (vector_xy(0.0, 0.0), Force_T(0.0))
+            return (acceleration_xy(0.0, 0.0), Force_T(0.0))
         let mass: Mass_T = self.sc.mass()
         let force: Force_T = st.max_thrust * throttle
         let exhaust: Speed_T = st.isp * G0
         let flow: float = float(force) / float(exhaust)              # kg/s
         let used: Mass_T = min(Mass_T(flow * float(dt)), st.prop)
         self.sc.consume(self.id, used)
-        return (direction * float(force / mass), force)
+        return (Acceleration(force / mass, direction.angle()), force)
 
 # ============================================================
 # MISSION
@@ -831,12 +865,12 @@ class PhaseError(Scalar_Fn):
     """How far the perilune of the transfer is from the target, as a function of
     the Moon's phase correction in degrees: what the shooting method finds the zero of."""
     var tli_r: Position
-    var tli_v: Vector
+    var tli_v: Velocity
     var phase_nominal: Degrees_T
     var t_max: Duration_T
     var target: Meters_T
 
-    def __init__(self, tli_r: Position, tli_v: Vector, phase_nominal: Degrees_T,
+    def __init__(self, tli_r: Position, tli_v: Velocity, phase_nominal: Degrees_T,
                  t_max: Duration_T, target: Meters_T):
         self.tli_r = tli_r
         self.tli_v = tli_v
@@ -878,7 +912,7 @@ class Mission:
     var lander: Spacecraft
     var t: Duration_T                           # since TLI
     var r: Position
-    var v: Vector
+    var v: Velocity
     var phase: Phase_T
     var earth_ts: []Duration_T
     var earth_track: []Position
@@ -887,7 +921,7 @@ class Mission:
     var descent: []Telemetry_T
     var result: Result_T
     var tli_r: Position
-    var tli_v: Vector
+    var tli_v: Velocity
     var phase_nominal: Degrees_T
     var t_max: Duration_T
 
@@ -900,7 +934,7 @@ class Mission:
         self.lander = Spacecraft([])
         self.t = 0.0
         self.r = ORIGIN
-        self.v = vector_xy(0.0, 0.0)
+        self.v = velocity_xy(0.0, 0.0)
         self.phase = LEO
         self.earth_ts = []
         self.earth_track = []
@@ -909,7 +943,7 @@ class Mission:
         self.descent = []
         self.result = Result_T(False, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         self.tli_r = ORIGIN
-        self.tli_v = vector_xy(0.0, 0.0)
+        self.tli_v = velocity_xy(0.0, 0.0)
         self.phase_nominal = 0.0
         self.t_max = 0.0
 
@@ -923,9 +957,9 @@ class Mission:
         let v_c: Speed_T = circular_velocity(MU_EARTH, r0)
         let v_t: Speed_T = vis_viva(MU_EARTH, r0, a_t)
         self.tli_r = ORIGIN + Vector(r0, 0.0)
-        self.tli_v = Vector(Meters_T(float(v_t)), 90.0)
+        self.tli_v = Velocity(v_t, 90.0)
         let dv: Speed_T = v_t - v_c
-        self.sc.burn(Vector(Meters_T(float(dv)), 90.0), S_IVB, TLI)
+        self.sc.burn(Velocity(dv, 90.0), S_IVB, TLI)
         self.sc.separate(S_IVB)
         print f"  TLI dv = {dv:.1f} m/s  (S-IVB jettisoned, stack = {thousands(self.sc.mass())} kg)"
 
@@ -978,7 +1012,7 @@ class Mission:
         print "ENTERED LUNAR SOI"
         print f"  Time     = {float(self.t) / 3600.0:.1f} h  ({float(self.t) / 86400.0:.2f} d)"
         print f"  Distance = {to_km(radius_of(self.r)):.0f} km"
-        print f"  Rel. vel = {speed_of(self.v):.1f} m/s"
+        print f"  Rel. vel = {self.v.speed():.1f} m/s"
 
     # --------------------------------------------------------
     # Lunar-frame propagation helper
@@ -1008,10 +1042,10 @@ class Mission:
     # Generic tangential burn to a target speed
     # --------------------------------------------------------
     def tangential_burn(self, sc: Spacecraft, id: StageId_T, target_speed: Speed_T, label: Burn_T) -> Speed_T:
-        let desired: Vector = tangent_along(self.r, self.v) * float(target_speed)
-        let dv: Vector = sc.burn(desired - self.v, id, label)
+        let desired: Velocity = Velocity(target_speed, tangent_along(self.r, self.v).angle())
+        let dv: Velocity = sc.burn(desired - self.v, id, label)
         self.v = self.v + dv
-        return speed_of(dv)
+        return dv.speed()
 
     # --------------------------------------------------------
     # LOI-1 / LOI-2
@@ -1066,22 +1100,22 @@ class Mission:
     def powered_descent(self):
         let lander: Spacecraft = self.lander
         var r: Position = self.r
-        var v: Vector = self.v
-        let s: float = sign(float((r - ORIGIN).cross(v)))
+        var v: Velocity = self.v
+        let s: float = sense(r, v)
         let site_up: Vector = rot(unit_vec(r - ORIGIN), self.DESCENT_ARC * s)
 
         var imu: IMU = IMU(self.rng)
         var nav: Navigation = Navigation(self.rng)
         nav.initialize(r, v)
         var guid: Guidance = Guidance(site_up, s)
-        var auto: Autopilot = Autopilot(v * -1.0)
+        var auto: Autopilot = Autopilot((v * -1.0).direction())
         var prop: Propulsion = Propulsion(lander, LM)
         let max_thrust: Force_T = lander.stage(LM).max_thrust
 
         print
         print "POWERED DESCENT INITIATION"
         print (f"  Altitude = {to_km(radius_of(r) - R_MOON):.1f} km, "
-               f"speed = {speed_of(v):.0f} m/s, mass = {thousands(lander.mass())} kg")
+               f"speed = {v.speed():.0f} m/s, mass = {thousands(lander.mass())} kg")
         print f"  Landing site is {to_km(Meters_T(degToRad(float(self.DESCENT_ARC)) * float(R_MOON))):.0f} km downrange"
 
         let dt: Duration_T = self.DT
@@ -1089,7 +1123,7 @@ class Mission:
         var next_guid: Duration_T = 0.0
         var next_radar: Duration_T = 0.0
         var next_tm: Duration_T = 0.0
-        var a_cmd: Vector = vector_xy(0.0, 0.0)
+        var a_cmd: Acceleration = acceleration_xy(0.0, 0.0)
         var last_cycle: Duration_T = 0.0
         var touched_down: bool = False
         var last_mode: Mode_T = P63
@@ -1102,7 +1136,7 @@ class Mission:
                 next_guid = next_guid + self.GUIDANCE_CYCLE
                 if not announced or last_mode != guid.mode:
                     print (f"  t+{t:6.1f}s  {MODE_NAME[guid.mode]:13s} alt {radius_of(r) - R_MOON:8.0f} m  "
-                           f"v {speed_of(v):7.1f} m/s  fuel {lander.stage(LM).prop:6.0f} kg")
+                           f"v {v.speed():7.1f} m/s  fuel {lander.stage(LM).prop:6.0f} kg")
                     last_mode = guid.mode
                     announced = True
 
@@ -1113,9 +1147,9 @@ class Mission:
                 let up: Vector = unit_vec(r - ORIGIN)
                 let east: Vector = perp(up) * s
                 self.descent.append(Telemetry_T(
-                    t, radius_of(r) - R_MOON, Speed_T(along(v, up)), Speed_T(along(v, east)),
+                    t, radius_of(r) - R_MOON, along(v, up), along(v, east),
                     throttle if float(force) > 0.0 else 0.0, lander.stage(LM).prop,
-                    (nav.r - r).length(), speed_of(nav.v - v), guid.mode))
+                    (nav.r - r).length(), (nav.v - v).speed(), guid.mode))
                 next_tm = next_tm + 1.0
 
             let (r_new, v_new) = rk4_step(r, v, a_thrust, dt)
@@ -1140,8 +1174,8 @@ class Mission:
 
         let up: Vector = unit_vec(r - ORIGIN)
         let east: Vector = perp(up) * s
-        let vv: Speed_T = Speed_T(along(v, up))
-        let vh: Speed_T = Speed_T(along(v, east))
+        let vv: Speed_T = along(v, up)
+        let vh: Speed_T = along(v, east)
         let arc: Degrees_T = wrapped(up.angle() - site_up.angle()) * s
         let miss: Meters_T = Meters_T(degToRad(float(arc)) * float(R_MOON))   # + = overshoot (beyond site)
 
@@ -1157,7 +1191,7 @@ class Mission:
         self.t = self.t + t
         let fuel: Mass_T = lander.stage(LM).prop
         self.result = Result_T(touched_down, vv, vh, miss, t, fuel,
-                               (nav.r - r).length(), speed_of(nav.v - v))
+                               (nav.r - r).length(), (nav.v - v).speed())
 
         print
         print "=============================="

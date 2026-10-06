@@ -311,6 +311,8 @@ def translate(code):
     from ady_stmt import scan_union_aliases, scan_type_decls
     _PS_rp.union_aliases = scan_union_aliases(code)
     _PS_rp.ady_type_decls = scan_type_decls(code)
+    from ady_stmt import scan_record_fields
+    _PS_rp.record_fields = scan_record_fields(code)
     from ady_declarations import distinct_types, unit_relations, scaled_units
     from ady_stmt import scan_consts
     # A scaled unit's conversions are chosen by the type of their argument,

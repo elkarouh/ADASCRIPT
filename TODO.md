@@ -723,11 +723,7 @@ Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
       two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
 - [ ] `min(a, b, c)` with three arguments does not compile on Nim.
 - [ ] `raise NotImplementedError()` does not compile on Nim (`newException` needs a message).
-- [ ] units: a literal beside `>` on a distinct type in a conditional expression
-      (`x if force > 0.0 else y`) came out as `0.0 < force` and was refused; a bare `0.0`
-      in a returned tuple `(Vector, Force_T)` is not converted; and on Python the unit
-      check does not know a record field's type (`st.isp * G0` taken for an `Accel_T`).
+- [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_utils import` works from a sibling directory only because the
       parent is searched; map_utils itself is Nim-only (`from math nimport`), so
-      anything built on it is too. A `Vector` for velocities and accelerations (m/s,
-      m/s^2) does not exist: moon_sim carries them in a `Vector` by convention.
+      anything built on it is too.

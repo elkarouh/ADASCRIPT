@@ -1,0 +1,36 @@
+# A record field's unit on the Python backend (st.isp * G0), a tuple
+# literal returned as (int, Force_T) with a bare number in it, and tuple-
+# unpacked names compared with a literal (x if force > 0.0 else y).
+type Mass_T is distinct float
+type Duration_T is distinct float
+type Accel_T is distinct float
+type Force_T is Mass_T * Accel_T
+type Ve_T is Duration_T * Accel_T
+
+type Stage_T is record:
+    isp: Duration_T
+    thrust: Force_T
+
+const G0: Accel_T = 9.8
+
+def exhaust(st: Stage_T) -> Ve_T:
+    let ve: Ve_T = st.isp * G0
+    return ve
+
+def sign_of(force: Force_T) -> float:
+    return 1.0 if force > 0.0 else 2.0
+
+def none_yet() -> (int, Force_T):
+    return (0, 0.0)
+
+def some(x: float) -> (int, Force_T):
+    return (1, 2.0)
+
+let s: Stage_T = Stage_T(2.0, 3.0)
+print float(exhaust(s))
+print sign_of(s.thrust)
+let (m0, f0) = none_yet()
+let (m1, f1) = some(1.0)
+print m0, m1
+print 1.0 if f1 > 0.0 else 2.0
+print 1 if f0 > 0.0 else 0, 1 if f1 > 0.0 else 0

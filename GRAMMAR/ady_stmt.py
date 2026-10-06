@@ -422,6 +422,36 @@ def scan_type_decls(code):
     return out
 
 
+_RECORD_HEAD = _re_dup.compile(
+    r"^type[ \t]+([A-Za-z_]\w*)(?:[ \t]*\([^)\n]*\))?[ \t]+is[ \t]+record[ \t]*:[ \t]*$",
+    _re_dup.MULTILINE)
+_RECORD_FIELD = _re_dup.compile(r"^[ \t]+([A-Za-z_]\w*)[ \t]*:[ \t]*([^=#\n]+?)[ \t]*(?:=.*)?(?:#.*)?$")
+
+
+def scan_record_fields(code):
+    """The fields of every record CODE declares, as {record: {field: type as
+    written}}. Read where a unit has to be told from `st.isp`: the symbol
+    table knows `st` is a Stage_T, and this knows what Stage_T's `isp` is."""
+    out = {}
+    lines = code.split("\n")
+    for m in _RECORD_HEAD.finditer(code):
+        i = code.count("\n", 0, m.start()) + 1
+        fields = {}
+        while i < len(lines):
+            line = lines[i]
+            if line.strip() == "" or line.strip().startswith("#"):
+                i += 1
+                continue
+            if not line.startswith((" ", "\t")):
+                break
+            f = _RECORD_FIELD.match(line)
+            if f:
+                fields[f.group(1)] = f.group(2).strip()
+            i += 1
+        out[m.group(1)] = fields
+    return out
+
+
 _GENERIC_DEF = _re_dup.compile(
     r"^def[ \t]+([A-Za-z_]\w*)[ \t]*\[([^\]\n]*)\][ \t]*\(", _re_dup.MULTILINE)
 _PLAIN_DEF = _re_dup.compile(

@@ -1457,6 +1457,27 @@ def _unpackable(value, count):
     return f"(let {tmp} = {value.strip()}; ({elems}))"
 
 
+def _note_tuple_result_units(value, names, kw):
+    """NAMES, unpacked from a call of a routine declared `-> (int, Force_T)`: the
+    ones whose element is a distinct type are typed as it, so that `force > 0.0`
+    beside them reads the literal as a Force_T, as it does for a name declared one."""
+    import re as _re_tu
+    from ady_declarations import is_distinct
+    m = _re_tu.search(r"([A-Za-z_]\w*)\([^()]*(?:\([^()]*\)[^()]*)*\)$", value.strip())
+    if not m:
+        return
+    rt = hek_nim_expr._proc_ret_nim(m.group(1)).strip()
+    if not (rt.startswith("(") and rt.endswith(")")):
+        return
+    parts = [p.strip() for p in _split_top_level_commas(rt[1:-1])]
+    if len(parts) != len(names):
+        return
+    for n, ty in zip(names, parts):
+        n = n.strip()
+        if _re_tu.fullmatch(r"[A-Za-z_]\w*", n) and is_distinct(ty):
+            ParserState.symbol_table.add(n, ty, kw)
+
+
 @method(decl_tuple_unpack)
 def to_nim(self):
     """decl_tuple_unpack: let/var/const (x, y) = expr -> Nim let/var (x, y) = expr"""
@@ -1465,6 +1486,7 @@ def to_nim(self):
     value = self.nodes[3].to_nim()  # expression (nodes[2] is V_EQUAL)
     names = _split_top_level_commas(targets.strip()[1:-1]) if targets.strip().startswith("(") else [targets]
     _note_split_parts(value, names)
+    _note_tuple_result_units(value, names, kw)
     return f"{kw} {targets} = {_unpackable(value, len(names))}"
 
 @method(return_val)
@@ -2539,6 +2561,12 @@ def _wrap_distinct_literal(value, nim_type):
     v = (value or "").strip()
     if is_distinct(t):
         return f"{t}({v})" if _is_nim_literal(v) else value
+    if t.startswith("(") and t.endswith(")") and v.startswith("(") and v.endswith(")"):
+        # `return (v, 0.0)` for `-> (Vector, Force_T)`: each element takes its own type
+        ts, vs = _split_top_level_commas(t[1:-1]), _split_top_level_commas(v[1:-1])
+        if len(ts) == len(vs) and any(is_distinct(x.strip()) for x in ts):
+            return "(" + ", ".join(_wrap_distinct_literal(b.strip(), a.strip())
+                                   for a, b in zip(ts, vs)) + ")"
     m = (_re_dl.match(r"^seq\[([A-Za-z_]\w*)\]$", t)
          or _re_dl.match(r"^array\[[^\[\]]+,\s*([A-Za-z_]\w*)\]$", t))
     if m and is_distinct(m.group(1)) and v.startswith(("@[", "[")) and v.endswith("]"):

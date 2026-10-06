@@ -305,6 +305,19 @@ def _py_call_name(e):
     return m.group(1)
 
 
+def _py_field_type(e):
+    """The declared type of `name.field`, when NAME is typed as a record that
+    declares FIELD, else None."""
+    m = _re_mod_p2s.match(r"^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$", e)
+    if not m:
+        return None
+    owner = _py_type_of_name(m.group(1))
+    if not owner:
+        return None
+    owner = _py_resolve_alias(owner.strip())
+    return getattr(ParserState, "record_fields", {}).get(owner, {}).get(m.group(2))
+
+
 def _py_atom_unit(e):
     """The unit of E, emitted Python that is no arithmetic: a distinct
     type's name for a name of one, `Velocity_T(x)` or a call declared to
@@ -324,6 +337,8 @@ def _py_atom_unit(e):
         t = getattr(ParserState, "ady_return_types", {}).get(called)
     else:
         t = _py_type_of_name(e)
+        if t is None:
+            t = _py_field_type(e)
     if not t:
         return None
     t = _py_resolve_alias(t.strip())

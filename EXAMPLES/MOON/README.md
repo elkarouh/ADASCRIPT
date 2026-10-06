@@ -51,14 +51,15 @@ Two places still go through plain floats, inside a function that has typed param
 `sqrt`, `exp`, `ln` and `**` (`vis_viva`, `half_period`, the Moon's mean motion), and the arithmetic of
 the integrator and Brent's method, which is on dimensionless step fractions.
 
-A `Vector` is metres, so a velocity is carried in one as "the distance covered in one second" and an
-acceleration as "in one second squared" (`speed_of`, `accel_of` read the length back as a `Speed_T`,
-an `Accel_T`). That is a convention, not something the compiler checks: map_utils has no velocity
-vector, and a `Vector` of m/s would need its own type.
+Velocities and accelerations are map_utils' `Velocity` (`Speed_T` along a bearing) and
+`Acceleration` (`Accel_T` along a bearing), with `Vector.per(t) -> Velocity`,
+`Velocity.over(t) -> Vector`, `Velocity.per(t) -> Acceleration` and `Acceleration.over(t) -> Velocity`;
+the integrator's state is a `Position` and a `Velocity`, and a step of it is a `Vector` and a `Velocity`.
+So `r + v.over(dt)` checks, and `r + v` does not.
 
 ## Transpiler gaps met on the way
 
-None needed a change to the transpiler; each has a workaround in the source, marked where it is.
+The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.ady`); the rest have a workaround in the source, marked where it is.
 
 * **`(a, b) = f()` inside a block, onto variables declared outside it, makes new variables on
   Nim** (`var (a, b) = ...`) and leaves the outer ones as they were. Silent: guidance flew to a
@@ -71,9 +72,10 @@ None needed a change to the transpiler; each has a workaround in the source, mar
 * **Classes are values on Nim, references on Python** (chapter 13): `Rng` and `Spacecraft` are shared,
   so they are `@virtual`.
 * **Units**: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time), so a cube is taken
-  through `float`; a literal beside `>` on a distinct type in a conditional expression
-  (`force > 0.0`) came out as `0.0 < force` and was refused (first version); a bare `0.0` in a tuple
-  returned as `(Vector, Force_T)` is not converted (`Force_T(0.0)`).
+  through `float`. Three others were fixed here: a literal beside `>` on a distinct type in a
+  conditional expression or on a tuple-unpacked name came out as `0.0 < force`; a bare `0.0` in a
+  returned tuple `(int, Force_T)` was not converted; and the Python unit check did not know a record
+  field's type (`st.isp * G0`).
 * **`{x:,.0f}` and `{x:+.0f}` in an f-string**: Nim has no `,` flag, and `+.0f` leaves a stray `.`
   (`-456396.`). Written as `thousands()` and `signed()`.
 * **`\n` inside an f-string is not an escape on Nim** (`f"\nPlot saved"` printed no blank line).
@@ -84,8 +86,6 @@ None needed a change to the transpiler; each has a workaround in the source, mar
   `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
 * **`min(a, b, c)` with three arguments does not compile on Nim.**
 * **`raise NotImplementedError()` does not compile on Nim** (`newException` needs a message).
-* **On Python**, `math.atan`/`atan2` and one-argument `math.log` are not mapped to Nim, and the
-  Python backend's unit check does not know a record field's type (`st.isp * G0` was taken for an
-  `Accel_T`). Both bit the first, two-backend version; neither matters to this one.
+* **On Python**, `math.atan`/`atan2` and one-argument `math.log` are not mapped to Nim.
 * **map_utils cannot be imported from a sibling directory by name**; `from MAP_UTILS/map_utils import`
   works because the parent of this directory is searched.
