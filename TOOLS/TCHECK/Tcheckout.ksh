@@ -169,6 +169,7 @@ if [[ -n "${cache}" ]]; then
   [[ -n "${at}" ]] || at=$(git -C "${work}" rev-parse -q --verify origin/HEAD) || at=""
   [[ -n "${at}" ]] || die "${file} is at none of:${revs}"
   git -C "${work}" -c advice.detachedHead=false checkout -q -f "${at}" || die "could not check out ${at} in ${work}"
+  git -C "${work}" cat-file -e "${at}:${file}" 2>/dev/null || die "no such file: ${target} is not in ${sub} at ${at}"
   echo "${PROG}: ${target} checked out in ${cache} (at ${at})"
   exit 0
 fi
@@ -289,4 +290,6 @@ git -C "${work}" cat-file -e "${commit}${peel}" 2>/dev/null || git -C "${work}" 
 # forced: a deinitialised submodule's index still lists the files its
 # emptied directory lacks, which a plain checkout keeps as deletions
 git -C "${work}" -c advice.detachedHead=false checkout -q -f "${commit}" || die "could not check out ${commit} in ${sub}"
+git -C "${work}" cat-file -e "${commit}:${file}" 2>/dev/null ||
+  die "no such file: ${target} is not in ${sub} at ${commit%"${commit#????????}"}"
 echo "${PROG}: ${target} checked out (${sub} at ${commit%"${commit#????????}"}, this file only)"

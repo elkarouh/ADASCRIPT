@@ -137,10 +137,12 @@ def take_out(work: Path, f: File_T) -> bool | !Failure_T:
     print f"{PROG}: {f.target} taken out"
     False
 
-def check_out(work: Path, rev: Rev_T) -> None | !Failure_T:
+def check_out(work: Path, rev: Rev_T, f: File_T) -> None | !Failure_T:
     # forced: a deinitialised submodule's index still lists the files its
     # emptied directory lacks, which a plain checkout keeps as deletions
-    git_checked(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
+    do:
+        git_checked(work, ["-c", "advice.detachedHead=false", "checkout", "-q", "-f", rev], f"could not check out {rev} in {work}")
+    return Failure_T(message=f"no such file: {f.target} is not in {f.sub} at {rev}") if not git_ok(work, ["cat-file", "-e", rev + ":" + f.file])
 
 # --- where files are checked out: the workspace, or the cache -----------------
 @virtual
@@ -256,7 +258,7 @@ class Workspace(Checkouts):
             let rc: int = shell: git -C {!work} fetch --tags origin
             return Failure_T(message=f"could not fetch {f.sub}") if rc != 0
         do:
-            check_out(work, commit)
+            check_out(work, commit, f)
         print f"{PROG}: {f.target} checked out ({f.sub} at {commit[:8]}, this file only)"
 
 # --- the cache, for no workspace at all ----------------------------------------
@@ -316,7 +318,7 @@ class Cache(Checkouts):
         let at: Rev_T = having[0] if having != [] else git_out(work, ["rev-parse", "-q", "--verify", "origin/HEAD"])
         return Failure_T(message=f"{f.file} is at none of:" + "".join([" " + r for r in revs])) if at == ""
         do:
-            check_out(work, at)
+            check_out(work, at, f)
         print f"{PROG}: {f.target} checked out in {self.dir} (at {at})"
 
 # --- main ----------------------------------------------------------------------
