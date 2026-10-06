@@ -1,86 +1,134 @@
 #!/usr/bin/env ady2nim
-#ady2nim-args c -d:release
-"""Tdiff — what changed in an NM superproject between two revisions.
+"""Tdiff — differences between baselines, workspaces and release branches,
+as a browsable directory-tree diff.
 
-The NM workspace is a superproject whose submodules are the subsystems,
-<system>/<subsystem>. Tdiff finds the submodules that differ between two
-revisions and lists what changed in them, in one of two forms:
+A port of TOOL/COMMON_UTILS's Tdiff.ksh (actually zsh, despite its shebang:
+`${(j:.:)match[*]}`, `${var:l}` and `${str[1]}`-style substring indexing are
+zsh, not ksh). For the lean, git-only tool that lists changed lines or
+commits for Tblame -- no baseline-name or workspace-name resolution, no
+directory tree -- see `Tdiff_lines.ady` beside it.
 
-  - the changed lines (the default), one per line as
-    <file>:<line_no>:<text> -- Tblame's input, so `Tdiff | Tblame` says
-    who wrote each line that changed, and under which SC ticket;
-  - the commits (`-commits`): one row per commit between the two revisions,
-    per submodule, with its date, SC ticket, committer and summary.
+  Tdiff [<option>...] [<descriptor>] [<descriptor>]
 
-A revision is one of three things, and means a commit in each submodule:
+  Tdiff                     -- in a workspace, diffs it against the release
+                                branch it belongs to; in a build context,
+                                diffs that baseline against the one before.
+  Tdiff <descriptor>        -- a baseline: diffs it against the one before.
+                                A workspace: diffs it against its release.
+  Tdiff <descriptor> <descriptor>
+                            -- diffs the two descriptors' closures directly.
 
-  - the checkout (no argument): the commit each checked-out submodule has
-    checked out;
-  - a superproject commit (HEAD^, HEAD~5, a SHA): the commit it records for
-    each submodule -- every superproject commit is a workspace baseline;
-  - an NM baseline (30.0.0.124): that tag, inside each checked-out
-    submodule.
+A <descriptor> is a baseline or a workspace:
 
-With no argument Tdiff compares HEAD^ with the checkout: the last baseline
-delivered and what is checked out now. `Tdiff REV1` compares REV1 with the
-checkout, and `Tdiff REV1 REV2` two revisions.
+  - baseline shorthand: a lone integer (30.0.0.<N>, against
+    main_release_version), `LATEST`/`LATEST_GOOD` (resolved), `X.Y.Z.<N>`
+    (CFMUTEST.CFMUTEST_CONFIG.X.Y.Z.<N>), or a full SYSTEM.SUBSYSTEM.VERSION.
+  - workspace: a bare name (taken as $USER.name) or user.name directly.
 
-Flow:
+Resolving a descriptor to a per-submodule revision:
 
-  1. Superproject lists the submodules HEAD records, and resolves each
-     revision to a commit per submodule: one `git ls-tree` for a
-     superproject commit, one `git rev-parse` per checked-out submodule
-     otherwise.
-  2. The submodules whose commits differ are the changes. Only checked-out
-     submodules can be looked into; changed ones that are not are named
-     once, on stderr.
-  3. One `git diff -U0` (or `git log`) per changed submodule, run in
-     parallel, gives the lines (or the commits). Against the checkout the
-     diff is taken against the working tree, which is what Tblame blames,
-     so the line numbers are the ones it will look up.
+  - a baseline, through Psort/list_subsystems (`context_refs`): the tag each
+    submodule in the baseline's closure has for that version.
+  - a workspace, as the *left* side (what to diff from): the merge-base of
+    its own branch and the release branch it belongs to (so only the
+    workspace's own commits show, not the whole release's) -- computed per
+    submodule by `git merge-base`, after working out the release branch
+    (main, or release/<major>.0.0) and, when one exists and is more recent,
+    preferring the testadm integration branch's merge-base instead.
+  - a workspace, as the *right* side: the tip of its own pushed branch,
+    `origin/workspace/<name, dashed, lower-cased>`.
 
-What stops the run -- no superproject, a baseline no submodule has -- is
-a Failure_T returned up the stages and said once, at the end; what only
-spoils one submodule is a warning, and the rest go on.
+Once both sides are refs per submodule, for each submodule whose two refs
+differ: `git diff --name-status` gives the changed files (plus, when
+diffing a workspace's own uncommitted changes, `git ls-files --others`);
+`-name`/`-status` print those and stop there. Otherwise each side's changed
+files are sparse-checked-out alone into a temporary directory -- cloned
+`--shared` from a configured alternate (`-alternate`, else
+$NM_REPOSITORY_ALTERNATE: a local NM mirror, so this is not a slow network
+clone) and checked out `--detach` at that side's revision; the special
+revision "" (the workspace's own uncommitted side) instead symlinks the
+files in from the real checkout. The two assembled trees, `left` and
+`right`, are then handed to `-extcmd` (default: an Emacs directory ediff)
+or printed as-is with `-extcmd ''`.
+
+Differences from Tdiff.ksh, this port's simplifications:
+
+  - `Log`/`Abort` are zsh functions from a sourced library this program does
+    not have; its own `warn`/`die` stand in (`Abort` -> `die`, `Log -w` ->
+    `warn`, plain `Log` -> a line on stderr). `Clsworkspace`, `Psort`,
+    `list_subsystems`, `Cget_viewspace_name`, `list_cfmutest_subsystems` are
+    real external programs either way, and are shelled out to exactly as
+    Tdiff.ksh does (as `where_workspace` already is, in `Tblame.ady`).
+  - the zsh glob patterns that classify a baseline shorthand
+    (`[0-9]*.[0-9]*.[0-9]*.[0-9]*`, ...) are approximated by regexes for the
+    realistic inputs (an all-digits-led, dot-separated version string);
+    they are not byte-for-byte the same matcher.
+  - concurrency: Tdiff.ksh backgrounds one job per submodule, itself
+    backgrounding its own left/right checkout inside; this port instead
+    runs every submodule's every side as one flat batch of jobs, `MAX_JOBS`
+    at a time -- simpler, and parallel across the same granularity that
+    matters (few submodules actually changed, out of very many).
+  - `-debug` prints a readable summary of what was resolved, not zsh's raw
+    `typeset -p1` variable dump.
+  - `-source` (sourcing the script for its functions, in the original) only
+    makes sense for a shell library; here it is accepted and does nothing,
+    for interface parity.
 """
 
+nimport os
+
 # ---------------------------------------------------------------------------
-# What flows between the stages
+# Shared types
 # ---------------------------------------------------------------------------
 
-# a submodule's path in the superproject: "<system>/<subsystem>"
 type SubmodulePath is str
-# a commit's 40-hex-digit SHA-1
-type CommitHash is str
-# a 1-based line number within a file
-type LineNo is int
+type Ref_T is str                      # anything git accepts: hash, tag, branch
+type RefMap_T is {SubmodulePath}Ref_T
 
-type RevKind is enum RK_Checkout, RK_Superproject, RK_Baseline
-
-# why the run cannot go on: returned up the stages, said once by main
 type Failure_T is record:
     message: str
 
-type Rev is record:
-    # as given on the command line; "" for the checkout
-    name:   str = ""
-    kind:   RevKind = RK_Checkout
-    # the superproject commit, for RK_Superproject
-    commit: CommitHash = ""
+type ArgKind is enum AK_Baseline, AK_Workspace
 
-type Change is record:
-    path: SubmodulePath = ""
-    old:  CommitHash = ""
-    new:  CommitHash = ""
-    # the new side is the checkout: diff against the working tree
-    to_checkout: bool = False
+type Descriptor_T is record:
+    kind:  ArgKind
+    value: str
 
-# at most this many git processes at once
+type OutputFormat is enum OF_ExtCmd, OF_Name, OF_Status
+
+type BranchParams_T is record:
+    release_branch:     str = ""
+    major_release:      str = ""
+    branch_ref:          str = ""
+    integration_branch: str = ""
+
+type Entry_T is record:
+    status: str         # a single letter: M, D, A, R, C, ? (untracked), ...
+    name:   str          # the current path
+    orig:   str = ""     # the path before a rename/copy, else ""
+
 const MAX_JOBS: int = 16
+const DEFAULT_EXTCMD: str = """() { emacs --eval "(ediff-directories \\"$1\\" \\"$2\\" nil)" }"""
 
-def run_git_all(commands: [][]str) -> []RunResult:
-    """Each argument list run as `git ...`, MAX_JOBS at a time; the results
-    in the order of COMMANDS."""
+# ---------------------------------------------------------------------------
+# git, batched
+# ---------------------------------------------------------------------------
+
+def git(where: Path, args: []str) -> RunResult:
+    run(["git", "-C", str(where)] + args)
+def git_ok(where: Path, args: []str) -> bool:
+    git(where, args).code == 0
+def git_out(where: Path, args: []str) -> str:
+    git(where, args).output.strip()
+def git_checked(where: Path, args: []str, message: str) -> None | !Failure_T:
+    let r: RunResult = git(where, args)
+    if r.code != 0:
+        if r.stderr.strip() != "":
+            warn(r.stderr.strip())
+        return Failure_T(message=message)
+
+def run_all(commands: [][]str) -> []RunResult:
+    """Each argument list run as `git ...`, MAX_JOBS at a time."""
     var results: []RunResult = []
     var start: int = 0
     while start < len(commands):
@@ -93,273 +141,598 @@ def run_git_all(commands: [][]str) -> []RunResult:
         start += MAX_JOBS
     return results
 
-def describe(rev: Rev) -> str:
-    return "the checkout" if rev.kind == RK_Checkout else rev.name
+def run_shell_all(commands: []str) -> []RunResult:
+    """Each command (a full shell command line) run under `sh -c`, MAX_JOBS
+    at a time -- the sparse checkouts, which are more than one git call."""
+    var results: []RunResult = []
+    var start: int = 0
+    while start < len(commands):
+        var jobs: []Job = []
+        for cmd in commands[start:min(start + MAX_JOBS, len(commands))]:
+            let j: Job = shellSpawn: sh -c {!cmd}
+            jobs.append(j)
+        for r in waitAll(jobs):
+            results.append(r)
+        start += MAX_JOBS
+    return results
 
-# ---------------------------------------------------------------------------
-# Stage 1: the superproject, and what a revision means in each submodule
-# ---------------------------------------------------------------------------
+def shquote(s: str) -> str:
+    """S, single-quoted for a shell command line."""
+    "'" + s.replace("'", "'\\''") + "'"
 
-def gitlink(line: str) -> (SubmodulePath, CommitHash):
-    """A submodule's path and commit from a `git ls-tree` line, or ("", "")
-    when the line is not a submodule."""
-    return ("", "") if line != /^160000 commit (?P<sha>[0-9a-f]{40})\t(?P<path>.+)$/
-    ($+{path}, $+{sha})
-
-class Superproject:
-    """The NM superproject: its submodules, and the commit a revision names
-    in each of them. open_superproject makes one."""
-    root:  Path = Path("")
-    # every submodule HEAD records, in tree order
-    paths: []SubmodulePath = []
-
-    def __init__(self, root: Path, paths: []SubmodulePath):
-        self.root = root
-        self.paths = paths
-
-    def recorded(self, commit: str) -> {SubmodulePath}CommitHash:
-        """The commit superproject commit COMMIT records for each submodule."""
-        var out: {SubmodulePath}CommitHash = {:}
-        let r = shell: git -C {!self.root} ls-tree -r {!commit}
-        for line in r.output.split("\n"):
-            let (path, sha) = gitlink(line)
-            if path != "":
-                out[path] = sha
-        out
-
-    def checked_out(self, path: SubmodulePath) -> bool:
-        -e (self.root / path / ".git")
-
-    def resolve(self, name: str) -> Rev:
-        """NAME as a revision: the checkout when empty, else a superproject
-        commit if the superproject knows it, else a baseline tag."""
-        var rev: Rev
-        rev.name = name
-        return rev if name == ""
-        let r = shell: git -C {!self.root} rev-parse --verify -q {!name}^{commit}
-        if r.code == 0:
-            rev.kind = RK_Superproject
-            rev.commit = r.output.strip()
-        else:
-            rev.kind = RK_Baseline
-        rev
-
-    def commits(self, rev: Rev) -> {SubmodulePath}CommitHash | !Failure_T:
-        """The commit REV names in each submodule it names one in -- or,
-        for a baseline no checked-out submodule has, the failure."""
-        return self.recorded(rev.commit) if rev.kind == RK_Superproject
-        # A submodule that is not checked out has no checkout of its own:
-        # what HEAD records stands in, so a change to it is still seen (and
-        # named as not checked out) rather than silently missed.
-        var out: {SubmodulePath}CommitHash = {:}
-        if rev.kind == RK_Checkout:
-            out = self.recorded("HEAD")
-        let spec: str = "HEAD" if rev.kind == RK_Checkout else rev.name + "^{commit}"
-        let here: []SubmodulePath = [p for p in self.paths if self.checked_out(p)]
-        let commands: [][]str = [["-C", str(self.root / p), "rev-parse", "--verify", "-q", spec] for p in here]
-        for p, r in zip(here, run_git_all(commands)):
-            if r.code == 0:
-                out[p] = r.output.strip()
-        if rev.kind == RK_Baseline and len(out) == 0:
-            return Failure_T(message=f"no checked-out submodule has a baseline or commit named {rev.name} (tags not fetched? try: git -C <submodule> fetch --tags)")
-        return out
-
-    def changes(self, rev1: Rev, rev2: Rev) -> []Change | !Failure_T:
-        """The submodules whose commit differs between REV1 and REV2, in
-        tree order; the changed ones not checked out are named on stderr."""
-        do:
-            before <- self.commits(rev1)
-            after  <- self.commits(rev2)
-        var out: []Change = []
-        var unseen: []SubmodulePath = []
-        for path in self.paths:
-            continue if path not in before or path not in after
-            continue if before[path] == after[path]
-            if not self.checked_out(path):
-                unseen.append(path)
-                continue
-            out.append(Change(path = path, old = before[path], new = after[path],
-                              to_checkout = rev2.kind == RK_Checkout))
-        if len(unseen) > 0:
-            warn(f"{len(unseen)} changed submodule(s) not checked out, not listed: {', '.join(unseen)}")
-        return out
-
-def open_superproject(root: Path) -> Superproject | !Failure_T:
-    """The superproject at ROOT, with the submodules HEAD records -- or
-    the failure, when ROOT is no git repository."""
-    let r = shell: git -C {!root} ls-tree -r HEAD
-    if r.code != 0:
-        return Failure_T(message=f"{root} is not a git repository")
-    var paths: []SubmodulePath = []
+def submodule_paths(nmroot: Path) -> []SubmodulePath:
+    """Every submodule NMROOT's .gitmodules declares and that is checked
+    out, in file order -- what `git submodule foreach` would list, without
+    needing NMROOT's submodules to be `git submodule init`-registered."""
+    let r: RunResult = git(nmroot, ["config", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"])
+    var out: []SubmodulePath = []
     for line in r.output.split("\n"):
-        let (path, sha) = gitlink(line)
-        if path != "":
-            paths.append(path)
-    return Superproject(root, paths)
+        let fields: []str = line.split()
+        continue if len(fields) < 2
+        let p: SubmodulePath = fields[1]
+        if -e (nmroot / p / ".git"):
+            out.append(p)
+    return out
 
 # ---------------------------------------------------------------------------
-# Stage 2a: the changed lines
+# Site tools, wrapped as opaque external programs (real executables, not the
+# zsh functions a sourced library would give -- see the module docstring)
 # ---------------------------------------------------------------------------
 
-def added_lines(repo: Path, diff: []str) -> []str:
-    """Each line a `git diff -U0` adds, as "<file>:<line_no>:<text>" with
-    <file> under REPO. A deleted file adds none. Headers are only read
-    between "diff --git" and the first hunk, so an added line that happens
-    to start with "++ " is still a line."""
+def cget_viewspace_name() -> str:
+    shell_out("Cget_viewspace_name")
+
+def shell_out(command: str) -> str:
+    let r: str | !ShellFailure_T = shell: sh -c {!command}
+    return "" if r is ShellFailure_T
+    r.strip()
+
+def clsworkspace_baseline(workspace: str) -> str:
+    """The baseline `Clsworkspace -all` reports for WORKSPACE, "" if it is
+    not listed. Slow: callers avoid it when the build context already names
+    the baseline."""
+    let r: str | !ShellFailure_T = shell: Clsworkspace -all 2>/dev/null
+    return "" if r is ShellFailure_T
+    for line in r.split("\n"):
+        let fields: []str = line.split()
+        if len(fields) >= 2 and fields[0] == workspace:
+            return fields[1]
+    return ""
+
+def list_cfmutest_subsystems(baseline: str, select: str) -> str:
+    shell_out(f"list_cfmutest_subsystems {shquote(baseline)} -select {shquote(select)}")
+
+def context_refs(normal_baseline: str) -> RefMap_T:
+    """<sys>/<subsys> -> tag, for every submodule in NORMAL_BASELINE's
+    closure: Psort lists it, as the /cm/ot/<system>/<subsystem.version>
+    context path, and list_subsystems turns that into the pairs."""
+    let path: str = "/cm/ot/" + replace_first(normal_baseline, ".", "/")
+    let r: str | !ShellFailure_T = shell(stdin = path + "\n"): Psort | list_subsystems -format '%S/%s %v'
+    var out: RefMap_T = {:}
+    return out if r is ShellFailure_T
+    for line in r.split("\n"):
+        let fields: []str = line.split()
+        if len(fields) == 2:
+            out[fields[0]] = fields[1]
+    return out
+
+def replace_first(s: str, old: str, new: str) -> str:
+    let i: int = s.find(old)
+    return s if i < 0
+    s[:i] + new + s[i + len(old):]
+
+# ---------------------------------------------------------------------------
+# Descriptors: baselines and workspaces, classified and normalized
+# ---------------------------------------------------------------------------
+
+def normalize_baseline(input: str, main_release_version: str) -> str | !Failure_T:
+    """INPUT, in full SYSTEM.SUBSYSTEM.VERSION form. (\\w+) and
+    (\\w+).(\\w+) are not handled here -- classify_argument already took
+    those as workspace names, ahead of this."""
+    let major_version: str = main_release_version + ".0.0"
+    var normal: str = ""
+    if input == /^[0-9][^.]*\.[0-9][^.]*\.[0-9][^.]*\.([0-9][^.]*|LATEST.*)$/:
+        normal = "CFMUTEST.CFMUTEST_CONFIG." + input
+    elif input == "LATEST" or input == "LATEST_GOOD":
+        normal = "CFMUTEST.CFMUTEST_CONFIG." + input
+    elif input == /^[0-9]+$/:
+        normal = f"CFMUTEST.CFMUTEST_CONFIG.{major_version}.{input}"
+    elif input == /^[A-Z][^.]*\.[A-Z][^.]*\.[0-9].*$/:
+        normal = input
+    else:
+        return Failure_T(message=f"Unsupported baseline format {input}")
+    if normal.endswith(".LATEST") or normal.endswith(".LATEST_GOOD"):
+        let select: str = normal.rpartition(".")[0]
+        normal = list_cfmutest_subsystems(normal, select)
+    return Failure_T(message=f"Could not normalize baseline {input}") if normal == ""
+    return normal
+
+def previous_baseline(normal_baseline: str) -> str:
+    """NORMAL_BASELINE with its last dotted, numeric component decremented
+    by one -- "" if it is not SYSTEM.SUBSYSTEM.N.N.N[.N]. Not guaranteed to
+    have actually been built, only that baselines are rarely untagged."""
+    if normal_baseline != /^\w+\.\w+\.[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$/:
+        return ""
+    var parts: []str = normal_baseline.split(".")
+    let last: int = len(parts) - 1
+    parts[last] = str(int(parts[last]) - 1)
+    return ".".join(parts)
+
+def classify_argument(arg: str, username: str, main_release_version: str) -> Descriptor_T | !Failure_T:
+    """ARG as a baseline or a workspace: a bare word not starting with
+    `LATEST` is $USERNAME.ARG (a workspace of one's own); user.name is a
+    workspace as given; anything else is a baseline shorthand."""
+    if arg == /^[a-zA-Z]+\w*$/ and arg != /^LATEST/:
+        return Descriptor_T(kind=AK_Workspace, value=f"{username}.{arg}")
+    if arg == /^\w+\.\w+$/:
+        return Descriptor_T(kind=AK_Workspace, value=arg)
+    do:
+        normal <- normalize_baseline(arg, main_release_version)
+    return Descriptor_T(kind=AK_Baseline, value=normal)
+
+# ---------------------------------------------------------------------------
+# Workspaces: which branch, and the merge-base to diff its own commits from
+# ---------------------------------------------------------------------------
+
+def workspace_branch_name(workspace: str) -> str:
+    """The branch a workspace's own commits are pushed to."""
+    ("origin/workspace/" + workspace.replace("_", "-")).lower()
+
+def resolve_workspace_branch_params(workspace: str, nmroot: Path, cma_root: Path,
+                                     context_baseline: str, main_release_version: str) -> BranchParams_T:
+    var baseline: str = ""
+    if cma_root != Path("") and workspace == cget_viewspace_name() and context_baseline == /CFMUTEST\.CFMUTEST_CONFIG\.[0-9]+/:
+        baseline = context_baseline        # avoid Clsworkspace: it is slow
+    else:
+        warn("Running Clsworkspace (can take some time).")
+        baseline = clsworkspace_baseline(workspace)
+    var p: BranchParams_T
+    if baseline == /\w+\.\w+\.(?P<major>[0-9]+).*/:
+        p.major_release = $+{major}
+        p.release_branch = "origin/main" if p.major_release == main_release_version else f"origin/release/{p.major_release}.0.0"
+    else:
+        warn(f"Could not identify target release for workspace {workspace}. Changes are relative to main.")
+        p.release_branch = "origin/main"
+        p.major_release = "XX"
+    p.branch_ref = "HEAD" if (workspace == cget_viewspace_name() and nmroot == cma_root) else workspace_branch_name(workspace)
+    p.integration_branch = f"workspace/testadm.integration-{p.major_release}"
+    return p
+
+def submodule_merge_base(work: Path, params: BranchParams_T, include_integration: bool) -> str:
+    """The commit this submodule's BRANCH_REF should be compared to, to see
+    only the workspace's own changes -- "" when the branch does not exist
+    here at all (not pushed, or this submodule is not on it)."""
+    return "" if not git_ok(work, ["rev-parse", params.branch_ref, "--"])
+    let release: str = git_out(work, ["merge-base", params.release_branch, params.branch_ref])
+    var integration: str = git_out(work, ["merge-base", "origin/" + params.integration_branch, params.branch_ref])
+    if integration == "":
+        integration = release
+    var target: str = release
+    if release != integration and not include_integration:
+        if git_ok(work, ["merge-base", "--is-ancestor", release, integration]):
+            target = integration
+    return target
+
+def workspace_branch_merge_base_refs(workspace: str, nmroot: Path, cma_root: Path, context_baseline: str,
+                                       main_release_version: str, include_integration: bool) -> RefMap_T:
+    let params: BranchParams_T = resolve_workspace_branch_params(workspace, nmroot, cma_root, context_baseline, main_release_version)
+    var out: RefMap_T = {:}
+    for sm_path in submodule_paths(nmroot):
+        let target: str = submodule_merge_base(nmroot / sm_path, params, include_integration)
+        if target != "":
+            out[sm_path] = target
+    return out
+
+def workspace_branch_refs(workspace: str, nmroot: Path) -> RefMap_T:
+    """<sys>/<subsys> -> the tip of WORKSPACE's own pushed branch, in every
+    submodule that has one."""
+    let ref: str = workspace_branch_name(workspace)
+    var out: RefMap_T = {:}
+    for sm_path in submodule_paths(nmroot):
+        let hash: str = git_out(nmroot / sm_path, ["rev-parse", "--quiet", "--verify", ref])
+        if hash != "":
+            out[sm_path] = hash
+    return out
+
+# ---------------------------------------------------------------------------
+# Sparse checkouts: each side's changed files alone, in a scratch directory
+# ---------------------------------------------------------------------------
+
+def checkout_command(ref: str, dest: Path, files: []str, nmroot: Path, sm_path: SubmodulePath, cma_root: Path) -> str:
+    """One shell command that sparse-checks-out FILES of NMROOT/SM_PATH at
+    REF into DEST -- or, REF == "" (the workspace's own uncommitted
+    changes): symlinks FILES in from the real checkout, when NMROOT is that
+    very workspace (else it says it cannot and does nothing)."""
+    if ref == "":
+        if nmroot != cma_root:
+            let msg: str = f"no checkout ref for {sm_path}; no sparse checkout done"
+            return f"echo {shquote(msg)} >&2"
+        var parts: []str = [f"mkdir -p {shquote(str(dest))}"]
+        for file in files:
+            let target: Path = dest / file
+            if "/" in file:
+                parts.append(f"mkdir -p {shquote(str(target.parent))}")
+            parts.append(f"ln -sf {shquote(str(nmroot / sm_path / file))} {shquote(str(target))}")
+        return " && ".join(parts)
+    let src: str = str(nmroot / sm_path)
+    let dst: str = str(dest)
+    let file_args: str = " ".join([shquote(f) for f in files])
+    return (f"mkdir -p {shquote(dst)} && "
+            f"git clone --shared --sparse --no-checkout {shquote(src)} {shquote(dst)} && "
+            f"git -C {shquote(dst)} sparse-checkout set --no-cone {file_args} && "
+            f"git -C {shquote(dst)} checkout --detach {shquote(ref)}")
+
+# ---------------------------------------------------------------------------
+# What changed in a submodule: name-status, plus untracked files of its own
+# uncommitted changes
+# ---------------------------------------------------------------------------
+
+def name_status_entries(diff_output: str, untracked_output: str) -> []Entry_T:
+    var lines: []str = []
+    for line in diff_output.split("\n"):
+        continue if line == "" or line.startswith("parents") or line.endswith("PARENT")
+        lines.append(line)
+    for line in untracked_output.split("\n"):
+        continue if line == ""
+        lines.append(line)
+    var out: []Entry_T = []
+    for line in lines:
+        let fields: []str = line.split()
+        continue if len(fields) < 2
+        var e: Entry_T
+        let code: str = fields[0][0:1]
+        if code == "R" or code == "C":
+            e.status = code
+            e.orig = fields[1]
+            e.name = fields[2] if len(fields) > 2 else fields[1]
+        else:
+            e.status = fields[0]
+            e.name = fields[1]
+        out.append(e)
+    return out
+
+def modified_files(entries: []Entry_T) -> []str:
+    """Every path NAME_STATUS_ENTRIES touched, old and new names both (a
+    rename/copy's old name is still needed, to sparse-checkout it on both
+    sides of the diff)."""
     var out: []str = []
-    var file: Path = Path("")
-    var in_header: bool = False
-    var line_no: LineNo = 0
-    for l in diff:
-        if l.startswith("diff --git "):
-            in_header = True
-            file = Path("")
-        elif in_header and l.startswith("+++ "):
-            let name: str = l[4:]
-            if name != "/dev/null":
-                file = repo / name.removeprefix("b/")
-        elif l == /^@@ -\d+(?:,\d+)? \+(?P<start>\d+)(?:,\d+)? @@/:
-            in_header = False
-            line_no = int($+{start})
-        elif not in_header and l.startswith("+") and file != "":
-            out.append(f"{file}:{line_no}:{l[1:]}")
-            line_no += 1
-    out
-
-def diff_command(sp: Superproject, c: Change) -> []str:
-    var argv: []str = ["-c", "core.quotePath=false", "-C", str(sp.root / c.path),
-                       "diff", "-U0", "--no-color", "--no-ext-diff", c.old]
-    if not c.to_checkout:
-        argv.append(c.new)
-    argv
-
-def cannot(sp: Superproject, c: Change, r: RunResult):
-    """Say why a submodule could not be looked into -- most often, a commit
-    its checkout was never fetched."""
-    let why: str = r.stderr.strip().split("\n")[0]
-    warn(f"{c.path}: cannot compare {c.old[:12]} with {c.new[:12]}: {why} (not fetched? try: git -C {sp.root / c.path} fetch)")
-
-def print_lines(sp: Superproject, changes: []Change):
-    let commands: [][]str = [diff_command(sp, c) for c in changes]
-    for c, r in zip(changes, run_git_all(commands)):
-        if r.code != 0:
-            cannot(sp, c, r)
-            continue
-        for line in added_lines(sp.root / c.path, r.output.split("\n")):
-            print(line)
-
-# ---------------------------------------------------------------------------
-# Stage 2b: the commits
-# ---------------------------------------------------------------------------
-
-def sc_hint(summary: str) -> str:
-    """The first SC ticket a summary names, with a count of the others."""
-    let tickets: []str = summary == /SC-\d+/g
-    return "<no-sc>" if len(tickets) == 0
-    return tickets[0] if len(tickets) == 1
-    f"{tickets[0]}(+{len(tickets) - 1})"
-
-def print_commits(sp: Superproject, changes: []Change):
-    let commands: [][]str = [["-C", str(sp.root / c.path), "log", "--no-merges",
-                              "--date=format:%Y.%m.%d", "--format=%h%x09%ad%x09%cn%x09%s",
-                              c.old + ".." + c.new] for c in changes]
-    var rows: [][]str = []
-    for c, r in zip(changes, run_git_all(commands)):
-        if r.code != 0:
-            cannot(sp, c, r)
-            continue
-        for line in r.output.split("\n"):
-            let f: []str = line.split("\t")
-            continue if len(f) < 4
-            rows.append([f[0], f[1], sc_hint(f[3]), f[2], c.path, "| " + f[3]])
-    var widths: []int = [0, 0, 0, 0, 0, 0]
-    for row in rows:
-        for i, cell in enumerate(row):
-            widths[i] = max(widths[i], len(cell))
-    for row in rows:
-        # the summary is last, and not padded
-        let cells: []str = [cell.ljust(widths[i]) for i, cell in enumerate(row[:5])]
-        print(" ".join(cells) + " " + row[5])
+    for e in entries:
+        if e.orig != "":
+            out.append(e.orig)
+        out.append(e.name)
+    return out
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def usage():
-    stderr.writeLine(f"""
-{PROG} [-commits] [-root DIR] [REV1 [REV2]]
-  List what changed in the NM superproject between REV1 and REV2.
+    print f"""
+{PROG} [<option>...] [<descriptor>] [<descriptor>]
 
-  REV1 defaults to HEAD^, the previous workspace baseline delivered; REV2
-  to the checkout. A revision is a superproject commit (HEAD^, HEAD~5, a
-  SHA) or an NM baseline (30.0.0.124), which is a tag in each submodule.
+  For analyzing differences between baselines, workspaces and release branches.
 
-  By default, prints each line REV2 adds or changes as
-  <file>:<line_no>:<text>, so that
+  {PROG}                             # (Without descriptor)
+    When in a workspace, it will return the diff of the current workspace compared with the appropriate release branch.
+    Otherwise, if in a context, it will return the diff of the context's baseline.
 
-    {PROG} | Tblame
+  {PROG} <descriptor>                # (Single descriptor)
+    When <descriptor> is a baseline, compute the diff of that baseline compared to the one before it. When <descriptor> is the name of a workspace,
+    compute the diff of that branch compared to the associated release branch.
 
-  says who wrote each one. Tblame blames the checkout, so leave REV2 out
-  for that. Deleted lines are not listed; -commits names who deleted them.
+  {PROG} <descriptor> <descriptor>
+    Compute the differences of the closure between the two descriptors with the below semantics.
 
-OPTIONS
-  -commits
-    List the commits instead: hash, date, SC ticket, committer, submodule
-    and summary, one per line.
+  <descriptor> arguments are resolved in the following manner:
+    For baselines:
+       X         -> CFMUTEST.CFMUTEST_CONFIG.30.0.0.X (where X is a lone integer)
+       LATEST    -> CFMUTEST.CFMUTEST_CONFIG.30.0.0.X (Resolves LATEST & LATEST_GOOD)
+       29.0.0.X  -> CFMUTEST.CFMUTEST_CONFIG.29.0.0.X
 
-  -root DIR
-    The superproject. Defaults to $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY.
-""")
+       Any other descriptor in format SYSTEM.SUBSYSTEM.VERSION can be used. When any child closure of CFMUTEST.CFMUTEST_CONFIG is
+       used, the scope of the diff will be limited to that closure. A given baseline build must exist for the dependencies to be
+       resolved by Psort.
+
+    For workspaces:
+       workspace      -> $USERNAME.workspace
+       user.workspace -> user.workspace
+
+       When supplied as a <descriptor>, workspace names are converted to branch names internally when the diff is constructed.
+       This means that {PROG} will only ever be able to present a diff of changes that have been pushed to bitbucket.
+
+  OPTIONS
+    -alternate <directory>
+      Explicitly set the path to an NM repository alternate. Otherwise, NM_REPOSITORY_ALTERNATE will be used. In the absence of
+      both of these, only the simple case of using {PROG} to review the changes of a workspace is supported, as anything else
+      will be extremely slow in workspaces which are shallow-cloned by default.
+
+    -debug
+      Show extra debug output
+
+    -directory <directory> | -d <directory>
+      Put the generated filetrees into <directory>.
+
+    -extcmd <command> | -x <command>
+      Use <command> to perform the directory diff. <command> will be executed as '<command> <left> <right>'
+
+      By default, <command> will open an emacs directory diff.
+
+      If <command> is an empty string (e.g. {PROG} -x ''), no command will be executed and the <left> and <right> directories
+      will be printed to stdout. In this case, the temporary working trees created by {PROG} will not be cleaned up
+      automatically after the program exits.
+
+    -head | -H
+      Compute only the diff of non-checked in changes (Only effective without any <descriptor>, inside a workspace.)
+
+    -name | -n
+      List only the names of changed files, prefixed with SYSTEM.SUBSYSTEM. No working trees are created thus <command> is not
+      executed.
+
+    -revision | -r
+      List only the revisions that would be used to make the comparison. As such, any other -name, -status or -extcmd args are ignored.
+
+    -source
+      Do nothing and return 0, for sourcing the script's functions (kept for interface parity; this is a compiled program, not
+      a shell library -- there is nothing to source).
+
+    -status | -s
+      Same as -name, but prepend a column describing the changes (M=Modified, D=Deleted, ?=Untracked, A=Added, R=Renamed, C=Copied ...)
+
+    -help
+      Show this help and exit.
+
+   EXAMPLES
+
+    {PROG} -x 'diff -r'
+      Generate a unified diff of the current workspace.
+
+    {PROG} -x meld 106 109
+      Open a diff between CFMUTEST.CFMUTEST_CONFIG.XX.0.0.106 and .109 in meld diff tool.
+
+    {PROG} LATEST
+      View the latest changes on the main baseline.
+"""
 
 class Options:
-    """What was asked for on the command line and in the environment."""
-    commits: bool = False
-    root:    Path = Path("")
-    revs:    []str = []
+    alternate:      Path = Path("")
+    debug:          bool = False
+    directory:      Path = Path("/tmp")
+    extcmd:         str = DEFAULT_EXTCMD
+    head_only:      bool = False
+    output:         OutputFormat = OF_ExtCmd
+    revision_only:  bool = False
+    descriptors:    []str = []
 
     def __init__(self, argv: []str):
         var i: int = 0
         while i < len(argv):
             let a: str = argv[i]
             case a:
-                when "-commits": self.commits = True
+                when "-alternate":
+                    i += 1
+                    die("-alternate requires a directory") if i >= len(argv)
+                    self.alternate = Path(argv[i])
+                when "-debug": self.debug = True
+                when "-directory" | "-d":
+                    i += 1
+                    die("-directory requires a directory") if i >= len(argv)
+                    self.directory = Path(argv[i])
+                when "-extcmd" | "-x":
+                    i += 1
+                    die("-extcmd requires a command") if i >= len(argv)
+                    self.extcmd = argv[i]
+                when "-head" | "-H": self.head_only = True
                 when "-help" | "-h":
                     usage()
                     quit(0)
-                when "-root":
-                    i += 1
-                    die("-root requires an argument") if i >= len(argv)
-                    self.root = Path(argv[i])
+                when "-name": self.output = OF_Name
+                when "-revision" | "-r": self.revision_only = True
+                when "-source": quit(0)
+                when "-status" | "-s": self.output = OF_Status
                 when others:
                     die("Unrecognised option " + a) if a.startswith("-")
-                    self.revs.append(a)
+                    self.descriptors.append(a)
             i += 1
-        die("at most two revisions") if len(self.revs) > 2
-        if self.root == "":
-            die("no superproject: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or use -root") if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY == ""
-            self.root = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY)
-        # absolute, so the lines name files Tblame can find from anywhere
-        self.root = Path(os.path.abspath(str(self.root)))
+        die("Too many arguments") if len(self.descriptors) > 2
+        die("Cannot use -head/-H in combination with input descriptors") if self.head_only and len(self.descriptors) > 0
+
+# ---------------------------------------------------------------------------
+# Resolving the descriptors to a per-submodule ref on each side
+# ---------------------------------------------------------------------------
+
+type Resolution_T is record:
+    nmroot:      Path
+    descriptors: []str = []
+    left_refs:   RefMap_T = {:}
+    right_refs:  RefMap_T = {:}
+
+def assert_alternate_available(opt: Options) -> None:
+    die("Expected an alternate to be configured to query the git history (" + PROG + " -help)") if opt.alternate == Path("")
+
+def resolve(opt: Options, cma_root: Path, context_baseline: str, username: str,
+            main_release_version: str, include_integration: bool) -> Resolution_T | !Failure_T:
+    case len(opt.descriptors):
+        when 0:
+            if cma_root != Path(""):
+                warn("Generating diff for current workspace")
+                let nmroot: Path = cma_root
+                var left: RefMap_T = {:}
+                if not opt.head_only:
+                    left = workspace_branch_merge_base_refs(cget_viewspace_name(), nmroot, cma_root, context_baseline, main_release_version, include_integration)
+                return Resolution_T(nmroot=nmroot, left_refs=left)
+            elif context_baseline != "":
+                assert_alternate_available(opt)
+                do:
+                    normal <- normalize_baseline(context_baseline, main_release_version)
+                let previous: str = previous_baseline(normal)
+                die(f"Could not determine previous baseline for {context_baseline}") if previous == ""
+                warn("Generating diff of current context's sources compared with previous.")
+                return Resolution_T(nmroot=opt.alternate, descriptors=[previous, normal],
+                                     left_refs=context_refs(previous), right_refs=context_refs(normal))
+            else:
+                assert_alternate_available(opt)
+                do:
+                    normal <- normalize_baseline("CFMUTEST.CFMUTEST_CONFIG.LATEST", main_release_version)
+                let previous: str = previous_baseline(normal)
+                die(f"Could not determine previous baseline for CFMUTEST.CFMUTEST_CONFIG.LATEST") if previous == ""
+                warn(f"Generating diff for latest baseline {normal}")
+                return Resolution_T(nmroot=opt.alternate, descriptors=[previous, normal],
+                                     left_refs=context_refs(previous), right_refs=context_refs(normal))
+        when 1:
+            assert_alternate_available(opt)
+            do:
+                d <- classify_argument(opt.descriptors[0], username, main_release_version)
+            case d.kind:
+                when AK_Baseline:
+                    let previous: str = previous_baseline(d.value)
+                    warn(f"Generating diff of {previous} with {d.value}")
+                    return Resolution_T(nmroot=opt.alternate, descriptors=[previous, d.value],
+                                         left_refs=context_refs(previous), right_refs=context_refs(d.value))
+                when AK_Workspace:
+                    warn(f"Generating diff of {d.value} with corresponding release branch")
+                    return Resolution_T(nmroot=opt.alternate, descriptors=[d.value, "release_branch"],
+                                         left_refs=workspace_branch_merge_base_refs(d.value, opt.alternate, cma_root, context_baseline, main_release_version, include_integration),
+                                         right_refs=workspace_branch_refs(d.value, opt.alternate))
+        when 2:
+            assert_alternate_available(opt)
+            warn("Generating diff between: ")
+            var refs: []RefMap_T = []
+            for arg in opt.descriptors:
+                do:
+                    d <- classify_argument(arg, username, main_release_version)
+                case d.kind:
+                    when AK_Baseline:
+                        warn(f"  Baseline {d.value}")
+                        refs.append(context_refs(d.value))
+                    when AK_Workspace:
+                        warn(f"  Workspace {d.value}")
+                        refs.append(workspace_branch_refs(d.value, opt.alternate))
+            return Resolution_T(nmroot=opt.alternate, descriptors=opt.descriptors, left_refs=refs[0], right_refs=refs[1])
+        when others:
+            die("Too many arguments")
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def run(opt: Options) -> None | !Failure_T:
-    """Stages 1 and 2: the first failure ends them, and comes back."""
-    do:
-        sp <- open_superproject(opt.root)
-    let rev1: Rev = sp.resolve(opt.revs[0] if len(opt.revs) > 0 else "HEAD^")
-    let rev2: Rev = sp.resolve(opt.revs[1] if len(opt.revs) > 1 else "")
-    do:
-        found <- sp.changes(rev1, rev2)
-    if opt.commits:
-        print_commits(sp, found)
-    else:
-        if rev2.kind != RK_Checkout:
-            warn(f"line numbers are {describe(rev2)}'s; Tblame blames the checkout, so its answers match only where that is what is checked out")
-        print_lines(sp, found)
+def main_release_version() -> str | !Failure_T:
+    let out: str | !ShellFailure_T = shell: readlink -e /cm/ot/CFMUTEST/CFMUTEST_CONFIG.LATEST
+    if out is not ShellFailure_T and out.strip() == /\/CFMUTEST\/CFMUTEST_CONFIG\.(?P<ver>[0-9]+)/:
+        return $+{ver}
+    return Failure_T(message="Could not determine main release version.")
 
-let outcome: None | !Failure_T = run(Options($@))
+def print_revisions(r: Resolution_T):
+    for sm_path in submodule_paths(r.nmroot):
+        let left: Ref_T = r.left_refs[sm_path] if sm_path in r.left_refs else ""
+        let right: Ref_T = r.right_refs[sm_path] if sm_path in r.right_refs else ""
+        continue if left == right
+        print f"{sm_path} {left} {right}"
+
+def go(opt_in: Options) -> None | !Failure_T:
+    var opt: Options = opt_in
+    let cma_root: Path = Path($CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY) if $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY != "" else Path("")
+    let context_baseline: str = $CONTEXT_CM_BASELINE
+    let username: str = $USERNAME if $USERNAME != "" else $USER
+    let include_integration: bool = $INCLUDE_INTEGRATION == "TRUE"
+
+    do:
+        version <- main_release_version()
+
+    if opt.alternate == Path("") and $NM_REPOSITORY_ALTERNATE != "":
+        opt.alternate = Path($NM_REPOSITORY_ALTERNATE)
+
+    do:
+        r <- resolve(opt, cma_root, context_baseline, username, version, include_integration)
+
+    if opt.debug:
+        warn(f"descriptors: {r.descriptors}")
+        warn(f"left_refs:   {r.left_refs}")
+        warn(f"right_refs:  {r.right_refs}")
+
+    if opt.revision_only:
+        print_revisions(r)
+        return
+
+    let is_own_workspace: bool = r.nmroot == cma_root
+
+    # -- every submodule's changed files -------------------------------------
+    let paths: []SubmodulePath = submodule_paths(r.nmroot)
+    var changed: []SubmodulePath = []
+    var entries: {SubmodulePath}[]Entry_T = {:}
+    var diff_commands: [][]str = []
+    for p in paths:
+        let left_ref: str = r.left_refs[p] if p in r.left_refs else ""
+        let right_ref: str = r.right_refs[p] if p in r.right_refs else ""
+        var args: []str = ["-C", str(r.nmroot / p), "diff", "--name-status", left_ref]
+        # "" means the checkout: an omitted ref, to git, is the working
+        # tree -- not a literal empty revision, which it would refuse
+        if right_ref != "":
+            args.append(right_ref)
+        diff_commands.append(args)
+    let diff_results: []RunResult = run_all(diff_commands)
+    for p, dr in zip(paths, diff_results):
+        continue if (r.left_refs[p] if p in r.left_refs else "") == (r.right_refs[p] if p in r.right_refs else "")
+        var untracked: str = ""
+        if is_own_workspace:
+            untracked = git_out(r.nmroot / p, ["ls-files", "-t", "--others", "--exclude-standard"])
+        let found: []Entry_T = name_status_entries(dr.output, untracked)
+        case opt.output:
+            when OF_Name:
+                for e in found:
+                    print f"{p}/{e.name}"
+            when OF_Status:
+                for e in found:
+                    print f"{e.status} {p}/{e.name}"
+            when others: pass
+        if len(found) == 0:
+            warn(f"No changes in {p}")
+        else:
+            warn(f"{len(found)} modified files in {p}")
+            changed.append(p)
+            entries[p] = found
+
+    return if opt.output == OF_Name or opt.output == OF_Status
+
+    # -- the directory trees --------------------------------------------------
+    if not -d opt.directory:
+        do:
+            opt.directory.mkdir() else Failure_T(message=f"Cannot write to directory {opt.directory}")
+    return Failure_T(message=f"Cannot write to directory {opt.directory}") if not -d opt.directory
+
+    var target_dir: Path = opt.directory
+    var left_dir: Path = Path("")
+    var right_dir: Path = Path("")
+    if opt.output == OF_ExtCmd:
+        let made: str = shell_out(f"mktemp -p {shquote(str(opt.directory))} -d {PROG}.XXX")
+        return Failure_T(message=f"could not make a temporary directory in {opt.directory}") if made == ""
+        target_dir = Path(made)
+        do:
+            (target_dir / "left").mkdir() else Failure_T(message=f"could not create {target_dir / 'left'}")
+            (target_dir / "right").mkdir() else Failure_T(message=f"could not create {target_dir / 'right'}")
+        left_dir = target_dir / "left"
+        right_dir = target_dir / "right"
+
+    var commands: []str = []
+    for p in changed:
+        let files: []str = modified_files(entries[p])
+        var left_ref: str = r.left_refs[p] if p in r.left_refs else ""
+        let right_ref: str = r.right_refs[p] if p in r.right_refs else ""
+        if opt.head_only:
+            left_ref = "HEAD"
+        commands.append(checkout_command(left_ref, left_dir / p, files, r.nmroot, p, cma_root))
+        commands.append(checkout_command(right_ref, right_dir / p, files, r.nmroot, p, cma_root))
+    for cr in run_shell_all(commands):
+        if cr.code != 0:
+            warn(cr.output)
+            warn(cr.stderr)
+
+    if opt.extcmd != "":
+        shell: eval {!opt.extcmd} {!left_dir} {!right_dir}
+        shell: rm -rf {!target_dir}
+    else:
+        print str(left_dir)
+        print str(right_dir)
+
+let outcome: None | !Failure_T = go(Options($@))
 if outcome is Failure_T:
     die(outcome.message)

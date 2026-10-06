@@ -35,8 +35,9 @@ TOOLS/TCHECK/*_gen.py
 # Tblame, the same again.
 TOOLS/TBLAME/Tblame
 TOOLS/TBLAME/*_gen.py
-# Tdiff, likewise.
+# Tdiff and Tdiff_lines, likewise.
 TOOLS/TDIFF/Tdiff
+TOOLS/TDIFF/Tdiff_lines
 TOOLS/TDIFF/*_gen.py
 # rsync_time_machine and lolcate, likewise.
 TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine

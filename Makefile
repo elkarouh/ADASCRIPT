@@ -398,6 +398,7 @@ TOOL_PROGRAMS := \
     TOOLS/TCHECK/Tcheckout.ady \
     TOOLS/TBLAME/Tblame.ady \
     TOOLS/TDIFF/Tdiff.ady \
+    TOOLS/TDIFF/Tdiff_lines.ady \
     TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady \
     TOOLS/LOLCATE/lolcate.ady \
     TOOLS/C500/c500.ady \
@@ -1130,20 +1131,36 @@ test: compile
 	@$(TBDIR)/test/run_tests.sh $(TBDIR)/test/tblame_py
 	@rm -f $(TBDIR)/test/Tblame_py.py $(TBDIR)/test/tblame_py
 
-	@# Tdiff against a superproject the test builds: four submodules, two
-	@# workspace baselines, NM baseline tags inside each submodule -- and
-	@# piped into Tblame, built the same way.
-	@echo "=== Tdiff against a superproject built for the test ==="
-	@$(TDDIR)/test/run_tests.sh $(TDDIR)/Tdiff $(TBDIR)/Tblame
-	@echo "=== Tdiff, the same checks on the Python backend ==="
-	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TDDIR)/Tdiff.ady > $(TDDIR)/test/Tdiff_py.py
+	@# Tdiff_lines against a superproject the test builds: four submodules,
+	@# two workspace baselines, NM baseline tags inside each submodule --
+	@# and piped into Tblame, built the same way.
+	@echo "=== Tdiff_lines against a superproject built for the test ==="
+	@$(TDDIR)/test/run_lines_tests.sh $(TDDIR)/Tdiff_lines $(TBDIR)/Tblame
+	@echo "=== Tdiff_lines, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TDDIR)/Tdiff_lines.ady > $(TDDIR)/test/Tdiff_lines_py.py
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TBDIR)/Tblame.ady > $(TDDIR)/test/Tblame_py.py
-	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tdiff_py.py" \
-	    > $(TDDIR)/test/tdiff_py && chmod +x $(TDDIR)/test/tdiff_py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tdiff_lines_py.py" \
+	    > $(TDDIR)/test/tdiff_lines_py && chmod +x $(TDDIR)/test/tdiff_lines_py
 	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tblame_py.py" \
 	    > $(TDDIR)/test/tblame_py && chmod +x $(TDDIR)/test/tblame_py
-	@$(TDDIR)/test/run_tests.sh $(TDDIR)/test/tdiff_py $(TDDIR)/test/tblame_py
-	@rm -f $(TDDIR)/test/Tdiff_py.py $(TDDIR)/test/tdiff_py $(TDDIR)/test/Tblame_py.py $(TDDIR)/test/tblame_py
+	@$(TDDIR)/test/run_lines_tests.sh $(TDDIR)/test/tdiff_lines_py $(TDDIR)/test/tblame_py
+	@rm -f $(TDDIR)/test/Tdiff_lines_py.py $(TDDIR)/test/tdiff_lines_py $(TDDIR)/test/Tblame_py.py $(TDDIR)/test/tblame_py
+
+	@# Tdiff against an alternate the test builds: two submodules, tagged
+	@# baselines, Psort/list_subsystems/list_cfmutest_subsystems/readlink
+	@# stubbed on PATH -- baseline resolution, -name/-status/-revision and
+	@# the sparse-checkout directory diff, including a rename. Workspace
+	@# descriptor resolution (Clsworkspace, Cget_viewspace_name, the
+	@# merge-base/integration-branch logic) has no fixture here; it was
+	@# checked by hand against the real Tdiff.ksh instead (TDIFF/README.md).
+	@echo "=== Tdiff against a superproject built for the test ==="
+	@$(TDDIR)/test/run_tests.sh $(TDDIR)/Tdiff
+	@echo "=== Tdiff, the same checks on the Python backend ==="
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TDDIR)/Tdiff.ady > $(TDDIR)/test/Tdiff_py.py
+	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tdiff_py.py" \
+	    > $(TDDIR)/test/tdiff_py && chmod +x $(TDDIR)/test/tdiff_py
+	@$(TDDIR)/test/run_tests.sh $(TDDIR)/test/tdiff_py
+	@rm -f $(TDDIR)/test/Tdiff_py.py $(TDDIR)/test/tdiff_py
 
 	@# Tcheck_tact -focus changes against a CM tree the test builds: a TACT
 	@# baseline, the CFMUTEST changes report Psort points it at, a view build.
