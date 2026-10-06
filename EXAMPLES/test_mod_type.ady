@@ -3,9 +3,13 @@
 # always 0 .. 360. Making one, and + - * on it, wrap, with the sign of the modulus as
 # Python's % has it. A mod type goes up to its parent as it is.
 
+const CAPACITY: int = 8
+const FULL_TURN: float = 360.0
 type Slot_T is mod 8
 type Degrees_T is distinct float
 type Bearing_T is Degrees_T mod 360
+type Index_T is mod CAPACITY
+type Heading_T is Degrees_T mod FULL_TURN
 
 def next_slot(s: Slot_T) -> Slot_T:
     return s + Slot_T(1)
@@ -39,5 +43,9 @@ def main():
     print(f"{b / Bearing_T(10.0):.1f}")
     print(int(b < c), int(b == Bearing_T(350.0)))
     print(f"{b:.2f}")
+    var head: Index_T = Index_T(CAPACITY - 1)   # a const is a modulus too
+    head = head + Index_T(2)
+    print(int(head), int(Index_T(-1)))
+    show(Heading_T(-90.0))
 
 main()

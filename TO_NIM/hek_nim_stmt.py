@@ -2603,12 +2603,11 @@ def _mod_type_nim(name, params, indent):
     is `to_N(x)`, and `+`, `-`, `*` and `/` by a plain number give an N that is
     wrapped again. Beside its parent P, `+` and `-` give an N, and a converter
     takes an N up to P."""
-    from ady_declarations import distinct_kind, parse_mod
+    from ady_declarations import distinct_kind, parse_mod, mod_modulus
     parent, mod = parse_mod(ParserState.ady_type_decls[name])
     kind = distinct_kind(name)
     base = _DISTINCT_BASE_NIM[kind]
-    if kind == "float" and not any(c in mod for c in ".eE"):
-        mod += ".0"
+    mod = mod_modulus(mod, kind)
     ParserState.symbol_table.add(name, name, "type")
     _top = ParserState.symbol_table.depth() <= 2
     _e = "*" if getattr(ParserState, 'export_symbols', False) and _top else ""

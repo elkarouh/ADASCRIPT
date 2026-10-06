@@ -514,6 +514,7 @@ let turned: Bearing_T = b + Degrees_T(30.0)   # 380 wraps to 20.0
 let wide: Degrees_T = b                    # up to the parent: no cast
 ```
 
+- The modulus may be a `const`, declared with its type: `const CAPACITY: int = 100` and `type Index_T is mod CAPACITY` make a ring-buffer index, `buffer[int(i)]` with `i = i + Index_T(1)` coming round to 0 after 99. An `int` const makes a whole-number type and a `float` one a float type; the name of anything else is refused.
 - The value wraps with the sign of the modulus, as Python's `%` does, on both backends: `Slot_T(-1)` is 7, not -1.
 - `Slot_T` has no parent: it is a type of its own, and a plain `int` is given to it by `Slot_T(n)`. `Bearing_T` has `Degrees_T`: a `Bearing_T` goes up to it without a cast, `bearing + degrees` is a `Bearing_T`, and a `Degrees_T` comes down only by `Bearing_T(d)`, which wraps it. A literal takes the declared type, wrapped: `let c: Bearing_T = 400.0` is 40.0.
 - `*` by a plain number gives the same type, wrapped; `/` by a plain number does too, and `Bearing_T / Bearing_T` is a plain ratio. Comparisons compare the wrapped values.

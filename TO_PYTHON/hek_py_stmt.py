@@ -1397,11 +1397,10 @@ def _py_mod_class(name, indent):
     """`type N is mod M` / `type N is P mod M` -> a class whose every value is
     wrapped into 0 .. M by `%`, which takes the sign of M on both backends. The
     operators give an N again, so a sum or a scaled N wraps; N / N is a ratio."""
-    from ady_declarations import distinct_kind, parse_mod
+    from ady_declarations import distinct_kind, parse_mod, mod_modulus
     parent, mod = parse_mod(ParserState.ady_type_decls[name])
     base = _DISTINCT_BASES.get(distinct_kind(name), "float")
-    if base == "float" and not any(c in mod for c in ".eE"):
-        mod += ".0"
+    mod = mod_modulus(mod, base)
     _note_alias(name, name)
     ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
     ind = _ind(indent)

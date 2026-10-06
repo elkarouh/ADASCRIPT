@@ -348,7 +348,7 @@ def translate(code):
     from ady_declarations import narrowed_types, mod_types
     _PS_rp.narrowed_types = narrowed_types(_PS_rp.ady_type_decls)
     _PS_rp.mod_types = mod_types(_PS_rp.ady_type_decls)
-    _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls)
+    _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls, consts=scan_consts(code))
     _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
     # a generic function must be called with its type arguments written out
     from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls

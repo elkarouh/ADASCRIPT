@@ -684,7 +684,16 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
                 f"declared `type {bad} is distinct float`")
     for name, (parent, modulus) in mod_types(decls).items():
         if parent is None:
-            out[name] = "float" if any(c in modulus for c in ".eE") else "int"
+            if modulus[0].isalpha() or modulus[0] == "_":
+                # a const: its declared type says what the type is made of
+                ctype = consts.get(modulus)
+                if ctype not in ("int", "float"):
+                    raise SyntaxError(
+                        f"type {name} is mod {modulus}: {modulus} must be a const "
+                        f"declared int or float, as in `const {modulus}: int = 8`")
+                out[name] = ctype
+            else:
+                out[name] = "float" if any(c in modulus for c in ".eE") else "int"
     narrowed = narrowed_types(decls)
     pending = dict(narrowed)
     while pending:
@@ -748,20 +757,31 @@ def narrowed_types(decls):
 # range checks and refuses; a mod type wraps, with the sign of the modulus, as
 # Python's `%` does. It is a type of its own, as a narrowed one is.
 
-_MOD = _re_du.compile(r"^(?:([A-Za-z_]\w*)[ \t]+)?mod[ \t]+(\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][-+]?\d+)?)$")
+_MOD = _re_du.compile(r"^(?:([A-Za-z_]\w*)[ \t]+)?mod[ \t]+(\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][-+]?\d+)?|[A-Za-z_]\w*)$")
 
 
 def parse_mod(rhs):
     """(parent or None, modulus) for a declaration `type N is mod M` or `type
     N is P mod M`, else None."""
     m = _MOD.match((rhs or "").strip())
-    return (m.group(1), m.group(2).replace("_", "")) if m else None
+    if not m:
+        return None
+    mod = m.group(2)
+    return (m.group(1), mod if mod[0].isalpha() or mod[0] == "_" else mod.replace("_", ""))
 
 
 def mod_types(decls):
     """{name: (parent or None, modulus text)} for every mod type in DECLS."""
     return {n: p for n, r in decls.items() if r is not None
             for p in [parse_mod(r)] if p}
+
+
+def mod_modulus(modulus, kind):
+    """The modulus as Nim and Python write it: a number gets a `.0` for a
+    float kind, a const's name stands as it is."""
+    if kind == "float" and modulus[:1].isdigit() and not any(c in modulus for c in ".eE"):
+        return modulus + ".0"
+    return modulus
 
 
 def mod_type_of(name):

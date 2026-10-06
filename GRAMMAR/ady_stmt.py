@@ -816,9 +816,9 @@ narrowed_def = IDENTIFIER + literal("range") + float_bound + (RANGE_EXCL_OP | RA
 # `P mod M`, a distinct type P that wraps, `type Bearing_T is Degrees_T mod 360`.
 # See ady_declarations.mod_types.
 mod_def = fw("mod_def")
-mod_def = ikw("mod") + NUMBER
+mod_def = ikw("mod") + (NUMBER | IDENTIFIER)
 parent_mod_def = fw("parent_mod_def")
-parent_mod_def = IDENTIFIER + ikw("mod") + NUMBER
+parent_mod_def = IDENTIFIER + ikw("mod") + (NUMBER | IDENTIFIER)
 # derived_def: A / B, A * B -- a unit made from two distinct ones, whose
 # arithmetic is then defined: `type Velocity_T is Distance_T / Duration_T`
 # says a Distance_T over a Duration_T is a Velocity_T, and so a Velocity_T
