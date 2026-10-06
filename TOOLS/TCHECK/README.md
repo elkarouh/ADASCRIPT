@@ -540,3 +540,18 @@ ady2nim c Tcheckout.ady
 - `Treport.ksh` — `list_changes` and `list_detailed_changes` of `Tcheck_tact.ady`, translated
   back to ksh
 - `Tcheckout.ady` — translated from `Tcheckout.ksh`
+
+## TODO
+
+- [ ] Tcheckout always clones a submodule straight from Bitbucket over the
+      network, which is exactly what makes its cache-mode checkouts fragile
+      off-VPN or with stale credentials. `Tblame.ady` already has the fix for
+      this elsewhere in this toolset: an `-alternate`/`$NM_REPOSITORY_ALTERNATE`
+      local object store it adds to a repository (`add_alternate`), so reads
+      are served locally instead of over the network. `TOOL/COMMON_UTILS`'s own
+      `Tdiff.ksh` goes further and clones *from* such an alternate directly
+      (`git clone --shared --sparse --no-checkout $NMROOT/<sm_path> <dest>`,
+      its `sparse_checkout_subsystem`) rather than from Bitbucket at all.
+      Tcheckout should accept the same `-alternate`/`$NM_REPOSITORY_ALTERNATE`
+      and, when one is configured, clone/fetch against it instead of (or
+      before falling back to) the network.
