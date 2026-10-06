@@ -931,6 +931,13 @@ conversion:
 
 <!-- from: EXAMPLES/test_narrowed_type.ady -->
 ```python
+type Degrees_T is distinct float
+type Latitude_T is Degrees_T range -90 .. 90
+type Longitude_T is Degrees_T range -180 .. 180
+```
+
+<!-- from: EXAMPLES/test_narrowed_type.ady -->
+```python
     let lat: Latitude_T = Latitude_T(45.5)
     let wide: Degrees_T = lat                  # up to the parent: no cast
     let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
@@ -941,6 +948,12 @@ Latitude and longitude are siblings, so a point built with the two swapped does
 not compile, which two plain `Degrees_T` would have let through. A bearing is
 the other case: 360 is north again, so the type wraps rather than refuses, and
 the `modulo` helper that every bearing calculation carries is gone:
+
+<!-- from: EXAMPLES/test_mod_type.ady -->
+```python
+type Degrees_T is distinct float
+type Bearing_T is Degrees_T mod 360
+```
 
 <!-- from: EXAMPLES/test_mod_type.ady -->
 ```python
