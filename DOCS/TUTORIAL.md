@@ -523,7 +523,7 @@ type Index_T is mod CAPACITY
 
 class Ring:
     var items: [Index_T]int
-    var head: Index_T = Index_T(0)
+    var head: Index_T                  # a mod type starts at 0
     var count: int = 0
 
     def push(self, x: int):

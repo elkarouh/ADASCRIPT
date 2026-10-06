@@ -1419,7 +1419,7 @@ def _py_mod_class(name, indent):
     ops = ["__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__"]
     lines = [f"{ind}class {name}({parent or base}):",
              f"{ind}    __slots__ = ()",
-             f"{ind}    def __new__(cls, x):",
+             f"{ind}    def __new__(cls, x=0):",
              f"{ind}        return super().__new__(cls, {base}(x) % {mod})"]
     for op in ops:
         lines.append(f"{ind}    def {op}(self, o): return {name}({base}.{op}(self, o))")
