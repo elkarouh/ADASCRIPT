@@ -256,6 +256,11 @@ def to_py(self, prec=None):
     return ""
 
 
+@method(distinct_float_range_def)
+def to_py(self, prec=None):
+    return "float"
+
+
 @method(distinct_def)
 def to_py(self, prec=None):
     """distinct_def: 'distinct' type_annotation -> the base type; the class
@@ -1284,6 +1289,14 @@ def to_py(self, indent=0):
         _note_alias(name, name)
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
         return f"{_ind(indent)}class {name}({base}): __slots__ = ()"
+    if rhs_type == 'distinct_float_range_def':
+        fr = rhs.nodes[0]
+        lo = "".join(str(getattr(n, "node", n)) for n in (fr.nodes[2].nodes if getattr(fr.nodes[2], "nodes", None) else [fr.nodes[2]]))
+        hi = "".join(str(getattr(n, "node", n)) for n in (fr.nodes[4].nodes if getattr(fr.nodes[4], "nodes", None) else [fr.nodes[4]]))
+        ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
+        _note_alias(name, name)
+        ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+        return f"{_ind(indent)}class {name}(float): __slots__ = ()  # range {lo} .. {hi}"
     if rhs_type == 'float_range_def':
         lo = str(rhs.nodes[2].node)
         hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]

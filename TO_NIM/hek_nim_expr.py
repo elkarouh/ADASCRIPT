@@ -476,6 +476,36 @@ def _ensure_numfmt_helper():
         ParserState.nim_top_decls = decls
 
 
+_SLICE_HELPER = """\
+proc adascriptBounds(n, lo, hi: int): (int, int) =
+  ## Python's slice bounds: a negative index counts from the end, and one past either
+  ## end is the end, so a slice is never an error and never longer than what is there.
+  var a = lo
+  var b = hi
+  if a < 0: a = max(a + n, 0) else: a = min(a, n)
+  if b < 0: b = max(b + n, 0) else: b = min(b, n)
+  (a, b)
+
+proc adascriptSliceStr(s: string, lo, hi: int): string =
+  ## Python's s[lo:hi].
+  let (a, b) = adascriptBounds(s.len, lo, hi)
+  if a >= b: "" else: s[a ..< b]
+
+proc adascriptSlice[T](s: openArray[T], lo, hi: int): seq[T] =
+  ## Python's xs[lo:hi].
+  let (a, b) = adascriptBounds(s.len, lo, hi)
+  if a >= b: @[] else: @(s[a ..< b])
+"""
+
+
+def _ensure_slice_helper():
+    """Add the slice helpers the first time a Python slice of a string or list is emitted."""
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptBounds" in d for d in decls):
+        decls.append(_SLICE_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _AFFIX_HELPER = """\
 proc adascriptRemovePrefix(s: string, prefix: string): string =
   ## Python's str.removeprefix: S without PREFIX when it starts with it, else
@@ -525,7 +555,7 @@ def _get_regex_info(node):
 # operand a string" -- to choose `&` over `+`, mostly -- and each had its own
 # list; this is the one they share.
 _STRING_RETURNING_CALLS = ("adascriptEnvOr(", "getEnv(", "paramStr(",
-                           "getAppFilename(")
+                           "getAppFilename(", "adascriptSliceStr(")
 
 # ...and the one bundled proc whose result is an Option. Kept beside the list
 # above so the two stay together, since both answer "what does this emitted
@@ -3649,7 +3679,33 @@ def to_nim(self, prec=None):
                     is_str = result.startswith('"') or result.startswith("f\"")
                 inner = tr.nodes[0]  # the slice node inside []
                 inner_name = type(inner).__name__
-                if is_str and inner_name in ("slice_2", "slice_1_stop", "slice_1_start", "slice_bare"):
+                # A slice of a string or a list is Python's: a negative index counts from the
+                # end and one past the end is the end. Nim's own `s[a..<b]` raises, and
+                # substr takes neither. Only where the operand is known to be one.
+                # the slice node is wrapped: slices -> slice_full -> slice_2, say
+                while (type(inner).__name__ in ("slices", "slice_full")
+                       and len(getattr(inner, "nodes", ())) == 1):
+                    inner = inner.nodes[0]
+                inner_name = type(inner).__name__
+                _sl_t = _nim_expr_type(result) or ""
+                if sym and not _sl_t:
+                    _sl_t = sym.get("type") or ""
+                import re as _re_sl
+                _sl_t = _re_sl.sub(r"^var\s+", "", _sl_t)
+                if ((is_str or _sl_t in ("string", "str") or _sl_t.startswith(("seq[", "array[", "openArray[")))
+                        and inner_name in ("slice_2", "slice_1_stop", "slice_1_start", "slice_bare", "V_COLON")):
+                    _ensure_slice_helper()
+                    if inner_name == "slice_2":
+                        _lo, _hi = inner.nodes[0].to_nim(), inner.nodes[2].to_nim()
+                    elif inner_name == "slice_1_stop":
+                        _lo, _hi = "0", inner.nodes[1].to_nim()
+                    elif inner_name == "slice_1_start":
+                        _lo, _hi = inner.nodes[0].to_nim(), "high(int)"
+                    else:
+                        _lo, _hi = "0", "high(int)"
+                    _str_slice = is_str or _sl_t in ("string", "str")
+                    result = f"adascriptSlice{'Str' if _str_slice else ''}({result}, {_lo}, {_hi})"
+                elif is_str and inner_name in ("slice_2", "slice_1_stop", "slice_1_start", "slice_bare"):
                     if inner_name == "slice_2":
                         lo = inner.nodes[0].to_nim()
                         hi = inner.nodes[2].to_nim()

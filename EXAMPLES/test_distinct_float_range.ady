@@ -1,0 +1,17 @@
+# `distinct float range lo .. hi`: a float with a stated range that is also a unit of its
+# own, so a latitude and a longitude do not mix (refused in the Makefile). The bounds may be
+# negative. A plain `float range` stays an alias of float.
+type Latitude_T  is distinct float range -90.0 .. 90.0
+type Longitude_T is distinct float range -180.0 .. 180.0
+type Share_T     is float range 0.0 .. 1.0
+
+def span(lat: Latitude_T, lon: Longitude_T) -> float:
+    return float(lat) + float(lon)
+
+var lat: Latitude_T = -45.5
+let lon: Longitude_T = 120.0
+lat += 10.0
+print float(lat), float(lon), span(lat, lon)
+let s: Share_T = 0.25
+let x: float = s + 0.5
+print x

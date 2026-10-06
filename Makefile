@@ -150,6 +150,8 @@ STANDALONE := \
     test_option_literals.ady \
     test_fstring_flags.ady \
     test_seq_field_concat.ady \
+    test_distinct_float_range.ady \
+    test_slice_semantics.ady \
     test_money.ady \
     test_scaled_units.ady \
     test_cents.ady \
@@ -298,7 +300,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_money \
+    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_distinct_float_range test_slice_semantics test_money \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat
@@ -869,7 +871,7 @@ test: compile
 	@# an operator between two typed names -- and leaves a wrong argument to
 	@# Nim, whose signature it does not record.
 	@echo "=== distinct types do not mix, both backends ==="
-	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\ntype Dollar_T is distinct float\ntype Euro_T is distinct float\ntype FX_T is Euro_T / Dollar_T\nvar usd: Dollar_T = 10.0\nvar eur: Euro_T = 9.0\nvar fx: FX_T = 0.9\nvar n: int = 3\n' \
+	@printf 'type Velocity_T is distinct float\ntype Distance_T is distinct float\ntype Duration_T is distinct float\ntype Rate_T is Distance_T / Duration_T\ndef fly(v: Velocity_T) -> Velocity_T:\n    return v\nvar v: Velocity_T = 1.0\nvar d: Distance_T = 2.0\nvar t: Duration_T = 1.0\nvar f: float = 3.0\ntype Dollar_T is distinct float\ntype Euro_T is distinct float\ntype FX_T is Euro_T / Dollar_T\nvar usd: Dollar_T = 10.0\nvar eur: Euro_T = 9.0\nvar fx: FX_T = 0.9\nvar n: int = 3\ntype Lat_T is distinct float range -90.0 .. 90.0\ntype Lon_T is distinct float range -180.0 .. 180.0\nvar lat: Lat_T = 10.0\nvar lon: Lon_T = 20.0\n' \
 	    > $(TMPDIR)/ady_distinct_hdr.ady
 	@# `*` and `/` scale, so the product of two units is refused unless a
 	@# derived unit says what it makes; a unit made of two others gives its
@@ -891,7 +893,10 @@ test: compile
 	          "15:py:dollars squared:let e: Dollar_T = usd * usd" \
 	          "16:py:a rate applied to the wrong currency:let e: Euro_T = eur * fx" \
 	          "17:py:a rate applied the wrong way round:let e: Euro_T = usd / fx" \
-	          "18:py:a plain number as money:let e: Dollar_T = f"; do \
+	          "18:py:a plain number as money:let e: Dollar_T = f" \
+	          "19:py:a latitude given a longitude:let e: Lat_T = lon" \
+	          "20:py:a latitude plus a longitude:let e: Lat_T = lat + lon" \
+	          "21:py:a latitude given a plain number:let e: Lat_T = f"; do \
 	    n=$${c%%:*}; rest=$${c#*:}; who=$${rest%%:*}; rest=$${rest#*:}; \
 	    what=$${rest%%:*}; line=$${rest#*:}; \
 	    { cat $(TMPDIR)/ady_distinct_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_distinct_$$n.ady; \

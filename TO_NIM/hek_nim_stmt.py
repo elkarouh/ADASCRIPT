@@ -171,9 +171,34 @@ def _float_range_assert(varname, type_name):
     lo = info['First']
     hi = info['Last']
     return (
-        f'assert {varname} >= {lo} and {varname} <= {hi}, '
+        f'assert float({varname}) >= {lo} and float({varname}) <= {hi}, '
         f'"{type_name} value " & ${varname} & " out of range [{lo}, {hi}]"'
     )
+
+
+def _unslice_target(lhs):
+    """`xs[a:b] = ...` assigns to a slice: Nim's own `xs[a ..< b]`, not the clamped copy
+    that `adascriptSlice(xs, a, b)` reads."""
+    _pre = next((p for p in ("adascriptSliceStr(", "adascriptSlice(") if lhs.startswith(p)), None)
+    if not (_pre and lhs.endswith(")")):
+        return lhs
+    inner = lhs[len(_pre):-1]
+    args, depth, cur = [], 0, ""
+    for ch in inner:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            args.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    args.append(cur.strip())
+    if len(args) != 3:
+        return lhs
+    base, lo, hi = args
+    return f"{base}[{lo} ..^ 1]" if hi == "high(int)" else f"{base}[{lo} ..< {hi}]"
 
 
 # --- assignment ---
@@ -200,7 +225,8 @@ def to_nim(self):
                 parts.append(_rhs)
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
-    lhs = parts[0]
+    lhs = _unslice_target(parts[0])
+    parts[0] = lhs
     # `(a, b) = f()` is the same statement as `a, b = f()`: a name already
     # declared outside this block is assigned, not declared again.
     if lhs.startswith("(") and lhs.endswith(")") and len(parts) == 2:
@@ -2159,11 +2185,28 @@ def to_nim(self):
     return self.nodes[1].to_nim()
 
 
+def _float_bound_text(node):
+    """The text of a float range's bound -- `0.0`, or `-90.0`."""
+    if hasattr(node, "nodes") and node.nodes:
+        return "".join(_float_bound_text(n) for n in node.nodes)
+    return str(getattr(node, "node", node))
+
+
+@method(float_bound)
+def to_nim(self):
+    return _float_bound_text(self)
+
+
+@method(distinct_float_range_def)
+def to_nim(self, prec=None):
+    return ""
+
+
 @method(float_range_def)
 def to_nim(self):
-    """float_range_def: 'float' 'range' NUMBER ('..'|'..<') NUMBER -> lo..hi as strings"""
-    lo = str(self.nodes[2].node)  # nodes[0]=float, nodes[1]=range, nodes[2]=NUMBER
-    hi = str(self.nodes[4].node)  # nodes[3]=RANGE_OP, nodes[4]=NUMBER
+    """float_range_def: 'float' 'range' BOUND ('..'|'..<') BOUND -> lo..hi as strings"""
+    lo = _float_bound_text(self.nodes[2])  # nodes[0]=float, nodes[1]=range, nodes[2]=bound
+    hi = _float_bound_text(self.nodes[4])  # nodes[3]=RANGE_OP, nodes[4]=bound
     return f"{lo}..{hi}"  # sentinel used by type_stmt to generate float type alias
 
 
@@ -2338,12 +2381,20 @@ def to_nim(self, indent=0):
     elif rhs_type == "derived_def":
         return _derived_type_nim(name, params, indent)
     elif rhs_type == "float_range_def":
-        lo = str(rhs.nodes[2].node)
-        hi = str(rhs.nodes[4].node)  # [float, range, lo, range_op, hi]
+        lo = _float_bound_text(rhs.nodes[2])
+        hi = _float_bound_text(rhs.nodes[4])  # [float, range, lo, range_op, hi]
         ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
         ParserState.symbol_table.add(name, "float", "type")
         _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
         return f"{_ind(indent)}type {name}{_exp}{params} = float"
+    elif rhs_type == "distinct_float_range_def":
+        fr = rhs.nodes[0]
+        lo = _float_bound_text(fr.nodes[2])
+        hi = _float_bound_text(fr.nodes[4])
+        ParserState.tick_types[name] = {"First": lo, "Last": hi, "is_float_range": True}
+        # a unit of its own: it does not mix with a float, or with another range
+        lines, _ = _distinct_lines(name, params, "float", "float", indent)
+        return "\n".join(lines)
     value = rhs.to_nim()
     # Named tuple: (field: Type, ...) -> tuple[field: Type, ...]
     import re as _re_nt

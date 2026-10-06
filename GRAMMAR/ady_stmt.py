@@ -793,12 +793,19 @@ constrained_subrange_def = fw("constrained_subrange_def")
 constrained_subrange_def = IDENTIFIER + subrange_def
 # float_range_def: float range LO .. HI  (e.g. float range 0.0 .. 100.0)
 float_range_def = fw("float_range_def")
-float_range_def = literal("float") + literal("range") + NUMBER + (RANGE_EXCL_OP | RANGE_OP) + NUMBER
+float_bound = fw("float_bound")
+float_bound = (V_MINUS + NUMBER) | NUMBER
+float_range_def = literal("float") + literal("range") + float_bound + (RANGE_EXCL_OP | RANGE_OP) + float_bound
 # distinct_def: distinct T -- a new type with T's values and operations,
 # which does not mix with T or with any other type made from it
 # (`type Velocity_T is distinct float`). See distinct_types().
 distinct_def = fw("distinct_def")
 distinct_def = ikw("distinct") + type_annotation
+# distinct_float_range_def: distinct float range LO .. HI -- a float range that
+# is a unit of its own, so a Latitude_T and a Longitude_T do not mix. A plain
+# `float range` stays an alias of float.
+distinct_float_range_def = fw("distinct_float_range_def")
+distinct_float_range_def = ikw("distinct") + float_range_def
 # derived_def: A / B, A * B -- a unit made from two distinct ones, whose
 # arithmetic is then defined: `type Velocity_T is Distance_T / Duration_T`
 # says a Distance_T over a Duration_T is a Velocity_T, and so a Velocity_T
@@ -824,7 +831,7 @@ elem_type.parsers.insert(0, subrange_def)
 from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_float_range_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

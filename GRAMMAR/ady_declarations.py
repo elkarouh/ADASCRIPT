@@ -649,7 +649,9 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
     scaled = scaled or {}
     consts = consts or {}
     for name, rhs in decls.items():
-        if rhs is not None and rhs.strip().startswith("distinct "):
+        if rhs is not None and _re_du.match(r"distinct\s+float\s+range\b", rhs.strip()):
+            out[name] = "float"          # a distinct float range is a unit of its own
+        elif rhs is not None and rhs.strip().startswith("distinct "):
             out[name] = _decl_kind(rhs, decls, frozenset({name}))
     derived = {n: parse_derived(r) for n, r in decls.items()
                if r is not None and n not in scaled and parse_derived(r) is not None}

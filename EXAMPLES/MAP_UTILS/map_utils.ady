@@ -71,10 +71,9 @@ type Accel_T        is Speed_T / Duration_T      # metres per second squared
 type Bearing_T   is float range 0.0 .. 360.0
 
 # Latitude and longitude are different types, so that GeoPoint(lon, lat) is a
-# compile error; what each may be (90 and 180 either way) is checked where a
-# GeoPoint is made.
-type Latitude_T  is distinct float
-type Longitude_T is distinct float
+# compile error, and each says what it may be: 90 and 180 either way.
+type Latitude_T  is distinct float range -90.0 .. 90.0
+type Longitude_T is distinct float range -180.0 .. 180.0
 
 # Which of the two a coordinate is: it decides the width of a DMS string.
 type Axis_T is enum LATITUDE, LONGITUDE
@@ -104,14 +103,6 @@ def geo_fail(kind: GeoErr_T, detail: str) -> GeoFailure_T:
 def modulo(x: float, period: float) -> float:
     """Python's x % period: the result has the sign of PERIOD."""
     x - period * floor(x / period)
-
-def slice_of(text: str, start: int, stop: int) -> str:
-    """text[start:stop] as Python has it: a slice that runs past the end is
-    shorter, or empty.  On Nim it raises."""
-    let n: int = len(text)
-    if start >= n:
-        return ""
-    text[start:min(n, stop)]
 
 # ---------------------------------------------------------------------------
 # WGS-84 ellipsoid parameters
@@ -191,7 +182,7 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let lon2: float = lon1_rad + big_l
     let az2: float = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
 
-    Direct_T(Latitude_T(float(Degrees_T(Radians_T(lat2)))), Degrees_T(Radians_T(lon2)), modulo(float(Degrees_T(Radians_T(az2))) + 360.0, 360.0))
+    Direct_T(Latitude_T(float(Degrees_T(Radians_T(lat2)))), Degrees_T(Radians_T(lon2)), Bearing_T(modulo(float(Degrees_T(Radians_T(az2))) + 360.0, 360.0)))
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +251,7 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
         az1 += 360
     let az2: float = float(Degrees_T(Radians_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))))) + 180
 
-    Inverse_T(Meters_T(dist_m), az1, az2)
+    Inverse_T(Meters_T(dist_m), Bearing_T(az1), Bearing_T(az2))
 
 
 # ---------------------------------------------------------------------------
@@ -322,9 +313,9 @@ def dms2dec(pos_in_dms: str, axis: Axis_T) -> Degrees_T | !GeoFailure_T:
     let pos: str = pos_in_dms[:len(pos_in_dms) - 1]
     let letter: str = pos_in_dms[len(pos_in_dms) - 1:]
     let width: int = DEGREE_DIGITS[axis]
-    let degrees_part: str = slice_of(pos, 0, width)
-    let minutes_part: str = slice_of(pos, width, width + 2)
-    var seconds_part: str = slice_of(pos, width + 2, len(pos))
+    let degrees_part: str = pos[0:width]
+    let minutes_part: str = pos[width:width + 2]
+    var seconds_part: str = pos[width + 2:]
 
     # Normalise the seconds: put a decimal point in, with at least one digit on
     # each side, so the parse never sees a bare '.'.
@@ -698,7 +689,7 @@ class GeoVector:
     def phase(self) -> Bearing_T:
         """Bearing, clockwise from north, in [0, 360)."""
         let around: Degrees_T = self.heading()
-        modulo(float(around), 360.0)
+        Bearing_T(modulo(float(around), 360.0))
 
     def east_km(self) -> Kilometers_T:
         Kilometers_T(self.east)

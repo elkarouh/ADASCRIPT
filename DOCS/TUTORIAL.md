@@ -1175,7 +1175,7 @@ type Age is int range 0..100   # same as: type Age is 0..100
 
 ### Float subranges
 
-For floating-point ranges use `float range lo .. hi`:
+For floating-point ranges use `float range lo .. hi` (the bounds may be negative). It is a float with a stated range, and still mixes with floats. Write `distinct float range lo .. hi` when it should also be a unit of its own, as `Latitude_T` (`-90.0 .. 90.0`) and `Longitude_T` (`-180.0 .. 180.0`) are: they do not mix with each other or with a float.
 
 ```python
 type Temperature is float range 0.0 .. 100.0
