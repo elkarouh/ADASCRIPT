@@ -1,0 +1,27 @@
+# A ring buffer: the index is a mod type, so it comes round by itself, and the
+# array is a fixed-size field, zeroed on both backends.
+
+const CAPACITY: int = 4
+type Index_T is mod CAPACITY
+
+class Ring:
+    var items: [CAPACITY]int
+    var head: Index_T = Index_T(0)
+    var count: int = 0
+
+    def push(self, x: int):
+        self.items[int(self.head)] = x
+        self.head = self.head + Index_T(1)
+        if self.count < CAPACITY:
+            self.count += 1
+
+    def latest(self, back: int) -> int:
+        return self.items[int(self.head - Index_T(1 + back))]
+
+def main():
+    var r: Ring = Ring()
+    for x in 1 .. 6:
+        r.push(x * 10)
+    print(r.count, r.latest(0), r.latest(1), r.latest(3))
+
+main()

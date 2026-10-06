@@ -30,10 +30,10 @@ Sequences (dynamic)
 
 Fixed-size arrays
 -----------------
-    [<N>]<type>                     tuple[<type>, ...]
+    [<N>]<type>                     _Fixed[<N>, <type>]
 
-    [5]int                          tuple[int, ...]
-    [3][]int                        tuple[list[int], ...]
+    [5]int                          _Fixed[5, int]
+    [3][]int                        _Fixed[3, list[int]]
 
 Dictionaries
 ------------
@@ -519,7 +519,8 @@ def to_py(self, prec=None):
 @method(array_type)
 def to_py(self, prec=None):
     """array_type: '[' INTEGER ']' type_annotation -> Nim: array[N, T]"""
-    return f"tuple[{self.nodes[1].to_py()}, ...]"
+    _ensure_fixed_alias()
+    return f"_Fixed[{self.nodes[0].to_py()}, {self.nodes[1].to_py()}]"
 
 
 @method(openarray_type)
@@ -570,6 +571,24 @@ class _EnumArray(dict):
 '''
 
 
+_FIXED_ALIAS = '''\
+class _Fixed:
+    """[N]T: a fixed-length array, a list of N slots here. The annotation
+    carries N so that a `var a: [N]T` can be given its N zeroes."""
+    def __class_getitem__(cls, item):
+        return cls
+'''
+
+
+def _ensure_fixed_alias():
+    """Define _Fixed the first time a [N]T is named."""
+    from hek_parsec import ParserState
+    decls = getattr(ParserState, 'py_top_decls', [])
+    if not any("class _Fixed:" in d for d in decls):
+        decls.append(_FIXED_ALIAS)
+        ParserState.py_top_decls = decls
+
+
 def _ensure_enum_array_alias():
     """Define _EnumArray the first time an [E]T is named or built."""
     from hek_parsec import ParserState
@@ -606,7 +625,8 @@ def to_py(self, prec=None):
     _info = getattr(ParserState, "tick_types", {}).get(idx)
     _is_ordinal_domain = _info is not None or idx in ("str", "bool")
     if not _is_ordinal_domain:
-        return f"tuple[{elem}, ...]"
+        _ensure_fixed_alias()
+        return f"_Fixed[{idx}, {elem}]"
     # Named rather than `dict[...]` so the annotation still says which of the
     # two it is: `[E]T` and `{E}T` both rendered as dict[E, T], and the zero
     # value below has nothing else to go on.
@@ -791,12 +811,12 @@ if __name__ == "__main__":
         ("[]str", "list[str]"),
         ("[][]int", "list[list[int]]"),
         # --- Fixed array ---
-        ("[5]int", "tuple[int, ...]"),
+        ("[5]int", "_Fixed[5, int]"),
         ("[*]int", "Sequence[int]"),
-        ("[3]str", "tuple[str, ...]"),
+        ("[3]str", "_Fixed[3, str]"),
         # --- Nested containers ---
-        ("[3][]int", "tuple[list[int], ...]"),
-        ("[][5]int", "list[tuple[int, ...]]"),
+        ("[3][]int", "_Fixed[3, list[int]]"),
+        ("[][5]int", "list[_Fixed[5, int]]"),
         # --- Dict ---
         ("{str}int", "dict[str, int]"),
         ("{int}str", "dict[int, str]"),

@@ -554,6 +554,18 @@ def _zero_value(annotation, _depth=0):
     # backend. An empty _EnumArray raised KeyError on the first read here.
     # A generator rather than a literal, so a mutable zero -- [] for an
     # [E][]T -- is a fresh one per member and not one list shared by all.
+    if ann.startswith("_Fixed[") and ann.endswith("]"):
+        # [N]T: N slots, each with the zero of T, a fresh one apiece
+        inner = ann[len("_Fixed["):-1]
+        depth = 0
+        for _i, _ch in enumerate(inner):
+            if _ch in "[(":
+                depth += 1
+            elif _ch in "])":
+                depth -= 1
+            elif _ch == "," and depth == 0:
+                n, elem = inner[:_i].strip(), inner[_i + 1:].strip()
+                return f"[{_zero_value(elem, _depth + 1)} for _ in range({n})]"
     if ann.startswith("_EnumArray[") and ann.endswith("]"):
         inner = ann[len("_EnumArray["):-1]
         depth = 0

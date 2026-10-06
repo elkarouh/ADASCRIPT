@@ -94,6 +94,8 @@ def _check(arg, typ, mode):
         t = "list"
     elif t.startswith("dict[") or t.startswith("{"):
         t = "dict"
+    elif t.startswith("_Fixed["):
+        t = "list"
     elif t.startswith("tuple[") or t.startswith("("):
         t = "tuple"
     if not _IDENT.match(t) or (len(t) == 1 and t.isupper()):

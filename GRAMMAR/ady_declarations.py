@@ -30,10 +30,10 @@ Sequences (dynamic)
 
 Fixed-size arrays
 -----------------
-    [<N>]<type>                     tuple[<type>, ...]
+    [<N>]<type>                     _Fixed[<N>, <type>]
 
-    [5]int                          tuple[int, ...]
-    [3][]int                        tuple[list[int], ...]
+    [5]int                          _Fixed[5, int]
+    [3][]int                        _Fixed[3, list[int]]
 
 Open arrays (read-only, accepts seq or array)
 ---------------------------------------------
@@ -372,7 +372,7 @@ tuple_type = empty_tuple_type | singleton_tuple_type | multi_tuple_type
 # []int             -> list[int]
 seq_type = LBRACKET + RBRACKET + elem_type
 
-# [5]int            -> tuple[int, ...]
+# [5]int            -> _Fixed[5, int]
 array_type = LBRACKET + INTEGER + RBRACKET + elem_type
 
 # [*]int            -> Sequence[int]  (unconstrained/open array)
