@@ -208,6 +208,32 @@ callables in fields — `geo_server.ady`'s `Region` holds its predicate that
 way. For user-defined callable *objects* (`__call__`, `__ror__`), see
 Chapter 9.
 
+## 8.6 Overloads
+
+A name may be defined more than once if the parameters differ in their types,
+and the call picks the def from the types of its arguments, as in Ada and in
+Nim. A distinct type is its own type here: a `Duration_T` finds the overload
+that names it, not the one that names `float`.
+
+```python
+# EXAMPLES/test_overload_types.ady
+def describe(n: int) -> str:
+    return f"int {n}"
+
+def describe(s: str) -> str:
+    return f"str {s}"
+
+def describe(d: Duration_T) -> str:
+    return f"duration {float(d):.1f}"
+```
+
+This is what lets an operator work on more than one type, and what lets a
+constructor take more than one shape (Chapter 9). Nim overloads natively; on
+Python the defs are renamed and a def of the name dispatches on the types of
+the arguments. A literal is no argument of any type, so one given to an
+overloaded name is refused on Nim and written with its type, `T(x)`. Two defs
+with the same parameter types are one name defined twice, and refused.
+
 ---
 
 *Next: [Chapter 9 — Classes, Generics, and Inheritance](09-classes-and-generics.md)*

@@ -717,6 +717,15 @@ same kind as its operands: `float` for a quotient, `float` or `int` for a
 product. `type Area_T is Length_T * Length_T` and `type Total_T is Cents_T *
 Qty_T` work the same way.
 
+**Narrowed and wrapping units.** `type Latitude_T is Degrees_T range -90 .. 90`
+is a unit narrowed to a range: it goes up to `Degrees_T` with no cast, comes
+down only by a checked `Latitude_T(d)`, and is refused beside a sibling such as
+`Longitude_T`. `type Bearing_T is Degrees_T mod 360` wraps where a range would
+refuse (`Bearing_T(-10.0)` is 350.0), and `type Slot_T is mod 8` does the same
+for a whole number. A name may be defined more than once for different
+parameter types, constructors included, so `v * t` and `v * 2.0` are both
+written as they read. The tutorial has examples of each.
+
 **A unit made from a unit.** Energy is mass times velocity times velocity,
 but a declaration combines two units, and the product evaluated first --
 mass times velocity -- would have no name. So name it: momentum is a real

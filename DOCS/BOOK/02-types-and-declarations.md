@@ -597,6 +597,57 @@ every base unit for you. Here every combination you use has a name — a
 reader can search for it, and it appears in the signature — and the
 compiler's messages talk about `Velocity_T`, not about exponents.
 
+### Narrowing a unit to a range
+
+A unit can be narrowed to part of its values, as an Ada subtype is. The
+parent comes first: `type Latitude_T is Degrees_T range -90 .. 90`. The result
+is a type of its own with a relation to its parent. It goes *up* with no cast,
+it comes *down* only by an explicit conversion that checks the range, and it
+is not a sibling of another type narrowed from the same parent:
+
+```python
+# EXAMPLES/test_narrowed_type.ady
+type Degrees_T is distinct float
+type Latitude_T is Degrees_T range -90 .. 90
+type Longitude_T is Degrees_T range -180 .. 180
+```
+
+```python
+# EXAMPLES/test_narrowed_type.ady
+    let lat: Latitude_T = Latitude_T(45.5)
+    let wide: Degrees_T = lat                  # up to the parent: no cast
+    let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
+    let back: Latitude_T = Latitude_T(sum)     # down: checked
+```
+
+`Latitude_T(95.0)` raises `AssertionError` (Nim: `AssertionDefect`), in a
+release build too. `let l: Latitude_T = lon` is refused, so
+`GeoPoint(lon, lat)` with the arguments swapped does not compile — the
+mistake that two plain `Degrees_T` would let through. The bounds may be
+negative on an `int range` as on a float one: `type Sense_T is int range -1 .. 1`.
+
+### A unit that wraps: `mod`
+
+Where a range refuses a value outside it, a mod type brings it back in.
+`type Slot_T is mod 8` is a whole number that is always 0 .. 7, and
+`type Bearing_T is Degrees_T mod 360` is a `Degrees_T` that is always 0 .. 360:
+a compass bearing, an angle, a clock hand, a ring-buffer index. Making one, and
+`+`, `-` and `*` on it, wrap, with the sign of the modulus as Python's `%` has
+it, on both backends:
+
+```python
+# EXAMPLES/test_mod_type.ady
+    let b: Bearing_T = Bearing_T(-10.0)
+    show(b)                                    # up to the parent, no cast
+    show(turn(b, Degrees_T(30.0)))
+    show(turn(Bearing_T(350.0), Degrees_T(20.0)))
+```
+
+That prints 350.0, 20.0 and 10.0: `-10` is 350, `350 + 30` wraps to 20, and
+`350 + 20` to 10. A mod type goes up to its parent as a narrowed one does, and
+`bearing + degrees` is a bearing, so the `modulo(x, 360.0)` helper that
+every bearing calculation used to carry is gone from `map_geo.ady`.
+
 Use `distinct` for units and for identifiers of different things that share
 a representation. Keep an alias where the value should mix with its base.
 

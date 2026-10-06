@@ -104,6 +104,24 @@ if track_position in Annulus:
     ...
 ```
 
+Operators and constructors overload on the types of their arguments too
+(§8.6). `Velocity` has a `__mul__` that scales by a number and another that
+multiplies by a `Duration_T`, so `v * 2.0` and `v * t` are both written as
+they read; `a * b` of two vectors is the dot product. A constructor overloads
+the same way: `Vector(length, angle)` and `Vector(x, y)` are two `__init__`s,
+told apart by the types of the arguments:
+
+```python
+# EXAMPLES/test_overload_types.ady
+    def __init__(self, a: Distance_T, b: Distance_T) -> None:
+        self.a = a
+        self.b = b
+
+    def __init__(self, a: Distance_T, v: Speed_T, t: Duration_T) -> None:
+        self.a = a
+        self.b = Distance_T(float(v) * float(t))
+```
+
 ## 9.4 Inheritance and `@virtual`
 
 Standard Python inheritance works, including `super().__init__(...)`.

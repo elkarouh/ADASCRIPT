@@ -924,6 +924,39 @@ backend cannot always see, so `ady2py` refuses the declaration with a message
 saying the program is built by `ady2nim` only, and `make test` checks that it
 does. Plain `distinct` units and derived units such as `Knots_T` work on both.
 
+A unit can also be narrowed to a range, and a range can be made to wrap. A
+latitude is a `Degrees_T` that is only ever between -90 and 90, and it goes up
+to a `Degrees_T` with no cast but comes down only through a checked
+conversion:
+
+<!-- from: EXAMPLES/test_narrowed_type.ady -->
+```python
+    let lat: Latitude_T = Latitude_T(45.5)
+    let wide: Degrees_T = lat                  # up to the parent: no cast
+    let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
+    let back: Latitude_T = Latitude_T(sum)     # down: checked
+```
+
+Latitude and longitude are siblings, so a point built with the two swapped does
+not compile, which two plain `Degrees_T` would have let through. A bearing is
+the other case: 360 is north again, so the type wraps rather than refuses, and
+the `modulo` helper that every bearing calculation carries is gone:
+
+<!-- from: EXAMPLES/test_mod_type.ady -->
+```python
+    let b: Bearing_T = Bearing_T(-10.0)
+    show(b)                                    # up to the parent, no cast
+    show(turn(b, Degrees_T(30.0)))
+    show(turn(Bearing_T(350.0), Degrees_T(20.0)))
+```
+
+That prints 350.0, 20.0 and 10.0, on both backends, with the sign of the
+divisor that Python's `%` has. The operators read as the mathematics does,
+because a name may be defined more than once for different parameter types:
+`velocity * t` is a distance and `velocity * 2.0` a velocity, and `a * b` of two
+vectors is their dot product, where the code would otherwise carry `over`,
+`per` and `dot_product` helpers.
+
 Not every name should be distinct. Conversions are work, and a value that
 is meant to mix with its base — an epoch plus a number of seconds — is
 better as an alias. Make distinct the quantities whose mixing would be a
