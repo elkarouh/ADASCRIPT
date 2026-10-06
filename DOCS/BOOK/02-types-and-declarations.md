@@ -648,6 +648,34 @@ That prints 350.0, 20.0 and 10.0: `-10` is 350, `350 + 30` wraps to 20, and
 `bearing + degrees` is a bearing, so the `modulo(x, 360.0)` helper that
 every bearing calculation used to carry is gone from `map_geo.ady`.
 
+A mod type of whole numbers is also an array index type, which is what a ring
+buffer wants: the index comes round by itself, and the array has exactly as
+many slots as the index has values.
+
+```python
+# EXAMPLES/test_ring_buffer.ady
+const CAPACITY: int = 4
+type Index_T is mod CAPACITY
+type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY, one more than an index
+
+class Ring:
+    var items: [Index_T]int
+    var head: Index_T                  # a mod type starts at 0
+    var count: Count_T
+
+    def push(self, x: int):
+        self.head += 1                 # a literal is an Index_T; it comes round at CAPACITY
+        self.items[self.head] = x      # head is the newest slot
+        if self.count < CAPACITY:
+            self.count += 1
+
+    def latest(self, back: Index_T) -> int:
+        return self.items[self.head - back]         # back = 0 is the newest
+```
+
+The count is a range, not a mod type: it runs from 0 to `CAPACITY`, one more
+value than an index, and a full buffer must not wrap to empty.
+
 Use `distinct` for units and for identifiers of different things that share
 a representation. Keep an alias where the value should mix with its base.
 

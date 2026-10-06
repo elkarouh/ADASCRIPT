@@ -970,6 +970,36 @@ because a name may be defined more than once for different parameter types:
 vectors is their dot product, where the code would otherwise carry `over`,
 `per` and `dot_product` helpers.
 
+The same type earns its keep where an index must come round. A ring buffer's
+index is a mod type, and it is also the type of the array it indexes, so the
+capacity is written once and there is no `% CAPACITY` and no cast anywhere in
+the class:
+
+<!-- from: EXAMPLES/test_ring_buffer.ady -->
+```python
+const CAPACITY: int = 4
+type Index_T is mod CAPACITY
+type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY, one more than an index
+
+class Ring:
+    var items: [Index_T]int
+    var head: Index_T                  # a mod type starts at 0
+    var count: Count_T
+
+    def push(self, x: int):
+        self.head += 1                 # a literal is an Index_T; it comes round at CAPACITY
+        self.items[self.head] = x      # head is the newest slot
+        if self.count < CAPACITY:
+            self.count += 1
+
+    def latest(self, back: Index_T) -> int:
+        return self.items[self.head - back]         # back = 0 is the newest
+```
+
+The count is a range type, not a mod type: it runs from 0 to the capacity,
+one value more than an index has, and a full buffer must not wrap to empty. The
+types say which is which.
+
 Not every name should be distinct. Conversions are work, and a value that
 is meant to mix with its base — an epoch plus a number of seconds — is
 better as an alias. Make distinct the quantities whose mixing would be a
