@@ -201,6 +201,12 @@ def to_nim(self):
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
     lhs = parts[0]
+    # `(a, b) = f()` is the same statement as `a, b = f()`: a name already
+    # declared outside this block is assigned, not declared again.
+    if lhs.startswith("(") and lhs.endswith(")") and len(parts) == 2:
+        _inner_targets = _split_top_level_commas(lhs[1:-1])
+        if len(_inner_targets) > 1:
+            lhs = lhs[1:-1]
     # Tuple assignment to existing lvalues: a[i], a[j] = a[j], a[i]
     # If every target is a subscript or already-declared name (not a new decl),
     # emit swap() for the two-element swap pattern or temp-var expansion otherwise.

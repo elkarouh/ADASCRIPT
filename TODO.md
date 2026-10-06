@@ -702,14 +702,8 @@ and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a funct
 
 Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
 
-- [ ] **`(a, b) = f()` inside a block, onto variables declared outside it, makes new
-      variables on Nim** (`var (a, b) = ...`) and leaves the outer ones as they were.
-      Python is right. Silent: guidance aimed at a target of zeros and the lander hit the
-      Moon at 300 m/s. Worth refusing at the least, better assigning.
 - [ ] `(self.r, self.v) = f()` is not read as a write to `self`: the method keeps a
       plain `self` and Nim refuses it.
-- [ ] methods in a `record` body are dropped without a word on both backends (operators
-      on a record exist only as top-level procs on Nim). Refuse them, or support them.
 - [ ] Nim has no mapping for `math.atan`, `atan2`, `asin`, `acos` (`arctan`, `arctan2`, ...),
       and `math.log(x)` with one argument (Nim's `log` wants a base; `ln`).
 - [ ] f-string format specs on Nim: no `,` flag (`{x:,.0f}`), and `{x:+.0f}` leaves a

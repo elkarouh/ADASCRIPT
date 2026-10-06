@@ -1,0 +1,16 @@
+# `(a, b) = f()` inside a block assigns the names declared outside it;
+# on Nim it declared new ones there and left the outer ones as they were.
+def pair(n: int) -> (int, float):
+    return (n, 2.5 * float(n))
+
+var a: int = 0
+var b: float = 0.0
+if True:
+    (a, b) = pair(2)
+print a, b
+for i in range(1, 3):
+    (a, b) = pair(i)
+print a, b
+if True:
+    a, b = pair(7)
+print a, b

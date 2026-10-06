@@ -723,6 +723,8 @@ def translate(code, export_symbols=False):
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
     from ady_stmt import scan_union_aliases, scan_type_decls
+    from ady_stmt import check_record_bodies
+    check_record_bodies(code)
     ParserState.union_aliases = scan_union_aliases(code)
     ParserState.ady_type_decls = scan_type_decls(code)
     from ady_declarations import distinct_types, unit_relations, scaled_units

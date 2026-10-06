@@ -309,6 +309,8 @@ def translate(code):
     _PS_rp.py_type_names |= BUILTIN_FAILURE_TYPES
     _PS_rp.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
     from ady_stmt import scan_union_aliases, scan_type_decls
+    from ady_stmt import check_record_bodies
+    check_record_bodies(code)
     _PS_rp.union_aliases = scan_union_aliases(code)
     _PS_rp.ady_type_decls = scan_type_decls(code)
     from ady_stmt import scan_record_fields

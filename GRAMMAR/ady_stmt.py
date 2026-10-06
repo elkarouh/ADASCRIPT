@@ -452,6 +452,29 @@ def scan_record_fields(code):
     return out
 
 
+def check_record_bodies(code):
+    """A record holds fields, not methods: a `def` in its body was dropped
+    without a word. Say so, where it is, and what to write instead."""
+    lines = code.split("\n")
+    for m in _RECORD_HEAD.finditer(code):
+        i = code.count("\n", 0, m.start()) + 1
+        while i < len(lines):
+            line = lines[i]
+            if line.strip() == "" or line.strip().startswith("#"):
+                i += 1
+                continue
+            if not line.startswith((" ", "\t")):
+                break
+            word = line.strip().split("(")[0].split()
+            if word and word[0] in ("def", "class", "async") or line.strip().startswith("@"):
+                raise SyntaxError(
+                    f"line {i + 1}: a record has fields only, so `{line.strip()}` "
+                    f"cannot be in the body of '{m.group(1)}' -- write it as a "
+                    f"function outside the record that takes a '{m.group(1)}' "
+                    f"(or make '{m.group(1)}' a class)")
+            i += 1
+
+
 _GENERIC_DEF = _re_dup.compile(
     r"^def[ \t]+([A-Za-z_]\w*)[ \t]*\[([^\]\n]*)\][ \t]*\(", _re_dup.MULTILINE)
 _PLAIN_DEF = _re_dup.compile(

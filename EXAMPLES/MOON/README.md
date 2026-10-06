@@ -61,14 +61,14 @@ So `r + v.over(dt)` checks, and `r + v` does not.
 
 The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.ady`); the rest have a workaround in the source, marked where it is.
 
-* **`(a, b) = f()` inside a block, onto variables declared outside it, makes new variables on
-  Nim** (`var (a, b) = ...`) and leaves the outer ones as they were. Silent: guidance flew to a
-  target of zeros and the lander hit the Moon at 300 m/s. Worked around by returning a record and
-  assigning (`Guidance.compute`'s `aim`).
+* **`(a, b) = f()` inside a block, onto variables declared outside it, made new variables on
+  Nim** (`var (a, b) = ...`) and left the outer ones as they were. Silent: guidance flew to a
+  target of zeros and the lander hit the Moon at 300 m/s. Fixed in the transpiler; the source still
+  returns a record and assigns (`Guidance.compute`'s `aim`).
 * **`(self.r, self.v) = f()` is not seen as a write to `self`**: the method gets a plain `self` and
   Nim refuses to compile it (`Navigation.propagate`).
-* **Methods in a `record` body are dropped without a word**, on both backends. The first version's
-  vector had to be a class for that reason.
+* **Methods in a `record` body were dropped without a word**, on both backends; both now refuse
+  them and say to write a function or use a class. The first version's vector had to be a class.
 * **Classes are values on Nim, references on Python** (chapter 13): `Rng` and `Spacecraft` are shared,
   so they are `@virtual`.
 * **Units**: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time), so a cube is taken
