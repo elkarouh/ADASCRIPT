@@ -697,3 +697,37 @@ In a plain function `if n is Failure_T: return 1` then `return n` works (it is
 emitted `n.value`). In a method it is emitted `is_err(n)` and `return n`,
 and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a function
 (`count_of`) for this.
+
+## Found porting EXAMPLES/MOON/moon_sim.ady
+
+Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
+
+- [ ] **`(a, b) = f()` inside a block, onto variables declared outside it, makes new
+      variables on Nim** (`var (a, b) = ...`) and leaves the outer ones as they were.
+      Python is right. Silent: guidance aimed at a target of zeros and the lander hit the
+      Moon at 300 m/s. Worth refusing at the least, better assigning.
+- [ ] `(self.r, self.v) = f()` is not read as a write to `self`: the method keeps a
+      plain `self` and Nim refuses it.
+- [ ] methods in a `record` body are dropped without a word on both backends (operators
+      on a record exist only as top-level procs on Nim). Refuse them, or support them.
+- [ ] Nim has no mapping for `math.atan`, `atan2`, `asin`, `acos` (`arctan`, `arctan2`, ...),
+      and `math.log(x)` with one argument (Nim's `log` wants a base; `ln`).
+- [ ] f-string format specs on Nim: no `,` flag (`{x:,.0f}`), and `{x:+.0f}` leaves a
+      stray `.` (`-456396.`).
+- [ ] `\n` inside an f-string is not an escape on Nim (`fmt"..."` is raw).
+- [ ] a call on a `PyObject` *variable* standing alone (`ax.plot(...)`) is not discarded
+      on Nim ("has to be used"); only a call on a pyimported module is.
+- [ ] `Record(a, b, None)` with a positional `None` for a `?T` field emits `nil` on Nim;
+      named (`hit=None`) is right.
+- [ ] `opt == value` / `opt != value` on a `?Enum` does not compile on Nim, and `a + b` on
+      two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
+- [ ] `min(a, b, c)` with three arguments does not compile on Nim.
+- [ ] `raise NotImplementedError()` does not compile on Nim (`newException` needs a message).
+- [ ] units: a literal beside `>` on a distinct type in a conditional expression
+      (`x if force > 0.0 else y`) came out as `0.0 < force` and was refused; a bare `0.0`
+      in a returned tuple `(Vector, Force_T)` is not converted; and on Python the unit
+      check does not know a record field's type (`st.isp * G0` taken for an `Accel_T`).
+- [ ] `from MAP_UTILS/map_utils import` works from a sibling directory only because the
+      parent is searched; map_utils itself is Nim-only (`from math nimport`), so
+      anything built on it is too. A `Vector` for velocities and accelerations (m/s,
+      m/s^2) does not exist: moon_sim carries them in a `Vector` by convention.
