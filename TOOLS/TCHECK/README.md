@@ -307,9 +307,10 @@ NET DIFF    : #emacs:(call-process-shell-command "git -C /…/NM/IFPS/CUA_IDL di
 Without a workspace (`$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY` unset), the
 links work in a cache instead, `$TCHECK_NM_CACHE` (default
 `~/Downloads/.cache/tcheck/NM`): the first click clones the file's
-repository from Bitbucket into it, without its files' contents, and every click fetches the
+repository from Bitbucket into it in full, and every later click fetches the
 commits and tags compared when the cache lacks them -- it keeps up with
-Bitbucket:
+Bitbucket. The clone is full (not a partial, blob-less one) so that
+comparing any two revisions later needs no further network access.
 
 ```
 DIFF        : #emacs:(when (eql 0 (shell-command "Tcheckout -cache /home/me/Downloads/.cache/tcheck/NM -rev c3fb81031 -rev c3fb81031^ TACT/UIF/sources/b.adb")) (vc-version-ediff (list "/home/me/Downloads/.cache/tcheck/NM/TACT/UIF/sources/b.adb") "c3fb81031^" "c3fb81031"))
@@ -412,10 +413,10 @@ Tcheckout TACT/UIF/sources/b.adb
 ```
 
 The workspace is `-root`, or `$CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY`. The
-submodule is registered (`git submodule init`), cloned into the workspace's
-`.git/modules/<name>` as `git submodule` would, but without its files'
-contents (`--filter=blob:none`: git fetches a version only when a diff reads
-it), then checked out at the commit the superproject records, sparsely: this
+submodule is registered (`git submodule init`), cloned in full into the
+workspace's `.git/modules/<name>` as `git submodule` would -- every blob of
+its history, so a later diff against any revision needs no further fetch --
+then checked out at the commit the superproject records, sparsely: this
 file alone. A submodule checked out sparsely gets the file added; one checked
 out in full is never moved. `git submodule status`, `update` and `deinit`
 treat the result as any other submodule. Needs git 2.25 or later.
@@ -441,9 +442,6 @@ to set; to clone from another server, have git rewrite the URLs, once:
 ```
 git config --global url.<the other server's prefix>.insteadOf https://bitbucket.eurocontrol.int/scm/nm/
 ```
-
-A server that does not filter gives a full clone (git warns "filtering not
-recognized by server"): slower, the same result.
 
 `-cache DIR` is for no workspace at all -- the diff links of a report made
 outside one:

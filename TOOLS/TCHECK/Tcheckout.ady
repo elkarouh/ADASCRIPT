@@ -16,10 +16,11 @@ const HELP: str = """\
 The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
 $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY):
 
-- not checked out: registered (git submodule init), cloned without its
-  files' contents (--filter=blob:none: git fetches a version only when
-  something reads it) and without a checkout, then checked out at the
-  commit the superproject records -- this file alone (sparse checkout).
+- not checked out: registered (git submodule init), cloned in full --
+  every blob of its history, so later diffs against any revision (Treport's
+  links, Thist's full history) need no further fetch -- without a
+  checkout, then checked out at the commit the superproject records --
+  this file alone (sparse checkout).
 - checked out sparsely, without this file: the file is added.
 - checked out with this file: nothing to do.
 
@@ -41,18 +42,16 @@ The clone uses the URL git has for the submodule -- .gitmodules, or
 submodule.<name>.url in the workspace's .git/config; a relative one
 (../tact.uif.git) resolved against the workspace's own remote -- and
 whatever `url.<base>.insteadOf` rewrites it to: that is how to clone from
-another server. A server that does not filter (git warns "filtering not
-recognized by server") gives a full clone: slower, the same result.
+another server.
 
 -cache: no workspace -- the diff links of a report made outside one; the
 cache is DIR, else, with no workspace either, $TCHECK_NM_CACHE (default
-~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, from
-Bitbucket, into DIR/<system>/<subsystem> -- without its files' contents,
-as above -- the file checked out at the first REV that has it; the REVs,
-those the diffs compare, are fetched when missing: the cache keeps up
-with Bitbucket. The repository is $TCHECK_NM_URL/<system>.<subsystem>.git,
-in lower case; TCHECK_NM_URL defaults to
-https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
+~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, in
+full, from Bitbucket, into DIR/<system>/<subsystem> -- the file checked
+out at the first REV that has it; a REV not yet in the clone's history is
+fetched: the cache keeps up with Bitbucket. The repository is
+$TCHECK_NM_URL/<system>.<subsystem>.git, in lower case; TCHECK_NM_URL
+defaults to https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
 -l and -u work there too; -u of a repository's last file removes the
 repository from the cache.
 
@@ -241,11 +240,11 @@ class Workspace(Checkouts):
             print f"{PROG}: reusing {gitdir}"     # cloned once, then deinitialised
             shell: printf 'gitdir: %s\n' {!gitdir} > {!work}/.git
         else:
-            print f"{PROG}: cloning {f.sub} from {url} (no contents until needed)"
+            print f"{PROG}: cloning {f.sub} from {url} (full history, so later diffs need no further fetch)"
             run(["rmdir", str(work)])
             do:
                 gitdir.parent.mkdir() else Failure_T(message=f"could not create {gitdir.parent}")
-            let rc: int = shell: git clone --filter=blob:none --no-checkout --separate-git-dir={!gitdir} {!url} {!work}
+            let rc: int = shell: git clone --no-checkout --separate-git-dir={!gitdir} {!url} {!work}
             return Failure_T(message=f"could not clone {url}") if rc != 0
         # the work tree, from the repository -- relative, as git submodule
         # writes it: .git/modules/<name> back up to the workspace, down to SUB
@@ -295,8 +294,8 @@ class Cache(Checkouts):
             do:
                 work.mkdir() else Failure_T(message=f"could not create {work}")
             return Failure_T(message=f"{work} is not empty: not cloning into it") if not empty_dir(work)
-            print f"{PROG}: cloning {url} into {work} (no contents until needed)"
-            let rc: int = shell: git clone -q --filter=blob:none --no-checkout {!url} {!work}
+            print f"{PROG}: cloning {url} into {work} (full history, so later diffs need no further fetch)"
+            let rc: int = shell: git clone -q --no-checkout {!url} {!work}
             return Failure_T(message=f"could not clone {url}") if rc != 0
             do:
                 git_checked(work, ["sparse-checkout", "set", "--no-cone", "/" + f.file], "could not set up the sparse checkout")

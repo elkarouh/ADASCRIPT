@@ -14,10 +14,11 @@
 # The file's submodule, <system>/<subsystem>, of the NM workspace (-root, or
 # $CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY):
 #
-# - not checked out: registered (git submodule init), cloned without its
-#   files' contents (--filter=blob:none: git fetches a version only when
-#   something reads it) and without a checkout, then checked out at the
-#   commit the superproject records -- this file alone (sparse checkout).
+# - not checked out: registered (git submodule init), cloned in full --
+#   every blob of its history, so later diffs against any revision (Treport's
+#   links, Thist's full history) need no further fetch -- without a
+#   checkout, then checked out at the commit the superproject records --
+#   this file alone (sparse checkout).
 # - checked out sparsely, without this file: the file is added.
 # - checked out with this file: nothing to do.
 #
@@ -39,18 +40,16 @@
 # submodule.<name>.url in the workspace's .git/config; a relative one
 # (../tact.uif.git) resolved against the workspace's own remote -- and
 # whatever `url.<base>.insteadOf` rewrites it to: that is how to clone from
-# another server. A server that does not filter (git warns "filtering not
-# recognized by server") gives a full clone: slower, the same result.
+# another server.
 #
 # -cache: no workspace -- the diff links of a report made outside one; the
 # cache is DIR, else, with no workspace either, $TCHECK_NM_CACHE (default
-# ~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, from
-# Bitbucket, into DIR/<system>/<subsystem> -- without its files' contents,
-# as above -- the file checked out at the first REV that has it; the REVs,
-# those the diffs compare, are fetched when missing: the cache keeps up
-# with Bitbucket. The repository is $TCHECK_NM_URL/<system>.<subsystem>.git,
-# in lower case; TCHECK_NM_URL defaults to
-# https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
+# ~/Downloads/.cache/tcheck/NM). The file's repository is cloned alone, in
+# full, from Bitbucket, into DIR/<system>/<subsystem> -- the file checked
+# out at the first REV that has it; a REV not yet in the clone's history is
+# fetched: the cache keeps up with Bitbucket. The repository is
+# $TCHECK_NM_URL/<system>.<subsystem>.git, in lower case; TCHECK_NM_URL
+# defaults to https://mirror-cma.bitbucket.cfmu.corp.eurocontrol.int/scm/nm.
 # -l and -u work there too; -u of a repository's last file removes the
 # repository from the cache.
 #
@@ -142,8 +141,8 @@ if [[ -n "${cache}" ]]; then
   if [[ ! -e "${work}/.git" ]]; then
     mkdir -p "${work}" || die "could not create ${work}"
     [[ -z "$(ls -A "${work}")" ]] || die "${work} is not empty: not cloning into it"
-    echo "${PROG}: cloning ${url} into ${work} (no contents until needed)"
-    git clone -q --filter=blob:none --no-checkout "${url}" "${work}" || die "could not clone ${url}"
+    echo "${PROG}: cloning ${url} into ${work} (full history, so later diffs need no further fetch)"
+    git clone -q --no-checkout "${url}" "${work}" || die "could not clone ${url}"
     git -C "${work}" sparse-checkout set --no-cone "/${file}" || die "could not set up the sparse checkout"
     fresh=1
   fi
@@ -267,10 +266,10 @@ if [[ -d "${gitdir}" ]]; then
   echo "${PROG}: reusing ${gitdir}"
   printf 'gitdir: %s\n' "${gitdir}" > "${work}/.git"
 else
-  echo "${PROG}: cloning ${sub} from ${url} (no contents until needed)"
+  echo "${PROG}: cloning ${sub} from ${url} (full history, so later diffs need no further fetch)"
   rmdir "${work}"
   mkdir -p "${gitdir%/*}" || die "could not create ${gitdir%/*}"
-  git clone --filter=blob:none --no-checkout --separate-git-dir="${gitdir}" "${url}" "${work}" ||
+  git clone --no-checkout --separate-git-dir="${gitdir}" "${url}" "${work}" ||
     die "could not clone ${url}"
 fi
 # where the work tree is, from the repository -- relative, as git submodule

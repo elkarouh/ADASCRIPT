@@ -64,11 +64,11 @@ check "the file, checked out"                        "b 2" "$(cat "$sub/sources/
 check "...alone"                                     no "$([ -e "$sub/sources/a.adb" ] && echo yes || echo no)"
 check "...at the commit the superproject records"    "$recorded" "$(git -C "$sub" rev-parse HEAD)"
 check "...from the relative URL, resolved"          "file://$up" "$(git -C "$sub" remote get-url origin)"
-check "...cloned without the files' contents"        blob:none "$(git -C "$sub" config remote.origin.partialclonefilter)"
+check "...cloned in full, not a partial clone"       "" "$(git -C "$sub" config remote.origin.partialclonefilter)"
 check "...its repository where git keeps submodules" "$(git -C "$ws" rev-parse --absolute-git-dir)/modules/TACT.UIF" \
     "$(git -C "$sub" rev-parse --absolute-git-dir)"
 check "git sees the submodule initialised"           "$recorded TACT/UIF" "$(git -C "$ws" submodule status TACT/UIF | awk '{ print $1, $2 }' | tr -d ' +-' | sed 's/TACT/ TACT/')"
-check "...the other files' contents not fetched"    yes "$(git -C "$sub" rev-list --objects --missing=print --all | grep -q '^?' && echo yes || echo no)"
+check "...the other files' contents fetched anyway" no "$(git -C "$sub" rev-list --objects --missing=print --all | grep -q '^?' && echo yes || echo no)"
 check "the diff between baselines works"             "+b 2" "$(git -C "$sub" diff 30.0.0.1 30.0.0.2 -- sources/b.adb | grep '^+b')"
 check "...and between commits"                       "-b 1" "$(git -C "$sub" diff HEAD^ HEAD -- sources/b.adb | grep '^-b')"
 out=$("$TCHECKOUT" -root "$ws" TACT/UIF/sources/a.adb 2>&1)
@@ -155,7 +155,7 @@ csub=$C/TACT/UIF
 out=$("$TCHECKOUT" -cache "$C" -rev 30.0.0.2 -rev 30.0.0.1 TACT/UIF/sources/b.adb 2>&1) || { echo "$out"; exit 1; }
 check "-cache: the file, checked out"                "b 2 no" "$(cat "$csub/sources/b.adb") $([ -e "$csub/sources/a.adb" ] && echo yes || echo no)"
 check "...cloned from TCHECK_NM_URL, lower case"     "file://$up" "$(git -C "$csub" remote get-url origin)"
-check "...without the files' contents"               blob:none "$(git -C "$csub" config remote.origin.partialclonefilter)"
+check "...cloned in full, not a partial clone"       "" "$(git -C "$csub" config remote.origin.partialclonefilter)"
 check "...at the first revision given"               "$(git -C "$up" rev-parse 30.0.0.2)" "$(git -C "$csub" rev-parse HEAD)"
 printf 'b 3\n' > "$up/sources/b.adb"; printf 'c 3\n' > "$up/sources/c.adb"
 git -C "$up" add . && git -C "$up" commit -qm three && git -C "$up" tag 30.0.0.3
