@@ -1,0 +1,20 @@
+# min and max of three or more, and NotImplementedError with and without a message:
+# Nim's min and max take two arguments, and its newException wants a message.
+let a: int = 3
+let b: int = 1
+let c: int = 2
+print min(a, b, c), max(a, b, c)
+let x: float = 1.5
+print min(x, 0.5, 2.0), max(x, 0.5, 2.0, 9.0)
+def todo() -> int:
+    raise NotImplementedError()
+def todo2() -> int:
+    raise NotImplementedError("later")
+try:
+    print todo()
+except NotImplementedError:
+    print "nie"
+try:
+    print todo2()
+except NotImplementedError:
+    print "nie2"

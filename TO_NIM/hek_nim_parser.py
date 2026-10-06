@@ -1087,6 +1087,10 @@ def to_nim(self, indent=0):
 def to_nim(self, indent=0):
     """except_clause: 'except' expression ('as' IDENTIFIER)? ':' block -> Nim: 'except Type as name:\n  body'"""
     exc = self.nodes[0].to_nim()
+    # Python's exceptions that Nim has no type for are raised as CatchableError
+    # (`raise` below), so they are caught as that.
+    if exc in ("NotImplementedError", "RuntimeError", "TypeError"):
+        exc = "CatchableError"
     result = f"except {exc}"
     for node in self.nodes[1:]:
         if type(node).__name__ == "Several_Times" and node.nodes:

@@ -84,8 +84,9 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 * **`Record(a, b, None)` with a positional `None` for a `?T` field emits `nil` on Nim**; named
   (`hit=None`) is right. **`opt == value` and `opt != value` on a `?Enum` do not compile on Nim**, and
   `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
-* **`min(a, b, c)` with three arguments does not compile on Nim.**
-* **`raise NotImplementedError()` does not compile on Nim** (`newException` needs a message).
+* **`min(a, b, c)` with three arguments, and `raise NotImplementedError()` without a message,
+  did not compile on Nim.** Fixed in the transpiler (nested two-argument calls; the exception's name
+  as its message, and `except NotImplementedError` catches it).
 * **`math.atan`, `atan2`, `asin`, `acos` and one-argument `math.log`** are Python's names, not Nim's
   (`arctan`, `arctan2`, `arcsin`, `arccos`, `ln`). They are now refused with what Nim calls them, and
   `math.arctan` and the others run on the Python backend too.

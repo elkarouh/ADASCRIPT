@@ -4454,6 +4454,37 @@ def _translate_stdlib_patterns(expr):
         ParserState.nim_imports.add("sequtils")
         return f"toSeq({iterable}).foldl(if {key_fn}(b) {cmp_op} {key_fn}(a): b else: a)"
 
+    # --- 8b. min(a, b, c) / max(a, b, c, ...) -> nested two-argument calls ---
+    # Nim's min and max take two arguments, or one sequence.
+    _mm3 = _re.match(r'^(min|max)\((.+)\)$', expr, _re.DOTALL)
+    if _mm3:
+        _args, _depth, _cur, _q = [], 0, "", None
+        for _ch in _mm3.group(2):
+            if _q:
+                _q = None if _ch == _q else _q
+            elif _ch in "\"'":
+                _q = _ch
+            elif _ch in "([{":
+                _depth += 1
+            elif _ch in ")]}":
+                _depth -= 1
+            if _depth < 0:
+                _args = []
+                break
+            if _ch == "," and _depth == 0 and not _q:
+                _args.append(_cur.strip())
+                _cur = ""
+            else:
+                _cur += _ch
+        else:
+            _args.append(_cur.strip())
+        if (len(_args) >= 3 and _depth == 0
+                and not any(_re.match(r'^\w+\s*=(?!=)', a) for a in _args)):
+            _acc = _args[0]
+            for _a in _args[1:]:
+                _acc = f"{_mm3.group(1)}({_acc}, {_a})"
+            return _acc
+
     # --- 9. Counter_T(expr) -> initCounter(expr) ---
     # Nim does not allow a type and a callable to share the same name, so we
     # rewrite Counter_T(...) constructor calls to initCounter(...) here.

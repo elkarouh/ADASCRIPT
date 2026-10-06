@@ -1654,7 +1654,7 @@ def to_nim(self):
     m = _re.match(r"(\w+)\((.*)\)$", val)
     if m and m.group(1) in _PY_EXCEPTIONS:
         nim_exc = _PY_EXCEPTIONS[m.group(1)]
-        args = m.group(2)
+        args = m.group(2).strip() or f'"{m.group(1)}"'   # newException wants a message
         return f"raise newException({nim_exc}, {args})"
     return f"raise {val}"
 

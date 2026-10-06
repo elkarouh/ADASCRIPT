@@ -711,8 +711,6 @@ Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
       named (`hit=None`) is right.
 - [ ] `opt == value` / `opt != value` on a `?Enum` does not compile on Nim, and `a + b` on
       two `[]T` fields reached through `self.x.y` is not seen as a list concatenation.
-- [ ] `min(a, b, c)` with three arguments does not compile on Nim.
-- [ ] `raise NotImplementedError()` does not compile on Nim (`newException` needs a message).
 - [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_utils import` works from a sibling directory only because the
       parent is searched; map_utils itself is Nim-only (`from math nimport`), so
