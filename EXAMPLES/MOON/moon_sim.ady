@@ -45,6 +45,7 @@ pyimport matplotlib.pyplot as plt
 
 type Mass_T        is distinct float                # kg
 type Force_T       is Mass_T * Accel_T              # N
+type Sense_T       is enum COUNTER_CLOCKWISE, CLOCKWISE   # the way round the origin
 type Mu_T          is Accel_T * SquareMeters_T      # a body's GM, m^3/s^2
 type AngularRate_T is Degrees_T / Duration_T        # deg/s
 type AngMom_T      is Meters_T * Speed_T            # specific angular momentum, m^2/s
@@ -87,9 +88,18 @@ def radial_rate(r: Vector, v: Velocity) -> float:
     """r . v, in m^2/s: zero at periapsis and apoapsis, positive going out."""
     return float(r.x) * float(v.x) + float(r.y) * float(v.y)
 
-def sense(r: Position, v: Velocity) -> float:
-    """+1 counter-clockwise about the origin, -1 clockwise."""
-    return sign(float(r.x) * float(v.y) - float(r.y) * float(v.x))
+def turn(s: Sense_T) -> float:
+    """The multiplier that turns an angle the way S goes: +1.0 or -1.0."""
+    if s == CLOCKWISE:
+        return -1.0
+    return 1.0
+
+def sense(r: Position, v: Velocity) -> Sense_T:
+    """Which way round the origin: COUNTER_CLOCKWISE, or CLOCKWISE (a radial fall has no
+    sense, and is called counter-clockwise)."""
+    if float(r.x) * float(v.y) - float(r.y) * float(v.x) < 0.0:
+        return CLOCKWISE
+    return COUNTER_CLOCKWISE
 
 def pull_toward(from_body: Vector, pull: Accel_T) -> Acceleration:
     """The acceleration of size PULL toward a body that FROM_BODY points away from."""
@@ -690,13 +700,13 @@ class Guidance:
     P65 is a velocity-tracking vertical descent.
     """
     var site_up: Vector
-    var s: float
+    var s: Sense_T
     var site: Position
     var mode: Mode_T
     var t_go: Duration_T
     var has_t_go: bool
 
-    def __init__(self, site_up: Vector, travel_sign: float):
+    def __init__(self, site_up: Vector, travel_sign: Sense_T):
         self.site_up = site_up
         self.s = travel_sign
         self.site = ORIGIN + site_up * float(R_MOON)
@@ -706,8 +716,8 @@ class Guidance:
 
     def target(self, gate: Gate_T) -> Target_T:
         let behind: Degrees_T = Degrees_T(Radians_T(float(gate.uprange / R_MOON)))
-        let up: Vector = rot(self.site_up, behind * -self.s)
-        let east: Vector = perp(up) * self.s
+        let up: Vector = rot(self.site_up, behind * -turn(self.s))
+        let east: Vector = perp(up) * turn(self.s)
         return Target_T(ORIGIN + up * float(R_MOON + gate.alt),
                         Velocity(gate.vh, east.angle()) + Velocity(gate.vv, up.angle()))
 
@@ -746,7 +756,7 @@ class Guidance:
         var a_total: Acceleration = Acceleration(Accel_T(0.0), Accel_T(0.0))
         if self.mode == P65:
             let up: Vector = from_moon.unit()
-            let east: Vector = perp(up) * self.s
+            let east: Vector = perp(up) * turn(self.s)
             let dx: Meters_T = along_vec(self.site - r, east)
             # horizontal velocity is nulled as the surface approaches
             let fade: float = clip(float(alt) / 30.0, 0.0, 1.0)
@@ -1073,8 +1083,8 @@ class Mission:
         let lander: Spacecraft = self.lander
         var r: Position = self.r
         var v: Velocity = self.v
-        let s: float = sense(r, v)
-        let site_up: Vector = rot((r - ORIGIN).unit(), self.DESCENT_ARC * s)
+        let s: Sense_T = sense(r, v)
+        let site_up: Vector = rot((r - ORIGIN).unit(), self.DESCENT_ARC * turn(s))
 
         var imu: IMU = IMU(self.rng)
         var nav: Navigation = Navigation(self.rng)
@@ -1117,7 +1127,7 @@ class Mission:
 
             if float(t) >= float(next_tm) - 1e-9:
                 let up: Vector = (r - ORIGIN).unit()
-                let east: Vector = perp(up) * s
+                let east: Vector = perp(up) * turn(s)
                 self.descent.append(Telemetry_T(
                     t, radius_of(r) - R_MOON, along(v, up), along(v, east),
                     throttle if float(force) > 0.0 else 0.0, lander.stage(LM).prop,
@@ -1145,10 +1155,10 @@ class Mission:
                 next_radar = next_radar + 1.0
 
         let up: Vector = (r - ORIGIN).unit()
-        let east: Vector = perp(up) * s
+        let east: Vector = perp(up) * turn(s)
         let vv: Speed_T = along(v, up)
         let vh: Speed_T = along(v, east)
-        let arc: Degrees_T = wrapped(up.angle() - site_up.angle()) * s
+        let arc: Degrees_T = wrapped(up.angle() - site_up.angle()) * turn(s)
         let miss: Meters_T = Meters_T(float(Radians_T(arc)) * float(R_MOON))   # + = overshoot (beyond site)
 
         let good: bool = touched_down and abs(float(vv)) < 3.0 and abs(float(vh)) < 1.5
