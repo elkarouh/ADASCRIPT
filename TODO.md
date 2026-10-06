@@ -704,9 +704,6 @@ Each has a workaround in that file (and a line in `EXAMPLES/MOON/README.md`).
 
 - [ ] `a + b` on two `[]T` fields reached through `self.x.y` is not seen as a list
       concatenation on Nim (`&`).
-- [ ] f-string format specs on Nim: no `,` flag (`{x:,.0f}`), and `{x:+.0f}` leaves a
-      stray `.` (`-456396.`).
-- [ ] `\n` inside an f-string is not an escape on Nim (`fmt"..."` is raw).
 - [ ] a call on a `PyObject` *variable* standing alone (`ax.plot(...)`) is not discarded
       on Nim ("has to be used"); only a call on a pyimported module is.
 - [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).

@@ -164,25 +164,6 @@ def orbital_elements(r: Position, v: Velocity, mu: Mu_T) -> Elements_T:
     return Elements_T(Meters_T(rmag), Speed_T(vmag), AngMom_T(h), e,
                       Meters_T(h * h / (m * (1.0 + e))))
 
-def thousands(m: Mass_T) -> str:
-    """f"{m:,.0f}" -- the Nim backend has no ',' format flag."""
-    let digits: str = f"{abs(float(m)):.0f}"
-    let n: int = len(digits)
-    var out: str = ""
-    for i in 0 ..< n:
-        if i > 0 and (n - i) % 3 == 0:
-            out = out + ","
-        out = out + digits[i:i + 1]
-    if float(m) < 0.0:
-        return "-" + out
-    return out
-
-def signed(d: Meters_T) -> str:
-    """f"{d:+.0f}" -- the Nim backend leaves a stray '.' after it ("-456396.")."""
-    if float(d) < 0.0:
-        return f"{d:.0f}"
-    return "+" + f"{d:.0f}"
-
 # ============================================================
 # NOISE -- L'Ecuyer's combined generator
 # ============================================================
@@ -961,7 +942,7 @@ class Mission:
         let dv: Speed_T = v_t - v_c
         self.sc.burn(Velocity(dv, 90.0), S_IVB, TLI)
         self.sc.separate(S_IVB)
-        print f"  TLI dv = {dv:.1f} m/s  (S-IVB jettisoned, stack = {thousands(self.sc.mass())} kg)"
+        print f"  TLI dv = {dv:.1f} m/s  (S-IVB jettisoned, stack = {float(self.sc.mass()):,.0f} kg)"
 
         let t_transfer: Duration_T = half_period(MU_EARTH, a_t)
         self.phase_nominal = Degrees_T(180.0) - MoonEphemeris(0.0).n * t_transfer
@@ -1080,8 +1061,8 @@ class Mission:
         let lm: Stage_T = self.sc.separate(LM)
         self.lander = Spacecraft([lm])
         print
-        print (f"LM UNDOCK  (lander mass = {thousands(self.lander.mass())} kg, "
-               f"CSM stays in orbit with {thousands(self.sc.stage(CSM).prop)} kg prop)")
+        print (f"LM UNDOCK  (lander mass = {float(self.lander.mass()):,.0f} kg, "
+               f"CSM stays in orbit with {float(self.sc.stage(CSM).prop):,.0f} kg prop)")
         self.coast_moon(period(MU_MOON, radius_of(self.r)), [], "circular orbit")
 
     def doi(self):
@@ -1115,7 +1096,7 @@ class Mission:
         print
         print "POWERED DESCENT INITIATION"
         print (f"  Altitude = {to_km(radius_of(r) - R_MOON):.1f} km, "
-               f"speed = {v.speed():.0f} m/s, mass = {thousands(lander.mass())} kg")
+               f"speed = {v.speed():.0f} m/s, mass = {float(lander.mass()):,.0f} kg")
         print f"  Landing site is {to_km(Meters_T(degToRad(float(self.DESCENT_ARC)) * float(R_MOON))):.0f} km downrange"
 
         let dt: Duration_T = self.DT
@@ -1199,7 +1180,7 @@ class Mission:
         print "=============================="
         print f"  Descent time         : {t:.0f} s"
         print f"  Contact velocity     : {vv:+.2f} m/s vertical, {vh:+.2f} m/s horizontal"
-        print f"  Landing miss         : {signed(miss)} m (+ = long)"
+        print f"  Landing miss         : {float(miss):+.0f} m (+ = long)"
         print (f"  Nav error at contact : {self.result.nav_pos_err:.0f} m, "
                f"{self.result.nav_vel_err:.2f} m/s")
         print f"  Descent prop left    : {fuel:.0f} kg"

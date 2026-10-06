@@ -437,6 +437,45 @@ def _ensure_fixed0_helper():
         ParserState.nim_top_decls = decls
 
 
+_NUMFMT_HELPER = """\
+proc adascriptCommas(s: string): string =
+  ## Python's `,` flag: thousands separators in the integer part of a formatted number.
+  var start = 0
+  while start < s.len and not (s[start] in {'0'..'9'}): start += 1
+  var stop = start
+  while stop < s.len and s[stop] in {'0'..'9'}: stop += 1
+  let digits = s[start ..< stop]
+  var grouped = ""
+  for i, c in digits:
+    if i > 0 and (digits.len - i) mod 3 == 0: grouped.add(',')
+    grouped.add(c)
+  result = s[0 ..< start] & grouped & s[stop .. ^1]
+
+proc adascriptNumFmt(x: float, prec: int, commas: bool, plus: bool): string =
+  ## Python's f"{x:+,.Nf}": formatFloat keeps the point of a zero-decimal number,
+  ## and has no `,` or `+` flag.
+  result = formatFloat(x, ffDecimal, prec)
+  if result.endsWith("."): result.setLen(result.len - 1)
+  if commas: result = adascriptCommas(result)
+  if plus and not result.startsWith("-"): result = "+" & result
+
+proc adascriptNumFmt(x: int64, commas: bool, plus: bool): string =
+  ## Python's f"{n:+,d}".
+  result = $x
+  if commas: result = adascriptCommas(result)
+  if plus and not result.startsWith("-"): result = "+" & result
+"""
+
+
+def _ensure_numfmt_helper():
+    """Add the `,` / `+` number-format helpers the first time a format spec needs them."""
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptNumFmt" in d for d in decls):
+        decls.append(_NUMFMT_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _AFFIX_HELPER = """\
 proc adascriptRemovePrefix(s: string, prefix: string): string =
   ## Python's str.removeprefix: S without PREFIX when it starts with it, else
@@ -2205,6 +2244,19 @@ def to_nim(self, prec=None):
             _align = _m0.group(1) or (">" if _m0.group(2) else "")
             _tail = (":" + _align + _m0.group(2)) if (_align or _m0.group(2)) else ""
             return "adascriptFixed0(float(" + stripped + "))" + _tail
+        # `{x:,.0f}`, `{x:+.2f}`, `{n:,}`, `{n:+d}`, with a width and alignment: Nim's
+        # format spec has neither `,` nor `+` (and `+.0f` leaves a stray point).
+        _m1 = _re_f0.fullmatch(r":([<>^]?)(\+?)(\d*)(,?)(?:\.(\d+)f)?(d?)", spec)
+        if _m1 and (_m1.group(2) or _m1.group(4)) and not (_m1.group(3).startswith("0")):
+            _ensure_numfmt_helper()
+            _al, _pl, _w, _cm, _pr, _d = _m1.groups()
+            _flags = f"{'true' if _cm else 'false'}, {'true' if _pl else 'false'}"
+            if _pr is not None:
+                _call = f"adascriptNumFmt(float({stripped}), {_pr}, {_flags})"
+            else:
+                _call = f"adascriptNumFmt(int64({stripped}), {_flags})"
+            _align = _al or (">" if _w else "")
+            return _call + ((":" + _align + _w) if (_align or _w) else "")
         return field
 
     def _apply_conversions(s):

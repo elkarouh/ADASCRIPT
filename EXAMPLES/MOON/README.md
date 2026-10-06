@@ -76,9 +76,9 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
   conditional expression or on a tuple-unpacked name came out as `0.0 < force`; a bare `0.0` in a
   returned tuple `(int, Force_T)` was not converted; and the Python unit check did not know a record
   field's type (`st.isp * G0`).
-* **`{x:,.0f}` and `{x:+.0f}` in an f-string**: Nim has no `,` flag, and `+.0f` leaves a stray `.`
-  (`-456396.`). Written as `thousands()` and `signed()`.
-* **`\n` inside an f-string is not an escape on Nim** (`f"\nPlot saved"` printed no blank line).
+* **`{x:,.0f}` and `{x:+.0f}` in an f-string**: Nim had no `,` flag, and `+.0f` left a stray `.`
+  (`-456396.`). Fixed in the transpiler, with a width and alignment too (`{x:15,.1f}`); the source
+  writes them as Python does. `\n` in an f-string was fixed some time before.
 * **A call on a `PyObject` variable standing alone is not discarded on Nim** (`ax.plot(...)`: "has to
   be used"); only calls on a pyimported module are. Written `let _: PyObject = ax.plot(...)`.
 * **`Record(a, b, None)` with a positional `None` for a `?T` field emitted `nil` on Nim, and

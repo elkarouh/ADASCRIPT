@@ -1,0 +1,10 @@
+# The `,` and `+` flags of an f-string format spec, alone and with a width:
+# Nim's has neither, and its `+.0f` leaves a stray point. A newline escape in the text too.
+let x: float = 1234567.891
+let y: float = -456396.4
+let z: float = 5.0
+let n: int = 1234567
+let m: int = -42
+print f"a {x:,.0f} b {y:+.0f} c {x:+.2f} d {n:,} e {n:+d} f {m:+d}"
+print f"[{x:,.1f}] [{x:15,.1f}] [{y:+12.0f}] [{n:<12,}] [{z:+.1f}] [{m:,}]"
+print f"x {y:+,.2f}\ny {n:+,d}"
