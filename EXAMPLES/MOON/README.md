@@ -232,9 +232,18 @@ The rocket equation is `ve = isp * G0` (a `Speed_T`), `used = m0 * (1 - exp(-dv 
 gravity is `MU_MOON / (r * r)` (an `Accel_T`), the Moon's phase is a `Degrees_T` advancing at an
 `AngularRate_T`, and a burn's delta-v cannot be added to a mass.
 
-Two places still go through plain floats, inside a function that has typed parameters and result:
-`sqrt`, `exp`, `ln` and `**` (`vis_viva`, `half_period`, the Moon's mean motion), and the arithmetic of
-the integrator and Brent's method, which is on dimensionless step fractions.
+Dot and cross products keep their unit: `r . v` and `r x v` are `AngMom_T` (m^2/s), `along` divides one by
+the unit vector's length to get a `Speed_T`, and the integrator's error control is a generic `scaled[T]` that
+compares an error in metres with a tolerance in metres and one in m/s with one in m/s. A rate is a
+`Duration_T` away from its distance (`dx / SETTLE` is a `Speed_T`), a throttle is a `Throttle_T`, and the
+log prints a time as `Hours_T(t)` or `Days_T(t)` and a distance as `Kilometers_T(d)`.
+
+What still goes through a plain float (each is in `TODO.md`):
+`sqrt`, `exp`, `ln` and `**` of a unit (`vis_viva`, `half_period`, the Moon's mean motion, the random
+walk's `sqrt(dt)`); the eccentricity vector, whose `v^2 - mu/r` has no unit; the mass flow `force / exhaust`;
+the sign of an event, which is the same function for metres and for m^2/s; the arithmetic of the integrator
+and Brent's method, which is on dimensionless step fractions; an arc length, `radius * angle`, because a
+radian has no unit; an `int` beside a float (`fraction`); and the numbers handed to matplotlib.
 
 Velocities and accelerations are map_flat's `Velocity` (`Speed_T` along a bearing) and
 `Acceleration` (`Accel_T` along a bearing), with `Vector / t -> Velocity`,

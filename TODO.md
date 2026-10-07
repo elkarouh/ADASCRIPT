@@ -705,6 +705,25 @@ Each open one has a workaround in that file.
 - [ ] units: `SquareMeters_T * Meters_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_base import` works from a sibling directory only because the
       parent is searched. (The map_* modules stay Nim-only, by decision.)
+- [ ] units: `sqrt` of a unit. `Speed_T(sqrt(float(mu) / float(radius)))`, `half_period`, the Moon's
+      mean motion and `sqrt(float(dt))` in the IMU all go through floats; `sqrt(SpeedSq_T)` is a
+      `Speed_T`, and `sqrt(Duration_T)` has no unit at all.
+- [ ] units: a unit with two derivations. `Force_T` is `Mass_T * Accel_T`, but the mass flow wants
+      `Force_T / Speed_T` and `MassFlow_T * Duration_T`; `v^2 - mu/r` (`Mu_T / Meters_T`) and the
+      products `AngMom_T * AngMom_T` have no unit either. `Propulsion.thrust` and `orbital_elements`
+      keep a float block.
+- [ ] units: an angle times a length. A radian is dimensionless, so `radius * angle` is a length;
+      `arc` (the one place that takes `float(Radians_T(angle))`) says so.
+- [ ] `max(unit, 1e-9)` and `min`/`max` with a literal beside a unit do not compile on Nim (the literal is
+      not typed); `max(a, Meters_T(1e-9))` does.
+- [ ] a literal on the LEFT of `-` takes the wrong unit: `180.0 - n * t` (n: `AngularRate_T`, t:
+      `Duration_T`) came out as `Duration_T(180.0) - ...` and did not compile. Workaround: a `const`.
+- [ ] a literal in an explicit generic call is not typed: `clip[Speed_T](x, -2.0, 2.0)` fails
+      (constants `SIDE_MAX` and friends instead), and a `const` initialised by `5.0 * 86400.0` stays a float.
+- [ ] an `int` beside a float (`0.9 * i`) is refused on Nim; the example has `fraction(i, n)`. A cast the
+      language could take over, as Python does.
+- [ ] a unit-typed constructor argument is spelled out where a class has two constructors
+      (`Velocity(Speed_T(0.0), Speed_T(0.0))`): a literal to an overloaded name is refused on Nim.
 
 ### Met on the way and since fixed
 
