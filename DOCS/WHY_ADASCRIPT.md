@@ -823,6 +823,16 @@ factor such as `0.5 * C_T` is refused when the type is declared. Float
 arithmetic on money is where a lost cent comes from, and here it can only
 happen at a conversion you can point at.
 
+Conversion functions are no longer required. Everywhere else I have worked,
+a program that mixes kilometres and miles carries a family of hand-written
+helpers (`km_to_m`, `miles_to_m`, `m_to_miles`), each with its factor typed in
+by hand, each a place to get the factor or the direction wrong, and none of
+them known to the compiler. Here the conversion factor is part of the type
+declaration, and the compiler enforces it transparently: the factor is written
+once, in `type Distance_in_km_T is 1000.0 * Distance_T`, and every conversion
+in either direction, to or from any unit declared that way, is derived from
+that line. There is no function to write, to test or to call by mistake.
+
 This is, as far as I know, unusual. Most languages give you either a units
 library that tracks exponents and is invisible at the call site, or nothing.
 Here the scale is one line, the conversion in both directions comes with it,
