@@ -672,7 +672,7 @@ class Ring:
         else:
             self.count += 1
 
-    def get(self) -> ?int:
+    def pop(self) -> ?int:
         if self.count == 0:
             return None
         self.tail += 1                 # tail is the slot last read

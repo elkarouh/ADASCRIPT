@@ -20,7 +20,7 @@ class Ring:
         else:
             self.count += 1
 
-    def get(self) -> ?int:
+    def pop(self) -> ?int:
         if self.count == 0:
             return None
         self.tail += 1                 # tail is the slot last read
@@ -35,12 +35,18 @@ def main():
     for x in 1 .. 6:
         r.push(x * 10)
     print(r.count, r.latest(0), r.latest(1), r.latest(3))
-    for _ in 0 ..< 5:
-        let v: ?int = r.get()
-        if v is None:
-            print("empty")
-        else:
-            print(v)
+    var x: ?int
+    while True:
+        x = r.pop()
+        if x is None:
+            break
+        print(x)
+
+class Cell:
+    var value: int
+
+    def get(self) -> int:           # a method named get is the class's own, not a dict lookup
+        return self.value
 
 def tally() -> int:
     var seen: [Slot_T]int          # a mod type written as a number is an index too
@@ -50,3 +56,6 @@ def tally() -> int:
 
 main()
 print(tally())
+var c: Cell = Cell()
+c.value = 7
+print(c.get())
