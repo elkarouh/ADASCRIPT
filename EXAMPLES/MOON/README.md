@@ -185,7 +185,7 @@ calculation with checked units (metres, seconds, kilograms, degrees) on one of i
 
 ## About this translation
 
-`moon_sim.ady` is `moon_sim.py` (a 2-D, Apollo-style mission: TLI, a trans-lunar coast,
+`moon_sim.ady` is [`moon_sim.py`](moon_sim.py) (a 2-D, Apollo-style mission: TLI, a trans-lunar coast,
 LOI-1/LOI-2, undock, DOI, then a closed-loop powered descent through
 IMU -> Navigation -> Guidance -> Autopilot -> Propulsion) written in Adascript.
 
