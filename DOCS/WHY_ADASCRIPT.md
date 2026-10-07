@@ -881,6 +881,32 @@ each, and the round trip is checked in the example rather than trusted:
     assert near(float(back_mi), float(marathon_mi), 1e-9)
 ```
 
+A constant is best declared in the unit it is read in, and converted where it
+is used. The Earth-Moon landing simulation (`EXAMPLES/MOON/moon_sim.ady`)
+keeps its altitudes the way the mission plan gives them, in kilometres, and
+the arithmetic that needs metres says so on the line that needs them:
+
+<!-- from: EXAMPLES/MOON/moon_sim.ady -->
+```python
+    const LEO_ALT: Kilometers_T = 200.0
+    const LOI_PERI_ALT: Kilometers_T = 100.0
+```
+
+<!-- from: EXAMPLES/MOON/moon_sim.ady -->
+```python
+        let r0: Meters_T = R_EARTH + Meters_T(self.LEO_ALT)
+```
+
+There are two reasons to prefer it to `const LEO_ALT: Meters_T = Meters_T(Kilometers_T(200.0))`.
+The declaration reads like the number in the mission plan, with no conversion
+to check by eye, and it prints in its own unit (`{self.LEO_ALT:.0f} km`)
+without converting back. And the compiler holds every use to it: write
+`R_EARTH + self.LEO_ALT` and it does not compile, because metres plus
+kilometres is not a sum. A conversion forgotten in a constant that was
+converted once, at the top, cannot be found; a conversion forgotten at a use
+is refused on that line. The conversion is not a cast to be avoided: it is the
+one place where the program says that a kilometre is a thousand metres.
+
 Money is where a conversion has to state its *policy*, and the same
 declaration does it. Keep the ledger in whole cents, an `int`, so that sums,
 counts and splits are exact; see it in dollars, a float, for tax and exchange
