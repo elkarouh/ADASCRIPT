@@ -823,6 +823,36 @@ factor such as `0.5 * C_T` is refused when the type is declared. Float
 arithmetic on money is where a lost cent comes from, and here it can only
 happen at a conversion you can point at.
 
+A distance in metres, kilometres and nautical miles shows how they are used
+together. The metre is the base unit, and the other two are declared as
+multiples of it:
+
+<!-- from: EXAMPLES/distance_units.ady -->
+```python
+type Distance_T is distinct float                     # metres
+type Distance_in_km_T is 1000.0 * Distance_T          # a kilometre is 1000 m
+type Distance_in_nm_T is 1852.0 * Distance_T          # a nautical mile is 1852 m, by definition
+```
+
+Each value is written in the unit it is given in, and a mixed sum goes through
+the base unit, on the line where the conversion happens:
+
+<!-- from: EXAMPLES/distance_units.ady -->
+```python
+let runway: Distance_T = 3200.0                       # given in metres
+let transfer: Distance_in_km_T = 12.5                 # the road leg, given in kilometres
+let sector: Distance_in_nm_T = 40.0                   # the flight leg, given in nautical miles
+
+# Mixing them goes through the base unit, where the conversion is written:
+let total: Distance_T = runway + Distance_T(transfer) + Distance_T(sector)
+```
+
+The total prints as `89.780 km = 48.477 nm = 89780.0 m`, and reading it in
+another unit is the same conversion the other way:
+`Distance_in_nm_T(total)`. `runway + transfer` is refused, metres plus
+kilometres, and so is `let wrong: Distance_in_nm_T = transfer`; the
+compiler's message names both types.
+
 Conversion functions are no longer required. In the aerospace code I have
 worked on, mixing metres and nautical miles meant a pair of hand-written
 helpers (`m_to_nm`, `nm_to_m`), each with its factor of 1852 typed in by

@@ -1,0 +1,31 @@
+#!/usr/bin/env ady2nim
+# distance_units.ady — one distance in metres, kilometres and nautical miles
+#
+#   ady2nim EXAMPLES/distance_units.ady -r
+#
+# The metre is the base unit. A kilometre and a nautical mile are each declared as a
+# multiple of it, and that one line is the whole conversion, in both directions. Scaled
+# units are Nim only (ady2py refuses the declaration).
+
+type Distance_T is distinct float                     # metres
+type Distance_in_km_T is 1000.0 * Distance_T          # a kilometre is 1000 m
+type Distance_in_nm_T is 1852.0 * Distance_T          # a nautical mile is 1852 m, by definition
+
+def describe(d: Distance_T) -> str:
+    return f"{Distance_in_km_T(d):.3f} km = {Distance_in_nm_T(d):.3f} nm = {float(d):.1f} m"
+
+let runway: Distance_T = 3200.0                       # given in metres
+let transfer: Distance_in_km_T = 12.5                 # the road leg, given in kilometres
+let sector: Distance_in_nm_T = 40.0                   # the flight leg, given in nautical miles
+
+# Mixing them goes through the base unit, where the conversion is written:
+let total: Distance_T = runway + Distance_T(transfer) + Distance_T(sector)
+print(describe(total))
+
+# Reading a result in another unit is the same conversion the other way:
+let flown: Distance_in_nm_T = Distance_in_nm_T(total)
+assert abs(float(flown) - 48.477) < 0.001
+assert abs(float(Distance_T(flown)) - float(total)) < 1e-9
+
+# let bad: Distance_T = runway + transfer           -- refused: metres plus kilometres
+# let wrong: Distance_in_nm_T = transfer            -- refused: kilometres are not nautical miles

@@ -164,6 +164,7 @@ STANDALONE := \
     test_scaled_units.ady \
     test_cents.ady \
     mars_climate_orbiter.ady \
+    distance_units.ady \
     test_union_args.ady \
     test_union_wide.ady \
     test_subrange_array.ady \
