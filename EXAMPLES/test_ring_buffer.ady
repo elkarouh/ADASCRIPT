@@ -4,7 +4,6 @@
 const CAPACITY: int = 4
 type Index_T is mod CAPACITY
 type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY, one more than an index
-type Slot_T is mod 8
 
 class Ring:
     var items: [Index_T]int
@@ -48,14 +47,7 @@ class Cell:
     def get(self) -> int:           # a method named get is the class's own, not a dict lookup
         return self.value
 
-def tally() -> int:
-    var seen: [Slot_T]int          # a mod type written as a number is an index too
-    for k in 0 ..< 20:
-        seen[Slot_T(k * 3)] += 1
-    return seen[Slot_T(0)] * 100 + seen[Slot_T(1)]
-
 main()
-print(tally())
 var c: Cell = Cell()
 c.value = 7
 print(c.get())

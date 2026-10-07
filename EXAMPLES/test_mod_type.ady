@@ -47,5 +47,9 @@ def main():
     head = head + Index_T(2)
     print(int(head), int(Index_T(-1)))
     show(Heading_T(-90.0))
+    var seen: [Slot_T]int                     # a mod type written as a number indexes an array too
+    for k in 0 ..< 20:
+        seen[Slot_T(k)] += 1                  # 20 values round 8 slots: slots 0-3 get 3, 4-7 get 2
+    print(seen[Slot_T(3)], seen[Slot_T(4)])
 
 main()
