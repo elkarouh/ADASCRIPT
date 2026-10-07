@@ -1,0 +1,70 @@
+#!/usr/bin/env ady2nim
+# mars_climate_orbiter.ady — the unit mix-up that lost a spacecraft, refused at compile time
+#
+#   ady2nim EXAMPLES/mars_climate_orbiter.ady -r
+#
+# On 23 September 1999 the Mars Climate Orbiter reached Mars about 57 km above the surface
+# instead of the planned 226 km, and was lost. The cause was a unit, not a bug in any one
+# routine: the ground software that computed the thruster impulses of the wheel
+# desaturation burns wrote them in pound-force seconds, and the navigation software read
+# them as newton-seconds, as the interface specification said it should. Every number was
+# right and every routine was correct; one factor of 4.45 sat between them. Both sides held
+# the value in a `float`, so nothing could notice.
+#
+# The numbers below are made up to give a miss of the same size; the mechanism is the real one.
+#
+# Here the two units are types. The file the vendor writes is in `Impulse_in_lbf_s_T`; the
+# navigation takes `Impulse_T`. Handing one to the other is refused when the program is
+# compiled (Makefile: "the Mars Climate Orbiter's call"), so the only way across is the
+# conversion, written where it happens. Scaled units are Nim only (ady2py refuses the
+# declaration).
+
+type Mass_T    is distinct float            # kg
+type Speed_T   is distinct float            # m/s
+type Time_T    is distinct float            # s
+type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
+type Length_T  is Speed_T * Time_T          # m
+
+type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
+
+# --- the ground software's output: the small-forces file, as its vendor writes it ----------
+const BURN: Impulse_in_lbf_s_T = 0.05       # one desaturation burn (made up)
+var SMALL_FORCES: []Impulse_in_lbf_s_T = []
+for i in 0 ..< 30:
+    SMALL_FORCES.append(BURN)
+
+# --- the navigation: what the burns add to the speed of the spacecraft ------------------
+def speed_change(impulses: [*]Impulse_T, mass: Mass_T) -> Speed_T:
+    var total: Impulse_T = 0.0
+    for p in impulses:
+        total += p
+    return total / mass
+
+let SPACECRAFT: Mass_T = 629.0
+let CRUISE: Time_T = 2.1e7                  # about eight months
+
+# The conversion, on the line where the units meet.
+def in_newton_seconds(file: [*]Impulse_in_lbf_s_T) -> []Impulse_T:
+    return [Impulse_T(p) for p in file]
+
+let dv: Speed_T = speed_change(in_newton_seconds(SMALL_FORCES), SPACECRAFT)
+let miss_if_ignored: Length_T = dv * CRUISE
+
+# What the navigation did in 1999: take the numbers as they were. Writing it needs the plain
+# numbers, which is the point: with types, a program has to say so.
+var raw: float = 0.0
+for p in SMALL_FORCES:
+    raw += float(p)
+let dv_1999: Speed_T = Speed_T(raw / float(SPACECRAFT))
+let miss_1999: Length_T = (dv - dv_1999) * CRUISE
+
+print f"speed change from the burns, in the right unit : {dv * 1000.0:.2f} mm/s"
+print f"speed change as the 1999 navigation took it     : {dv_1999 * 1000.0:.2f} mm/s"
+print f"drift over the cruise from that factor          : {miss_1999 / 1000.0:.0f} km"
+
+assert 160_000.0 < miss_1999 < 190_000.0
+
+# The line that was the mission's loss, and that no longer compiles:
+#
+#     let wrong: Speed_T = speed_change(SMALL_FORCES, SPACECRAFT)
+#                          -- refused: Impulse_in_lbf_s_T is not Impulse_T

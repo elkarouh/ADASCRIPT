@@ -163,6 +163,7 @@ STANDALONE := \
     accounting.ady \
     test_scaled_units.ady \
     test_cents.ady \
+    mars_climate_orbiter.ady \
     test_union_args.ady \
     test_union_wide.ady \
     test_subrange_array.ady \
@@ -981,6 +982,16 @@ test: compile
 	    grep -q "built by ady2nim only" $(TMPDIR)/ady_scaled.out \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_scaled.out; exit 1; }
 	@rm -rf $(TMPDIR)/ady_scaled_* $(TMPDIR)/ady_scaled.out
+	@# The Mars Climate Orbiter's call: pound-force seconds where newton-seconds
+	@# are expected. The example is the program that converts; this is the one that does not.
+	@printf '  %-42s' "the Mars Climate Orbiter's call"; \
+	    { cat $(EXDIR)/mars_climate_orbiter.ady; echo 'let wrong: Speed_T = speed_change(SMALL_FORCES, SPACECRAFT)'; } \
+	        > $(TMPDIR)/ady_mco.ady; \
+	    if (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_mco_cache $(ADY2NIM) c ady_mco.ady) \
+	            > $(TMPDIR)/ady_mco.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	    grep -q "type mismatch" $(TMPDIR)/ady_mco.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_mco.out; exit 1; }
+	@rm -rf $(TMPDIR)/ady_mco*
 	@for t in $(BOTH_BACKENDS_COMPARED); do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
