@@ -2,35 +2,59 @@
 
 *Hassan El-Karouni*
 
-I have spent a long career in aerospace building complex systems, and I have
-written them in C, C++, AWK, Bash, Ada, Python and Nim. Every one of those
-languages is useful. Not one of them is right. The last three shaped how I
-think, each by being excellent at the thing the other two were missing.
+I started this language more than ten years ago as a dialect of Python. It was
+called py2py then, because it generated valid Python from the dialect. I have
+spent a long career in aerospace building complex systems, and I have written
+them in C, C++, AWK, Bash, Ada, Python and Nim.
 
-**Ada** taught me that a type is a statement about the world, not a size in
-bytes. Its enumerations can index an array and drive a `for` loop; its records
-can carry a discriminant; its subranges make a whole class of bug
-unrepresentable. Pascal set that minimum and Ada raised it. What Ada asks in
-return is ceremony, and a build.
+When optional typing was added to Python I was disappointed. It made Python
+more verbose and added little compared with what explicit typing could give.
+So I looked at Ada first, and then at Nim. Nim is a great language, inspired by
+Python and by Ada. But none of the three satisfied me:
 
-**Python** taught me that a language can get out of the way. No build, no
-declarations demanded, a line of it does a day of work in C. What it takes in
-return is every guarantee. `$3` in AWK and `d["k"]` in Python mean nothing to
-the next reader and nothing at all to the compiler, because there is no
-compiler.
+- **Python**'s type annotations are ugly, and nothing checks them.
+- **Ada** is verbose.
+- **Nim**'s syntax is sometimes weird, and its type syntax was not optimal.
 
-**Nim** taught me that the two are not opposites. It compiles to C, it is
-fast, it is statically typed, and it is as short to write as Python. What it
-lacks is Python's reach — the library, the people, the scripts already on the
-disk.
+I then decided to develop Adascript on three ideas:
 
-Adascript is what I wanted from all three: Ada's types, Python's syntax, and
-both of Nim's and Python's backends from one source. This document is the
-argument, not the manual. The manual is `README.md` and `DOCS/BOOK/`.
+1. **Take inspiration from Ada's typing, because it is fantastic.**
+2. **Exceptions are not a very good idea. Errors should be processed where they
+   occur.**
+3. **Software is written for humans, not for machines, so type inference is a
+   bad idea.** When you write life-threatening software, you do not want to
+   take the risk of someone guessing incorrectly.
+
+I stole many features from many languages, and I say from whom where I know.
+What is unique to Adascript is its powerful typing syntax, and this document
+goes deeper on it. It transpiles to both Python and Nim from one source. This
+document is the argument, not the manual; the manual is `README.md` and
+`DOCS/BOOK/`.
+
+How it is laid out:
+
+- **What I believe** states the three ideas above.
+- **What it looks like** shows a whole algorithm, types and all.
+- **Layers and vocabulary**, **The method** and **The notation** are the
+  typing: why a type should name a concept, how to find the concepts, and the
+  notation that writes them down.
+- **What the compiler holds you to** is what that buys: units, money, ranges,
+  and a spacecraft that would not have been lost.
+- **A failure belongs in the signature** is the second idea in full.
+- **What is not yet true** lists what each backend does not do.
 
 ---
 
-## The lessons
+## What I believe
+
+### Ada's typing is the right idea
+
+A type is a statement about the world, not a size in bytes. Ada's
+enumerations can index an array and drive a `for` loop; its records can carry a
+discriminant; its subranges make a whole class of bug unrepresentable. Pascal
+set that minimum and Ada raised it. What Ada asks in return is ceremony and a
+build, and the ceremony is what Adascript removes: the typing is Ada's, the
+syntax is Python's.
 
 ### Software is written for humans to be read
 
@@ -42,6 +66,50 @@ morning is somebody reading. A language that is short to *write* and hard to
 
 This is why I care about notation. Not because terse is good — because a form
 that a reader can take in without decoding it is good.
+
+### Implicit typing is a bad idea
+
+Not "static typing is good" — that argument is over. Implicit typing is
+something narrower: a language that *has* types but declines to make you write
+them, so the type exists in the compiler and not on the page.
+
+The compiler is not the audience. When I read
+
+<!-- illustrative: the counter-example -- a bare assignment is not a declaration, and does not compile -->
+```python
+speed = compute(track, wind)
+```
+
+I know nothing. When I read
+
+<!-- from: EXAMPLES/DOC/why_snippets.ady -->
+```python
+let speed: Velocity_T = compute("BAW117", 12.0)
+```
+
+I know what came back, I know what `compute` is for, and if the next line
+treats `speed` as a distance the discrepancy is on the page where a reader can
+see it, not three files away where only the compiler can. Inference saves the
+writer a few characters and costs every later reader the trip. In software
+that can hurt someone, the reader who guesses the type wrong is the risk,
+and the page should leave nothing to guess.
+
+Adascript makes the annotation the ordinary way to write a declaration, and
+`let` and `var` say whether the thing can change. Those two words are worth
+their keystrokes.
+
+### Errors belong where they occur
+
+An exception is handled wherever a `try` happens to be, some distance up the
+call stack, or nowhere; the function that failed and the function that
+decides what to do about it do not meet on the page. Adascript returns the
+failure as a value instead, in the signature, and a failure that is dropped is
+refused. The full argument, with a real tool that lost three bugs to it, is
+the section "A failure belongs in the signature" below.
+
+---
+
+## What it looks like
 
 ### Executable pseudocode, for real this time
 
@@ -116,34 +184,9 @@ algorithm. That is what executable pseudocode was supposed to mean. The
 book's chapter 1 §1.4 sets it beside the same program in idiomatic Python,
 line by line.
 
-### Implicit typing is a bad idea
+---
 
-Not "static typing is good" — that argument is over. Implicit typing is
-something narrower: a language that *has* types but declines to make you write
-them, so the type exists in the compiler and not on the page.
-
-The compiler is not the audience. When I read
-
-<!-- illustrative: the counter-example -- a bare assignment is not a declaration, and does not compile -->
-```python
-speed = compute(track, wind)
-```
-
-I know nothing. When I read
-
-<!-- from: EXAMPLES/DOC/why_snippets.ady -->
-```python
-let speed: Velocity_T = compute("BAW117", 12.0)
-```
-
-I know what came back, I know what `compute` is for, and if the next line
-treats `speed` as a distance the discrepancy is on the page where a reader can
-see it, not three files away where only the compiler can. Inference saves the
-writer a few characters and costs every later reader the trip.
-
-Adascript makes the annotation the ordinary way to write a declaration, and
-`let` and `var` say whether the thing can change. Those two words are worth
-their keystrokes.
+## Layers and vocabulary
 
 ### A complex system is built out of layers of abstraction
 
@@ -190,223 +233,8 @@ change.
 
 That is the argument, and it holds even when the type is only a name. When
 putting one of them where the other belongs would be a bug, a type can be
-more than a name: `distinct` makes the compiler hold you to it, and the end
-of this document says exactly how far that reaches.
-
-### A failure belongs in the signature
-
-A signature that says `-> Path` is telling half the truth when the function
-can fail. C returns an error code nothing obliges anyone to check. The shell sets `$?` and
-moves on. Python and Ada raise an exception that appears nowhere in the
-signature, so the reader has to know the body to know the contract. In
-every case the failure is real and the page does not show it.
-
-Adascript prefers that to an exception, and the reason is that the
-handling is where you can see it. With an exception, what is done about a
-failure is written wherever the handler happens to be -- a `try` some
-distance up the call stack, or none at all -- and neither the call nor the
-functions it passes through show anything. With a failure value the call
-takes its result and either deals with it on the next line, next to what
-caused it, or passes it up to its own caller -- which is one `do:` step, and
-is in that function's signature too, so every caller can see it can fail and
-decides where it is handled. The built-in shell and `Path` operations are
-written this way too, and a failure that is dropped is refused.
-
-Adascript lets the return type say both halves: `-> Path | !Failure_T`,
-*either* a path *or* the failure that says why there is none; the `!`
-marks which is which. A failure is a type like any other — an ordinary
-record:
-
-<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
-```python
-type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
-
-type Failure_T is record:
-    kind:   ErrKind_T
-    detail: str    # the command that failed, the path at fault, or what went wrong
-    stderr: str    # what a failed command said; "" for any other failure
-    fix:    str    # a command that would fix it; "" when there is none
-```
-
-A function returns its value or a failure, and there is nothing to wrap —
-the type of what is returned says which it is:
-
-<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
-```python
-def run_checked(cmd: str, ssh: ?SSH = None) -> str | !Failure_T:
-    let r: CmdResult = run_cmd(cmd, ssh)
-    if r.returncode != 0:
-        return failure(CMD_FAILED, cmd, r.stderr.strip())
-    return r.stdout
-```
-
-A chain of steps that must all succeed is written as a chain, and the
-first failure leaves the function with its reason intact. Nothing in it is
-error-handling code; the `do:` block is the error handling:
-
-<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
-```python
-    # One railway: the lock is released only once `latest` points at this
-    # backup. If the link fails, the lock stays, and the next run finds an
-    # interrupted backup to resume rather than a finished one with no link.
-    do:
-        rm_file(dest_f / "latest", dest_is_ssh(ssh))
-        ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
-        rm_file(inprogress_file, ssh)
-```
-
-And one place, at the top, decides what the user is told and which status
-the program exits with. `outcome is Failure_T` asks which of the two it
-holds; a `case` over the failure's kind inside `report` is exhaustive, so a
-new kind of failure nobody reports does not compile:
-
-<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
-```python
-    let outcome: None | !Failure_T = backup(
-        ...
-    )
-    if outcome is Failure_T:
-        report(outcome)
-        quit(1)
-```
-
-The built-in operations that can fail are on these tracks already:
-
-| The call | Its result | The failure's fields |
-|---|---|---|
-| `shell: cmd` | `str \| !ShellFailure_T` | `command`, `code`, `stderr` |
-| `p.mkdir()`, `p.write_text(s)` | `None \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
-| `p.relative_to(base)` | `Path \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
-| `p.read_text()` | `str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
-| `p.read_lines()` | `[]str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
-| `parse_float(s)` | `float \| !ParseFailure_T` | `what`, `text` |
-| `parse_int(s)` | `int \| !ParseFailure_T` | `what`, `text` |
-| `parse_enum(E, s)`, `parse_enum(E, n)` | `E \| !ParseFailure_T` | `what`, `text` |
-| `input(prompt)`, `stdin.readLine()` | `str \| !InputFailure_T` | `reason` |
-
-This is railway-oriented programming — Scott Wlaschin's name for it — and it
-is not new: F#'s and Rust's `Result` and Zig's error unions all do it. What the notation adds is
-that it costs nothing to write. The test narrows the name — past
-`if r is Failure_T: return`, `r` *is* the path, with nothing to unwrap —
-and the same source runs on both backends.
-
-The case for it is not a theory. `rsync_time_machine.ady` is a port of a
-real backup tool, and it ignored the exit status of every command that
-changed something. Rewritten this way, it gave up
-three bugs that `make test`, which only compiled it, had never seen:
-
-- A failed `ln -s latest` was ignored: the lock was removed and the run
-  reported success, with no `latest` link at all. It now fails, names the
-  command and what it printed, and keeps the lock so the next run resumes.
-- On a full disk it was meant to expire the oldest backup and retry. It
-  expired the newest — the one in progress — freed nothing, retried a
-  hundred times and exited 0, with `latest` pointing at a directory it had
-  just deleted.
-- Every retry reused one log, and rsync appends: the first "No space left"
-  was read again after every attempt, successful or not. With the first
-  bug fixed, it went on to expire every backup there was.
-
-The first bug is the kind the signature now prevents: once `ln_s` says
-`-> None | !Failure_T`, it cannot be called and its failure thrown away. A
-bare `ln_s(...)` as a statement does not compile, on either backend —
-the result has to be taken, by a `do:` step, a test or a `return`. The
-other two came to light because failures had become values a test could
-look at. `TOOLS/RSYNC_TIME_MACHINE/test/rsync_time_machine_test.sh` now runs
-the tool against real folders, with a disk that fills up; the old version
-fails six of its fifteen checks.
-
-### The same chain in other notations
-
-[trcks](https://github.com/christophgietl/trcks) is a Python library for
-railway-oriented programming, and its README has one small example: look up a
-user by e-mail, then the user's subscription, then compute the fee, where each
-of the first two can fail. Here is the function that chains the three, in
-trcks's object-oriented style (the helpers return `("success", value)` or
-`("failure", description)` tuples, typed as `Result[...]`, and the chain
-needs `Wrapper` and the `map_*` methods):
-
-```py
-def get_subscription_fee_by_email(user_email: str) -> Result[FailureDescription, float]:
-    return (
-        Wrapper(core=user_email)
-        .map_to_result(get_user_id)
-        .map_success_to_result(get_subscription_id)
-        .map_success(get_subscription_fee)
-        .core
-    )
-```
-
-Its functional style swaps the `Wrapper` for `pipe(user_email, get_user_id,
-r.map_success_to_result(get_subscription_id), r.map_success(get_subscription_fee))`.
-In Haskell the `Either` monad does it, with `do` notation, and in Rust it is
-`Result` and the `?` operator:
-
-```haskell
-getSubscriptionFeeByEmail :: String -> Either Failure Double
-getSubscriptionFeeByEmail email = do
-  userId         <- getUserId email
-  subscriptionId <- getSubscriptionId userId
-  pure (getSubscriptionFee subscriptionId)
-```
-
-```rust
-fn get_subscription_fee_by_email(email: &str) -> Result<f64, Failure> {
-    let user_id = get_user_id(email)?;
-    let subscription_id = get_subscription_id(user_id)?;
-    Ok(get_subscription_fee(subscription_id))
-}
-```
-
-In Adascript it is the `do:` block, and it is the whole chain; the full
-program, which `make test` runs on both backends and compares, is
-`EXAMPLES/trcks_example.ady`:
-
-<!-- from: EXAMPLES/trcks_example.ady -->
-```python
-type Failure_T is record:
-    description: str
-
-def get_user_id(user_email: str) -> int | !Failure_T:
-    case user_email:
-        when "erika.mustermann@domain.org":
-            return 1
-        when "john_doe@provider.com":
-            return 2
-        when others:
-            return Failure_T("User does not exist")
-
-def get_subscription_id(user_id: int) -> int | !Failure_T:
-    if user_id == 1:
-        return 42
-    return Failure_T("User does not have a subscription")
-
-def get_subscription_fee(subscription_id: int) -> float:
-    return float(subscription_id) * 0.1
-
-def get_subscription_fee_by_email(user_email: str) -> float | !Failure_T:
-    do:
-        user_id         <- get_user_id(user_email)
-        subscription_id <- get_subscription_id(user_id)
-    return get_subscription_fee(subscription_id)
-```
-
-What differs is what each one asks the reader to know:
-
-| | trcks (Python) | Haskell | Rust | Adascript |
-|---|---|---|---|---|
-| The two tracks | `Result`, `("success", x)` / `("failure", e)` tuples | `Either`, `Left` / `Right` | `Result`, `Ok` / `Err` | `T \| !Failure_T`; a plain `return` of a value or of the failure |
-| The chain | `Wrapper` and `map_to_result`, `map_success_to_result`, `map_success`, or `pipe` with `r.map_*` | the `Either` monad, `do` and `pure` | `?` after each call | `x <- step()` in a `do:` block |
-| A plain function in the chain | wrapped by `map_success` | `pure`, or `fmap` | called on the unwrapped value | called on the value |
-| Where the failure types come in | a `Literal` per failure, joined with `\|` | a data type | an enum | one record, marked `!` |
-| A dropped failure | a type checker may notice | a warning for an unused result | `#[must_use]` warns | refused by the compiler |
-| Library to learn | `trcks` | the standard `Either` and `Monad` | the standard `Result` | none |
-
-The Haskell and Rust versions are as short as the Adascript one, because
-their languages were built around the idea, and an Adascript reader who knows
-either will read the `do:` block as the same thing. The difference is for
-everyone else: the chain is a block of two lines that reads top to bottom,
-the types say what can fail, and there is no vocabulary to learn first.
-Python gets there only by a library whose function names carry the meaning.
+more than a name: `distinct` makes the compiler hold you to it, and the section
+"What the compiler holds you to" says exactly how far that reaches.
 
 ---
 
@@ -745,6 +573,8 @@ step 2 were done first.
 
 ## What the compiler holds you to
 
+### Aliases document, and `distinct` enforces
+
 An advocacy document that overclaims is worth less than no document, so,
 precisely: **a scalar type alias is documentation; a distinct type is
 enforcement.**
@@ -795,6 +625,8 @@ speed` is refused, because knots times knots is not knots, and `miles *
 hours` because nobody declared a mile-hour. Multiplying by a plain number
 scales, so `speed * 2.0` is still knots.
 
+### Money, in dollars and euros
+
 The commoner case is money, and it is the same idea. An amount of dollars is
 not a number: it cannot be added to euros, or squared, or passed where euros
 are wanted — but it can be scaled by a quantity, a tax rate or a discount,
@@ -844,6 +676,8 @@ name is in the signature, in the grep and in the compiler's message —
 combinations, which a program has to name to be read anyway, and the gain is
 that there is nothing to learn beyond `type C is A / B`.
 
+### Scaled units: kilometres and miles
+
 Kilometres and miles are the next step, and the one most languages stop at.
 A distance in kilometres is not a distance in metres, and the bug is rarely
 the missing multiplication; it is the multiplication done twice, or in the
@@ -880,6 +714,8 @@ each, and the round trip is checked in the example rather than trusted:
     let back_mi: Distance_in_miles_T = Distance_in_miles_T(marathon_m)
     assert near(float(back_mi), float(marathon_mi), 1e-9)
 ```
+
+### The Mars Climate Orbiter
 
 The best-known unit failure in spaceflight is this one. On 23 September 1999 the
 Mars Climate Orbiter reached Mars about 57 km above the surface, not the planned
@@ -921,6 +757,8 @@ call is refused. What it takes is one declaration, which the program needed
 anyway to be read; and the mistake that cost a spacecraft becomes an error on
 the line that made it.
 
+### Constants in the unit they are read in
+
 A constant is best declared in the unit it is read in, and converted where it
 is used. The Earth-Moon landing simulation (`EXAMPLES/MOON/moon_sim.ady`)
 keeps its altitudes the way the mission plan gives them, in kilometres, and
@@ -946,6 +784,8 @@ kilometres is not a sum. A conversion forgotten in a constant that was
 converted once, at the top, cannot be found; a conversion forgotten at a use
 is refused on that line. The conversion is not a cast to be avoided: it is the
 one place where the program says that a kilometre is a thousand metres.
+
+### Money in whole cents
 
 Money is where a conversion has to state its *policy*, and the same
 declaration does it. Keep the ledger in whole cents, an `int`, so that sums,
@@ -989,6 +829,8 @@ Nim only. A conversion depends on the type of its argument, which the Python
 backend cannot always see, so `ady2py` refuses the declaration with a message
 saying the program is built by `ady2nim` only, and `make test` checks that it
 does. Plain `distinct` units and derived units such as `Knots_T` work on both.
+
+### Narrowed and wrapping ranges
 
 A unit can also be narrowed to a range, and a range can be made to wrap. A
 latitude is a `Degrees_T` that is only ever between -90 and 90, and it goes up
@@ -1036,6 +878,8 @@ because a name may be defined more than once for different parameter types:
 vectors is their dot product, where the code would otherwise carry `over`,
 `per` and `dot_product` helpers.
 
+### An index that comes round
+
 The same type earns its keep where an index must come round. A ring buffer's
 index is a mod type, and it is also the type of the array it indexes, so the
 capacity is written once and there is no `% CAPACITY` and no cast anywhere in
@@ -1076,6 +920,8 @@ The count is a range type, not a mod type: it runs from 0 to the capacity,
 one value more than an index has, and a full buffer must not wrap to empty. The
 types say which is which.
 
+### What is checked where
+
 Not every name should be distinct. Conversions are work, and a value that
 is meant to mix with its base — an epoch plus a number of seconds — is
 better as an alias. Make distinct the quantities whose mixing would be a
@@ -1095,6 +941,225 @@ type (index an `[E]T` with a string and it will not compile), `Natural` and
 `Positive` are range-checked at run time, a record is nominal, `?T` is not
 `T`, and `Path` is a distinct string — `p = s` is an error on both backends
 and `Path(s)` is how you mean it.
+
+---
+
+## A failure belongs in the signature
+
+A signature that says `-> Path` is telling half the truth when the function
+can fail. C returns an error code nothing obliges anyone to check. The shell sets `$?` and
+moves on. Python and Ada raise an exception that appears nowhere in the
+signature, so the reader has to know the body to know the contract. In
+every case the failure is real and the page does not show it.
+
+Adascript prefers that to an exception, and the reason is that the
+handling is where you can see it. With an exception, what is done about a
+failure is written wherever the handler happens to be -- a `try` some
+distance up the call stack, or none at all -- and neither the call nor the
+functions it passes through show anything. With a failure value the call
+takes its result and either deals with it on the next line, next to what
+caused it, or passes it up to its own caller -- which is one `do:` step, and
+is in that function's signature too, so every caller can see it can fail and
+decides where it is handled. The built-in shell and `Path` operations are
+written this way too, and a failure that is dropped is refused.
+
+Adascript lets the return type say both halves: `-> Path | !Failure_T`,
+*either* a path *or* the failure that says why there is none; the `!`
+marks which is which. A failure is a type like any other — an ordinary
+record:
+
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
+```python
+type ErrKind_T is enum CMD_FAILED, NOT_A_BACKUP_DEST, SOURCE_MISSING, STILL_RUNNING, NO_SPACE, BAD_ARGUMENTS
+
+type Failure_T is record:
+    kind:   ErrKind_T
+    detail: str    # the command that failed, the path at fault, or what went wrong
+    stderr: str    # what a failed command said; "" for any other failure
+    fix:    str    # a command that would fix it; "" when there is none
+```
+
+A function returns its value or a failure, and there is nothing to wrap —
+the type of what is returned says which it is:
+
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
+```python
+def run_checked(cmd: str, ssh: ?SSH = None) -> str | !Failure_T:
+    let r: CmdResult = run_cmd(cmd, ssh)
+    if r.returncode != 0:
+        return failure(CMD_FAILED, cmd, r.stderr.strip())
+    return r.stdout
+```
+
+A chain of steps that must all succeed is written as a chain, and the
+first failure leaves the function with its reason intact. Nothing in it is
+error-handling code; the `do:` block is the error handling:
+
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
+```python
+    # One railway: the lock is released only once `latest` points at this
+    # backup. If the link fails, the lock stays, and the next run finds an
+    # interrupted backup to resume rather than a finished one with no link.
+    do:
+        rm_file(dest_f / "latest", dest_is_ssh(ssh))
+        ln_s(Path(dest.name), dest_f / "latest", dest_is_ssh(ssh))
+        rm_file(inprogress_file, ssh)
+```
+
+And one place, at the top, decides what the user is told and which status
+the program exits with. `outcome is Failure_T` asks which of the two it
+holds; a `case` over the failure's kind inside `report` is exhaustive, so a
+new kind of failure nobody reports does not compile:
+
+<!-- from: TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady -->
+```python
+    let outcome: None | !Failure_T = backup(
+        ...
+    )
+    if outcome is Failure_T:
+        report(outcome)
+        quit(1)
+```
+
+The built-in operations that can fail are on these tracks already:
+
+| The call | Its result | The failure's fields |
+|---|---|---|
+| `shell: cmd` | `str \| !ShellFailure_T` | `command`, `code`, `stderr` |
+| `p.mkdir()`, `p.write_text(s)` | `None \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `p.relative_to(base)` | `Path \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `p.read_text()` | `str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `p.read_lines()` | `[]str \| !PathFailure_T` | `op`, `path`, `base`, `reason` |
+| `parse_float(s)` | `float \| !ParseFailure_T` | `what`, `text` |
+| `parse_int(s)` | `int \| !ParseFailure_T` | `what`, `text` |
+| `parse_enum(E, s)`, `parse_enum(E, n)` | `E \| !ParseFailure_T` | `what`, `text` |
+| `input(prompt)`, `stdin.readLine()` | `str \| !InputFailure_T` | `reason` |
+
+This is railway-oriented programming — Scott Wlaschin's name for it — and it
+is not new: F#'s and Rust's `Result` and Zig's error unions all do it. What the notation adds is
+that it costs nothing to write. The test narrows the name — past
+`if r is Failure_T: return`, `r` *is* the path, with nothing to unwrap —
+and the same source runs on both backends.
+
+The case for it is not a theory. `rsync_time_machine.ady` is a port of a
+real backup tool, and it ignored the exit status of every command that
+changed something. Rewritten this way, it gave up
+three bugs that `make test`, which only compiled it, had never seen:
+
+- A failed `ln -s latest` was ignored: the lock was removed and the run
+  reported success, with no `latest` link at all. It now fails, names the
+  command and what it printed, and keeps the lock so the next run resumes.
+- On a full disk it was meant to expire the oldest backup and retry. It
+  expired the newest — the one in progress — freed nothing, retried a
+  hundred times and exited 0, with `latest` pointing at a directory it had
+  just deleted.
+- Every retry reused one log, and rsync appends: the first "No space left"
+  was read again after every attempt, successful or not. With the first
+  bug fixed, it went on to expire every backup there was.
+
+The first bug is the kind the signature now prevents: once `ln_s` says
+`-> None | !Failure_T`, it cannot be called and its failure thrown away. A
+bare `ln_s(...)` as a statement does not compile, on either backend —
+the result has to be taken, by a `do:` step, a test or a `return`. The
+other two came to light because failures had become values a test could
+look at. `TOOLS/RSYNC_TIME_MACHINE/test/rsync_time_machine_test.sh` now runs
+the tool against real folders, with a disk that fills up; the old version
+fails six of its fifteen checks.
+
+### The same chain in other notations
+
+[trcks](https://github.com/christophgietl/trcks) is a Python library for
+railway-oriented programming, and its README has one small example: look up a
+user by e-mail, then the user's subscription, then compute the fee, where each
+of the first two can fail. Here is the function that chains the three, in
+trcks's object-oriented style (the helpers return `("success", value)` or
+`("failure", description)` tuples, typed as `Result[...]`, and the chain
+needs `Wrapper` and the `map_*` methods):
+
+```py
+def get_subscription_fee_by_email(user_email: str) -> Result[FailureDescription, float]:
+    return (
+        Wrapper(core=user_email)
+        .map_to_result(get_user_id)
+        .map_success_to_result(get_subscription_id)
+        .map_success(get_subscription_fee)
+        .core
+    )
+```
+
+Its functional style swaps the `Wrapper` for `pipe(user_email, get_user_id,
+r.map_success_to_result(get_subscription_id), r.map_success(get_subscription_fee))`.
+In Haskell the `Either` monad does it, with `do` notation, and in Rust it is
+`Result` and the `?` operator:
+
+```haskell
+getSubscriptionFeeByEmail :: String -> Either Failure Double
+getSubscriptionFeeByEmail email = do
+  userId         <- getUserId email
+  subscriptionId <- getSubscriptionId userId
+  pure (getSubscriptionFee subscriptionId)
+```
+
+```rust
+fn get_subscription_fee_by_email(email: &str) -> Result<f64, Failure> {
+    let user_id = get_user_id(email)?;
+    let subscription_id = get_subscription_id(user_id)?;
+    Ok(get_subscription_fee(subscription_id))
+}
+```
+
+In Adascript it is the `do:` block, and it is the whole chain; the full
+program, which `make test` runs on both backends and compares, is
+`EXAMPLES/trcks_example.ady`:
+
+<!-- from: EXAMPLES/trcks_example.ady -->
+```python
+type Failure_T is record:
+    description: str
+
+def get_user_id(user_email: str) -> int | !Failure_T:
+    case user_email:
+        when "erika.mustermann@domain.org":
+            return 1
+        when "john_doe@provider.com":
+            return 2
+        when others:
+            return Failure_T("User does not exist")
+
+def get_subscription_id(user_id: int) -> int | !Failure_T:
+    if user_id == 1:
+        return 42
+    return Failure_T("User does not have a subscription")
+
+def get_subscription_fee(subscription_id: int) -> float:
+    return float(subscription_id) * 0.1
+
+def get_subscription_fee_by_email(user_email: str) -> float | !Failure_T:
+    do:
+        user_id         <- get_user_id(user_email)
+        subscription_id <- get_subscription_id(user_id)
+    return get_subscription_fee(subscription_id)
+```
+
+What differs is what each one asks the reader to know:
+
+| | trcks (Python) | Haskell | Rust | Adascript |
+|---|---|---|---|---|
+| The two tracks | `Result`, `("success", x)` / `("failure", e)` tuples | `Either`, `Left` / `Right` | `Result`, `Ok` / `Err` | `T \| !Failure_T`; a plain `return` of a value or of the failure |
+| The chain | `Wrapper` and `map_to_result`, `map_success_to_result`, `map_success`, or `pipe` with `r.map_*` | the `Either` monad, `do` and `pure` | `?` after each call | `x <- step()` in a `do:` block |
+| A plain function in the chain | wrapped by `map_success` | `pure`, or `fmap` | called on the unwrapped value | called on the value |
+| Where the failure types come in | a `Literal` per failure, joined with `\|` | a data type | an enum | one record, marked `!` |
+| A dropped failure | a type checker may notice | a warning for an unused result | `#[must_use]` warns | refused by the compiler |
+| Library to learn | `trcks` | the standard `Either` and `Monad` | the standard `Result` | none |
+
+The Haskell and Rust versions are as short as the Adascript one, because
+their languages were built around the idea, and an Adascript reader who knows
+either will read the `do:` block as the same thing. The difference is for
+everyone else: the chain is a block of two lines that reads top to bottom,
+the types say what can fail, and there is no vocabulary to learn first.
+Python gets there only by a library whose function names carry the meaning.
+
+---
 
 ## What is not yet true
 
@@ -1150,3 +1215,4 @@ catches them:
 - `DOCS/ADASCRIPT_FOR_SHELL.md` — for scripts and system tools
 - `EXAMPLES/` — every one of them compiled and run on both backends by
   `make test`
+
