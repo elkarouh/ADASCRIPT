@@ -745,3 +745,11 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
   `math.arctan` and the others run on the Python backend too.
 * **map_base and map_flat cannot be imported from a sibling directory by name**; `from MAP_UTILS/map_base import`
   works because the parent of this directory is searched.
+
+## Found porting EXAMPLES/accounting.ady
+
+- [ ] A literal beside `==` (and the other comparisons) on a tuple subscript of a call, on
+      Nim: `assert books.profit_and_loss()[2] == 130_000` (the tuple's third field is a
+      `Cents_T`, a `distinct int`) emits a bare `130000` and Nim reports a type mismatch.
+      The literal takes the declared type next to a name or a field, but not next to
+      `f(...)[i]`. Workaround in the example: unpack with `let (revenue, expenses, profit) = ...`.
