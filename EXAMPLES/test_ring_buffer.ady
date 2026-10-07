@@ -9,13 +9,23 @@ type Slot_T is mod 8
 class Ring:
     var items: [Index_T]int
     var head: Index_T                  # a mod type starts at 0
+    var tail: Index_T
     var count: Count_T
 
     def push(self, x: int):
         self.head += 1                 # a literal is an Index_T; it comes round at CAPACITY
         self.items[self.head] = x      # head is the newest slot
-        if self.count < CAPACITY:
+        if self.count == CAPACITY:
+            self.tail += 1             # full: the oldest is overwritten
+        else:
             self.count += 1
+
+    def get(self) -> ?int:
+        if self.count == 0:
+            return None
+        self.tail += 1                 # tail is the slot last read
+        self.count -= 1
+        return self.items[self.tail]
 
     def latest(self, back: Index_T) -> int:
         return self.items[self.head - back]         # back = 0 is the newest
@@ -25,6 +35,12 @@ def main():
     for x in 1 .. 6:
         r.push(x * 10)
     print(r.count, r.latest(0), r.latest(1), r.latest(3))
+    for _ in 0 ..< 5:
+        let v: ?int = r.get()
+        if v is None:
+            print("empty")
+        else:
+            print(v)
 
 def tally() -> int:
     var seen: [Slot_T]int          # a mod type written as a number is an index too

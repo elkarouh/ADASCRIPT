@@ -2791,6 +2791,12 @@ def _translate_method(obj_name, method_name):
             return method_name
     if sym:
         type_str = sym.get("type", "") or ""
+        # A method the receiver's own class defines keeps its name: a Ring
+        # with a `get` is not a dict, whatever `get` is called on a dict.
+        import re as _re_own
+        _cls = _re_own.sub(r"^(?:var|ref)\s+", "", type_str).strip()
+        if method_name in (getattr(ParserState, "_all_class_methods", None) or {}).get(_cls, ()):
+            return method_name
         for prefix, mappings in _PY_METHOD_TO_NIM.items():
             if type_str.startswith(prefix):
                 if method_name in mappings:

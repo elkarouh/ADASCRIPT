@@ -525,13 +525,23 @@ type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY,
 class Ring:
     var items: [Index_T]int
     var head: Index_T                  # a mod type starts at 0
+    var tail: Index_T
     var count: Count_T
 
     def push(self, x: int):
         self.head += 1                 # a literal is an Index_T; it comes round at CAPACITY
         self.items[self.head] = x      # head is the newest slot
-        if self.count < CAPACITY:
+        if self.count == CAPACITY:
+            self.tail += 1             # full: the oldest is overwritten
+        else:
             self.count += 1
+
+    def get(self) -> ?int:
+        if self.count == 0:
+            return None
+        self.tail += 1                 # tail is the slot last read
+        self.count -= 1
+        return self.items[self.tail]
 
     def latest(self, back: Index_T) -> int:
         return self.items[self.head - back]         # back = 0 is the newest
