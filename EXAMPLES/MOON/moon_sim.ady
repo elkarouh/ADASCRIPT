@@ -918,10 +918,10 @@ class PhaseError(Scalar_Fn):
         return float(p - self.target)
 
 class Mission:
-    const LEO_ALT: Meters_T = Meters_T(Kilometers_T(200.0))
-    const LOI_PERI_ALT: Meters_T = Meters_T(Kilometers_T(100.0))
-    const LOI1_APO_ALT: Meters_T = Meters_T(Kilometers_T(300.0))
-    const DOI_PERI_ALT: Meters_T = Meters_T(Kilometers_T(15.0))
+    const LEO_ALT: Kilometers_T = 200.0
+    const LOI_PERI_ALT: Kilometers_T = 100.0
+    const LOI1_APO_ALT: Kilometers_T = 300.0
+    const DOI_PERI_ALT: Kilometers_T = 15.0
     const DESCENT_ARC: Degrees_T = Degrees_T(Radians_T(0.36))   # lunar arc between PDI and the site
     const DT: Duration_T = 0.2                           # physics step in powered descent
     const GUIDANCE_CYCLE: Duration_T = 2.0               # AGC guidance cycle
@@ -971,7 +971,7 @@ class Mission:
     # --------------------------------------------------------
     def plan_tli(self):
         print "PHASE: TLI"
-        let r0: Meters_T = R_EARTH + self.LEO_ALT
+        let r0: Meters_T = R_EARTH + Meters_T(self.LEO_ALT)
         let a_t: Meters_T = (r0 + MOON_DISTANCE) / 2.0
         let v_c: Speed_T = circular_velocity(MU_EARTH, r0)
         let v_t: Speed_T = vis_viva(MU_EARTH, r0, a_t)
@@ -989,7 +989,7 @@ class Mission:
 
     def solve_moon_phase(self):
         """Shooting method: choose the Moon's phase so that perilune = 100 km."""
-        let target: Meters_T = R_MOON + self.LOI_PERI_ALT
+        let target: Meters_T = R_MOON + Meters_T(self.LOI_PERI_ALT)
         print "  Solving Moon phasing (shooting method)..."
         let miss: PhaseError = PhaseError(self.tli_r, self.tli_v, self.phase_nominal,
                                           self.t_max, target)
@@ -1072,11 +1072,11 @@ class Mission:
     def loi1(self):
         self.phase = LOI_1
         let rp: Meters_T = radius_of(self.r)
-        let ra: Meters_T = R_MOON + self.LOI1_APO_ALT
+        let ra: Meters_T = R_MOON + Meters_T(self.LOI1_APO_ALT)
         let speed: Speed_T = vis_viva(MU_MOON, rp, (rp + ra) / 2.0)
         let dv: Speed_T = self.tangential_burn(self.sc, CSM, speed, LOI_1)
         print (f"LOI-1 dv = {dv:.1f} m/s   (-> {Kilometers_T(rp - R_MOON):.0f} x "
-               f"{Kilometers_T(self.LOI1_APO_ALT):.0f} km)")
+               f"{self.LOI1_APO_ALT:.0f} km)")
 
     def coast_to_next_periapsis(self):
         self.phase = LUNAR_ORBIT
@@ -1106,10 +1106,10 @@ class Mission:
     def doi(self):
         self.phase = DOI
         let r: Meters_T = radius_of(self.r)
-        let rp: Meters_T = R_MOON + self.DOI_PERI_ALT
+        let rp: Meters_T = R_MOON + Meters_T(self.DOI_PERI_ALT)
         let speed: Speed_T = vis_viva(MU_MOON, r, (r + rp) / 2.0)
         let dv: Speed_T = self.tangential_burn(self.lander, LM, speed, DOI)
-        print f"DOI dv = {dv:.1f} m/s   (-> periapsis {Kilometers_T(self.DOI_PERI_ALT):.0f} km)"
+        print f"DOI dv = {dv:.1f} m/s   (-> periapsis {self.DOI_PERI_ALT:.0f} km)"
         self.coast_moon(ORBIT_LIMIT, [PERILUNE, IMPACT], "descent orbit")
         self.phase = PDI
 
