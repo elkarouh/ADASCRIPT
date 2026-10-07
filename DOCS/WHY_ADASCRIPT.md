@@ -881,6 +881,46 @@ each, and the round trip is checked in the example rather than trusted:
     assert near(float(back_mi), float(marathon_mi), 1e-9)
 ```
 
+The best-known unit failure in spaceflight is this one. On 23 September 1999 the
+Mars Climate Orbiter reached Mars about 57 km above the surface, not the planned
+226 km, and was lost. The ground software wrote the thruster impulses of its
+wheel-desaturation burns in pound-force seconds; the navigation software read
+them as newton-seconds, as the interface specification said it should. Every
+routine was correct and every number was right. One factor of 4.45 sat between
+two programs that both held the value in a `float`, so nothing could notice.
+In Adascript the two units are two types, and one line says how they relate:
+
+<!-- from: EXAMPLES/mars_climate_orbiter.ady -->
+```python
+type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
+type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
+```
+
+The navigation takes an `Impulse_T`, the file is in `Impulse_in_lbf_s_T`, and the
+call that was the mission's loss does not compile:
+
+<!-- from: EXAMPLES/mars_climate_orbiter.ady -->
+```python
+#     let wrong: Speed_T = speed_change(SMALL_FORCES, SPACECRAFT)
+```
+
+The way across is the conversion, on the line where the units meet, and a
+reviewer can see it:
+
+<!-- from: EXAMPLES/mars_climate_orbiter.ady -->
+```python
+def in_newton_seconds(file: [*]Impulse_in_lbf_s_T) -> []Impulse_T:
+    return [Impulse_T(p) for p in file]
+```
+
+`EXAMPLES/mars_climate_orbiter.ady` runs the whole thing with made-up numbers:
+thirty small burns, a cruise of eight months, and the 4.45 between the right
+speed change and the one the 1999 navigation took, which drifts the spacecraft
+by about 173 km, the order of the real miss. The Makefile checks that the wrong
+call is refused. What it takes is one declaration, which the program needed
+anyway to be read; and the mistake that cost a spacecraft becomes an error on
+the line that made it.
+
 A constant is best declared in the unit it is read in, and converted where it
 is used. The Earth-Moon landing simulation (`EXAMPLES/MOON/moon_sim.ady`)
 keeps its altitudes the way the mission plan gives them, in kilometres, and
