@@ -1,0 +1,268 @@
+#!/usr/bin/env ady2nim
+# accounting.ady — a toy double-entry bookkeeping system
+#
+#   ady2nim EXAMPLES/accounting.ady -r        (or: ady2py -c)
+#
+# Account -> journal entry -> general ledger -> trial balance -> statements.
+#
+# The one rule of the books: in every journal entry, total debits equal total
+# credits. `post` refuses an entry that breaks it, so a journal that exists is
+# balanced, and the trial balance and the balance sheet then balance by
+# construction.
+#
+# What the types do here:
+#   * money is `Cents_T`, a distinct whole number: sums are exact, it cannot be
+#     mixed with a count or a float, and nothing is rounded anywhere;
+#   * an account number is `AccountNo_T`, not a bare `str`, so a name or a
+#     description cannot be passed where an account is wanted;
+#   * the kind of an account and the side of a line are enums, not strings:
+#     "Assett" cannot be typed, and a `case` over them must name every member;
+#   * a line is one amount on one side (DEBIT or CREDIT): no line can carry
+#     both, or a negative one;
+#   * what can go wrong when posting is a `!AccountingFailure_T` in the
+#     signature, which the caller must look at.
+
+type Cents_T       is distinct int          # money, in cents (1/100 of the euro)
+type AccountNo_T   is distinct str          # "1000", "4000", ...
+type Kind_T        is enum ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+type Side_T        is enum DEBIT, CREDIT
+
+type AccountingFailure_T is record:
+    reason: str
+
+type Account is record:
+    number: AccountNo_T
+    name:   str
+    kind:   Kind_T
+
+type Line is record:
+    account: AccountNo_T
+    side:    Side_T
+    amount:  Cents_T
+
+type Entry is record:
+    description: str
+    lines:       []Line
+
+type Statement_T is record:                 # the balance sheet's three totals
+    assets:      Cents_T
+    liabilities: Cents_T
+    equity:      Cents_T
+
+def debit(account: AccountNo_T, amount: Cents_T) -> Line:
+    return Line(account, DEBIT, amount)
+
+def credit(account: AccountNo_T, amount: Cents_T) -> Line:
+    return Line(account, CREDIT, amount)
+
+# 1234 cents -> "12.34"
+def money(c: Cents_T) -> str:
+    let a: Cents_T = abs(c)
+    let sign: str = "-" if c < 0 else ""
+    return f"{sign}{a // 100}.{a % 100:02d}"
+
+# Assets and expenses grow on the debit side; the rest on the credit side.
+def debit_normal(kind: Kind_T) -> bool:
+    return kind == ASSET or kind == EXPENSE
+
+# `net` is debits minus credits; a balance counts in the account's own direction.
+def balance_of(kind: Kind_T, net: Cents_T) -> Cents_T:
+    return net if debit_normal(kind) else -net
+
+
+class AccountingSystem:
+    var accounts: [AccountNo_T]Account      # chart of accounts, in the order added
+    var journal:  []Entry
+
+    def __init__(self):
+        self.accounts = {:}
+        self.journal = []
+
+    def add_account(self, number: AccountNo_T, name: str, kind: Kind_T) -> None | !AccountingFailure_T:
+        if number in self.accounts:
+            return AccountingFailure_T(f"account {number} exists")
+        self.accounts[number] = Account(number, name, kind)
+        return None
+
+    # The only way into the journal. Nothing is recorded unless all of it is valid.
+    def post(self, description: str, lines: []Line) -> None | !AccountingFailure_T:
+        if len(lines) < 2:
+            return AccountingFailure_T(f"'{description}': an entry needs two lines or more")
+        var debits: Cents_T = 0
+        var credits: Cents_T = 0
+        for line in lines:
+            if line.account not in self.accounts:
+                return AccountingFailure_T(f"'{description}': no account {line.account}")
+            if line.amount <= 0:
+                return AccountingFailure_T(f"'{description}': an amount must be above zero")
+            case line.side:
+                when DEBIT:
+                    debits += line.amount
+                when CREDIT:
+                    credits += line.amount
+        if debits != credits:
+            return AccountingFailure_T(
+                f"'{description}' is unbalanced: debit {money(debits)}, credit {money(credits)}")
+        self.journal.append(Entry(description, lines))
+        return None
+
+    # General ledger: debits minus credits per account, in one pass over the journal.
+    def ledger(self) -> [AccountNo_T]Cents_T:
+        var net: [AccountNo_T]Cents_T = {:}
+        for number in self.accounts:
+            net[number] = 0
+        for entry in self.journal:
+            for line in entry.lines:
+                case line.side:
+                    when DEBIT:
+                        net[line.account] += line.amount
+                    when CREDIT:
+                        net[line.account] -= line.amount
+        return net
+
+    def profit_and_loss(self) -> (Cents_T, Cents_T, Cents_T):
+        var revenue: Cents_T = 0
+        var expenses: Cents_T = 0
+        let net: [AccountNo_T]Cents_T = self.ledger()
+        for number in self.accounts:
+            let account: Account = self.accounts[number]
+            case account.kind:
+                when REVENUE:
+                    revenue += balance_of(account.kind, net[number])
+                when EXPENSE:
+                    expenses += balance_of(account.kind, net[number])
+                when others:
+                    pass
+        return (revenue, expenses, revenue - expenses)
+
+    def balance_sheet(self) -> Statement_T:
+        var s: Statement_T = Statement_T(0, 0, 0)
+        let net: [AccountNo_T]Cents_T = self.ledger()
+        for number in self.accounts:
+            let account: Account = self.accounts[number]
+            case account.kind:
+                when ASSET:
+                    s.assets += balance_of(account.kind, net[number])
+                when LIABILITY:
+                    s.liabilities += balance_of(account.kind, net[number])
+                when EQUITY:
+                    s.equity += balance_of(account.kind, net[number])
+                when others:
+                    pass
+        let (revenue, expenses, profit) = self.profit_and_loss()
+        s.equity += profit                          # this period's profit belongs to equity
+        return s
+
+    # --- reports ---------------------------------------------------------------
+    def print_journal(self):
+        print "\nJOURNAL"
+        print "-" * 55
+        for entry in self.journal:
+            print entry.description
+            for line in entry.lines:
+                let name: str = self.accounts[line.account].name
+                case line.side:
+                    when DEBIT:
+                        print f"    {name:25} {money(line.amount):>12}"
+                    when CREDIT:
+                        print f"    {name:25} {'':12} {money(line.amount):>12}"
+
+    def print_trial_balance(self):
+        print "\nTRIAL BALANCE"
+        print "-" * 55
+        print f"{'Account':25} {'Debit':>12} {'Credit':>12}"
+        var total_debit: Cents_T = 0
+        var total_credit: Cents_T = 0
+        let net: [AccountNo_T]Cents_T = self.ledger()
+        for number in self.accounts:
+            let n: Cents_T = net[number]
+            let name: str = self.accounts[number].name
+            if n >= 0:
+                print f"{name:25} {money(n):>12} {money(0):>12}"
+                total_debit += n
+            else:
+                print f"{name:25} {money(0):>12} {money(-n):>12}"
+                total_credit -= n
+        print "-" * 55
+        print f"{'TOTAL':25} {money(total_debit):>12} {money(total_credit):>12}"
+
+    def print_profit_and_loss(self):
+        let (revenue, expenses, profit) = self.profit_and_loss()
+        print "\nPROFIT & LOSS"
+        print "-" * 40
+        print f"Revenue:       {money(revenue):>10}"
+        print f"Expenses:      {money(expenses):>10}"
+        print "-" * 40
+        print f"Profit:        {money(profit):>10}"
+
+    def print_balance_sheet(self):
+        let s: Statement_T = self.balance_sheet()
+        print "\nBALANCE SHEET"
+        print "-" * 40
+        print f"Assets:        {money(s.assets):>10}"
+        print f"Liabilities:   {money(s.liabilities):>10}"
+        print f"Equity:        {money(s.equity):>10}"
+        print "-" * 40
+        print f"Liab. + Eq.:   {money(s.liabilities + s.equity):>10}"
+
+
+# A refused entry is not an error of the program: say what was wrong and carry on.
+def posted(books: AccountingSystem, description: str, lines: []Line):
+    let r: None | !AccountingFailure_T = books.post(description, lines)
+    if r is AccountingFailure_T:
+        print f"refused: {r.reason}"
+
+def opened(books: AccountingSystem, number: AccountNo_T, name: str, kind: Kind_T):
+    let r: None | !AccountingFailure_T = books.add_account(number, name, kind)
+    if r is AccountingFailure_T:
+        print f"refused: {r.reason}"
+
+
+# ================================================================
+# Example company
+# ================================================================
+
+var books: AccountingSystem = AccountingSystem()
+
+# chart of accounts
+const BANK: AccountNo_T      = "1000"
+const EQUIPMENT: AccountNo_T = "1100"
+const LOAN: AccountNo_T      = "2000"
+const CAPITAL: AccountNo_T   = "3000"
+const SALES: AccountNo_T     = "4000"
+const RENT: AccountNo_T      = "5000"
+const SUPPLIES: AccountNo_T  = "5100"
+
+opened(books, BANK,      "Bank",          ASSET)
+opened(books, EQUIPMENT, "Equipment",     ASSET)
+opened(books, LOAN,      "Loan",          LIABILITY)
+opened(books, CAPITAL,   "Owner Capital", EQUITY)
+opened(books, SALES,     "Sales",         REVENUE)
+opened(books, RENT,      "Rent",          EXPENSE)
+opened(books, SUPPLIES,  "Supplies",      EXPENSE)
+
+# Each transaction is two lines, a debit and a credit of the same amount.
+posted(books, "Owner invests money",  [debit(BANK, 1_000_000), credit(CAPITAL, 1_000_000)])
+posted(books, "Buy equipment",        [debit(EQUIPMENT, 300_000), credit(BANK, 300_000)])
+posted(books, "Cash sale",            [debit(BANK, 200_000), credit(SALES, 200_000)])
+posted(books, "Pay rent",             [debit(RENT, 50_000), credit(BANK, 50_000)])
+posted(books, "Buy supplies",         [debit(SUPPLIES, 20_000), credit(BANK, 20_000)])
+posted(books, "Receive bank loan",    [debit(BANK, 500_000), credit(LOAN, 500_000)])
+
+# What `post` refuses; none of these reaches the journal.
+posted(books, "Typo in the amount",   [debit(BANK, 10_000), credit(SALES, 1_000)])
+posted(books, "Unknown account",      [debit("9999", 10_000), credit(SALES, 10_000)])
+posted(books, "Negative amount",      [debit(BANK, -10_000), credit(SALES, -10_000)])
+posted(books, "Only one line",        [debit(BANK, 10_000)])
+opened(books, BANK, "Bank again", ASSET)
+
+books.print_journal()
+books.print_trial_balance()
+books.print_profit_and_loss()
+books.print_balance_sheet()
+
+let sheet: Statement_T = books.balance_sheet()
+assert sheet.assets == sheet.liabilities + sheet.equity
+assert sheet.assets == 1_630_000
+let (revenue, expenses, profit) = books.profit_and_loss()
+assert profit == 130_000
