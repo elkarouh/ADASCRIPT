@@ -78,7 +78,7 @@ class AccountingSystem:
         self.accounts = {:}
         self.journal = []
 
-    def add_account(self, number: AccountNo_T, name: str, kind: Kind_T) -> None | !AccountingFailure_T:
+    def open(self, number: AccountNo_T, name: str, kind: Kind_T) -> None | !AccountingFailure_T:
         if number in self.accounts:
             return AccountingFailure_T(f"account {number} exists")
         self.accounts[number] = Account(number, name, kind)
@@ -206,23 +206,9 @@ class AccountingSystem:
         print f"Liab. + Eq.:   {money(s.liabilities + s.equity):>10}"
 
 
-# A refused entry is not an error of the program: say what was wrong and carry on.
-def posted(books: AccountingSystem, description: str, lines: []Line):
-    let r: None | !AccountingFailure_T = books.post(description, lines)
-    if r is AccountingFailure_T:
-        print f"refused: {r.reason}"
-
-def opened(books: AccountingSystem, number: AccountNo_T, name: str, kind: Kind_T):
-    let r: None | !AccountingFailure_T = books.add_account(number, name, kind)
-    if r is AccountingFailure_T:
-        print f"refused: {r.reason}"
-
-
 # ================================================================
 # Example company
 # ================================================================
-
-var books: AccountingSystem = AccountingSystem()
 
 # chart of accounts
 const BANK: AccountNo_T      = "1000"
@@ -233,28 +219,46 @@ const SALES: AccountNo_T     = "4000"
 const RENT: AccountNo_T      = "5000"
 const SUPPLIES: AccountNo_T  = "5100"
 
-opened(books, BANK,      "Bank",          ASSET)
-opened(books, EQUIPMENT, "Equipment",     ASSET)
-opened(books, LOAN,      "Loan",          LIABILITY)
-opened(books, CAPITAL,   "Owner Capital", EQUITY)
-opened(books, SALES,     "Sales",         REVENUE)
-opened(books, RENT,      "Rent",          EXPENSE)
-opened(books, SUPPLIES,  "Supplies",      EXPENSE)
+# A `do:` block runs its steps in order and stops at the first failure, which
+# the function passes up as it is.
+def run_year(books: AccountingSystem) -> None | !AccountingFailure_T:
+    do:
+        books.open(BANK,      "Bank",          ASSET)
+        books.open(EQUIPMENT, "Equipment",     ASSET)
+        books.open(LOAN,      "Loan",          LIABILITY)
+        books.open(CAPITAL,   "Owner Capital", EQUITY)
+        books.open(SALES,     "Sales",         REVENUE)
+        books.open(RENT,      "Rent",          EXPENSE)
+        books.open(SUPPLIES,  "Supplies",      EXPENSE)
 
-# Each transaction is two lines, a debit and a credit of the same amount.
-posted(books, "Owner invests money",  [debit(BANK, 1_000_000), credit(CAPITAL, 1_000_000)])
-posted(books, "Buy equipment",        [debit(EQUIPMENT, 300_000), credit(BANK, 300_000)])
-posted(books, "Cash sale",            [debit(BANK, 200_000), credit(SALES, 200_000)])
-posted(books, "Pay rent",             [debit(RENT, 50_000), credit(BANK, 50_000)])
-posted(books, "Buy supplies",         [debit(SUPPLIES, 20_000), credit(BANK, 20_000)])
-posted(books, "Receive bank loan",    [debit(BANK, 500_000), credit(LOAN, 500_000)])
+        # Each transaction is two lines, a debit and a credit of the same amount.
+        books.post("Owner invests money", [debit(BANK, 1_000_000), credit(CAPITAL, 1_000_000)])
+        books.post("Buy equipment",       [debit(EQUIPMENT, 300_000), credit(BANK, 300_000)])
+        books.post("Cash sale",           [debit(BANK, 200_000), credit(SALES, 200_000)])
+        books.post("Pay rent",            [debit(RENT, 50_000), credit(BANK, 50_000)])
+        books.post("Buy supplies",        [debit(SUPPLIES, 20_000), credit(BANK, 20_000)])
+        books.post("Receive bank loan",   [debit(BANK, 500_000), credit(LOAN, 500_000)])
 
-# What `post` refuses; none of these reaches the journal.
-posted(books, "Typo in the amount",   [debit(BANK, 10_000), credit(SALES, 1_000)])
-posted(books, "Unknown account",      [debit("9999", 10_000), credit(SALES, 10_000)])
-posted(books, "Negative amount",      [debit(BANK, -10_000), credit(SALES, -10_000)])
-posted(books, "Only one line",        [debit(BANK, 10_000)])
-opened(books, BANK, "Bank again", ASSET)
+var books: AccountingSystem = AccountingSystem()
+let year: None | !AccountingFailure_T = run_year(books)
+if year is AccountingFailure_T:
+    die(year.reason)
+
+# What the books refuse: none of these reaches the journal.
+let bad: []Entry = [
+    Entry("Typo in the amount", [debit(BANK, 10_000), credit(SALES, 1_000)]),
+    Entry("Unknown account",    [debit("9999", 10_000), credit(SALES, 10_000)]),
+    Entry("Negative amount",    [debit(BANK, -10_000), credit(SALES, -10_000)]),
+    Entry("Only one line",      [debit(BANK, 10_000)]),
+]
+for e in bad:
+    let r: None | !AccountingFailure_T = books.post(e.description, e.lines)
+    if r is AccountingFailure_T:
+        print f"refused: {r.reason}"
+let again: None | !AccountingFailure_T = books.open(BANK, "Bank again", ASSET)
+if again is AccountingFailure_T:
+    print f"refused: {again.reason}"
+assert len(books.journal) == 6
 
 books.print_journal()
 books.print_trial_balance()
