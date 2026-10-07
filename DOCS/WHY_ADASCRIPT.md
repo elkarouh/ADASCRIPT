@@ -145,8 +145,7 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
     queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
         current_dist, node = queue.pop()
-        if node in visited:
-            continue
+        continue if node in visited
         visited.add(node)
         for dist, neighbor in graph[node]:
             let new_dist: Distance_T = current_dist + dist
@@ -181,7 +180,7 @@ comprehension, so there is no afterwards.
 
 The function is the algorithm and nothing else. Every node starts at
 infinity except the start; take the nearest node; skip it if it has been
-seen; mark it; relax every edge out of it. A signature and fourteen lines,
+seen; mark it; relax every edge out of it. A signature and thirteen lines,
 and not one of them is there for the language rather than for the
 algorithm. That is what executable pseudocode was supposed to mean. The
 book's chapter 1 §1.4 sets it beside the same program in idiomatic Python,

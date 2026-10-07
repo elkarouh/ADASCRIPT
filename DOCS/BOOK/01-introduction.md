@@ -149,8 +149,7 @@ def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
     queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
         current_dist, node = queue.pop()
-        if node in visited:
-            continue
+        continue if node in visited
         visited.add(node)
         for dist, neighbor in graph[node]:
             let new_dist: Distance_T = current_dist + dist
