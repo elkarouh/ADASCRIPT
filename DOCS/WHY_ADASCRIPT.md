@@ -1204,6 +1204,69 @@ Python gets there only by a library whose function names carry the meaning.
 
 ---
 
+## A page is a tree of objects
+
+Most ways of making a web page start from a template language: a second
+syntax, with its own loops and its own escaping, glued to the program by
+strings. Adascript's way is to let the objects that already model the page
+render themselves. The base class says what every widget can do:
+
+<!-- from: EXAMPLES/HTML/html_app.ady -->
+```python
+@virtual
+class Widget:
+    def to_html(self) -> Html:
+        html:
+            div class="widget"
+```
+
+A leaf is a few lines. The tag is the first word, the text is an expression
+of the program, and a field is a field:
+
+<!-- from: EXAMPLES/HTML/html_app.ady -->
+```python
+class Button(Widget):
+    var id:    str
+    var label: str
+
+    def __init__(self, id: str, label: str):
+        self.id = id
+        self.label = label
+
+    def to_html(self) -> Html:
+        html:
+            button id=self.id: self.label
+```
+
+A container is the same, with the children asked for their own HTML. The
+`for` is the language's `for`, over a list of the base type, so a panel can
+hold a label, a button or another panel, and the call goes to whichever it
+is:
+
+<!-- from: EXAMPLES/HTML/html_app.ady -->
+```python
+class Panel(Widget):
+    var title:    str
+    var children: []Widget
+
+    def add(self, child: Widget):
+        self.children.append(child)
+
+    def to_html(self) -> Html:
+        html:
+            section class="panel":
+                h2: self.title
+                for child in self.children:
+                    + child.to_html()
+```
+
+There is nothing to escape by hand and no template to keep in step with the
+class: rename `label` and the compiler finds the line. The same classes
+compile for the browser with `ady2nim js`. This is Nim-only, built on
+karax, and the Python backend does not know `html:`.
+
+---
+
 ## What is not yet true
 
 The Nim backend is the reference one; the Python backend is less
@@ -1244,6 +1307,7 @@ catches them:
   name.
 - **An untested failure used as a value** fails when that line runs, not
   before. Nim refuses it at compile time.
+- **`html:` blocks** are not known: they are built by `ady2nim` only.
 - **Scaled units** (the kilometre, the mile, money in cents) are refused:
   they are built by `ady2nim` only.
 - **Unions** are at most six members.

@@ -1583,6 +1583,91 @@ drop(c)
 
 ---
 
+## `html:` Blocks — a Class Renders Itself (Nim only)
+
+An `html:` block writes a page as indented tags, inside a method whose
+result type is `Html`. The Nim backend turns it into a
+[karax](https://github.com/karaxnim/karax) `buildHtml`, so `Html` is karax's
+`VNode` and `$page` is the HTML text. Every expression in the block is
+ordinary Adascript, checked like the rest.
+
+```python
+class Card:
+    var title: str
+    var items: []str
+    var done:  bool
+
+    def __init__(self, title: str, items: []str, done: bool):
+        self.title = title
+        self.items = items
+        self.done = done
+
+    def to_html(self) -> Html:
+        html:
+            div class="card":
+                h2: self.title
+                ul:
+                    for item in self.items:
+                        li: item
+                if self.done:
+                    span: "done"
+                br
+                button id="inc": "+1"
+```
+
+Line forms inside the block:
+
+| Line                          | Meaning                                             |
+|-------------------------------|-----------------------------------------------------|
+| `tag a="x" b=expr:`           | a tag; its children are indented below              |
+| `tag a="x": expr`             | a tag around one expression or string              |
+| `tag a="x"`                   | a void tag (`br`, `hr`, `img`, `input`)             |
+| `"text"` / `f"text"`          | text                                                |
+| `+ expr`                      | another widget's `Html` goes here                   |
+| `for` / `if` / `elif` / `else` / `while` | ordinary control flow around tags        |
+
+An attribute value is a string or an expression without spaces
+(`id=self.id`); `class` and `for` are fine as attribute names, and
+`data-id` is written `data_id`. The block needs exactly one root tag.
+
+**A page as a tree of objects.** Each object knows how to render itself, and a
+parent asks its children for theirs with `+`:
+
+```python
+@virtual
+class Widget:
+    def to_html(self) -> Html:
+        html:
+            div class="widget"
+
+class Panel(Widget):
+    var title:    str
+    var children: []Widget
+
+    def to_html(self) -> Html:
+        html:
+            section class="panel":
+                h2: self.title
+                for child in self.children:
+                    + child.to_html()
+```
+
+A `Panel` can hold a `Label`, a `Button` or another `Panel`: the call
+dispatches on the object. `EXAMPLES/HTML/html_app.ady` is the whole
+program, with an `App` that renders `html`, `head` and `body` around a
+panel.
+
+The same classes compile for the browser with `ady2nim js`, where the
+karax tree is a live DOM. Needs `nimble install karax`. **Nim only**: the
+Python backend does not know `html:`. Not built yet: event handlers
+(`onclick`).
+
+**Rules for writing one:** the method returns `Html`; the block has one root
+tag; a child's HTML is `+ child.to_html()`; do not use it in a program that
+must also build with `ady2py`.
+
+---
+
 ## Complete Quick Example
 
 ```adascript
@@ -1704,6 +1789,7 @@ for s in Stage_T'First .. Stage_T'Last:
 | Ownership transfer | `move(x)` |
 | Explicit release | `drop(x)` |
 | RAII scope | `with own x = expr:` |
+| HTML page (Nim only) | `html:` in a `-> Html` method; tags indented below |
 
 ---
 

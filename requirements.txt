@@ -22,7 +22,7 @@
 #   curl -fsSL https://ziglang.org/download/0.14.0/zig-linux-x86_64-0.14.0.tar.xz | tar -xJ -C /opt
 #   ln -sf /opt/zig-linux-x86_64-0.14.0/zig /usr/local/bin/zig
 #   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc
-#   nimble install nimpy db_connector
+#   nimble install nimpy db_connector karax
 #   pip install matplotlib
 #   apt install fd-find ripgrep bc sqlite3 libpcre3   # adjust for your distro
 #   # On Debian/Ubuntu fd-find installs as 'fdfind' — symlink it to 'fd'
@@ -37,6 +37,12 @@
 #   awk_example.ady, test_awk.ady  (nimport re  →  via nimpy)
 #   tsp.ady        (pyimport matplotlib)
 nimpy >= 0.3.1
+
+# karax — HTML DSL and virtual DOM; required by files that use an `html:`
+# block (a class rendering itself with `to_html`):
+#   EXAMPLES/HTML/html_card.ady, EXAMPLES/HTML/html_app.ady
+# The same source builds for the browser with `ady2nim js`.
+karax
 
 # db_connector — SQLite bindings for Nim 2.x; required by:
 #   timetable_engine.ady, timetable_backtrack.ady, timetable_sa.ady

@@ -197,6 +197,7 @@ which earlier versions do not emit). Nothing beyond the standard library.
 | Package | Install | Required for |
 |---------|---------|--------------|
 | `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
+| `karax` | `nimble install karax` | Any `.ady` file with an `html:` block (`EXAMPLES/HTML/`) |
 | `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `import db` (SQLite support; removed from Nim 2.x stdlib) |
 | `zig` / `zigcc` | *optional* — download from [ziglang.org](https://ziglang.org/download/), then `printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc` | Preferred by files pinning `#ady2nim-args c --cc:clang --clang.exe:zigcc` — `state_search.ady`, `shortest_path.ady`, their tests, and the timetable examples |
 
