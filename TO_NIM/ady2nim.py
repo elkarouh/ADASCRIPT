@@ -706,6 +706,8 @@ def translate(code, export_symbols=False):
     from hek_parsec import ParserState
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
+    from ady_html import expand_html_blocks
+    code = expand_html_blocks(code)  # `html:` blocks: see ady_html
     # Before the parse, so that `failure` on anything but a record is
     # reported as that rather than as the parse error it also is.
     from ady_stmt import scan_failure_types, scan_return_types, either_procs
@@ -880,6 +882,8 @@ def translate(code, export_symbols=False):
                 result.append(ln)
         return '\n'.join(result)
     output = [_expand_nimraw(block) for block in output]
+    from ady_html import finish_html_nim
+    output = [finish_html_nim(block) for block in output]
 
     # Merge consecutive 'type X = object/ref object' blocks into a single 'type' block.
     # Nim requires mutually-recursive types to be declared in one 'type' block.

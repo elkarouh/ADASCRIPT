@@ -1,0 +1,78 @@
+#!/usr/bin/env ady2nim
+"""A page as a tree of objects, each rendering itself.
+
+The application renders the page, and asks each child for its own HTML
+(`+ child.to_html()`), which asks its children in turn. Needs karax
+(`nimble install karax`). Build for the browser with `ady2nim js`.
+"""
+
+@virtual
+class Widget:
+    def to_html(self) -> Html:
+        html:
+            div class="widget"
+
+class Label(Widget):
+    var text: str
+
+    def __init__(self, text: str):
+        self.text = text
+
+    def to_html(self) -> Html:
+        html:
+            span class="label": self.text
+
+class Button(Widget):
+    var id:    str
+    var label: str
+
+    def __init__(self, id: str, label: str):
+        self.id = id
+        self.label = label
+
+    def to_html(self) -> Html:
+        html:
+            button id=self.id: self.label
+
+class Panel(Widget):
+    var title:    str
+    var children: []Widget
+
+    def __init__(self, title: str):
+        self.title = title
+        self.children = []
+
+    def add(self, child: Widget):
+        self.children.append(child)
+
+    def to_html(self) -> Html:
+        html:
+            section class="panel":
+                h2: self.title
+                for child in self.children:
+                    + child.to_html()
+
+class App(Widget):
+    var title: str
+    var body:  Panel
+
+    def __init__(self, title: str, body: Panel):
+        self.title = title
+        self.body = body
+
+    def to_html(self) -> Html:
+        html:
+            html lang="en":
+                head:
+                    title: self.title
+                body:
+                    h1: self.title
+                    + self.body.to_html()
+
+var panel: Panel = Panel("Counter")
+panel.add(Label("count: 0"))
+panel.add(Button("inc", "+1"))
+panel.add(Button("dec", "-1"))
+let app: App = App("Demo", panel)
+print "<!doctype html>"
+print app.to_html()

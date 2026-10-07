@@ -1,0 +1,25 @@
+#!/usr/bin/env ady2nim
+class Card:
+    var title: str
+    var items: []str
+    var done:  bool
+
+    def __init__(self, title: str, items: []str, done: bool):
+        self.title = title
+        self.items = items
+        self.done = done
+
+    def to_html(self) -> Html:
+        html:
+            div class="card":
+                h2: self.title
+                ul:
+                    for item in self.items:
+                        li: item
+                if self.done:
+                    span: "done"
+                br
+                button id="inc": "+1"
+
+var c: Card = Card("Counter", ["a", "b"], True)
+print c.to_html()
