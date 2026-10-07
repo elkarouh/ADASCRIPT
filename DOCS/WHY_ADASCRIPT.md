@@ -73,24 +73,27 @@ Not "static typing is good" — that argument is over. Implicit typing is
 something narrower: a language that *has* types but declines to make you write
 them, so the type exists in the compiler and not on the page.
 
-The compiler is not the audience. When I read
+The compiler is not the audience. Take the same call, written twice. When I
+read
 
 <!-- illustrative: the counter-example -- a bare assignment is not a declaration, and does not compile -->
 ```python
-speed = compute(track, wind)
+limit = restriction(phase)
 ```
 
-I know nothing. When I read
+I know nothing about `limit`. Feet? A flight level? Metres? Nothing on the
+page says, so I have to find `restriction` and read it. When I read
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
-let speed: Velocity_T = compute("BAW117", 12.0)
+let limit: Altitude_T = restriction(phase)
 ```
 
-I know what came back, I know what `compute` is for, and if the next line
-treats `speed` as a distance the discrepancy is on the page where a reader can
-see it, not three files away where only the compiler can. Inference saves the
-writer a few characters and costs every later reader the trip. In software
+the call is the same, and only the declaration has changed. It now says what
+came back, so I do not need `restriction` to know it, and if the next line
+compares `limit` with a speed the discrepancy is on the page where a reader
+can see it, not three files away where only the compiler can. Inference saves
+the writer a few characters and costs every later reader the trip. In software
 that can hurt someone, the reader who guesses the type wrong is the risk,
 and the page should leave nothing to guess.
 

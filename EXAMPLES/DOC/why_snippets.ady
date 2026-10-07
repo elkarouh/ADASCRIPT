@@ -125,11 +125,12 @@ type Position_T is record:
     lat: float = 0.0
     lon: float = 0.0
 
-def compute(track: str, wind: float) -> Velocity_T:
-    return 250.0
+def restriction(phase: Flight_Phase_T) -> Altitude_T:
+    return ceiling[phase]
 
-let speed: Velocity_T = compute("BAW117", 12.0)
-assert speed == 250.0
+let phase: Flight_Phase_T = HOLD
+let limit: Altitude_T = restriction(phase)
+assert limit == 24000
 
 def separation(own: Position_T, other: Position_T,
                closing: Velocity_T, horizon: Duration_T) -> Distance_T:
