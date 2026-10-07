@@ -34,7 +34,7 @@ Nim only (map_flat is):  ady2nim c -r moon_sim.ady
 """
 
 from math nimport sqrt, exp, ln, PI
-from MAP_UTILS/map_base import Accel_T, Bearing_T, Degrees_T, Duration_T, Kilometers_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
+from MAP_UTILS/map_base import Accel_T, AngMom_T, Bearing_T, Degrees_T, Duration_T, Kilometers_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
 from MAP_UTILS/map_flat import Acceleration, Position, Vector, Velocity
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
@@ -48,7 +48,6 @@ type Force_T       is Mass_T * Accel_T              # N
 type Sense_T       is enum COUNTER_CLOCKWISE, CLOCKWISE   # the way round the origin
 type Mu_T          is Accel_T * SquareMeters_T      # a body's GM, m^3/s^2
 type AngularRate_T is Degrees_T / Duration_T        # deg/s
-type AngMom_T      is Meters_T * Speed_T            # specific angular momentum, m^2/s
 type Hours_T       is 3600.0 * Duration_T           # for the log: Hours_T(t) is t in hours
 type Days_T        is 86400.0 * Duration_T
 
@@ -88,7 +87,7 @@ def radius_of(p: Position) -> Meters_T:
 def along(v: Velocity, direction: Vector) -> Speed_T:
     """The part of V in the direction of DIRECTION."""
     let d: Vector = direction.unit()
-    return (v.x * d.x + v.y * d.y) / d.length()
+    return (v * d) / d.length()
 
 def along_vec(v: Vector, direction: Vector) -> Meters_T:
     """The part of V in the direction of DIRECTION."""
@@ -97,11 +96,11 @@ def along_vec(v: Vector, direction: Vector) -> Meters_T:
 
 def radial_rate(r: Vector, v: Velocity) -> AngMom_T:
     """r . v, in m^2/s: zero at periapsis and apoapsis, positive going out."""
-    return r.x * v.x + r.y * v.y
+    return r * v
 
 def angular_momentum(r: Vector, v: Velocity) -> AngMom_T:
     """r x v, in m^2/s: positive counter-clockwise."""
-    return r.x * v.y - r.y * v.x
+    return r.cross(v)
 
 def turn(s: Sense_T) -> float:
     """The multiplier that turns an angle the way S goes: +1.0 or -1.0."""

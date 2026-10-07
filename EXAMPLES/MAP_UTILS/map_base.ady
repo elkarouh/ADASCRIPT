@@ -27,6 +27,7 @@ type Radians_T      is 57.29577951308232 * Degrees_T   # a radian is 180/pi degr
 type Duration_T     is distinct float            # seconds
 type Speed_T        is Meters_T / Duration_T     # metres per second
 type Accel_T        is Speed_T / Duration_T      # metres per second squared
+type AngMom_T       is Meters_T * Speed_T        # a position times a velocity: r . v and r x v, m^2/s
 
 # A direction clockwise from true north: a Degrees_T that wraps, so 360 is 0 and
 # Bearing_T(-10.0) is 350.0.

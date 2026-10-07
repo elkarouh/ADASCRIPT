@@ -8,7 +8,7 @@ Distances are in metres, angles in degrees; a time turns a Vector into a Velocit
 and a Velocity into an Acceleration, by `/`, and back by `*`.
 """
 
-from map_base import Accel_T, Degrees_T, Duration_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
+from map_base import Accel_T, AngMom_T, Degrees_T, Duration_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
 nimport math
 from math nimport floor, sqrt, round, hypot
 
@@ -73,6 +73,14 @@ class Vector:
 
     def cross(self, other: Vector) -> SquareMeters_T:
         """Z-component of the 3-D cross product: the signed area of the parallelogram."""
+        self.x * other.y - self.y * other.x
+
+    def __mul__(self, other: Velocity) -> AngMom_T:
+        """r . v: how fast it moves along the line from the origin, times its length (m^2/s)."""
+        self.x * other.x + self.y * other.y
+
+    def cross(self, other: Velocity) -> AngMom_T:
+        """r x v: the specific angular momentum, positive counter-clockwise (m^2/s)."""
         self.x * other.y - self.y * other.x
 
     def cos_theta(self, other: Vector) -> float:
@@ -189,6 +197,10 @@ class Velocity:
     def __truediv__(self, t: Duration_T) -> Acceleration:
         """The acceleration that changes it by this much in the time T."""
         Acceleration(self.x / t, self.y / t)
+
+    def __mul__(self, other: Vector) -> AngMom_T:
+        """The scalar product with a displacement (m^2/s): v . d is the part of v along d, times d's length."""
+        self.x * other.x + self.y * other.y
 
     def __mul__(self, other: Velocity) -> float:
         """The scalar product, in (m/s)^2."""
