@@ -1628,8 +1628,42 @@ panel.
 
 The same classes compile for the browser with `ady2nim js`, where the
 karax tree is a live DOM. Needs `nimble install karax`. **Nim only**: the
-Python backend does not know `html:`. Not built yet: event handlers
-(`onclick`).
+Python backend does not know `html:`.
+
+**Events.** An attribute whose name starts with `on` is an event handler. Its
+value is a call on the widget, with no arguments to write:
+
+```python
+from karax/karax nimport setRenderer
+
+@virtual
+class Counter:
+    var count: int = 0
+
+    def inc(self):
+        self.count += 1
+
+    def to_html(self) -> Html:
+        html:
+            div class="counter":
+                h2: f"count: {self.count}"
+                button id="inc" onclick=self.inc: "+1"
+
+var counter: Counter = Counter()
+
+def render() -> Html:
+    return counter.to_html()
+
+setRenderer(render)
+```
+
+The page is redrawn after every handler. A class whose handlers change its
+own fields is `@virtual`, so the handler and the page share one object.
+A page with a handler builds only under `ady2nim js` (`#ady2nim-args js` on
+the second line); it needs a `<div id="ROOT">` and the compiled script in an
+HTML file. `EXAMPLES/HTML/html_counter.ady` and its `index.html` are the whole
+program, and `make run` there serves it. Handlers that take the event object
+are not built.
 
 ---
 

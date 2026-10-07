@@ -28,6 +28,11 @@ else
   nim --version | head -1
 fi
 
+# karax: the html: blocks of EXAMPLES/HTML (best effort).
+if [ ! -d "$HOME/.nimble/pkgs2" ] || ! ls "$HOME"/.nimble/pkgs2 2>/dev/null | grep -q '^karax-'; then
+  nimble install -y karax >/dev/null 2>&1 || echo "warning: could not install karax"
+fi
+
 # System packages used by tests (best effort: a failure must not break the
 # session). Only apt-get when something is actually missing.
 missing=()

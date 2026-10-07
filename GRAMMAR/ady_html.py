@@ -29,6 +29,9 @@ Line forms inside the block:
     for / if / elif / else / while   ordinary control flow around tags
 
 An attribute value is a string literal or a bare expression without spaces.
+An attribute named on... (`onclick=self.inc`) is an event handler: its value
+is run when the event fires, and the module then needs karax's browser side,
+so it builds under `ady2nim js` only.
 `class`, `for` ... take a trailing underscore on the way (`class_="x"` is
 accepted too); `data-id` is spelled `data_id`.
 """
@@ -51,6 +54,8 @@ def _attrs(text):
         name = name.replace("-", "_")
         if name in ("class", "for"):
             name += "_"
+        if re.match(r"on[a-z]+$", name):               # an event handler
+            value = f"__on({value})"
         out.append((name, value))
     return out
 
@@ -151,7 +156,11 @@ def expand_html_blocks(code):
         end = _block(lines, i + 1, base)
         out.extend(_expand(lines, i + 1, end, base))
         i = end
-    head = ["# nimraw: import karax/[karaxdsl, vdom]", "# nimraw: type Html = VNode"]
+    # An event handler needs the browser side of karax (karax/karax), which
+    # only compiles under `ady2nim js`; a page without one also builds native.
+    karax = "karax/[karax, karaxdsl, vdom]" if "__on(" in "\n".join(out) \
+        else "karax/[karaxdsl, vdom]"
+    head = [f"# nimraw: import {karax}", "# nimraw: type Html = VNode"]
     if out and out[0].startswith("#!"):               # keep the shebang first
         return "\n".join([out[0]] + head + out[1:])
     return "\n".join(head + out)
@@ -172,6 +181,17 @@ def _karax(tag, args):
     return tag, args
 
 
+def _handlers(line):
+    """LINE with each __on(expr) written as a karax handler, proc() = (expr)."""
+    while (i := line.find("__on(")) >= 0:
+        depth, j = 1, i + 5
+        while j < len(line) and depth:
+            depth += {"(": 1, ")": -1}.get(line[j], 0)
+            j += 1
+        line = f"{line[:i]}proc() = ({line[i + 5:j - 1]}){line[j:]}"
+    return line
+
+
 def finish_html_nim(nim):
     """NIM, the text of a module, with the markers turned into karax."""
     if "__tag_" not in nim and "__root_" not in nim and "__text(" not in nim \
@@ -179,6 +199,7 @@ def finish_html_nim(nim):
         return nim
     out = []
     for ln in nim.split("\n"):
+        ln = _handlers(ln) if "__on(" in ln else ln
         if (m := _ROOT.match(ln)):
             tag, args = _karax(m.group(2), m.group(3))
             out.append(f"{m.group(1)}result = buildHtml({tag}({args})):")

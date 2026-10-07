@@ -1,0 +1,37 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""A counter in the browser: a widget whose buttons call its own methods.
+
+An attribute starting with `on` is an event handler; its value is a call on
+the widget (`onclick=self.inc`). Build and open it with `make run`; needs
+karax (`nimble install karax`).
+"""
+from karax/karax nimport setRenderer
+
+@virtual
+class Counter:
+    var count: int = 0
+
+    def inc(self):
+        self.count += 1
+
+    def dec(self):
+        self.count -= 1
+
+    def reset(self):
+        self.count = 0
+
+    def to_html(self) -> Html:
+        html:
+            div class="counter":
+                h2: f"count: {self.count}"
+                button id="dec" onclick=self.dec: "-1"
+                button id="inc" onclick=self.inc: "+1"
+                button id="reset" onclick=self.reset: "reset"
+
+var counter: Counter = Counter()
+
+def render() -> Html:
+    return counter.to_html()
+
+setRenderer(render)

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head><title>Demo</title></head>
+  <body>
+    <h1>Demo</h1>
+    <section class="panel">
+      <h2>Counter</h2>
+      <span class="label">count: 0</span>
+      <button id="inc">+1</button>
+      <button id="dec">-1</button>
+    </section>
+  </body>
+</html>

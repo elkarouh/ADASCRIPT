@@ -337,6 +337,11 @@ ifeq ($(call nim_has,db_connector/db_sqlite),)
 SKIPPED += $(NEEDS_DB_CONNECTOR)
 SKIP_NOTES += "db_connector (nimble install db_connector): $(NEEDS_DB_CONNECTOR)"
 endif
+# html: blocks need karax; without it EXAMPLES/HTML is not built.
+ifeq ($(call nim_has,karax/karaxdsl),)
+HTML_SKIPPED := yes
+SKIP_NOTES += "karax (nimble install karax): EXAMPLES/HTML/"
+endif
 LIBS := $(filter-out $(SKIPPED),$(LIBS))
 STANDALONE := $(filter-out $(SKIPPED),$(STANDALONE))
 STDIN_EXAMPLES := $(filter-out $(SKIPPED),$(STDIN_EXAMPLES))
@@ -1403,6 +1408,21 @@ test: compile
 	@printf '  %-42s' "STDLIB/jointjs.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/jointjs.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+
+	@# html: blocks: the native build prints the page (compared with the
+	@# .expected file next to it); the one with event handlers only builds
+	@# under js, so for it the check is that `nim js` accepts it.
+	@echo "=== html: blocks (karax) ==="
+	@if [ -n "$(HTML_SKIPPED)" ]; then echo "  SKIPPED, karax not installed"; else \
+	    for n in html_card html_app accounting_graph accounting_drawn accounting_objects; do \
+	        printf '  %-42s' "HTML/$$n.ady"; \
+	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | cmp -s - $(EXDIR)/HTML/$$n.expected \
+	            && echo OK || { echo FAIL; exit 1; }; \
+	    done; \
+	    printf '  %-42s' "HTML/html_counter.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(EXDIR)/HTML/html_counter.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	fi
 
 	@echo ""
 	@echo "All tests passed."
