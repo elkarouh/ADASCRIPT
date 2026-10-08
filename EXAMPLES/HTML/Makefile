@@ -30,6 +30,11 @@ build/%.html: %.ady
 	@$(ADY2NIM) c -r $< > $@ 2> build/$*.log \
 	    || { cat build/$*.log; rm -f $@; exit 1; }
 
+# The accounting pages are built from the model and, for the live one, from
+# accounting_gui.ady too: a change to either rebuilds them.
+build/accounting_gui.html: accounting_model.ady
+build/accounting_live.js:  accounting_model.ady accounting_gui.ady
+
 gui:     build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 card:    build/html_card.html
