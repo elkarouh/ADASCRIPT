@@ -21,7 +21,7 @@ from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, place, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
-const WIDTH: float = 780.0
+const WIDTH: float = 980.0
 const HEIGHT: float = 670.0
 
 const LIVE_STYLE: str = """

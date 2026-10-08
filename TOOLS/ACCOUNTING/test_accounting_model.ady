@@ -14,9 +14,10 @@ assert g.total() == 0
 assert g.net_assets() == g.equity()
 
 # Balances, in cents.
-assert g.balance("Bank account") == 3333500    # the chair cost 500 + 105 VAT, customer 1 paid
+assert g.balance("Bank account") == 3133500    # the chair cost 500 + 105 VAT, customer 1 paid
                                                 # 5,000 + 1,050, the loan brings 10,000 less 1,000,
-                                                # half the supplier's 1,210 is paid
+                                                # half the supplier's 1,210 is paid, and 2,000 of salary
+                                                # for the software
 assert g.balance("Credit card") == -800
 assert g.balance("Furniture") == 37500
 assert g.balance("Customer 1") == 0
@@ -28,24 +29,30 @@ assert g.balance("VAT to recover") == 94500    # 21% of 500, 3,000 and 1,000, to
 assert g.balance("Stock") == 100000            # 3,000 and 1,000 bought on credit, 3,000 sold
 assert g.balance("Suppliers") == -423500       # 3,630 and 1,210 owed, 605 paid
 assert g.balance("Cost of sales") == 300000    # what the material sold to customer 1 cost
+assert g.balance("Payroll") == 1000000         # 8,000 of salaries and 2,000 for the software
+assert g.balance("Own work capitalised") == -200000   # ... which this cancels out of the year's costs
+assert g.balance("Software") == 150000         # the software, 2,000 less a quarter
+assert g.balance("Depreciation") == 62500      # a quarter of the chair's 500 and of the software's 2,000
 assert g.balance("Loans") == -900000           # 10,000 borrowed, 1,000 repaid
 assert g.balance("VAT to pay") == -105000      # 21% of 5,000, owed to the tax office
 
 # The statements.
-assert g.profit() == -163800         # the material sold for 5,000 cost 3,000
-assert g.net_assets() == 2336200       # the loan and the stock change assets and liabilities alike
-assert g.equity() == 2336200
-assert len(g.profit_and_loss()) == 5
+assert g.profit() == -213800         # the material sold for 5,000 cost 3,000; the software
+                                     # costs this year only its depreciation, 500
+assert g.net_assets() == 2286200       # the loan and the stock change assets and liabilities alike
+assert g.equity() == 2286200
+assert len(g.profit_and_loss()) == 6
 assert g.profit_and_loss()[0].label == "Revenue: Sales"
 
 # Two transactions between the same accounts, the same way, are one flow;
 # the credit note goes the other way, so it is a flow of its own. The chair is
 # two edges, one to Furniture and one to VAT to recover; the sale to customer 1
 # two, one from Sales and one from VAT to pay; the stock is two, from Suppliers;
-# so is the material bought for stock; the loan and its repayment go
+# so is the material bought for stock; the salary for the software adds
+# to Bank account to Payroll; the loan and its repayment go
 # opposite ways, so they are two flows.
-assert len(g.edges) == 23
-assert len(g.flows) == 19
+assert len(g.edges) == 26
+assert len(g.flows) == 21
 
 # A flow's transactions, with their dates: Capital to Bank account is two.
 var capital_to_bank: Flow = g.flows[0]

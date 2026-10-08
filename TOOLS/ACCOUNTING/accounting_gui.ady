@@ -100,6 +100,10 @@ def place(a: Account) -> Point:
             return Point(700.0, 470.0)
         when "Cost of sales":
             return Point(480.0, 610.0)
+        when "Own work capitalised":
+            return Point(900.0, 190.0)
+        when "Software":
+            return Point(900.0, 330.0)
         when "Depreciation":
             return Point(700.0, 330.0)
         when others:
@@ -125,18 +129,38 @@ def account_tip(g: Graph, a: Account) -> str:
         tip += "\n" + f"{t.date}   {signed(change)}   -> {money(running)}   {t.what}"
     return tip
 
+# A name as it fits in a node: on one line, or, when long, on two, broken
+# at the space nearest its middle.
+def label_lines(name: str) -> []str:
+    if len(name) <= 14:
+        return [name]
+    var best: int = -1
+    for i in range(len(name)):
+        if name[i] == ' ' and (best < 0 or abs(i - len(name) // 2) < abs(best - len(name) // 2)):
+            best = i
+    if best < 0:
+        return [name]
+    return [name[:best], name[best + 1:]]
+
 # An account as a node at P: a circle with its name in it. TIP shows when the
 # mouse is over it, as for an arrow below.
 def to_html(a: Account, p: Point, tip: str) -> Html:
     let cx: str = px(p.x)
     let cy: str = px(p.y)
     let css: str = css_of(a)
+    let lines: []str = label_lines(a.name)
+    let first: str = lines[0]
+    let second: str = (lines[1] if len(lines) == 2 else "")
+    let y1: str = (px(p.y - 7.0) if second != "" else cy)
+    let y2: str = px(p.y + 7.0)
     html:
         g:
             if tip != "":
                 title: tip
             circle class=css cx=cx cy=cy r="42"
-            stext class="label" x=cx y=cy: a.name
+            stext class="label" x=cx y=y1: first
+            if second != "":
+                stext class="label" x=cx y=y2: second
 
 # The point D along the way from P to Q.
 def toward(p: Point, q: Point, d: float) -> Point:
@@ -195,7 +219,7 @@ def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
 
 def to_html(g: Graph) -> Html:
     html:
-        svg viewBox="0 0 780 670" class="graph":
+        svg viewBox="0 0 980 670" class="graph":
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
