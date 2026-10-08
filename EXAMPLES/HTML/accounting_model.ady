@@ -139,7 +139,9 @@ class Graph:
                 lines.append(Line(f"Equity: {a.name}", -a.balance))
         return lines
 
-# The article's company, every transaction in the order it tells them.
+# The article's company, every transaction in the order it tells them, and
+# one more of ours: a credit note that sends money back along an edge, so the
+# graph has a flow both ways between two accounts.
 def kleppmann() -> Graph:
     var g: Graph = Graph()
     let sales: Account = g.add_account("Sales", BLUE)
@@ -165,4 +167,5 @@ def kleppmann() -> Graph:
     g.transfer("Y Combinator invests", capital, bank, 2000000)
     g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
     g.transfer("The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
+    g.transfer("Customer 2 returns part of the order: a credit note of 500", customer2, sales, 50000)
     return g
