@@ -1,0 +1,28 @@
+# scenarios/9_accruals.books: loaded by ledger_server into 9_accruals.db the first time it is picked,
+# and again by Start over. Amounts are in cents.
+title	9. The year end: costs in the year they belong to
+about	A cost belongs to the year it is used in, not the year it is paid. Rent for a year paid on 1 October is three months of this year and nine of the next: at the year end the nine go to Prepaid expenses, an asset (charges à reporter, over te dragen kosten).
+about	The other way round, December's electricity is used this year but billed in January: it is a cost now, owed under Accrued expenses, a liability (charges à imputer, toe te rekenen kosten). Both are undone at the start of the next year.
+currency	USD
+account	100000	equity	Capital
+account	550000	asset	Bank account
+account	490000	asset	Prepaid expenses
+account	492000	liability	Accrued expenses
+account	700000	revenue	Sales
+account	610000	expense	Rent
+account	612000	expense	Energy
+entry	2011-01-02	The founder puts in savings
+posting	Capital	-1000000
+posting	Bank account	1000000
+entry	2011-06-30	Sales for the year, paid at once
+posting	Sales	-2000000
+posting	Bank account	2000000
+entry	2011-10-01	A year's rent paid in advance: 12,000
+posting	Bank account	-1200000
+posting	Rent	1200000
+entry	2011-12-31	Nine months of the rent belong to next year
+posting	Rent	-900000
+posting	Prepaid expenses	900000
+entry	2011-12-31	December's electricity, billed in January: 400
+posting	Accrued expenses	-40000
+posting	Energy	40000

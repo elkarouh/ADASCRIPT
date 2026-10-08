@@ -43,11 +43,11 @@ def cents(word: str) -> Cents_T:
             return r
 
 let config: Config = config_of(Path("accounting.conf"))
-assert len(config.accounts) == 21
+assert len(config.accounts) == 31
 assert config.currency == "USD"
 
 var books: Ledger = Ledger(":memory:")
-assert number_of(open_chart(books, config)) == 21
+assert number_of(open_chart(books, config)) == 31
 assert number_of(open_chart(books, config)) == 0                  # opening the chart twice opens nothing twice
 assert record_example(books) is None
 assert books.count("transactions") == 22
@@ -58,7 +58,7 @@ assert record_example(books) is BookFailure_T      # the example goes in an empt
 # its colour, and the edges and flows drawn from them.
 let stored: Graph = books.graph()
 let built: Graph = kleppmann()
-assert len(stored.accounts) == len(built.accounts) + 2     # and Interest and Cost of sales, which the example does not use
+assert len(stored.accounts) == len(built.accounts) + 12    # and the accounts the example does not use: Interest, Cost of sales and those of scenarios 6 to 9
 for a in built.accounts:
     assert stored.account(a.name).balance == a.balance
     assert stored.account(a.name).colour == a.colour
@@ -82,7 +82,7 @@ case got:
     when BookFailure_T:
         raise ValueError(got.detail)
     when Books:
-        assert len(got.accounts) == 21 and len(got.entries) == 22
+        assert len(got.accounts) == 31 and len(got.entries) == 22
         assert got.currency == "USD"
         let drawn: Graph = graph_of(got)
         for a in built.accounts:
@@ -162,5 +162,5 @@ for file in walkFiles("scenarios/*.books"):
                     assert len(back.accounts) == len(read.accounts) and len(back.entries) == len(read.entries), file
                     scenario.close()
                     scenarios += 1
-assert scenarios == 7
+assert scenarios == 11
 print "ledger: all checks passed"

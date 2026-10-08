@@ -273,6 +273,13 @@ def good_name(name: str) -> bool:
             return False
     return True
 
+# A scenario's name with its leading number padded, so names sort by number.
+def sort_key(name: str) -> str:
+    var digits: int = 0
+    while digits < len(name) and name[digits].isDigit():
+        digits += 1
+    return "0" * (6 - digits) + name if digits < 6 else name
+
 class Scenarios:
     var dir: Path
 
@@ -289,11 +296,16 @@ class Scenarios:
         return good_name(name) and fileExists(str(self.books_file(name)))
 
     # The scenarios there are, by name, in order.
+    # In the order of their numbers, so 10_blank comes after 9_accruals.
     def names(self) -> []str:
-        var found: []str = []
+        var keyed: []str = []
         for f in walkFiles(str(self.dir / "*.books")):
-            found.append(splitFile(f).name)
-        found.sort()
+            let name: str = splitFile(f).name
+            keyed.append(f"{sort_key(name)}\t{name}")
+        keyed.sort()
+        var found: []str = []
+        for k in keyed:
+            found.append(k.split("\t")[1])
         return found
 
     def title_of(self, name: str) -> str:

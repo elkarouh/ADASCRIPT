@@ -1,0 +1,26 @@
+# scenarios/7_customer_deposit.books: loaded by ledger_server into 7_customer_deposit.db the first time it is picked,
+# and again by Start over. Amounts are in cents.
+title	7. A customer's deposit: money in, but no revenue yet
+about	A deposit paid before the goods are delivered is not revenue: the company owes the goods, or the money back. It sits in Customer deposits, a liability (acomptes reçus, ontvangen vooruitbetalingen), until the delivery.
+about	On delivery the whole 10,000 is invoiced and becomes revenue, and the deposit is set against the invoice: the customer owes only the 7,000 left.
+currency	USD
+account	100000	equity	Capital
+account	550000	asset	Bank account
+account	400001	asset	Customer 1
+account	460000	liability	Customer deposits
+account	700000	revenue	Sales
+entry	2011-01-02	The founder puts in savings
+posting	Capital	-500000
+posting	Bank account	500000
+entry	2011-02-01	Customer 1 pays a 30% deposit on an order of 10,000
+posting	Customer deposits	-300000
+posting	Bank account	300000
+entry	2011-03-15	The goods are delivered and invoiced: 10,000
+posting	Sales	-1000000
+posting	Customer 1	1000000
+entry	2011-03-15	The deposit is set against the invoice
+posting	Customer 1	-300000
+posting	Customer deposits	300000
+entry	2011-04-15	Customer 1 pays the 7,000 left
+posting	Customer 1	-700000
+posting	Bank account	700000

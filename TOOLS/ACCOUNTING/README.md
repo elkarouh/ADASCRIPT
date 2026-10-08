@@ -23,7 +23,11 @@ company's books that show one idea, with a few lines saying which.
 | 3b. Stock, the international way | the same transactions: goods bought for resale are Stock, an asset, until sold, then Cost of sales |
 | 4. Intellectual work | salaries for billed work are a cost; for lasting work (software) they are capitalised and depreciated |
 | 5. A loan | borrowing is no income and repaying no cost; interest is |
-| 6. Start from scratch | the whole chart of accounts, no transaction yet |
+| 6. Salaries | an employee costs the gross salary plus the employer's social security; what is withheld is owed to the ONSS and the tax office |
+| 7. A customer's deposit | money received before delivery is a liability, not revenue, until the goods are invoiced |
+| 8. A credit note and a bad debt | a credit note cancels part of a sale; an unpaid debt is written off as a cost |
+| 9. The year end | prepaid and accrued expenses put each cost in the year it belongs to |
+| 10. Start from scratch | the whole chart of accounts, no transaction yet |
 
 Change a scenario as you like: Start over brings it back as it was, and
 Save as keeps your version as a scenario of its own.
