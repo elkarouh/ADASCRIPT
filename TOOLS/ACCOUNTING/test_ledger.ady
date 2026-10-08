@@ -43,11 +43,11 @@ def cents(word: str) -> Cents_T:
             return r
 
 let config: Config = config_of(Path("accounting.conf"))
-assert len(config.accounts) == 19
+assert len(config.accounts) == 20
 assert config.currency == "USD"
 
 var books: Ledger = Ledger(":memory:")
-assert number_of(open_chart(books, config)) == 19
+assert number_of(open_chart(books, config)) == 20
 assert number_of(open_chart(books, config)) == 0                  # opening the chart twice opens nothing twice
 assert record_example(books) is None
 assert books.count("transactions") == 22
@@ -82,7 +82,7 @@ case got:
     when BookFailure_T:
         raise ValueError(got.detail)
     when Books:
-        assert len(got.accounts) == 19 and len(got.entries) == 22
+        assert len(got.accounts) == 20 and len(got.entries) == 22
         assert got.currency == "USD"
         let drawn: Graph = graph_of(got)
         for a in built.accounts:

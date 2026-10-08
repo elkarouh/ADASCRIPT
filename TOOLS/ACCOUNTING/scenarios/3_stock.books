@@ -1,7 +1,10 @@
 # scenarios/3_stock.books: loaded by ledger_server into 3_stock.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
-title	3. Stock: a purchase is a cost only once it is sold
-about	Material bought to be sold is not a cost when it is bought: it sits in Stock, an asset. When it is sold, its cost moves from Stock to Cost of sales, in the same period as the sale's revenue, so the profit on it shows: 5,000 less 3,000.
+title	3. Stock: purchases (604) and the stock variation (609)
+about	The Belgian way (PCMN/MAR): material bought for resale goes straight to 604 Purchases (achats, aankopen), a cost. At the year end the stock is counted, and what is still there goes back to 340 Stock, an asset, through 609 Stock variation (variation des stocks, voorraadwijziging), which lowers the cost of the year.
+about	Here 5,000 of material is bought and 3,000 of it sold for 5,000; 2,000 is still in stock on 31 December. The costs are 5,000 of purchases less a 2,000 increase in stock: 3,000, so the profit is 2,000.
+about	A stock increase leaves 609 with a credit balance, so the graph and the profit and loss show it like a revenue; the Belgian annual accounts keep it among the costs, as a negative amount next to 604.
+about	Try it: if the stock went down instead, the variation would be a cost: an arrow from Stock to Stock variation.
 currency	USD
 account	100000	equity	Capital
 account	550000	asset	Bank account
@@ -9,22 +12,26 @@ account	440000	liability	Suppliers
 account	340000	asset	Stock
 account	400001	asset	Customer 1
 account	700000	revenue	Sales
-account	604000	expense	Cost of sales
+account	604000	expense	Purchases
+account	609000	expense	Stock variation
 entry	2011-01-02	The founder puts in savings
 posting	Capital	-500000
 posting	Bank account	500000
-entry	2011-01-15	Material bought on credit for 3,000, kept in stock
+entry	2011-01-15	Material bought on credit for 3,000
 posting	Suppliers	-300000
-posting	Stock	300000
+posting	Purchases	300000
 entry	2011-02-01	The supplier is paid
 posting	Bank account	-300000
 posting	Suppliers	300000
 entry	2011-03-01	The material is sold to customer 1 for 5,000
 posting	Sales	-500000
 posting	Customer 1	500000
-entry	2011-03-01	The material sold leaves the stock: it cost 3,000
-posting	Stock	-300000
-posting	Cost of sales	300000
 entry	2011-03-31	Customer 1 pays
 posting	Customer 1	-500000
 posting	Bank account	500000
+entry	2011-11-20	More material bought for 2,000, paid at once
+posting	Bank account	-200000
+posting	Purchases	200000
+entry	2011-12-31	Inventory: 2,000 of material is still in stock
+posting	Stock variation	-200000
+posting	Stock	200000

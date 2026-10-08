@@ -15,7 +15,8 @@ account	440000	liability	Suppliers
 account	451000	liability	VAT to pay
 account	489000	liability	Credit card
 account	550000	asset	Bank account
-account	604000	expense	Cost of sales
+account	604000	expense	Purchases
+account	609000	expense	Stock variation
 account	613000	expense	Food
 account	620000	expense	Payroll
 account	630000	expense	Depreciation

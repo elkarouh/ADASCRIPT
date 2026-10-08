@@ -287,22 +287,21 @@ def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net:
                  [Posting(source, -net), Posting(vat, -tax), Posting(target, net + tax)])
 
 # The article's company, the VAT on the chair and on customer 1's order, the
-# credit note to customer 2, stock bought on credit (part of it sold to customer 1, at its cost), software built by an employee and capitalised, and a bank loan.
+# credit note to customer 2, material bought on credit (a cost, the Belgian way, part of it still in stock at the year end), software built by an employee and capitalised, and a bank loan.
 def example_entries() -> []Entry:
     return [
         entry("2011-01-03", "A bagel on the company credit card", "Credit card", "Food", 500),
         purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank account", "Furniture", "VAT to recover", 50000, STANDARD),
         entry("2011-01-05", "The founder puts in savings", "Capital", "Bank account", 500000),
-        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000, kept in stock", "Suppliers", "Stock", "VAT to recover", 300000, STANDARD),
+        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000", "Suppliers", "Purchases", "VAT to recover", 300000, STANDARD),
         entry("2011-01-31", "The credit card bill is paid from the bank", "Bank account", "Credit card", 500),
         entry("2011-02-01", "A Super Burrito on the credit card", "Credit card", "Food", 800),
         sale_with_vat("2011-02-07", "Sale to customer 1 of the material in stock, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, STANDARD),
-        entry("2011-02-07", "The material sold to customer 1 leaves the stock: it cost 3,000", "Stock", "Cost of sales", 300000),
         entry("2011-02-08", "Sale to customer 2, agreed at 5,000", "Sales", "Customer 2", 500000),
         entry("2011-02-21", "Customer 1 pays in full, VAT included", "Customer 1", "Bank account", 605000),
         entry("2011-02-22", "Customer 2 pays half up front", "Customer 2", "Bank account", 250000),
         entry("2011-03-01", "Y Combinator invests", "Capital", "Bank account", 2000000),
-        purchase_with_vat("2011-03-10", "Stock bought on credit from a supplier", "Suppliers", "Stock", "VAT to recover", 100000, STANDARD),
+        purchase_with_vat("2011-03-10", "More material bought on credit from a supplier", "Suppliers", "Purchases", "VAT to recover", 100000, STANDARD),
         entry("2011-03-31", "Salaries, paid from the bank", "Bank account", "Payroll", 800000),
         entry("2011-04-04", "Customer 2 returns part of the order: a credit note of 500", "Customer 2", "Sales", 50000),
         entry("2011-04-15", "Half of the supplier's invoice is paid from the bank", "Bank account", "Suppliers", 60500),
@@ -310,6 +309,7 @@ def example_entries() -> []Entry:
         entry("2011-04-30", "The software is capitalised: the work becomes an asset", "Own work capitalised", "Software", 200000),
         entry("2011-05-02", "The bank lends 10,000", "Loans", "Bank account", 1000000),
         entry("2011-06-30", "1,000 of the loan is repaid", "Bank account", "Loans", 100000),
+        entry("2011-12-31", "Inventory: 1,000 of material is still in stock", "Stock variation", "Stock", 100000),
         entry("2011-12-31", "The chair loses a quarter of its value to depreciation", "Furniture", "Depreciation", 12500),
         entry("2011-12-31", "The software loses a quarter of its value to depreciation", "Software", "Depreciation", 50000)]
 
@@ -330,7 +330,8 @@ def kleppmann() -> Graph:
     g.add_account("Suppliers", GREEN)
     g.add_account("Stock", GREEN)
     g.add_account("Loans", GREEN)
-    g.add_account("Cost of sales", BLUE)
+    g.add_account("Purchases", BLUE)
+    g.add_account("Stock variation", BLUE)
     g.add_account("Software", GREEN)
     g.add_account("Own work capitalised", BLUE)
 

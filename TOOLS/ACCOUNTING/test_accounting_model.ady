@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """The accounting model on its own, no GUI: the article's figures, with the
 VAT on the chair and on customer 1's order, the credit note to customer 2,
-the stock bought on credit and the loan, that kleppmann() adds.
+the material bought on credit and the loan, that kleppmann() adds.
 
     ady2nim c -r test_accounting_model.ady
 """
@@ -26,9 +26,10 @@ assert g.balance("Sales") == -950000
 assert g.balance("Capital") == -2500000
 assert g.balance("Food") == 1300
 assert g.balance("VAT to recover") == 94500    # 21% of 500, 3,000 and 1,000, to claim back
-assert g.balance("Stock") == 100000            # 3,000 and 1,000 bought on credit, 3,000 sold
+assert g.balance("Stock") == 100000            # counted at the year end: 1,000 left
 assert g.balance("Suppliers") == -423500       # 3,630 and 1,210 owed, 605 paid
-assert g.balance("Cost of sales") == 300000    # what the material sold to customer 1 cost
+assert g.balance("Purchases") == 400000        # 3,000 and 1,000 of material bought
+assert g.balance("Stock variation") == -100000 # 1,000 of it still in stock: a cost of 3,000 for the year
 assert g.balance("Payroll") == 1000000         # 8,000 of salaries and 2,000 for the software
 assert g.balance("Own work capitalised") == -200000   # ... which this cancels out of the year's costs
 assert g.balance("Software") == 150000         # the software, 2,000 less a quarter
@@ -41,7 +42,7 @@ assert g.profit() == -213800         # the material sold for 5,000 cost 3,000; t
                                      # costs this year only its depreciation, 500
 assert g.net_assets() == 2286200       # the loan and the stock change assets and liabilities alike
 assert g.equity() == 2286200
-assert len(g.profit_and_loss()) == 6
+assert len(g.profit_and_loss()) == 7       # the stock increase is a credit, so it lists as a revenue
 assert g.profit_and_loss()[0].label == "Revenue: Sales"
 
 # Two transactions between the same accounts, the same way, are one flow;

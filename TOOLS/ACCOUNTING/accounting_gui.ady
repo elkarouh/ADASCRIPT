@@ -102,8 +102,10 @@ def place(a: Account) -> Point:
             return Point(480.0, 470.0)
         when "Loans":
             return Point(700.0, 470.0)
-        when "Cost of sales":
+        when "Purchases":
             return Point(480.0, 610.0)
+        when "Stock variation":
+            return Point(270.0, 610.0)
         when "Interest":
             return Point(900.0, 50.0)
         when "Own work capitalised":

@@ -19,7 +19,7 @@ company's books that show one idea, with a few lines saying which.
 |---|---|
 | 1. The basics | money moving between accounts; revenue, costs and profit |
 | 2. VAT | VAT paid is recovered, VAT charged is owed, the VAT return settles both |
-| 3. Stock | goods bought for resale are an asset until sold, then Cost of sales |
+| 3. Stock | the Belgian way: purchases go to 604 Purchases (achats, aankopen); at the year end the goods still in stock go back to Stock through 609 Stock variation |
 | 4. Intellectual work | salaries for billed work are a cost; for lasting work (software) they are capitalised and depreciated |
 | 5. A loan | borrowing is no income and repaying no cost; interest is |
 | 6. Start from scratch | the whole chart of accounts, no transaction yet |
