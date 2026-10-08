@@ -57,7 +57,7 @@
 #
 
 PROG=${0##*/}
-die() { echo "${PROG}: $*" >&2; exit 1; }
+function die { echo "${PROG}: $@" >&2; exit 1; }
 _co=commit; peel="^{$_co}"   # git revision peel suffix
 
 root=${CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY:-}
@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
+function parse_target {        # <system>/<subsystem>/<path> -> target system sub file
   target=$1
   case ${target} in
     */) die "not a file: ${target}" ;;
@@ -87,7 +87,7 @@ parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
   sub=${system}/${rest%%/*}; file=${rest#*/}
 }
 
-[[ -n "${cache}" || -n "${root}" ]] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
+[[ -n "${cache}" || -n "${root}" ]] || cache=${TCHECK_NM_CACHE:-${HOME}/Downloads/.cache/tcheck/NM}
 
 if [[ -n "${all}" ]]; then
   # every file -l lists, taken out one by one: the others still, when one
@@ -197,17 +197,17 @@ fi
 [[ -n "${root}" ]] || die "no NM workspace: set CMA_WORKSPACE_NM_REPOSITORY_DIRECTORY or give -root"
 git -C "${root}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git work tree: ${root}"
 
-submodule_paths() {     # the workspace's submodules: NAME PATH a line
+function submodule_paths {     # the workspace's submodules: NAME PATH a line
   git -C "${root}" config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null |
     awk '{ n = $1; sub(/^submodule\./, "", n); sub(/\.path$/, "", n); print n, $2 }'
 }
-checked_out() {         # DIR: whether DIR is a checked-out submodule's top
+function checked_out {         # DIR: whether DIR is a checked-out submodule's top
   git -C "$1" rev-parse --show-toplevel 2>/dev/null | grep -qx "$(cd "$1" 2>/dev/null && pwd -P)"
 }
-sparse() {              # DIR: whether its checkout is sparse
+function sparse {              # DIR: whether its checkout is sparse
   [[ "$(git -C "$1" config --bool core.sparseCheckout)" = true ]]
 }
-keep_worktree_in_config() {     # DIR: core.worktree where git submodule has it
+function keep_worktree_in_config {     # DIR: core.worktree where git submodule has it
   # sparse-checkout moves core.worktree to the work tree's own config
   # (config.worktree); git submodule reads and unsets it in the
   # repository's config -- where it goes back
@@ -299,7 +299,7 @@ up=../..
 rest_of_name=${name}
 while :; do
   up=${up}/..
-  case $rest_of_name in */*) rest_of_name=${rest_of_name#*/} ;; *) break ;; esac
+  case ${rest_of_name} in */*) rest_of_name=${rest_of_name#*/} ;; *) break ;; esac
 done
 git -C "${work}" config core.worktree "${up}/${sub}"
 # this file alone, then the recorded commit, fetched if it is not there yet
