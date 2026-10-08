@@ -18,7 +18,7 @@ from accounting_model import Account, Flow, Graph, kleppmann
 from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, px, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 
 const WIDTH: float = 780.0
-const HEIGHT: float = 390.0
+const HEIGHT: float = 530.0
 
 const LIVE_STYLE: str = """
 g.node { cursor: grab; }
