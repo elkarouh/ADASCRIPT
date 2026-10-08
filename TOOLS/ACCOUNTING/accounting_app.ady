@@ -42,6 +42,14 @@ p.about { margin: 0.4em 0; }
 div.record { background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: 0.4em 1em; }
 div.record input, div.record select, div.record button { margin: 0.2em 0.3em 0.2em 0; font-size: 0.95em; }
 p.message { font-weight: bold; }
+p.replay button { margin-right: 0.4em; }
+span.caption { margin-left: 0.6em; font-weight: bold; color: #e65100; }
+g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }   /* the head drawn as wide as the plain one */
+polygon.now { fill: #e65100; }
+g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
+g.now circle { stroke: #e65100; stroke-width: 6; }
+tr.now td { background: #ffe0b2; font-weight: bold; }
+tr.later td { color: #bbb; }
 p.refused { color: #b71c1c; }
 button.delete { font-size: 0.8em; }
 table.accounts tr.new td { background: #f6f6f6; }
@@ -272,6 +280,14 @@ var popup_message: str = ""             # why the popup's transaction cannot be 
 let NO_HEADERS: [](cstring, cstring) = []
 var replaced: bool = False              # another scenario, or this one started over: lay it out afresh
 
+# The replay (below): the transactions one at a time
+var step: int = -1                      # the transaction shown last; -1: not replaying, all shown
+var playing: bool = False
+var tick_pending: bool = False          # a tick is on its way: no second one
+var replayed: Graph = Graph()           # the books up to and with transaction STEP
+var now_arrows: []str = []              # its arrows, "source\ttarget"
+var now_accounts: []str = []            # the accounts it touches
+
 def say(text: str, is_refusal: bool):
     message = text
     refused = is_refusal
@@ -287,6 +303,7 @@ def on_books(status: int, response: cstring):
         when Books:
             books = read
             graph = graph_of(books)
+            stop_replay()
             if replaced:
                 layout.reset()
                 replaced = False
@@ -471,7 +488,8 @@ def live_node_html(g: Graph, a: Account) -> Html:
     let p: Point = layout.at(a)
     let tip: str = account_tip(g, a)
     let none: str = ""                  # the page's own tooltip shows it, not a <title>
-    let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else "node"))
+    let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else
+                    ("node now" if step >= 0 and a.name in now_accounts else "node")))
     html:
         g class=css onmousedown=layout.press(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
             + a.to_html(p, none)
@@ -480,8 +498,9 @@ def live_arrow_html(g: Graph, f: Flow) -> Html:
     let a: Point = layout.at(f.source)
     let b: Point = layout.at(f.target)
     let tip: str = tip_of(g, f)
+    let css: str = ("now" if step >= 0 and (f.source.name + "\t" + f.target.name) in now_arrows else "")
     html:
-        g onmouseover=layout.show(tip) onmouseout=layout.hide():
+        g class=css onmouseover=layout.show(tip) onmouseout=layout.hide():
             + f.to_html(a, b, bend_of(g, f), "")
 
 def live_button_html() -> Html:
@@ -489,6 +508,86 @@ def live_button_html() -> Html:
     html:
         p:
             button id="graph-only" onclick=layout.toggle_graph_only(): label
+
+# ---------------------------------------------------------------------
+# The replay: the transactions one at a time, each highlighted on the graph
+# and in the table, the balances as they stood after it
+# ---------------------------------------------------------------------
+
+const STEP_MS: int = 1800                # how long each transaction is shown while playing
+
+# The graph drawn: the books as they stood at STEP while replaying, else all of them.
+def shown() -> Graph:
+    return (replayed if step >= 0 else graph)
+
+def replay_to(i: int):
+    step = i
+    var upto: Books = books
+    upto.entries = books.entries[:i + 1]
+    replayed = graph_of(upto)
+    var alone: Books = books
+    alone.entries = [books.entries[i]]
+    now_arrows = []
+    for f in graph_of(alone).flows:
+        now_arrows.append(f.source.name + "\t" + f.target.name)
+    now_accounts = []
+    for p in books.entries[i].postings:
+        now_accounts.append(p.account)
+
+def tick():
+    tick_pending = False
+    if not playing:
+        return
+    if step + 1 < len(books.entries):
+        replay_to(step + 1)
+        schedule_tick()
+    else:
+        playing = False                 # the last one stays shown
+    redraw()
+
+def schedule_tick():
+    if not tick_pending:
+        tick_pending = True
+        discard_timeout(setTimeout(tick, STEP_MS))
+
+def play():
+    if len(books.entries) == 0:
+        return
+    layout.unfreeze()
+    if step < 0 or step + 1 >= len(books.entries):
+        replay_to(0)                    # from the first
+    playing = True
+    schedule_tick()
+
+def pause():
+    playing = False
+
+def step_by(d: int):
+    playing = False
+    if len(books.entries) == 0:
+        return
+    let start: int = (len(books.entries) if step < 0 and d < 0 else step)
+    replay_to(max(0, min(len(books.entries) - 1, start + d)))
+
+def stop_replay():
+    playing = False
+    step = -1
+
+def replay_html() -> Html:
+    let n: int = len(books.entries)
+    let caption: str = (f"Transaction {step + 1} of {n}: {books.entries[step].date}, {books.entries[step].what}" if step >= 0 else "")
+    html:
+        p class="replay":
+            if playing:
+                button id="pause" onclick=pause(): "Pause"
+            else:
+                button id="play" onclick=play(): "Play the transactions"
+            button id="back" onclick=step_by(-1): "Previous"
+            button id="next" onclick=step_by(1): "Next"
+            if step >= 0:
+                button id="all" onclick=stop_replay(): "Show all"
+            if caption != "":
+                span class="caption": caption
 
 # The scenario picker, Start over, Save as, and what the scenario is about.
 def scenario_option_html(i: int) -> Html:
@@ -521,6 +620,7 @@ def record_html() -> Html:
                      f"{layout.source} is frozen: drag an arrow from it to the account the money reaches. Click {layout.source} again, or press Escape, to let it go.")
     html:
         div class="record":
+            + replay_html()
             p: hint
             if message != "":
                 p class=message_class: message
@@ -529,13 +629,13 @@ def record_html() -> Html:
 # to delete it, and a last row to open a new one.
 def account_row_html(i: int) -> Html:
     let a: AccountRow = books.accounts[i]
-    let css: str = css_of(graph.account(a.name))
+    let css: str = css_of(shown().account(a.name))
     html:
         tr:
             td: a.number
             td class=css: a.name
             td: kind_text(a.kind)
-            td class="num": money(graph.balance(a.name))
+            td class="num": money(shown().balance(a.name))
             td:
                 button class="delete" onclick=delete_account(a.name): "Delete"
 
@@ -605,8 +705,9 @@ def postings_text(e: Entry) -> str:
 
 def journal_row_html(i: int) -> Html:
     let e: Entry = books.entries[i]
+    let css: str = ("" if step < 0 else ("now" if i == step else ("later" if i > step else "")))
     html:
-        tr:
+        tr class=css:
             td: e.date
             td: e.what
             td: postings_text(e)
@@ -631,6 +732,8 @@ def live_graph_html(g: Graph) -> Html:
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
+                marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
+                    polygon class="now" points="0 0, 4.3 1.5, 0 3"
             for f in g.flows:
                 + live_arrow_html(g, f)
             for a in g.accounts:
@@ -674,16 +777,16 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Hover over an account or an arrow to see its transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
 
 def main():
     def render() -> Html:
         var sections: []Html = [
             section_html("Accounts are nodes, transactions are edges",
                 GRAPH_TEXT + " Drag an account to move it.",
-                [record_html(), live_graph_html(graph), journal_html()])]
+                [record_html(), live_graph_html(shown()), journal_html()])]
         sections.append(section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()]))
-        let after: []Html = sections_after_graph(graph)
+        let after: []Html = sections_after_graph(shown())
         for i in range(1, len(after)):          # its first, the balances, is the table above
             sections.append(after[i])
         let wide: str = ("wide" if layout.graph_only else "")
@@ -695,7 +798,7 @@ def main():
                     + popup_html()
                 if layout.graph_only:
                     + record_html()
-                    + live_graph_html(graph)
+                    + live_graph_html(shown())
                     + journal_html()
                 else:
                     h1: APP_TITLE

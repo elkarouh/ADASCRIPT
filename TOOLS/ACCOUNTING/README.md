@@ -48,6 +48,11 @@ the last row of the accounts opens a new one. Hover over an account or an
 arrow to see its transactions; "Graph only" gives the drawing the whole
 window, with the transactions table under it.
 
+"Play the transactions" replays the books one transaction at a time: the
+graph, the balances and the statements as they stood after it, its arrows
+and accounts in orange and its row in the table highlighted. Pause, Previous
+and Next step through by hand; Show all ends the replay.
+
 ### Scenarios
 
 A scenario is `scenarios/NAME.books`, the books as text (`books_text.ady`:
