@@ -1,0 +1,430 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""The books of the ledger, drawn in the browser and kept by clicking: the
+accounts are nodes to drag, the money that moved between them arrows, and
+two clicks and an amount record a transaction.
+
+    make app       (builds the page and ledger_server, runs it, opens the page)
+
+ledger_server.ady serves this page and the books (books_text.ady); the page
+asks for the books when it starts and after each change. A transaction or an
+account is checked here first, as the ledger checks it (Graph.check), then
+sent to the server, which records it unless the books refuse it.
+
+Needs karax: `nimble install karax@1.5.0`.
+"""
+from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementById, getBoundingClientRect, addEventListener
+from dom nimport value, InputElement
+from karax/karax nimport setRenderer, redraw
+from karax/kajax nimport ajaxGet, ajaxPost
+from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, entry, purchase_with_vat, sale_with_vat
+from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, px, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, parse_books
+
+const WIDTH: float = 780.0
+const HEIGHT: float = 530.0
+
+const LIVE_STYLE: str = """
+g.node { cursor: grab; }
+g.from circle { stroke: #c62828; stroke-width: 5; }
+g.to circle { stroke: #2e7d32; stroke-width: 5; }
+div.record { background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: 0.4em 1em; }
+div.record input, div.record select, div.record button { margin: 0.2em 0.3em 0.2em 0; font-size: 0.95em; }
+p.message { font-weight: bold; }
+p.refused { color: #b71c1c; }
+svg.graph { user-select: none; }
+div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone breaks out of the text column */
+g.tip { pointer-events: none; }
+g.tip rect { fill: #fffbe6; stroke: #888; }
+text.tipline { font-size: 11px; white-space: pre; }
+text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
+"""
+
+# Where each account sits, starting where accounting_gui.ady puts it.
+@virtual
+class Layout:
+    var names: []str
+    var points: []Point
+    var held: int = -1                  # the account being dragged, or -1
+    var tip: str = ""                   # what the arrow under the mouse lists, or ""
+    var mouse_x: float = 0.0            # where the mouse is, in the drawing's units
+    var mouse_y: float = 0.0
+    var width: float = WIDTH            # the drawing's size: WIDTH x HEIGHT, or the window's when graph_only
+    var height: float = HEIGHT
+    var graph_only: bool = False        # True: the graph alone, without the text and tables
+    var grabbed_x: float = 0.0          # where the held account was grabbed: a press that
+    var grabbed_y: float = 0.0          # does not move it is a click, which picks it
+    var source: str = ""                # the accounts picked for a transaction: the one
+    var target: str = ""                # the money leaves, the one it reaches
+
+    # An account of G that has no place yet gets the example's (place), or
+    # the first spot on the grid that no account is near.
+    def sync(self, g: Graph):
+        for a in g.accounts:
+            if a.name not in self.names:
+                var p: Point = place(a)
+                if p.x < 0.0:
+                    p = self.free_spot()
+                self.names.append(a.name)
+                self.points.append(p)
+        if not self.graph_only:
+            for p in self.points:
+                self.height = max(self.height, p.y + NODE_RADIUS + 18.0)
+
+    def free_spot(self) -> Point:
+        var row: int = 0
+        while True:
+            for x in [80.0, 270.0, 480.0, 700.0]:
+                let y: float = 50.0 + 140.0 * float(row)
+                var taken: bool = False
+                for p in self.points:
+                    if abs(p.x - x) < 2.0 * NODE_RADIUS and abs(p.y - y) < 2.0 * NODE_RADIUS:
+                        taken = True
+                if not taken:
+                    return Point(x, y)
+            row += 1
+
+    # A click on an account: the first picks where the money leaves, the
+    # second where it goes; a third starts again.
+    def pick(self, name: str):
+        if self.source == "" or self.target != "":
+            self.source = name
+            self.target = ""
+        elif name != self.source:
+            self.target = name
+
+    def unpick(self):
+        self.source = ""
+        self.target = ""
+
+    def index(self, a: Account) -> int:
+        for i in range(len(self.names)):
+            if self.names[i] == a.name:
+                return i
+        raise KeyError(f"no account {a.name}")
+
+    def at(self, a: Account) -> Point:
+        return self.points[self.index(a)]
+
+    def grab(self, a: Account):
+        self.held = self.index(a)
+        self.grabbed_x = self.mouse_x
+        self.grabbed_y = self.mouse_y
+        self.tip = ""
+
+    # The browser shows an SVG <title> as a tooltip, but karax builds this
+    # one outside SVG, so the live page draws its own, in the drawing: a box
+    # of the tip's lines beside the mouse, on the side that has room.
+    def show(self, tip: str):
+        if self.held < 0:
+            self.tip = tip
+
+    def hide(self):
+        self.tip = ""
+
+    def tip_html(self) -> Html:
+        let lines: []str = self.tip.split("\n")
+        var widest: int = 0
+        for line in lines:
+            widest = max(widest, len(line))
+        let w: float = float(widest) * 6.2 + 16.0
+        let h: float = float(len(lines)) * 15.0 + 8.0
+        let x: float = (self.mouse_x + 14.0 if self.mouse_x + 14.0 + w <= self.width else max(self.mouse_x - 14.0 - w, 0.0))
+        let y: float = (self.mouse_y + 14.0 if self.mouse_y + 14.0 + h <= self.height else max(self.mouse_y - 14.0 - h, 0.0))
+        let top: float = y + 16.0
+        let left: float = x + 8.0
+        html:
+            g class="tip":
+                rect x=px(x) y=px(y) width=px(w) height=px(h) rx="3"
+                for i in range(len(lines)):
+                    if i == 0:
+                        stext class="tiphead" x=px(left) y=px(top): lines[i]
+                    else:
+                        stext class="tipline" x=px(left) y=px(top+float(i)*15.0): lines[i]
+
+    # The held account to (X, Y), kept whole inside the drawing.
+    def move_to(self, x: float, y: float):
+        if self.held >= 0:
+            self.points[self.held] = Point(
+                min(max(x, NODE_RADIUS), self.width - NODE_RADIUS),
+                min(max(y, NODE_RADIUS), self.height - NODE_RADIUS))
+
+    # The held account let go; if it did not move, it was clicked.
+    def drop(self):
+        if self.held >= 0 and abs(self.mouse_x - self.grabbed_x) < 4.0 and abs(self.mouse_y - self.grabbed_y) < 4.0:
+            self.pick(self.names[self.held])
+        self.held = -1
+
+    # The graph alone fills the window, one drawing unit per pixel, the
+    # accounts moved to its middle; back in the page it is WIDTH x HEIGHT
+    # again, the accounts moved back (and kept inside if they strayed).
+    def toggle_graph_only(self):
+        let was_width: float = self.width
+        let was_height: float = self.height
+        self.graph_only = not self.graph_only
+        self.tip = ""
+        if self.graph_only:
+            self.width = float(window.innerWidth) - 20.0
+            self.height = max(float(window.innerHeight) - 90.0, HEIGHT)
+        else:
+            self.width = WIDTH
+            self.height = HEIGHT
+            for p in self.points:
+                self.height = max(self.height, p.y + NODE_RADIUS + 18.0)
+        let dx: float = (self.width - was_width) / 2.0
+        let dy: float = (self.height - was_height) / 2.0
+        for i in range(len(self.points)):
+            self.held = i
+            self.move_to(self.points[i].x + dx, self.points[i].y + dy)
+        self.held = -1
+
+    def view_box(self) -> str:
+        return f"0 0 {self.width:.0f} {self.height:.0f}"
+
+var layout: Layout = Layout()
+
+# ---------------------------------------------------------------------
+# The books, as the server last sent them, and what the page sends it
+# ---------------------------------------------------------------------
+
+var books: Books = Books("", [], [])
+var graph: Graph = Graph()
+var message: str = "Asking the ledger for the books..."
+var refused: bool = False               # whether the message says why something was refused
+
+let NO_HEADERS: [](cstring, cstring) = []
+
+def say(text: str, is_refusal: bool):
+    message = text
+    refused = is_refusal
+
+def on_books(status: int, response: cstring):
+    if status != 200:
+        say(f"The ledger did not answer ({status}): is ledger_server running?", True)
+        return
+    let read: Books | !BookFailure_T = parse_books(str(response))
+    case read:
+        when BookFailure_T:
+            say("The ledger sent books this page cannot read: " + read.detail, True)
+        when Books:
+            books = read
+            graph = graph_of(books)
+            layout.sync(graph)
+            if message.startswith("Asking"):
+                say("", False)
+
+def load():
+    ajaxGet("/books", NO_HEADERS, on_books)
+
+# The server's answer to a POST: "ok", or "error" and why.
+def on_answer(status: int, response: cstring):
+    let answer: str = str(response)
+    if answer == "ok":
+        load()
+    else:
+        say(("Refused: " + answer[6:] if answer.startswith("error") else f"The ledger did not answer ({status})"), True)
+
+def field_text(id: str) -> str:
+    return str(document.getElementById(id).value).strip()
+
+def clear_fields(ids: []str):
+    for id in ids:
+        InputElement(document.getElementById(id)).value = ""
+
+def kind_of(name: str) -> ?Kind_T:
+    for a in books.accounts:
+        if a.name == name:
+            return a.kind
+    return None
+
+# The account whose number starts with PREFIX: 411 is VAT to recover, 451
+# VAT to pay, in the Belgian chart of accounts.
+def account_numbered(prefix: str) -> str:
+    for a in books.accounts:
+        if a.number.startswith(prefix):
+            return a.name
+    return ""
+
+# The transaction the form describes: from the picked source to the picked
+# target, AMOUNT before VAT. With VAT, a sale (the source is revenue) owes it
+# to the tax office, a purchase claims it back.
+def form_entry() -> Entry | !BookFailure_T:
+    let date: str = field_text("date")
+    let what: str = field_text("what")
+    if layout.source == "" or layout.target == "":
+        return BookFailure_T("Click the account the money leaves, then the one it reaches.")
+    if len(date) != 10:
+        return BookFailure_T("The date is written 2012-01-31.")
+    if what == "":
+        return BookFailure_T("Say what happened.")
+    do:
+        amount <- parse_float(field_text("amount").replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
+        rate <- parse_int(field_text("vat")) else BookFailure_T("The VAT rate is a number.")
+    let net: Cents_T = Cents_T(int(amount * 100.0 + 0.5))
+    if net <= 0:
+        return BookFailure_T("The amount is more than zero: the arrow says which way it goes.")
+    if rate == 0:
+        return entry(date, what, layout.source, layout.target, net)
+    let source_kind: ?Kind_T = kind_of(layout.source)
+    let is_sale: bool = source_kind is not None and source_kind == REVENUE
+    let vat: str = account_numbered("451" if is_sale else "411")
+    if vat == "":
+        return BookFailure_T(f"There is no {('VAT to pay (451...)' if is_sale else 'VAT to recover (411...)')} account to put the VAT in.")
+    if is_sale:
+        return sale_with_vat(date, what, layout.source, layout.target, vat, net, rate)
+    return purchase_with_vat(date, what, layout.source, layout.target, vat, net, rate)
+
+def record_entry():
+    let made: Entry | !BookFailure_T = form_entry()
+    if made is BookFailure_T:
+        say(made.detail, True)
+    else:
+        let checked: None | !BookFailure_T = graph.check(made)
+        if checked is BookFailure_T:
+            say(checked.detail, True)
+        else:
+            say(f"Recorded: {made.what}", False)
+            layout.unpick()
+            clear_fields(["what", "amount"])
+            ajaxPost("/entry", NO_HEADERS, entry_lines(made), on_answer)
+
+def open_account():
+    let number: str = field_text("number")
+    let name: str = field_text("name")
+    let kind: Kind_T | !BookFailure_T = kind_named(field_text("kind"))
+    if kind is BookFailure_T:
+        say(kind.detail, True)
+    elif number == "" or name == "":
+        say("An account needs a number and a name.", True)
+    else:
+        say(f"Opened: {number} {name}", False)
+        clear_fields(["number", "name"])
+        ajaxPost("/account", NO_HEADERS, account_line(AccountRow(number, kind, name)), on_answer)
+
+# ---------------------------------------------------------------------
+# Rendering: the graph at the layout's points, the rest as on the static page
+# ---------------------------------------------------------------------
+
+def live_node_html(g: Graph, a: Account) -> Html:
+    let p: Point = layout.at(a)
+    let tip: str = account_tip(g, a)
+    let none: str = ""                  # the page's own tooltip shows it, not a <title>
+    let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else "node"))
+    html:
+        g class=css onmousedown=layout.grab(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
+            + a.to_html(p, none)
+
+def live_arrow_html(g: Graph, f: Flow) -> Html:
+    let a: Point = layout.at(f.source)
+    let b: Point = layout.at(f.target)
+    let tip: str = tip_of(g, f)
+    html:
+        g onmouseover=layout.show(tip) onmouseout=layout.hide():
+            + f.to_html(a, b, bend_of(g, f), "")
+
+def live_button_html() -> Html:
+    let label: str = ("Show everything" if layout.graph_only else "Graph only")
+    html:
+        p:
+            button id="graph-only" onclick=layout.toggle_graph_only(): label
+
+def last_date() -> str:
+    return (books.entries[len(books.entries) - 1].date if len(books.entries) > 0 else "")
+
+def record_html() -> Html:
+    let source: str = (layout.source if layout.source != "" else "(click an account)")
+    let target: str = (layout.target if layout.target != "" else ("(click another)" if layout.source != "" else ""))
+    let message_class: str = ("message refused" if refused else "message")
+    let date: str = last_date()
+    html:
+        div class="record":
+            p:
+                strong: "A transaction: "
+                span: f"from {source} to {target}"
+            p:
+                input id="date" value=date placeholder="2012-01-31" size="10"
+                input id="what" placeholder="what happened" size="34"
+                input id="amount" placeholder="amount, before VAT" size="14"
+                select id="vat":
+                    option value="0": "no VAT"
+                    option value="6": "6% VAT"
+                    option value="12": "12% VAT"
+                    option value="21": "21% VAT"
+                button id="record" onclick=record_entry(): "Record"
+                button id="clear" onclick=layout.unpick(): "Clear"
+            p:
+                strong: "An account: "
+                input id="number" placeholder="number, 613100" size="12"
+                select id="kind":
+                    option value="asset": "asset"
+                    option value="liability": "liability"
+                    option value="equity": "equity"
+                    option value="revenue": "revenue"
+                    option value="expense": "expense"
+                input id="name" placeholder="name" size="20"
+                button id="open" onclick=open_account(): "Open"
+            if message != "":
+                p class=message_class: message
+
+def live_graph_html(g: Graph) -> Html:
+    html:
+        svg id="graph" viewBox=layout.view_box() class="graph":
+            defs:
+                marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                    polygon points="0 0, 10 3.5, 0 7"
+            for f in g.flows:
+                + live_arrow_html(g, f)
+            for a in g.accounts:
+                + live_node_html(g, a)
+            if layout.tip != "":
+                + layout.tip_html()
+
+# ---------------------------------------------------------------------
+# The mouse: a press on a node grabs it (above), these move it and drop it
+# ---------------------------------------------------------------------
+
+def on_move(e: Event):
+    let m: MouseEvent = MouseEvent(e)
+    let box: BoundingRect = document.getElementById("graph").getBoundingClientRect()
+    let scale: float = layout.width / box.width    # the svg is drawn at the page's width
+    layout.mouse_x = (float(m.clientX) - box.left) * scale
+    layout.mouse_y = (float(m.clientY) - box.top) * scale
+    layout.move_to(layout.mouse_x, layout.mouse_y)      # when an account is held
+    if layout.held >= 0 or layout.tip != "":
+        redraw()
+
+def on_up(e: Event):
+    layout.drop()
+
+const APP_TITLE: str = "Accounting, as graph theory"
+const APP_INTRO: str = "Your books, as the ledger keeps them. To record a transaction, click the account the money leaves, then the one it reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Hover over an account or an arrow to see its transactions."
+
+def main():
+    def render() -> Html:
+        var sections: []Html = [
+            section_html("Accounts are nodes, transactions are edges",
+                GRAPH_TEXT + " Drag an account to move it.",
+                [record_html(), live_graph_html(graph), graph.edges.to_html()])]
+        for s in sections_after_graph(graph):
+            sections.append(s)
+        let wide: str = ("wide" if layout.graph_only else "")
+        html:
+            div class=wide:
+                style: STYLE + LIVE_STYLE
+                + live_button_html()
+                if layout.graph_only:
+                    + record_html()
+                    + live_graph_html(graph)
+                else:
+                    h1: APP_TITLE
+                    p: APP_INTRO
+                    for s in sections:
+                        + s
+
+    setRenderer(render)
+    document.addEventListener("mousemove", on_move)
+    document.addEventListener("mouseup", on_up)
+    load()
+
+if __name__ == "__main__":       # not when another module imports this
+    main()

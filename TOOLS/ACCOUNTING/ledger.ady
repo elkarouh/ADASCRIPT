@@ -24,31 +24,17 @@ nothing is written.
 """
 from db import DB
 from math nimport round
-from accounting_model import Account, BookFailure_T, Cents_T, Dollars_T, Entry, Graph, Kind_T, Line, Posting, colour_of, example_entries, money_text
+from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, example_entries, money_text
+from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text
 
 # ---------------------------------------------------------------------
 # The config file
 # ---------------------------------------------------------------------
 
-type ChartAccount is record:
-    number: str
-    kind:   Kind_T
-    name:   str
-
 type Config is record:
     database: Path
     currency: str
-    accounts: []ChartAccount
-
-def bad(detail: str) -> BookFailure_T:
-    return BookFailure_T(detail)
-
-def kind_named(word: str) -> Kind_T | !BookFailure_T:
-    let k: Kind_T | !ParseFailure_T = parse_enum(Kind_T, word.upper())
-    if k is ParseFailure_T:
-        return bad(f"{word} is not a kind of account: asset, liability, equity, revenue or expense")
-    else:
-        return k
+    accounts: []AccountRow
 
 def is_number(word: str) -> bool:
     if len(word) == 0:
@@ -80,7 +66,7 @@ def read_config(path: Path) -> Config | !BookFailure_T:
             if kind is BookFailure_T:
                 return bad(f"{path}:{n}: {kind.detail}")
             else:
-                config.accounts.append(ChartAccount(words[0], kind, rest[len(words[1]):].strip()))
+                config.accounts.append(AccountRow(words[0], kind, rest[len(words[1]):].strip()))
         elif words[0] == "database":
             config.database = path.parent / rest
         elif words[0] == "currency":
@@ -136,7 +122,7 @@ class Ledger:
         if self.number_of(name) != "":
             return bad(f"there is already an account named {name}")
         self.db.exec("INSERT INTO accounts (number, name, kind) VALUES (?, ?, ?)",
-                     [number, name, str(kind).lower()])
+                     [number, name, kind_text(kind)])
 
     # Entry E, once the books as they are accept it (Graph.check), in one
     # database transaction.
@@ -144,12 +130,16 @@ class Ledger:
         do:
             self.graph().check(e)
         self.db.exec("BEGIN")
-        self.db.exec("INSERT INTO transactions (date, what) VALUES (?, ?)", [e.date, e.what])
-        let tx: str = self.db.value("SELECT last_insert_rowid()")
-        for p in e.postings:
-            self.db.exec("INSERT INTO postings (tx, account, amount) VALUES (?, ?, ?)",
-                         [tx, self.number_of(p.account), str(int(p.amount))])
-        self.db.exec("COMMIT")
+        try:
+            self.db.exec("INSERT INTO transactions (date, what) VALUES (?, ?)", [e.date, e.what])
+            let tx: str = self.db.value("SELECT last_insert_rowid()")
+            for p in e.postings:
+                self.db.exec("INSERT INTO postings (tx, account, amount) VALUES (?, ?, ?)",
+                             [tx, self.number_of(p.account), str(int(p.amount))])
+            self.db.exec("COMMIT")
+        except:                         # the database failed: nothing of the entry stays
+            self.db.exec("ROLLBACK")
+            raise
 
     # The transactions, by date, each with its postings in the order written.
     def entries(self) -> []Entry:
@@ -166,19 +156,19 @@ class Ledger:
     def kinds(self) -> [][]str:
         return self.db.rows("SELECT number, name, kind FROM accounts ORDER BY number")
 
-    # The books as a graph: the accounts in the order they were opened, then
-    # every transaction posted.
-    def graph(self) -> Graph:
-        var g: Graph = Graph()
-        for row in self.db.rows("SELECT name, kind FROM accounts ORDER BY rowid"):
+    # The accounts in the order they were opened, and the entries.
+    def books(self, currency: str) -> Books:
+        var accounts: []AccountRow = []
+        for row in self.db.rows("SELECT number, kind, name FROM accounts ORDER BY rowid"):
             let kind: Kind_T | !BookFailure_T = kind_named(row[1])
             if kind is BookFailure_T:
                 raise ValueError(f"the database has an account of kind {row[1]}")
             else:
-                g.add_account(row[0], colour_of(kind))
-        for e in self.entries():
-            g.post(e)
-        return g
+                accounts.append(AccountRow(row[0], kind, row[2]))
+        return Books(currency, accounts, self.entries())
+
+    def graph(self) -> Graph:
+        return graph_of(self.books(""))
 
     def count(self, table: str) -> int:
         return int(self.db.value(f"SELECT COUNT(*) FROM {table}"))

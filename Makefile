@@ -1438,13 +1438,22 @@ test: compile
 
 	@# TOOLS/ACCOUNTING: the model and the ledger it keeps in SQLite, run from
 	@# their directory, where test_ledger.ady reads accounting.conf.
-	@echo "=== TOOLS/ACCOUNTING (model, ledger) ==="
+	@echo "=== TOOLS/ACCOUNTING (model, ledger, server, page) ==="
 	@if [ -z "$(call nim_has,db_connector/db_sqlite)" ]; then echo "  SKIPPED, db_connector not installed"; else \
 	    for t in test_accounting_model test_ledger; do \
 	        printf '  %-42s' "ACCOUNTING/$$t.ady (nim)"; \
 	        (cd $(TOOLDIR)/ACCOUNTING && $(ADY2NIM) c -r $$t.ady >/dev/null 2>&1) \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
+	    printf '  %-42s' "ACCOUNTING/ledger_server.ady (nim)"; \
+	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/ledger_server.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    if [ -z "$(HTML_SKIPPED)" ]; then \
+	        printf '  %-42s' "ACCOUNTING/accounting_app.ady (ady2nim js)"; \
+	        $(ADY2NIM) js $(TOOLDIR)/ACCOUNTING/accounting_app.ady >/dev/null 2>&1 \
+	            && echo OK || { echo FAIL; exit 1; }; \
+	        rm -f $(TOOLDIR)/ACCOUNTING/accounting_app.js; \
+	    fi; \
 	fi
 
 	@echo ""

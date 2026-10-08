@@ -66,6 +66,8 @@ type Point is record:
     x: float
     y: float
 
+# Where account A is drawn: the example's accounts each have a place;
+# another is at (-1, -1), and the page that shows it finds it one.
 def place(a: Account) -> Point:
     case a.name:
         when "VAT to pay":
@@ -96,8 +98,10 @@ def place(a: Account) -> Point:
             return Point(480.0, 470.0)
         when "Loans":
             return Point(700.0, 470.0)
+        when "Depreciation":
+            return Point(700.0, 330.0)
         when others:
-            return Point(700.0, 330.0)        # Depreciation
+            return Point(-1.0, -1.0)          # no place of its own: the page finds one
 
 # ---------------------------------------------------------------------
 # Rendering: a to_html for each thing of the model that is drawn, called as

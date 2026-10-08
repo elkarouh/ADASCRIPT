@@ -1,0 +1,108 @@
+#!/usr/bin/env ady2nim
+"""ledger_server -- the ledger's books, served to the page that draws them.
+
+    ledger_server [--config FILE] [--db FILE] [--port N]     (or: make app)
+
+Serves the page (build/app.html and build/accounting_app.js, beside the
+config file) and, as text (books_text.ady), the books and what the page adds:
+
+    GET  /books      the accounts and every transaction
+    POST /account    one account line: opens it
+    POST /entry      one entry and its postings: records it
+
+A POST answers "ok", or "error", a tab, and why the books refuse it. The
+database is the config file's (accounting.conf), or --db's.
+"""
+from asyncdispatch nimport complete, newFuture, Port, waitFor
+from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from accounting_model import BookFailure_T, Entry
+from books_text import AccountRow, Books, parse_books, text_of_books
+from ledger import Config, Ledger, read_config
+
+var config: Config = Config(Path("accounting.db"), "USD", [])
+var books: Ledger = Ledger(":memory:")
+var www: Path = Path("build")            # where the page is: build/, beside the config file
+
+const PAGES: []str = ["app.html", "accounting_app.js"]
+
+def content_type(file: str) -> str:
+    return ("text/javascript" if file.endswith(".js") else "text/html; charset=utf-8")
+
+def answer(r: None | !BookFailure_T) -> str:
+    if r is BookFailure_T:
+        return "error\t" + r.detail
+    return "ok"
+
+# What the page posts to PATH, done; the answer to send back.
+def post(path: str, body: str) -> str:
+    let read: Books | !BookFailure_T = parse_books(body)
+    if read is BookFailure_T:
+        return "error\t" + read.detail
+    else:
+        let b: Books = read
+        if path == "/account" and len(b.accounts) == 1 and len(b.entries) == 0:
+            let a: AccountRow = b.accounts[0]
+            return answer(books.open_account(a.number, a.kind, a.name))
+        elif path == "/entry" and len(b.entries) == 1 and len(b.accounts) == 0:
+            return answer(books.record(b.entries[0]))
+        return "error\tthe page sent what " + path + " does not take"
+
+async def handler(req: Request):
+    let path: str = req.url.path
+    let text: HttpHeaders = newHttpHeaders([("Content-Type", "text/plain; charset=utf-8")])
+    if req.reqMethod'Image == "GET" and path == "/books":
+        await req.respond(Http200, text_of_books(books.books(config.currency)), text)
+    elif req.reqMethod'Image == "POST":
+        var answer: str = ""
+        try:
+            answer = post(path, req.body)
+        except:                         # the database, not the books: say so, and keep serving
+            answer = "error\tthe database failed: " + getCurrentExceptionMsg()
+        await req.respond(Http200, answer, text)
+    else:
+        let file: str = ("app.html" if path == "/" else path[1:])
+        if file in PAGES:
+            let page: str | !PathFailure_T = (www / file).read_text()
+            if page is PathFailure_T:
+                await req.respond(Http404, f"{file} is not built: make app")
+            else:
+                await req.respond(Http200, page, newHttpHeaders([("Content-Type", content_type(file))]))
+        else:
+            await req.respond(Http404, "not found")
+
+def main():
+    var conf_path: Path = Path("accounting.conf")
+    var db_path: str = ""
+    var port: int = 8803
+    let args: []str = $@
+    var i: int = 0
+    while i + 1 < len(args):
+        case args[i]:
+            when "--config":
+                conf_path = Path(args[i + 1])
+            when "--db":
+                db_path = args[i + 1]
+            when "--port":
+                let n: int | !ParseFailure_T = parse_int(args[i + 1])
+                if n is ParseFailure_T:
+                    die(f"--port {args[i + 1]}: not a number")
+                else:
+                    port = n
+            when others:
+                die(f"unknown option {args[i]}")
+        i += 2
+    die(f"unknown option {args[i]}") if i < len(args)
+    let read: Config | !BookFailure_T = read_config(conf_path)
+    if read is BookFailure_T:
+        die(read.detail)
+    else:
+        config = read
+    www = conf_path.parent / "build"
+    let db: str = (db_path if db_path != "" else str(config.database))
+    books = Ledger(db)
+    print f"ledger of {db}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    var server: AsyncHttpServer = newAsyncHttpServer()
+    waitFor(server.serve(Port(port), handler))
+
+if __name__ == "__main__":
+    main()

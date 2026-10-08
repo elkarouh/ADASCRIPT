@@ -1,0 +1,100 @@
+"""The books as text, the way the ledger's server and the page in the browser
+pass them to each other: one line per account, per transaction and per
+posting, the fields separated by tabs.
+
+    currency  USD
+    account   550000  asset  Bank account
+    entry     2011-01-04  A chair (21% VAT)
+    posting   Bank account  -60500
+    posting   Furniture  50000
+    posting   VAT to recover  10500
+
+Amounts are in cents. The server builds the text from its database and the
+page reads it; the page writes one account or one entry the same way, and
+the server reads it. Nothing here needs a database or a browser, so both
+compile it.
+"""
+from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of
+
+# An account as a chart of accounts lists it.
+type AccountRow is record:
+    number: str
+    kind:   Kind_T
+    name:   str
+
+type Books is record:
+    currency: str
+    accounts: []AccountRow
+    entries:  []Entry
+
+def bad(detail: str) -> BookFailure_T:
+    return BookFailure_T(detail)
+
+def kind_named(word: str) -> Kind_T | !BookFailure_T:
+    let k: Kind_T | !ParseFailure_T = parse_enum(Kind_T, word.upper())
+    if k is ParseFailure_T:
+        return bad(f"{word} is not a kind of account: asset, liability, equity, revenue or expense")
+    else:
+        return k
+
+def kind_text(k: Kind_T) -> str:
+    return str(k).lower()
+
+# A field as it may go between tabs: no tab, no line break.
+def field(s: str) -> str:
+    return s.replace("\t", " ").replace("\n", " ").replace("\r", " ").strip()
+
+def account_line(a: AccountRow) -> str:
+    return f"account\t{field(a.number)}\t{kind_text(a.kind)}\t{field(a.name)}"
+
+def entry_lines(e: Entry) -> str:
+    var text: str = f"entry\t{field(e.date)}\t{field(e.what)}"
+    for p in e.postings:
+        text += "\n" + f"posting\t{field(p.account)}\t{int(p.amount)}"
+    return text
+
+def text_of_books(b: Books) -> str:
+    var lines: []str = [f"currency\t{field(b.currency)}"]
+    for a in b.accounts:
+        lines.append(account_line(a))
+    for e in b.entries:
+        lines.append(entry_lines(e))
+    return "\n".join(lines) + "\n"
+
+# TEXT read back. An entry's postings are the posting lines that follow it.
+def parse_books(text: str) -> Books | !BookFailure_T:
+    var b: Books = Books("", [], [])
+    var n: int = 0
+    for line in text.split("\n"):
+        n += 1
+        if line.strip() == "":
+            continue
+        let f: []str = line.split("\t")
+        if f[0] == "currency" and len(f) == 2:
+            b.currency = f[1]
+        elif f[0] == "account" and len(f) == 4:
+            let kind: Kind_T | !BookFailure_T = kind_named(f[2])
+            if kind is BookFailure_T:
+                return bad(f"line {n}: {kind.detail}")
+            else:
+                b.accounts.append(AccountRow(f[1], kind, f[3]))
+        elif f[0] == "entry" and len(f) == 3:
+            b.entries.append(Entry(f[1], f[2], []))
+        elif f[0] == "posting" and len(f) == 3 and len(b.entries) > 0:
+            let amount: int | !ParseFailure_T = parse_int(f[2])
+            if amount is ParseFailure_T:
+                return bad(f"line {n}: {f[2]} is not an amount in cents")
+            else:
+                b.entries[len(b.entries) - 1].postings.append(Posting(f[1], Cents_T(amount)))
+        else:
+            return bad(f"line {n}: cannot read '{line}'")
+    return b
+
+# The books as a graph: the accounts in their order, every entry posted.
+def graph_of(b: Books) -> Graph:
+    var g: Graph = Graph()
+    for a in b.accounts:
+        g.add_account(a.name, colour_of(a.kind))
+    for e in b.entries:
+        g.post(e)
+    return g

@@ -3,12 +3,14 @@
 # (nimble install karax@1.5.0) and db_connector for the ledger
 # (nimble install db_connector).
 #
-#   make ledger     build the ledger program (./ledger -h)
-#   make example    a database, accounting.db, holding the example company's year
-#   make gui        the example as a web page            (accounting_gui.ady)
-#   make live       the same page, its nodes dragged with the mouse (accounting_live.ady)
+#   make app        the tool: the books drawn in the browser, kept by clicking
+#                   (ledger_server serves accounting_app; the database is
+#                   accounting.db, made with the example's year if missing)
+#   make ledger     build the ledger's command line (./ledger -h)
+#   make example    a fresh accounting.db, holding the example company's year
+#   make gui        the example as a static web page      (accounting_gui.ady)
 #   make test       the model and the ledger, no GUI (Nim only)
-#   make all        build the program and both pages, open none
+#   make all        build the programs and the pages, open none
 #
 # $(OPEN) is xdg-open, or open on a Mac; `make gui OPEN=firefox` picks one.
 
@@ -19,13 +21,18 @@ ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8802
 
-.PHONY: all ledger example gui live test clean
+.PHONY: all app ledger ledger_server example gui test clean
 
-all: ledger build/accounting_gui.html build/accounting_live.js
+all: ledger ledger_server build/accounting_gui.html build/accounting_app.js
 
-ledger: ledger.ady accounting_model.ady
+ledger: ledger.ady books_text.ady accounting_model.ady
 	@echo "building ledger"
 	@$(ADY2NIM) c ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@rm -f build.log
+
+ledger_server: ledger_server.ady ledger.ady books_text.ady accounting_model.ady
+	@echo "building ledger_server"
+	@$(ADY2NIM) c ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 # A fresh database each time: the example goes in an empty one.
@@ -40,20 +47,23 @@ build/accounting_gui.html: accounting_gui.ady accounting_model.ady
 	@$(ADY2NIM) c -r $< > $@ 2> build/accounting_gui.log \
 	    || { cat build/accounting_gui.log; rm -f $@; exit 1; }
 
-build/accounting_live.js: accounting_live.ady accounting_gui.ady accounting_model.ady
+build/accounting_app.js: accounting_app.ady accounting_gui.ady books_text.ady accounting_model.ady
 	@mkdir -p build
 	@echo "building $@"
-	@$(ADY2NIM) js $< > build/accounting_live.log 2>&1 || { cat build/accounting_live.log; exit 1; }
-	@cp -L accounting_live.js $@ && rm -f accounting_live.js
-	@cp live.html build/
+	@$(ADY2NIM) js $< > build/accounting_app.log 2>&1 || { cat build/accounting_app.log; exit 1; }
+	@cp -L accounting_app.js $@ && rm -f accounting_app.js
+	@cp app.html build/
 
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 
-live: build/accounting_live.js
-	@echo "serving http://127.0.0.1:$(PORT)/live.html (Ctrl-C to stop)"
-	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/live.html) &
-	cd build && python3 -m http.server $(PORT) --bind 127.0.0.1
+accounting.db:
+	$(MAKE) ledger
+	./ledger example
+
+app: ledger_server build/accounting_app.js accounting.db
+	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
+	./ledger_server --port $(PORT)
 
 test:
 	$(ADY2NIM) c -r test_accounting_model.ady 2>/dev/null

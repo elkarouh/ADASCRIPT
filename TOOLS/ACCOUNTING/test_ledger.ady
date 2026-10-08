@@ -6,7 +6,8 @@ and what does not fit the books is refused without a trace.
     ady2nim c -r test_ledger.ady
 """
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
-from ledger import Config, Ledger, cents_of, kind_named, open_chart, read_config, record_example
+from books_text import Books, kind_named, parse_books, text_of_books, graph_of
+from ledger import Config, Ledger, cents_of, open_chart, read_config, record_example
 
 # The value of a step that must not fail here.
 def config_of(path: Path) -> Config:
@@ -72,6 +73,22 @@ assert entries[1].what == example_entries()[1].what
 assert len(entries[1].postings) == 3
 assert entries[1].postings[2].account == "VAT to recover"
 assert entries[1].postings[2].amount == 10500
+
+# The books as the server sends them to the page, and read back there: the
+# same graph.
+let sent: Books = books.books("USD")
+let got: Books | !BookFailure_T = parse_books(text_of_books(sent))
+case got:
+    when BookFailure_T:
+        raise ValueError(got.detail)
+    when Books:
+        assert len(got.accounts) == 15 and len(got.entries) == 17
+        assert got.currency == "USD"
+        let drawn: Graph = graph_of(got)
+        for a in built.accounts:
+            assert drawn.account(a.name).balance == a.balance
+assert parse_books("account\t1\tcost\tX\n") is BookFailure_T
+assert parse_books("posting\tX\t5\n") is BookFailure_T       # a posting needs its entry
 
 # What does not fit is refused, and leaves nothing behind.
 def refused(e: Entry) -> bool:
