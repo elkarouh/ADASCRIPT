@@ -1,11 +1,11 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""The accounting page of accounting_objects.ady, live in the browser: the
+"""The accounting page of accounting_gui.ady, live in the browser: the
 accounts in the graph can be dragged with the mouse, and the arrows follow.
 
     make live      (builds accounting_live.js, serves live.html, opens it)
 
-The model is accounting_model.ady and the drawing is accounting_objects.ady's;
+The model is accounting_model.ady and the drawing is accounting_gui.ady's;
 this file adds a Layout, where each account sits, which the mouse moves.
 Pressing on a node grabs it (an onmousedown handler in the html: block); the
 document's mousemove and mouseup move it and let it go, and karax redraws.
@@ -15,12 +15,12 @@ Needs karax: `nimble install karax@1.5.0`.
 from dom nimport Event, MouseEvent, BoundingRect, document, getElementById, getBoundingClientRect, addEventListener
 from karax/karax nimport setRenderer, redraw
 from accounting_model import Account, Flow, Graph, kleppmann
-from accounting_objects import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, place, node_html, arrow_html, edges_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, place, node_html, arrow_html, edges_html, section_html, sections_after_graph
 
 const WIDTH: float = 780.0
 const HEIGHT: float = 390.0
 
-# Where each account sits, starting where accounting_objects.ady puts it.
+# Where each account sits, starting where accounting_gui.ady puts it.
 @virtual
 class Layout:
     var names: []str

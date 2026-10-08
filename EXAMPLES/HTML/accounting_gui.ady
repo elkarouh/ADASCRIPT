@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """Accounting for computer scientists, as a web page.
 
-    ady2nim c -r accounting_objects.ady > accounting_objects.html   (or: make objects)
+    ady2nim c -r accounting_gui.ady > accounting_gui.html   (or: make gui)
 
 The accounting itself is accounting_model.ady: Account and Graph objects
 with no GUI in them, tested on their own by test_accounting_model.ady. This

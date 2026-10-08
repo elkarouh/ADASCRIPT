@@ -1,7 +1,7 @@
 # EXAMPLES/HTML: pages written with html: blocks. Needs karax >= 1.5.0
 # (nimble install karax@1.5.0).
 #
-#   make objects    the accounting page of Kleppmann's article (accounting_objects.ady)
+#   make gui        the accounting page of Kleppmann's article (accounting_gui.ady)
 #   make live       the same page, its graph's nodes dragged with the mouse (accounting_live.ady)
 #   make card       one widget                               (html_card.ady)
 #   make app        a page as a tree of widgets              (html_app.ady)
@@ -10,15 +10,15 @@
 #   make all        build every page into build/, open none
 #
 # Each target builds its page into build/ and opens it in the browser:
-# $(OPEN) is xdg-open, or open on a Mac; `make objects OPEN=firefox` picks one.
+# $(OPEN) is xdg-open, or open on a Mac; `make gui OPEN=firefox` picks one.
 
 ADY2NIM ?= ady2nim
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8801
 
-PAGES := html_card html_app accounting_objects
+PAGES := html_card html_app accounting_gui
 
-.PHONY: all objects live card app counter test clean
+.PHONY: all gui live card app counter test clean
 
 all: $(PAGES:%=build/%.html) build/html_counter.js build/accounting_live.js
 
@@ -30,7 +30,7 @@ build/%.html: %.ady
 	@$(ADY2NIM) c -r $< > $@ 2> build/$*.log \
 	    || { cat build/$*.log; rm -f $@; exit 1; }
 
-objects: build/accounting_objects.html
+gui:     build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 card:    build/html_card.html
 	$(OPEN) $(CURDIR)/$<

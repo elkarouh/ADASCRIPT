@@ -1416,7 +1416,7 @@ test: compile
 	@echo "=== html: blocks (karax) ==="
 	@if [ -n "$(HTML_SKIPPED)" ]; then echo "  SKIPPED, karax not installed"; else \
 	    for t in 'html_card:<h2>Counter</h2>' 'html_app:<button id="dec">-1</button>' \
-	             'accounting_objects:<td class="num">1,862.00</td>'; do \
+	             'accounting_gui:<td class="num">1,862.00</td>'; do \
 	        n=$${t%%:*}; want=$${t#*:}; \
 	        printf '  %-42s' "HTML/$$n.ady"; \
 	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \

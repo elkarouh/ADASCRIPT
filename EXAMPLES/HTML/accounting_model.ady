@@ -9,7 +9,7 @@ statements are read off the colours the article gives the accounts: blue
 owed) and pink (what the shareholders put in) make the balance sheet.
 
 Nothing here draws anything: test_accounting_model.ady checks it on its own,
-and accounting_objects.ady renders it. Nim only: the Python backend does not
+and accounting_gui.ady renders it. Nim only: the Python backend does not
 build a scaled unit such as Dollars_T.
 """
 
