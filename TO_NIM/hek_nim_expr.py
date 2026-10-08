@@ -1031,6 +1031,13 @@ def _field_type(expr):
     if not _btype and "." in base:
         # a chain: `self.inner.xs` -- the type of `self.inner` is the object's
         _btype = _re_ft.sub(r"^var\s+", "", _field_type(base.strip()))
+    if not _btype and base.rstrip().endswith(")"):
+        # a call: `account(g, "x").balance` -- the object is what the routine
+        # is declared to return
+        _called = _outer_call_name(base.strip())
+        if _called:
+            _btype = _re_ft.sub(r"^var\s+", "",
+                                getattr(ParserState, "proc_return_types", {}).get(_called, "") or "")
     _ftype = ParserState.class_field_types.get(_btype, {}).get(field) if _btype else None
     if not _ftype:
         _fsym = ParserState.symbol_table.lookup(field)

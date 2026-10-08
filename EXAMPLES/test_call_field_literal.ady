@@ -1,0 +1,35 @@
+# A literal beside a distinct field read off a call's result takes the field's
+# type: `g.account().balance == 5` is `Cents_T(5)`, as it is beside `acc.balance`.
+# Nim would not compile the bare integer next to a Cents_T.
+type Cents_T is distinct int
+
+@virtual
+class Account:
+    var balance: Cents_T = 0
+
+    def __init__(self, balance: Cents_T):
+        self.balance = balance
+
+class Graph:
+    var main: Account
+
+    def __init__(self):
+        self.main = Account(5)
+
+    def account(self) -> Account:
+        return self.main
+
+def find(g: Graph) -> Account:
+    return g.main
+
+let g: Graph = Graph()
+let acc: Account = g.account()
+assert acc.balance == 5
+assert g.main.balance == 5
+assert g.account().balance == 5
+assert find(g).balance == 5
+assert g.account().balance != 6
+assert g.account().balance > 4
+assert g.account().balance <= 5
+assert 5 == g.account().balance
+print "a literal beside a call's field works"
