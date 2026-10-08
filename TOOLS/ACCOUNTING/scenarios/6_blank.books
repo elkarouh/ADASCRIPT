@@ -1,0 +1,24 @@
+# scenarios/6_blank.books: loaded by ledger_server into 6_blank.db the first time it is picked,
+# and again by Start over. Amounts are in cents.
+title	6. Start from scratch
+about	The whole chart of accounts, and no transaction yet: the books of a company of your own. Record its first transaction by freezing Capital and dragging an arrow to Bank account.
+currency	USD
+account	100000	equity	Capital
+account	173000	liability	Loans
+account	211000	asset	Software
+account	240000	asset	Furniture
+account	340000	asset	Stock
+account	400001	asset	Customer 1
+account	400002	asset	Customer 2
+account	411000	asset	VAT to recover
+account	440000	liability	Suppliers
+account	451000	liability	VAT to pay
+account	489000	liability	Credit card
+account	550000	asset	Bank account
+account	604000	expense	Cost of sales
+account	613000	expense	Food
+account	620000	expense	Payroll
+account	630000	expense	Depreciation
+account	650000	expense	Interest
+account	700000	revenue	Sales
+account	720000	revenue	Own work capitalised

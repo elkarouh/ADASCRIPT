@@ -1,0 +1,39 @@
+# scenarios/1_basics.books: loaded by ledger_server into 1_basics.db the first time it is picked,
+# and again by Start over. Amounts are in cents.
+title	1. The basics: money moves between accounts
+about	A company's first months, without VAT, after Martin Kleppmann's article. Each arrow is money leaving one account and reaching another; each account's balance is what came in less what went out.
+about	Sales is blue: its balance is negative, money the company earned. Food, Payroll and Depreciation are orange: costs. Profit is what Sales brought in less what the costs took.
+currency	USD
+account	100000	equity	Capital
+account	550000	asset	Bank account
+account	489000	liability	Credit card
+account	613000	expense	Food
+account	240000	asset	Furniture
+account	400001	asset	Customer 1
+account	700000	revenue	Sales
+account	620000	expense	Payroll
+account	630000	expense	Depreciation
+entry	2011-01-03	The founder puts in savings
+posting	Capital	-500000
+posting	Bank account	500000
+entry	2011-01-04	A bagel on the company credit card
+posting	Credit card	-500
+posting	Food	500
+entry	2011-01-05	A chair, paid from the bank account
+posting	Bank account	-50000
+posting	Furniture	50000
+entry	2011-01-31	The credit card bill is paid from the bank
+posting	Bank account	-500
+posting	Credit card	500
+entry	2011-02-07	Sale to customer 1, invoiced at 5,000
+posting	Sales	-500000
+posting	Customer 1	500000
+entry	2011-02-21	Customer 1 pays
+posting	Customer 1	-500000
+posting	Bank account	500000
+entry	2011-03-31	Salaries, paid from the bank
+posting	Bank account	-300000
+posting	Payroll	300000
+entry	2011-12-31	The chair loses a quarter of its value to depreciation
+posting	Furniture	-12500
+posting	Depreciation	12500

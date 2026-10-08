@@ -791,3 +791,12 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 - [ ] `assert r is not F` does not narrow `r` for the lines after it (an `if
       r is F: die(...)` does not either, without `else:`), so a test takes a
       value that must not fail through a helper with `case r:`.
+- [ ] a `let` that shadows an outer one of the same name narrows as the
+      outer: in ledger.ady's main, `let read: Books | !BookFailure_T` inside
+      the `else:` of an outer `let read: Config | !BookFailure_T` gave
+      "undeclared field: 'detail' for type Books" on `read.detail`. The
+      inner one is named `loaded` instead.
+- [ ] a module-level function used before its `def` in another function's
+      body (`setTimeout(pick_shown, 50)` with `pick_shown` defined below) is
+      "undeclared identifier" in the Nim, though calling one before its def
+      works elsewhere: forward declarations miss a function passed as a value.

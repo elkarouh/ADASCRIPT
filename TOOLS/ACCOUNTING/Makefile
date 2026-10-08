@@ -4,8 +4,8 @@
 # (nimble install db_connector).
 #
 #   make app        the tool: the books drawn in the browser, kept by clicking
-#                   (ledger_server serves accounting_app; the database is
-#                   accounting.db, made with the example's year if missing)
+#                   (ledger_server serves accounting_app; each scenario,
+#                   scenarios/NAME.books, gets a database NAME.db there)
 #   make ledger     build the ledger's command line (./ledger -h)
 #   make example    a fresh accounting.db, holding the example company's year
 #   make gui        the example as a static web page      (accounting_gui.ady)
@@ -57,11 +57,7 @@ build/accounting_app.js: accounting_app.ady accounting_gui.ady books_text.ady ac
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 
-accounting.db:
-	$(MAKE) ledger
-	./ledger example
-
-app: ledger_server build/accounting_app.js accounting.db
+app: ledger_server build/accounting_app.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
 	./ledger_server --port $(PORT)
 
@@ -70,4 +66,4 @@ test:
 	$(ADY2NIM) c -r test_ledger.ady 2>/dev/null
 
 clean:
-	rm -rf build *.js accounting.db $(basename $(wildcard *.ady))
+	rm -rf build *.js accounting.db scenarios/*.db $(basename $(wildcard *.ady))

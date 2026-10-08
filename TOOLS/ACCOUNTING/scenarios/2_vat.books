@@ -1,0 +1,31 @@
+# scenarios/2_vat.books: loaded by ledger_server into 2_vat.db the first time it is picked,
+# and again by Start over. Amounts are in cents.
+title	2. VAT: collected for the tax office, not earned
+about	The VAT paid on a purchase is claimed back (VAT to recover), the VAT charged on a sale is owed (VAT to pay); neither is a cost or a revenue. At the VAT return the two are set off, and the bank pays the difference.
+about	Try it: record a purchase with 21% VAT, and see where the VAT goes.
+currency	USD
+account	100000	equity	Capital
+account	550000	asset	Bank account
+account	240000	asset	Furniture
+account	411000	asset	VAT to recover
+account	700000	revenue	Sales
+account	400001	asset	Customer 1
+account	451000	liability	VAT to pay
+entry	2011-01-02	The founder puts in savings
+posting	Capital	-1000000
+posting	Bank account	1000000
+entry	2011-01-10	A desk for 1,000 (21% VAT)
+posting	Bank account	-121000
+posting	Furniture	100000
+posting	VAT to recover	21000
+entry	2011-02-01	Consulting invoiced to customer 1 for 2,000 (21% VAT)
+posting	Sales	-200000
+posting	VAT to pay	-42000
+posting	Customer 1	242000
+entry	2011-02-28	Customer 1 pays, VAT included
+posting	Customer 1	-242000
+posting	Bank account	242000
+entry	2011-04-20	The VAT return: 420 owed less 210 to recover, the bank pays 210
+posting	VAT to recover	-21000
+posting	Bank account	-21000
+posting	VAT to pay	42000

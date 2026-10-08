@@ -14,7 +14,7 @@ sent to the server, which records it unless the books refuse it.
 Needs karax: `nimble install karax@1.5.0`.
 """
 from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementById, getBoundingClientRect, addEventListener
-from dom nimport value, Element, InputElement, confirm, focus, setTimeout, TimeOut, KeyboardEvent
+from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeout, TimeOut, KeyboardEvent
 from karax/karax nimport setRenderer, redraw
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, entry, purchase_with_vat, sale_with_vat
@@ -36,6 +36,9 @@ div.popup label { display: block; margin: 0.5em 0 0.15em; font-size: 0.9em; colo
 div.popup input, div.popup select { font-size: 1em; width: 100%; box-sizing: border-box; }
 div.popup button { font-size: 1em; margin: 1em 0.5em 0 0; }
 g.to circle { stroke: #2e7d32; stroke-width: 5; }
+div.scenario { background: #eef4fb; border: 1px solid #c9dcf0; border-radius: 6px; padding: 0.2em 1em; margin-bottom: 1em; }
+div.scenario select, div.scenario button { font-size: 1em; margin: 0 0.4em; }
+p.about { margin: 0.4em 0; }
 div.record { background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: 0.4em 1em; }
 div.record input, div.record select, div.record button { margin: 0.2em 0.3em 0.2em 0; font-size: 0.95em; }
 p.message { font-weight: bold; }
@@ -101,6 +104,15 @@ class Layout:
     # moves), an arrow is dragged from it to another account, and letting go
     # there opens the popup. A click on the frozen account, or Escape, lets
     # it go.
+    # Another scenario's accounts: they start where the example puts them.
+    def reset(self):
+        self.names = []
+        self.points = []
+        self.held = -1
+        self.tip = ""
+        self.height = (self.height if self.graph_only else HEIGHT)
+        self.unfreeze()
+
     def unfreeze(self):
         self.source = ""
         self.target = ""
@@ -251,13 +263,14 @@ var layout: Layout = Layout()
 # The books, as the server last sent them, and what the page sends it
 # ---------------------------------------------------------------------
 
-var books: Books = Books("", [], [], [])
+var books: Books = Books("", [], [], [], "", "")
 var graph: Graph = Graph()
 var message: str = "Asking the ledger for the books..."
 var refused: bool = False               # whether the message says why something was refused
 var popup_message: str = ""             # why the popup's transaction cannot be recorded yet
 
 let NO_HEADERS: [](cstring, cstring) = []
+var replaced: bool = False              # another scenario, or this one started over: lay it out afresh
 
 def say(text: str, is_refusal: bool):
     message = text
@@ -274,12 +287,72 @@ def on_books(status: int, response: cstring):
         when Books:
             books = read
             graph = graph_of(books)
+            if replaced:
+                layout.reset()
+                replaced = False
             layout.sync(graph)
             if message.startswith("Asking"):
                 say("", False)
 
 def load():
     ajaxGet("/books", NO_HEADERS, on_books)
+
+# The scenarios the ledger has, and the one it shows.
+var scenario: str = ""
+var scenario_names: []str = []
+var scenario_titles: []str = []
+
+def discard_timeout(t: TimeOut):
+    pass
+
+def pick_shown():
+    let picker: Element = document.getElementById("scenario")
+    if picker != nil:
+        InputElement(picker).value = scenario
+
+def on_scenarios(status: int, response: cstring):
+    if status != 200:
+        return
+    scenario_names = []
+    scenario_titles = []
+    for line in str(response).split("\n"):
+        let f: []str = line.split("\t")
+        if f[0] == "current" and len(f) == 2:
+            scenario = f[1]
+        elif f[0] == "scenario" and len(f) == 3:
+            scenario_names.append(f[1])
+            scenario_titles.append(f[2])
+    discard_timeout(setTimeout(pick_shown, 50))     # once the options are drawn, the one shown picked
+
+def load_scenarios():
+    ajaxGet("/scenarios", NO_HEADERS, on_scenarios)
+
+# The server's answer to a change of scenario: the new books, drawn afresh.
+def on_switched(status: int, response: cstring):
+    let answer: str = str(response)
+    if answer == "ok":
+        replaced = True                 # the layout starts afresh with the books that come
+        load()
+        load_scenarios()
+    else:
+        say(("Refused: " + answer[6:] if answer.startswith("error") else f"The ledger did not answer ({status})"), True)
+
+def choose_scenario():
+    let name: str = field_text("scenario")
+    if name != scenario:
+        say("", False)
+        ajaxPost("/scenario", NO_HEADERS, name, on_switched)
+
+def start_over():
+    if window.confirm("Start this scenario over? What you changed in it is lost."):
+        say("Started over.", False)
+        ajaxPost("/start-over", NO_HEADERS, scenario, on_switched)
+
+def save_as():
+    let name: str = str(window.prompt("Save these books as a new scenario, named (letters, digits, _ and -):", cstring(scenario & "_mine")))
+    if name != "":
+        say(f"Saved as {name}.", False)
+        ajaxPost("/save-as", NO_HEADERS, name, on_switched)
 
 # The server's answer to a POST: "ok", or "error" and why.
 def on_answer(status: int, response: cstring):
@@ -416,6 +489,27 @@ def live_button_html() -> Html:
     html:
         p:
             button id="graph-only" onclick=layout.toggle_graph_only(): label
+
+# The scenario picker, Start over, Save as, and what the scenario is about.
+def scenario_option_html(i: int) -> Html:
+    let name: str = scenario_names[i]
+    let title: str = scenario_titles[i]
+    html:
+        option value=name: title
+
+def scenario_html() -> Html:
+    var about: []str = (books.about.split("\n") if books.about != "" else [])
+    html:
+        div class="scenario":
+            p:
+                strong: "Scenario "
+                select id="scenario" onchange=choose_scenario():
+                    for i in range(len(scenario_names)):
+                        + scenario_option_html(i)
+                button id="start-over" onclick=start_over(): "Start over"
+                button id="save-as" onclick=save_as(): "Save as..."
+            for line in about:
+                p class="about": line
 
 def last_date() -> str:
     return (books.entries[len(books.entries) - 1].date if len(books.entries) > 0 else "")
@@ -569,8 +663,6 @@ def on_up(e: Event):
     if layout.popup and not was_open:
         discard_timeout(setTimeout(focus_what, 30))       # the popup is drawn: type straight into it
 
-def discard_timeout(t: TimeOut):
-    pass
 
 def on_key(e: Event):
     let k: KeyboardEvent = KeyboardEvent(e)
@@ -582,7 +674,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Hover over an account or an arrow to see its transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Hover over an account or an arrow to see its transactions."
 
 def main():
     def render() -> Html:
@@ -607,6 +699,7 @@ def main():
                 else:
                     h1: APP_TITLE
                     p: APP_INTRO
+                    + scenario_html()
                     for s in sections:
                         + s
 
@@ -615,6 +708,7 @@ def main():
     document.addEventListener("mouseup", on_up)
     document.addEventListener("keydown", on_key)
     load()
+    load_scenarios()
 
 if __name__ == "__main__":       # not when another module imports this
     main()

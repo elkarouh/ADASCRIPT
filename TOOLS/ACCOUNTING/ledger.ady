@@ -14,6 +14,8 @@
     journal                       every transaction, numbered, with what it did to each account
     delete NUMBER                 delete transaction NUMBER, as journal numbers it
     delete-account ACCOUNT        delete an account no transaction touches
+    load FILE                     write the books of FILE (scenarios/*.books) into an empty ledger
+    export                        the books as text, as load reads them
 
 The config file (accounting.conf in the current directory, or --config) names the
 database and holds the chart of accounts; --db names another database.
@@ -27,7 +29,7 @@ nothing is written.
 from db import DB
 from math nimport round
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, example_entries, money_text
-from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text
+from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
 
 # ---------------------------------------------------------------------
 # The config file
@@ -93,7 +95,10 @@ const SCHEMA: []str = [
     """CREATE TABLE IF NOT EXISTS postings (
         tx      INTEGER NOT NULL REFERENCES transactions(id),
         account TEXT NOT NULL REFERENCES accounts(number),
-        amount  INTEGER NOT NULL)"""]
+        amount  INTEGER NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL)"""]
 
 class Ledger:
     var db: DB
@@ -105,6 +110,14 @@ class Ledger:
 
     def close(self):
         self.db.close()
+
+    # A setting the books keep: their title, what they are about, their
+    # currency; "" when there is none.
+    def setting(self, key: str) -> str:
+        return self.db.value("SELECT value FROM settings WHERE key IS ?", [key])
+
+    def set_setting(self, key: str, value: str):
+        self.db.exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value])
 
     def number_of(self, account: str) -> str:
         return self.db.value("SELECT number FROM accounts WHERE name IS ?", [account])
@@ -189,7 +202,8 @@ class Ledger:
     def kinds(self) -> [][]str:
         return self.db.rows("SELECT number, name, kind FROM accounts ORDER BY number")
 
-    # The accounts in the order they were opened, and the entries.
+    # The accounts in the order they were opened, and the entries; the
+    # currency the books keep, or CURRENCY.
     def books(self, currency: str) -> Books:
         var accounts: []AccountRow = []
         for row in self.db.rows("SELECT number, kind, name FROM accounts ORDER BY rowid"):
@@ -199,7 +213,26 @@ class Ledger:
             else:
                 accounts.append(AccountRow(row[0], kind, row[2]))
         let (entries, ids) = self.numbered_entries()
-        return Books(currency, accounts, entries, ids)
+        let kept: str = self.setting("currency")
+        return Books((kept if kept != "" else currency), accounts, entries, ids,
+                     self.setting("title"), self.setting("about"))
+
+    # Books B (a scenario, books_text.ady) written into an empty ledger: its
+    # title, about and currency, its accounts, then its transactions in order.
+    def load(self, b: Books) -> None | !BookFailure_T:
+        if self.count("transactions") > 0:
+            return bad("the ledger has transactions already; books are loaded into an empty one")
+        self.set_setting("title", b.title)
+        self.set_setting("about", b.about)
+        if b.currency != "":
+            self.set_setting("currency", b.currency)
+        for a in b.accounts:
+            if self.name_of(a.number) == "":
+                do:
+                    self.open_account(a.number, a.kind, a.name)
+        for e in b.entries:
+            do:
+                self.record(e)
 
     def graph(self) -> Graph:
         return graph_of(self.books(""))
@@ -241,7 +274,9 @@ const USAGE: str = """usage: ledger [--config FILE] [--db FILE] COMMAND ...
     show                          the accounts and their balances, and the statements
     journal                       every transaction, numbered, with what it did to each account
     delete NUMBER                 delete transaction NUMBER, as journal numbers it
-    delete-account ACCOUNT        delete an account no transaction touches"""
+    delete-account ACCOUNT        delete an account no transaction touches
+    load FILE                     write the books of FILE (scenarios/*.books) into an empty ledger
+    export                        the books as text, as load reads them"""
 
 # 12.10 or -605 as cents.
 def cents_of(word: str) -> Cents_T | !BookFailure_T:
@@ -376,6 +411,22 @@ def main():
                     done = ledger.delete_entry(id)
                     if done is None:
                         print f"transaction {id} deleted"
+            when "load":
+                if len(words) != 2:
+                    die("load FILE")
+                let text: str | !PathFailure_T = Path(words[1]).read_text()
+                if text is PathFailure_T:
+                    die(f"{text.op} {text.path}: {text.reason}")
+                else:
+                    let loaded: Books | !BookFailure_T = parse_books(text)
+                    if loaded is BookFailure_T:
+                        die(f"{words[1]}: {loaded.detail}")
+                    else:
+                        done = ledger.load(loaded)
+                        if done is None:
+                            print f"{ledger.count('accounts')} accounts, {ledger.count('transactions')} transactions loaded"
+            when "export":
+                stdout.write(text_of_books(ledger.books(config.currency)))
             when "delete-account":
                 if len(words) < 2:
                     die("delete-account ACCOUNT")

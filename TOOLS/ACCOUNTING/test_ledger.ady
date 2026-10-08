@@ -8,6 +8,7 @@ and what does not fit the books is refused without a trace.
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
 from books_text import Books, kind_named, parse_books, text_of_books, graph_of
 from ledger import Config, Ledger, cents_of, open_chart, read_config, record_example
+from os nimport walkFiles
 
 # The value of a step that must not fail here.
 def config_of(path: Path) -> Config:
@@ -42,12 +43,12 @@ def cents(word: str) -> Cents_T:
             return r
 
 let config: Config = config_of(Path("accounting.conf"))
-assert len(config.accounts) == 18
+assert len(config.accounts) == 19
 assert config.currency == "USD"
 assert config.database.name == "accounting.db"
 
 var books: Ledger = Ledger(":memory:")
-assert number_of(open_chart(books, config)) == 18
+assert number_of(open_chart(books, config)) == 19
 assert number_of(open_chart(books, config)) == 0                  # opening the chart twice opens nothing twice
 assert record_example(books) is None
 assert books.count("transactions") == 22
@@ -58,7 +59,7 @@ assert record_example(books) is BookFailure_T      # the example goes in an empt
 # its colour, and the edges and flows drawn from them.
 let stored: Graph = books.graph()
 let built: Graph = kleppmann()
-assert len(stored.accounts) == len(built.accounts)
+assert len(stored.accounts) == len(built.accounts) + 1     # and Interest, which the example does not use
 for a in built.accounts:
     assert stored.account(a.name).balance == a.balance
     assert stored.account(a.name).colour == a.colour
@@ -82,7 +83,7 @@ case got:
     when BookFailure_T:
         raise ValueError(got.detail)
     when Books:
-        assert len(got.accounts) == 18 and len(got.entries) == 22
+        assert len(got.accounts) == 19 and len(got.entries) == 22
         assert got.currency == "USD"
         let drawn: Graph = graph_of(got)
         for a in built.accounts:
@@ -135,4 +136,32 @@ assert cents("1,210.00") == 121000
 assert cents_of("twelve") is BookFailure_T
 
 books.close()
+
+# Every scenario loads into an empty ledger, balances, and comes back out as
+# it went in.
+var scenarios: int = 0
+for file in walkFiles("scenarios/*.books"):
+    let text: str | !PathFailure_T = Path(file).read_text()
+    case text:
+        when PathFailure_T:
+            raise ValueError(text.reason)
+        when str:
+            let read: Books | !BookFailure_T = parse_books(text)
+            case read:
+                when BookFailure_T:
+                    raise ValueError(f"{file}: {read.detail}")
+                when Books:
+                    assert read.title != "" and read.about != "", file
+                    var scenario: Ledger = Ledger(":memory:")
+                    assert scenario.load(read) is None, file
+                    if len(read.entries) > 0:
+                        assert scenario.load(read) is BookFailure_T, file      # into an empty ledger only
+                    let g: Graph = scenario.graph()
+                    assert g.total() == 0 and g.net_assets() == g.equity(), file
+                    let back: Books = scenario.books("")
+                    assert back.title == read.title and back.about == read.about and back.currency == read.currency, file
+                    assert len(back.accounts) == len(read.accounts) and len(back.entries) == len(read.entries), file
+                    scenario.close()
+                    scenarios += 1
+assert scenarios == 6
 print "ledger: all checks passed"
