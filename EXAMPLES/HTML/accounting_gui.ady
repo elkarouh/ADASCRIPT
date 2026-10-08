@@ -214,13 +214,16 @@ def main():
     assert books.total() == 0                   # the books balance
     assert books.net_assets() == books.equity()     # and so does the balance sheet
 
-    var sections: []Html = [
-        section_html("Accounts are nodes, transactions are edges", GRAPH_TEXT,
-            [books.to_html(), books.edges.to_html()])]
-    for s in sections_after_graph(books):
-        sections.append(s)
+    def render() -> Html:
+        var sections: []Html = [
+            section_html("Accounts are nodes, transactions are edges", GRAPH_TEXT,
+                [books.to_html(), books.edges.to_html()])]
+        for s in sections_after_graph(books):
+            sections.append(s)
+        return page_html(TITLE, INTRO, sections)
+
     print "<!doctype html>"
-    print page_html(TITLE, INTRO, sections)
+    print render()
 
 if __name__ == "__main__":       # not when accounting_live.ady imports this
     main()
