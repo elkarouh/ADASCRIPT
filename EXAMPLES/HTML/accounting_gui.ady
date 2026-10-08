@@ -86,11 +86,12 @@ def place(a: Account) -> Point:
             return Point(700.0, 330.0)        # Depreciation
 
 # ---------------------------------------------------------------------
-# Rendering: one function per thing on the page
+# Rendering: a to_html for each thing of the model that is drawn, called as
+# a method (a.to_html(p), g.to_html()) though the model knows nothing of it
 # ---------------------------------------------------------------------
 
 # An account as a node at P: a circle with its name in it.
-def node_html(a: Account, p: Point) -> Html:
+def to_html(a: Account, p: Point) -> Html:
     let cx: str = px(p.x)
     let cy: str = px(p.y)
     let css: str = css_of(a)
@@ -101,7 +102,7 @@ def node_html(a: Account, p: Point) -> Html:
 
 # A flow as an arrow from the rim of the circle at A to the rim of the one
 # at B, with the amount in the middle.
-def arrow_html(f: Flow, a: Point, b: Point) -> Html:
+def to_html(f: Flow, a: Point, b: Point) -> Html:
     let dx: float = b.x - a.x
     let dy: float = b.y - a.y
     let length: float = sqrt(dx * dx + dy * dy)
@@ -119,18 +120,18 @@ def arrow_html(f: Flow, a: Point, b: Point) -> Html:
             line class="edge" x1=x1 y1=y1 x2=x2 y2=y2
             stext class="amount" x=lx y=ly: money(f.amount)
 
-def graph_html(g: Graph) -> Html:
+def to_html(g: Graph) -> Html:
     html:
         svg viewBox="0 0 780 390" class="graph":
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
             for f in g.flows:
-                + arrow_html(f, place(f.source), place(f.target))
+                + f.to_html(place(f.source), place(f.target))
             for a in g.accounts:
-                + node_html(a, place(a))
+                + a.to_html(place(a))
 
-def edges_html(edges: []Transaction) -> Html:
+def to_html(edges: []Transaction) -> Html:
     html:
         table:
             tr:
@@ -145,7 +146,7 @@ def edges_html(edges: []Transaction) -> Html:
                     td class=css_of(t.target): t.target.name
                     td class="num": money(t.amount)
 
-def balances_html(accounts: []Account) -> Html:
+def to_html(accounts: []Account) -> Html:
     html:
         table:
             tr:
@@ -156,7 +157,7 @@ def balances_html(accounts: []Account) -> Html:
                     td class=css_of(a): a.name
                     td class="num": money(a.balance)
 
-def statement_html(lines: []Line, total_label: str, total: Cents_T) -> Html:
+def to_html(lines: []Line, total_label: str, total: Cents_T) -> Html:
     html:
         table class="statement":
             for l in lines:
@@ -193,14 +194,14 @@ def sections_after_graph(g: Graph) -> []Html:
     return [
         section_html("Balances",
             "An account starts at zero. Money coming in adds to it, money going out subtracts. Every transaction is counted once as positive and once as negative, so all the balances add up to zero: that is what accountants call balancing the books.",
-            [balances_html(g.accounts)]),
+            [g.accounts.to_html()]),
         section_html("Profit and loss",
             "Only the blue accounts: revenue less expenses. A negative balance on a blue account is revenue, so the sign flips when it is reported.",
-            [statement_html(g.profit_and_loss(), "Profit", g.profit())]),
+            [g.profit_and_loss().to_html("Profit", g.profit())]),
         section_html("Balance sheet",
             "The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customer 2 still owes half.",
-            [statement_html(g.assets_and_liabilities(), "Assets less liabilities", g.net_assets()),
-             statement_html(g.equity_lines(), "Total equity", g.equity())]),
+            [g.assets_and_liabilities().to_html("Assets less liabilities", g.net_assets()),
+             g.equity_lines().to_html("Total equity", g.equity())]),
     ]
 
 const GRAPH_TEXT: str = "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and expense, pink for the money its shareholders put in."
@@ -215,7 +216,7 @@ def main():
 
     var sections: []Html = [
         section_html("Accounts are nodes, transactions are edges", GRAPH_TEXT,
-            [graph_html(g), edges_html(g.edges)])]
+            [g.to_html(), g.edges.to_html()])]
     for s in sections_after_graph(g):
         sections.append(s)
     print "<!doctype html>"
