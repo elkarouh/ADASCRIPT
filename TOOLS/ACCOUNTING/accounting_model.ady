@@ -94,9 +94,19 @@ type Line is record:
 def money_text(c: Cents_T) -> str:
     return f"{Dollars_T(c):,.2f}"
 
-# The VAT on NET at RATE percent, rounded to the cent.
-def vat_on(net: Cents_T, rate: int) -> Cents_T:
-    return Cents_T((int(net) * rate + 50) // 100)
+# The VAT rates there are (Belgium's), each member's value its percentage:
+# a rate is picked from these, never typed, so 2.1% or 210% cannot happen.
+type VatRate_T is enum NO_VAT = 0, REDUCED = 6, INTERMEDIATE = 12, STANDARD = 21
+
+const VAT_RATES: []VatRate_T = [NO_VAT, REDUCED, INTERMEDIATE, STANDARD]
+
+# 21% or "no VAT", as the page and a transaction's description say it.
+def vat_text(rate: VatRate_T) -> str:
+    return ("no VAT" if rate == NO_VAT else f"{ord(rate)}% VAT")
+
+# The VAT on NET at RATE, rounded to the cent.
+def vat_on(net: Cents_T, rate: VatRate_T) -> Cents_T:
+    return Cents_T((int(net) * ord(rate) + 50) // 100)
 
 class Graph:
     var accounts: []Account
@@ -264,17 +274,17 @@ def entry(date: str, what: str, source: str, target: str, amount: Cents_T) -> En
 # A purchase with VAT: one transaction, three accounts. SOURCE pays NET to
 # TARGET and the VAT on it to VAT, where it waits to be claimed back from the
 # tax office: VAT to recover, an asset.
-def purchase_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: int) -> Entry:
+def purchase_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: VatRate_T) -> Entry:
     let tax: Cents_T = vat_on(net, rate)
-    return Entry(date, f"{what} ({rate}% VAT)",
+    return Entry(date, f"{what} ({vat_text(rate)})",
                  [Posting(source, -(net + tax)), Posting(target, net), Posting(vat, tax)])
 
 # A sale with VAT, the other way round: TARGET, the customer, owes NET to
 # SOURCE, the revenue, and the VAT on it to VAT, which the company collects
 # for the tax office: VAT to pay, a liability.
-def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: int) -> Entry:
+def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: VatRate_T) -> Entry:
     let tax: Cents_T = vat_on(net, rate)
-    return Entry(date, f"{what} ({rate}% VAT)",
+    return Entry(date, f"{what} ({vat_text(rate)})",
                  [Posting(source, -net), Posting(vat, -tax), Posting(target, net + tax)])
 
 # The article's company, the VAT on the chair and on customer 1's order, the
@@ -282,18 +292,18 @@ def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net:
 def example_entries() -> []Entry:
     return [
         entry("2011-01-03", "A bagel on the company credit card", "Credit card", "Food", 500),
-        purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank account", "Furniture", "VAT to recover", 50000, 21),
+        purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank account", "Furniture", "VAT to recover", 50000, STANDARD),
         entry("2011-01-05", "The founder puts in savings", "Capital", "Bank account", 500000),
-        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000, kept in stock", "Suppliers", "Stock", "VAT to recover", 300000, 21),
+        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000, kept in stock", "Suppliers", "Stock", "VAT to recover", 300000, STANDARD),
         entry("2011-01-31", "The credit card bill is paid from the bank", "Bank account", "Credit card", 500),
         entry("2011-02-01", "A Super Burrito on the credit card", "Credit card", "Food", 800),
-        sale_with_vat("2011-02-07", "Sale to customer 1 of the material in stock, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, 21),
+        sale_with_vat("2011-02-07", "Sale to customer 1 of the material in stock, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, STANDARD),
         entry("2011-02-07", "The material sold to customer 1 leaves the stock: it cost 3,000", "Stock", "Cost of sales", 300000),
         entry("2011-02-08", "Sale to customer 2, agreed at 5,000", "Sales", "Customer 2", 500000),
         entry("2011-02-21", "Customer 1 pays in full, VAT included", "Customer 1", "Bank account", 605000),
         entry("2011-02-22", "Customer 2 pays half up front", "Customer 2", "Bank account", 250000),
         entry("2011-03-01", "Y Combinator invests", "Capital", "Bank account", 2000000),
-        purchase_with_vat("2011-03-10", "Stock bought on credit from a supplier", "Suppliers", "Stock", "VAT to recover", 100000, 21),
+        purchase_with_vat("2011-03-10", "Stock bought on credit from a supplier", "Suppliers", "Stock", "VAT to recover", 100000, STANDARD),
         entry("2011-03-31", "Salaries, paid from the bank", "Bank account", "Payroll", 800000),
         entry("2011-04-04", "Customer 2 returns part of the order: a credit note of 500", "Customer 2", "Sales", 50000),
         entry("2011-04-15", "Half of the supplier's invoice is paid from the bank", "Bank account", "Suppliers", 60500),

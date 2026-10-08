@@ -17,7 +17,7 @@ from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementBy
 from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeout, TimeOut, KeyboardEvent
 from karax/karax nimport setRenderer, redraw
 from karax/kajax nimport ajaxGet, ajaxPost
-from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, entry, purchase_with_vat, sale_with_vat
+from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, VAT_RATES, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, place, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
@@ -414,11 +414,11 @@ def form_entry() -> Entry | !BookFailure_T:
         return BookFailure_T("Say what happened.")
     do:
         amount <- parse_float(field_text("amount").replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
-        rate <- parse_int(field_text("vat")) else BookFailure_T("The VAT rate is a number.")
+        rate <- parse_enum(VatRate_T, field_text("vat")) else BookFailure_T("Pick a VAT rate from the list.")
     let net: Cents_T = Cents_T(int(amount * 100.0 + 0.5))
     if net <= 0:
         return BookFailure_T("The amount is more than zero: the arrow says which way it goes.")
-    if rate == 0:
+    if rate == NO_VAT:
         return entry(date, what, layout.source, layout.target, net)
     let source_kind: ?Kind_T = kind_of(layout.source)
     let is_sale: bool = source_kind is not None and source_kind == REVENUE
@@ -668,6 +668,12 @@ def accounts_html() -> Html:
 
 const ACCOUNTS_TEXT: str = "Every account, with its number in the chart of accounts, its kind and its balance. An account starts at zero; money coming in adds to it, money going out subtracts, and as every transaction is counted once as positive and once as negative, all the balances add up to zero: the books balance. Open a new account on the last row; an account can be deleted once no transaction touches it."
 
+# A VAT rate as the popup offers it: its member's name, its percentage shown.
+def vat_option_html(rate: VatRate_T) -> Html:
+    let name: str = str(rate)
+    html:
+        option value=name: vat_text(rate)
+
 # The transaction from the frozen account to the one the arrow was dropped
 # on: when, what, how much. Enter records it, Escape closes it.
 def popup_html() -> Html:
@@ -686,10 +692,8 @@ def popup_html() -> Html:
                 input id="amount" placeholder="605.00"
                 label: "VAT"
                 select id="vat":
-                    option value="0": "no VAT"
-                    option value="6": "6%"
-                    option value="12": "12%"
-                    option value="21": "21%"
+                    for rate in VAT_RATES:
+                        + vat_option_html(rate)
                 if popup_message != "":
                     p class="message refused": popup_message
                 button id="record" onclick=record_entry(): "Record"
