@@ -27,7 +27,7 @@ class Layout:
     var points: []Point
     var held: int = -1                  # the account being dragged, or -1
 
-    def __init__(self, g: Graph):
+    def start(self, g: Graph):
         for a in g.accounts:
             self.names.append(a.name)
             self.points.append(place(a))
@@ -54,8 +54,8 @@ class Layout:
     def drop(self):
         self.held = -1
 
-let books: Graph = kleppmann()
-var layout: Layout = Layout(books)
+var books: Graph = Graph()              # set by main, as the page is built
+var layout: Layout = Layout()
 
 # ---------------------------------------------------------------------
 # Rendering: the graph at the layout's points, the rest as on the static page
@@ -116,6 +116,15 @@ def on_move(e: Event):
 def on_up(e: Event):
     layout.drop()
 
-setRenderer(render)
-document.addEventListener("mousemove", on_move)
-document.addEventListener("mouseup", on_up)
+def main():
+    books = kleppmann()
+    layout.start(books)
+    assert books.total() == 0                   # the books balance
+    assert books.net_assets() == books.equity()     # and so does the balance sheet
+
+    setRenderer(render)
+    document.addEventListener("mousemove", on_move)
+    document.addEventListener("mouseup", on_up)
+
+if __name__ == "__main__":       # not when another module imports this
+    main()
