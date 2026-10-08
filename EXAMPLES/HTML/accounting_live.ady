@@ -38,6 +38,7 @@ class Layout:
     var tip: str = ""                   # what the arrow under the mouse lists, or ""
     var mouse_x: float = 0.0            # where the mouse is, in the drawing's units
     var mouse_y: float = 0.0
+    var graph_only: bool = False        # True: the graph alone, without the text and tables
 
     def start(self, g: Graph):
         for a in g.accounts:
@@ -97,6 +98,10 @@ class Layout:
     def drop(self):
         self.held = -1
 
+    def toggle_graph_only(self):
+        self.graph_only = not self.graph_only
+        self.tip = ""
+
 var layout: Layout = Layout()
 
 # ---------------------------------------------------------------------
@@ -118,6 +123,12 @@ def live_arrow_html(g: Graph, f: Flow) -> Html:
     html:
         g onmouseover=layout.show(tip) onmouseout=layout.hide():
             + f.to_html(a, b, bend_of(g, f), "")
+
+def live_button_html() -> Html:
+    let label: str = ("Show everything" if layout.graph_only else "Graph only")
+    html:
+        p:
+            button id="graph-only" onclick=layout.toggle_graph_only(): label
 
 def live_graph_html(g: Graph) -> Html:
     html:
@@ -165,11 +176,14 @@ def main():
         html:
             div:
                 style: STYLE + LIVE_STYLE
-                h1: TITLE
-                p: INTRO
-                for s in sections:
-                    + s
-
+                + live_button_html()
+                if layout.graph_only:
+                    + live_graph_html(books)
+                else:
+                    h1: TITLE
+                    p: INTRO
+                    for s in sections:
+                        + s
 
     setRenderer(render)
     document.addEventListener("mousemove", on_move)
