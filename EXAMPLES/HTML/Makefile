@@ -1,9 +1,7 @@
 # EXAMPLES/HTML: pages written with html: blocks. Needs karax >= 1.5.0
 # (nimble install karax@1.5.0).
 #
-#   make tables     the accounting page, as tables           (accounting_graph.ady)
-#   make drawn      ... with the graph drawn as an SVG       (accounting_drawn.ady)
-#   make objects    ... with Account and Graph objects       (accounting_objects.ady)
+#   make objects    the accounting page of Kleppmann's article (accounting_objects.ady)
 #   make card       one widget                               (html_card.ady)
 #   make app        a page as a tree of widgets              (html_app.ady)
 #   make counter    a counter in the browser, with events    (html_counter.ady)
@@ -11,16 +9,16 @@
 #   make all        build every page into build/, open none
 #
 # Each target builds its page into build/ and opens it in the browser:
-# $(OPEN) is xdg-open, or open on a Mac; `make tables OPEN=firefox` picks one.
+# $(OPEN) is xdg-open, or open on a Mac; `make objects OPEN=firefox` picks one.
 
 ADY2NIM ?= ady2nim
 ADY2PY  ?= ady2py
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8801
 
-PAGES := html_card html_app accounting_graph accounting_drawn accounting_objects
+PAGES := html_card html_app accounting_objects
 
-.PHONY: all tables drawn objects card app counter test clean
+.PHONY: all objects card app counter test clean
 
 all: $(PAGES:%=build/%.html) build/html_counter.js
 
@@ -32,10 +30,6 @@ build/%.html: %.ady
 	@$(ADY2NIM) c -r $< > $@ 2> build/$*.log \
 	    || { cat build/$*.log; rm -f $@; exit 1; }
 
-tables:  build/accounting_graph.html
-	$(OPEN) $(CURDIR)/$<
-drawn:   build/accounting_drawn.html
-	$(OPEN) $(CURDIR)/$<
 objects: build/accounting_objects.html
 	$(OPEN) $(CURDIR)/$<
 card:    build/html_card.html
