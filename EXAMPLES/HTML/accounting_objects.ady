@@ -89,9 +89,8 @@ def place(a: Account) -> Point:
 # Rendering: one function per thing on the page
 # ---------------------------------------------------------------------
 
-# An account as a node: a circle with its name in it.
-def node_html(a: Account) -> Html:
-    let p: Point = place(a)
+# An account as a node at P: a circle with its name in it.
+def node_html(a: Account, p: Point) -> Html:
     let cx: str = px(p.x)
     let cy: str = px(p.y)
     let css: str = css_of(a)
@@ -100,11 +99,9 @@ def node_html(a: Account) -> Html:
             circle class=css cx=cx cy=cy r="42"
             stext class="label" x=cx y=cy: a.name
 
-# A flow as an arrow from the rim of one circle to the rim of the other,
-# with the amount in the middle.
-def arrow_html(f: Flow) -> Html:
-    let a: Point = place(f.source)
-    let b: Point = place(f.target)
+# A flow as an arrow from the rim of the circle at A to the rim of the one
+# at B, with the amount in the middle.
+def arrow_html(f: Flow, a: Point, b: Point) -> Html:
     let dx: float = b.x - a.x
     let dy: float = b.y - a.y
     let length: float = sqrt(dx * dx + dy * dy)
@@ -129,9 +126,9 @@ def graph_html(g: Graph) -> Html:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
             for f in g.flows:
-                + arrow_html(f)
+                + arrow_html(f, place(f.source), place(f.target))
             for a in g.accounts:
-                + node_html(a)
+                + node_html(a, place(a))
 
 def edges_html(edges: []Transaction) -> Html:
     html:
@@ -191,15 +188,9 @@ def page_html(title: str, text: str, sections: []Html) -> Html:
                 for s in sections:
                     + s
 
-def main():
-    let g: Graph = kleppmann()
-    assert g.total() == 0                   # the books balance
-    assert g.net_assets() == g.equity()     # and so does the balance sheet
-
-    let sections: []Html = [
-        section_html("Accounts are nodes, transactions are edges",
-            "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and expense, pink for the money its shareholders put in.",
-            [graph_html(g), edges_html(g.edges)]),
+# The page's sections, below the graph; accounting_live.ady shows them too.
+def sections_after_graph(g: Graph) -> []Html:
+    return [
         section_html("Balances",
             "An account starts at zero. Money coming in adds to it, money going out subtracts. Every transaction is counted once as positive and once as negative, so all the balances add up to zero: that is what accountants call balancing the books.",
             [balances_html(g.accounts)]),
@@ -211,9 +202,24 @@ def main():
             [statement_html(g.assets_and_liabilities(), "Assets less liabilities", g.net_assets()),
              statement_html(g.equity_lines(), "Total equity", g.equity())]),
     ]
-    print "<!doctype html>"
-    print page_html("Accounting for computer scientists",
-        "Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program.",
-        sections)
 
-main()
+const GRAPH_TEXT: str = "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and expense, pink for the money its shareholders put in."
+
+const TITLE: str = "Accounting for computer scientists"
+const INTRO: str = "Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program."
+
+def main():
+    let g: Graph = kleppmann()
+    assert g.total() == 0                   # the books balance
+    assert g.net_assets() == g.equity()     # and so does the balance sheet
+
+    var sections: []Html = [
+        section_html("Accounts are nodes, transactions are edges", GRAPH_TEXT,
+            [graph_html(g), edges_html(g.edges)])]
+    for s in sections_after_graph(g):
+        sections.append(s)
+    print "<!doctype html>"
+    print page_html(TITLE, INTRO, sections)
+
+if __name__ == "__main__":       # not when accounting_live.ady imports this
+    main()

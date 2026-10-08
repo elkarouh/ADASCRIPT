@@ -1,0 +1,121 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""The accounting page of accounting_objects.ady, live in the browser: the
+accounts in the graph can be dragged with the mouse, and the arrows follow.
+
+    make live      (builds accounting_live.js, serves live.html, opens it)
+
+The model is accounting_model.ady and the drawing is accounting_objects.ady's;
+this file adds a Layout, where each account sits, which the mouse moves.
+Pressing on a node grabs it (an onmousedown handler in the html: block); the
+document's mousemove and mouseup move it and let it go, and karax redraws.
+
+Needs karax: `nimble install karax@1.5.0`.
+"""
+from dom nimport Event, MouseEvent, BoundingRect, document, getElementById, getBoundingClientRect, addEventListener
+from karax/karax nimport setRenderer, redraw
+from accounting_model import Account, Flow, Graph, kleppmann
+from accounting_objects import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, place, node_html, arrow_html, edges_html, section_html, sections_after_graph
+
+const WIDTH: float = 780.0
+const HEIGHT: float = 390.0
+
+# Where each account sits, starting where accounting_objects.ady puts it.
+@virtual
+class Layout:
+    var names: []str
+    var points: []Point
+    var held: int = -1                  # the account being dragged, or -1
+
+    def __init__(self, g: Graph):
+        for a in g.accounts:
+            self.names.append(a.name)
+            self.points.append(place(a))
+
+    def index(self, a: Account) -> int:
+        for i in range(len(self.names)):
+            if self.names[i] == a.name:
+                return i
+        raise KeyError(f"no account {a.name}")
+
+    def at(self, a: Account) -> Point:
+        return self.points[self.index(a)]
+
+    def grab(self, a: Account):
+        self.held = self.index(a)
+
+    # The held account to (X, Y), kept whole inside the drawing.
+    def move_to(self, x: float, y: float):
+        if self.held >= 0:
+            self.points[self.held] = Point(
+                min(max(x, NODE_RADIUS), WIDTH - NODE_RADIUS),
+                min(max(y, NODE_RADIUS), HEIGHT - NODE_RADIUS))
+
+    def drop(self):
+        self.held = -1
+
+let books: Graph = kleppmann()
+var layout: Layout = Layout(books)
+
+# ---------------------------------------------------------------------
+# Rendering: the graph at the layout's points, the rest as on the static page
+# ---------------------------------------------------------------------
+
+def live_node_html(a: Account) -> Html:
+    let p: Point = layout.at(a)
+    html:
+        g class="node" onmousedown=layout.grab(a):
+            + node_html(a, p)
+
+def live_arrow_html(f: Flow) -> Html:
+    let a: Point = layout.at(f.source)
+    let b: Point = layout.at(f.target)
+    html:
+        g:
+            + arrow_html(f, a, b)
+
+def live_graph_html(g: Graph) -> Html:
+    html:
+        svg id="graph" viewBox="0 0 780 390" class="graph":
+            defs:
+                marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                    polygon points="0 0, 10 3.5, 0 7"
+            for f in g.flows:
+                + live_arrow_html(f)
+            for a in g.accounts:
+                + live_node_html(a)
+
+def render() -> Html:
+    var sections: []Html = [
+        section_html("Accounts are nodes, transactions are edges",
+            GRAPH_TEXT + " Drag an account to move it.",
+            [live_graph_html(books), edges_html(books.edges)])]
+    for s in sections_after_graph(books):
+        sections.append(s)
+    html:
+        div:
+            style: STYLE + "g.node { cursor: grab; } svg.graph { user-select: none; }"
+            h1: TITLE
+            p: INTRO
+            for s in sections:
+                + s
+
+# ---------------------------------------------------------------------
+# The mouse: a press on a node grabs it (above), these move it and drop it
+# ---------------------------------------------------------------------
+
+def on_move(e: Event):
+    if layout.held < 0:
+        return
+    let m: MouseEvent = MouseEvent(e)
+    let box: BoundingRect = document.getElementById("graph").getBoundingClientRect()
+    let scale: float = WIDTH / box.width    # the svg is drawn at the page's width
+    layout.move_to((float(m.clientX) - box.left) * scale, (float(m.clientY) - box.top) * scale)
+    redraw()
+
+def on_up(e: Event):
+    layout.drop()
+
+setRenderer(render)
+document.addEventListener("mousemove", on_move)
+document.addEventListener("mouseup", on_up)

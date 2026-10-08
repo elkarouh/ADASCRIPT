@@ -1428,6 +1428,10 @@ test: compile
 	    printf '  %-42s' "HTML/html_counter.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(EXDIR)/HTML/html_counter.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
+	    printf '  %-42s' "HTML/accounting_live.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(EXDIR)/HTML/accounting_live.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(EXDIR)/HTML/html_counter.js $(EXDIR)/HTML/accounting_live.js; \
 	fi
 
 	@echo ""
