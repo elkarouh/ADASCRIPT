@@ -41,8 +41,9 @@ nimpy >= 0.3.1
 # karax — HTML DSL and virtual DOM; required by files that use an `html:`
 # block (a class rendering itself with `to_html`):
 #   EXAMPLES/HTML/html_card.ady, EXAMPLES/HTML/html_app.ady
-# The same source builds for the browser with `ady2nim js`.
-karax
+# The same source builds for the browser with `ady2nim js`. Needs 1.5.0 or
+# newer: karax 1.2.1 does not compile on Nim 2.2 (`shallowCopy` is gone).
+karax >= 1.5.0
 
 # db_connector — SQLite bindings for Nim 2.x; required by:
 #   timetable_engine.ady, timetable_backtrack.ady, timetable_sa.ady
