@@ -13,19 +13,25 @@ make app            # builds everything, starts ledger_server, opens http://127.
 ```
 
 The page draws the books of the database: the accounts as nodes (drag them
-about), the money that moved between them as arrows, the transactions, the
-balances and the statements below. To record a transaction, click the
-account the money leaves (red), then the one it reaches (green), and give a
-date, what happened and the amount. With VAT, the amount is before VAT, and
-the VAT goes to the account numbered 411... (a purchase: VAT to recover) or,
-when the money leaves a revenue account, 451... (a sale: VAT to pay). An
-account is opened with a number, a kind and a name. A transaction is
-deleted with the Delete button on its row in the table below the graph; an
-account by clicking it, then Delete account, which the ledger allows only
-once no transaction touches it. The page checks what it
-sends as the ledger does, and the ledger refuses what does not fit the
-books, saying why. Hover over an account or an arrow to see its
-transactions; "Graph only" gives the drawing the whole window.
+about), the money that moved between them as arrows, the transactions below
+the graph, then the accounts, the profit and loss and the balance sheet.
+
+To record a transaction, click the account the money leaves: it freezes
+(a dashed red ring) and no longer moves. Drag an arrow from it to the
+account the money reaches and let go there (or just click that account): a
+popup asks for the date, what happened, the amount and the VAT. Enter
+records it, Escape or Cancel closes it; a click on the frozen account, or
+Escape, lets it go. With VAT, the amount is before VAT, and the VAT goes to
+the account numbered 411... (a purchase: VAT to recover) or, when the money
+leaves a revenue account, 451... (a sale: VAT to pay). The page checks what
+it sends as the ledger does, and the ledger refuses what does not fit the
+books, saying why.
+
+Rarer things happen in the tables: each transaction and each account has a
+Delete button (an account only goes once no transaction touches it), and
+the last row of the accounts opens a new one. Hover over an account or an
+arrow to see its transactions; "Graph only" gives the drawing the whole
+window.
 
 The first `make app` makes accounting.db with the example company's year;
 `make example` starts it over.

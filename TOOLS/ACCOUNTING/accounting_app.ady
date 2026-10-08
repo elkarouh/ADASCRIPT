@@ -14,25 +14,35 @@ sent to the server, which records it unless the books refuse it.
 Needs karax: `nimble install karax@1.5.0`.
 """
 from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementById, getBoundingClientRect, addEventListener
-from dom nimport value, InputElement, confirm
+from dom nimport value, Element, InputElement, confirm, focus, setTimeout, TimeOut, KeyboardEvent
 from karax/karax nimport setRenderer, redraw
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, entry, purchase_with_vat, sale_with_vat
-from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, money, px, signed, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
-from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, parse_books
+from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, place, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
 const WIDTH: float = 780.0
 const HEIGHT: float = 530.0
 
 const LIVE_STYLE: str = """
 g.node { cursor: grab; }
-g.from circle { stroke: #c62828; stroke-width: 5; }
+g.from circle { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
+g.from { cursor: crosshair; }
+path.rubber { fill: none; stroke: #c62828; stroke-width: 2.5; stroke-dasharray: 6 4; marker-end: url(#arrow); pointer-events: none; }
+div.backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 10; }
+div.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); z-index: 11; background: #fff;
+            border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3); padding: 0.6em 1.4em 1em; min-width: 26em; }
+div.popup label { display: block; margin: 0.5em 0 0.15em; font-size: 0.9em; color: #444; }
+div.popup input, div.popup select { font-size: 1em; width: 100%; box-sizing: border-box; }
+div.popup button { font-size: 1em; margin: 1em 0.5em 0 0; }
 g.to circle { stroke: #2e7d32; stroke-width: 5; }
 div.record { background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: 0.4em 1em; }
 div.record input, div.record select, div.record button { margin: 0.2em 0.3em 0.2em 0; font-size: 0.95em; }
 p.message { font-weight: bold; }
 p.refused { color: #b71c1c; }
 button.delete { font-size: 0.8em; }
+table.accounts tr.new td { background: #f6f6f6; }
+table.accounts input, table.accounts select { font-size: 0.9em; }
 svg.graph { user-select: none; }
 div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone breaks out of the text column */
 g.tip { pointer-events: none; }
@@ -55,8 +65,10 @@ class Layout:
     var graph_only: bool = False        # True: the graph alone, without the text and tables
     var grabbed_x: float = 0.0          # where the held account was grabbed: a press that
     var grabbed_y: float = 0.0          # does not move it is a click, which picks it
-    var source: str = ""                # the accounts picked for a transaction: the one
-    var target: str = ""                # the money leaves, the one it reaches
+    var source: str = ""                # the frozen account, where the money leaves, or ""
+    var target: str = ""                # the account the arrow from it was dropped on, or ""
+    var drawing: bool = False           # an arrow is being drawn from the frozen account
+    var popup: bool = False             # the transaction's popup is open
 
     # An account of G that has no place yet gets the example's (place), or
     # the first spot on the grid that no account is near.
@@ -85,18 +97,67 @@ class Layout:
                     return Point(x, y)
             row += 1
 
-    # A click on an account: the first picks where the money leaves, the
-    # second where it goes; a third starts again.
-    def pick(self, name: str):
-        if self.source == "" or self.target != "":
-            self.source = name
-            self.target = ""
-        elif name != self.source:
-            self.target = name
-
-    def unpick(self):
+    # A transaction is drawn: a click on an account freezes it (it no longer
+    # moves), an arrow is dragged from it to another account, and letting go
+    # there opens the popup. A click on the frozen account, or Escape, lets
+    # it go.
+    def unfreeze(self):
         self.source = ""
         self.target = ""
+        self.drawing = False
+        self.popup = False
+
+    def open_popup(self, target: str):
+        self.target = target
+        self.popup = True
+        self.tip = ""
+
+    # A press on account A: on the frozen one it starts an arrow, on any
+    # other it grabs the account, to move it or, if it does not move, to
+    # click it.
+    def press(self, a: Account):
+        if self.popup:
+            return
+        if a.name == self.source:
+            self.drawing = True
+            self.grabbed_x = self.mouse_x
+            self.grabbed_y = self.mouse_y
+            self.tip = ""
+        else:
+            self.grab(a)
+
+    # The account under (X, Y), or "".
+    def node_at(self, x: float, y: float) -> str:
+        for i in range(len(self.points)):
+            let dx: float = self.points[i].x - x
+            let dy: float = self.points[i].y - y
+            if dx * dx + dy * dy <= NODE_RADIUS * NODE_RADIUS:
+                return self.names[i]
+        return ""
+
+    def still(self) -> bool:
+        return abs(self.mouse_x - self.grabbed_x) < 4.0 and abs(self.mouse_y - self.grabbed_y) < 4.0
+
+    # The mouse let go: an arrow ends on its target, or a click lets the
+    # frozen account go; a held account is dropped, or, if it did not move,
+    # frozen (or, with another frozen, taken as the target).
+    def release(self):
+        if self.drawing:
+            self.drawing = False
+            let under: str = self.node_at(self.mouse_x, self.mouse_y)
+            if under != "" and under != self.source:
+                self.open_popup(under)
+            elif under == self.source and self.still():
+                self.unfreeze()
+        elif self.held >= 0:
+            let name: str = self.names[self.held]
+            let clicked: bool = self.still()
+            self.held = -1
+            if clicked:
+                if self.source == "":
+                    self.source = name
+                else:
+                    self.open_popup(name)
 
     def index(self, a: Account) -> int:
         for i in range(len(self.names)):
@@ -117,7 +178,7 @@ class Layout:
     # one outside SVG, so the live page draws its own, in the drawing: a box
     # of the tip's lines beside the mouse, on the side that has room.
     def show(self, tip: str):
-        if self.held < 0:
+        if self.held < 0 and not self.drawing and not self.popup:
             self.tip = tip
 
     def hide(self):
@@ -150,11 +211,15 @@ class Layout:
                 min(max(x, NODE_RADIUS), self.width - NODE_RADIUS),
                 min(max(y, NODE_RADIUS), self.height - NODE_RADIUS))
 
-    # The held account let go; if it did not move, it was clicked.
-    def drop(self):
-        if self.held >= 0 and abs(self.mouse_x - self.grabbed_x) < 4.0 and abs(self.mouse_y - self.grabbed_y) < 4.0:
-            self.pick(self.names[self.held])
-        self.held = -1
+    # The arrow being drawn, from the rim of the frozen account to the mouse.
+    def rubber_d(self) -> str:
+        let i: int = self.names.index(self.source)
+        let a: Point = self.points[i]
+        let b: Point = Point(self.mouse_x, self.mouse_y)
+        if abs(a.x - b.x) + abs(a.y - b.y) < NODE_RADIUS:
+            return ""
+        let start: Point = toward(a, b, NODE_RADIUS)
+        return f"M {start.x:.1f} {start.y:.1f} L {b.x:.1f} {b.y:.1f}"
 
     # The graph alone fills the window, one drawing unit per pixel, the
     # accounts moved to its middle; back in the page it is WIDTH x HEIGHT
@@ -192,6 +257,7 @@ var books: Books = Books("", [], [], [])
 var graph: Graph = Graph()
 var message: str = "Asking the ledger for the books..."
 var refused: bool = False               # whether the message says why something was refused
+var popup_message: str = ""             # why the popup's transaction cannot be recorded yet
 
 let NO_HEADERS: [](cstring, cstring) = []
 
@@ -278,16 +344,24 @@ def form_entry() -> Entry | !BookFailure_T:
 def record_entry():
     let made: Entry | !BookFailure_T = form_entry()
     if made is BookFailure_T:
-        say(made.detail, True)
+        popup_message = made.detail
     else:
         let checked: None | !BookFailure_T = graph.check(made)
         if checked is BookFailure_T:
-            say(checked.detail, True)
+            popup_message = checked.detail
         else:
             say(f"Recorded: {made.what}", False)
-            layout.unpick()
-            clear_fields(["what", "amount"])
+            close_popup()
             ajaxPost("/entry", NO_HEADERS, entry_lines(made), on_answer)
+
+def close_popup():
+    popup_message = ""
+    layout.unfreeze()
+
+def focus_what():
+    let what: Element = document.getElementById("what")
+    if what != nil:
+        what.focus()
 
 # Transaction I of the books, deleted, once the learner says so.
 def delete_entry(i: int):
@@ -296,13 +370,13 @@ def delete_entry(i: int):
         say(f"Deleted: {e.what}", False)
         ajaxPost("/delete-entry", NO_HEADERS, str(books.ids[i]), on_answer)
 
-# The picked account, deleted: the ledger refuses while a transaction
-# touches it.
-def delete_account():
-    let name: str = layout.source
-    if name != "" and window.confirm(f"Delete the account {name}?"):
+# Account NAME, deleted, once the learner says so: the ledger refuses while
+# a transaction touches it.
+def delete_account(name: str):
+    if window.confirm(f"Delete the account {name}?"):
         say(f"Deleted: {name}", False)
-        layout.unpick()
+        if layout.source == name:
+            layout.unfreeze()
         ajaxPost("/delete-account", NO_HEADERS, name, on_answer)
 
 def open_account():
@@ -328,7 +402,7 @@ def live_node_html(g: Graph, a: Account) -> Html:
     let none: str = ""                  # the page's own tooltip shows it, not a <title>
     let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else "node"))
     html:
-        g class=css onmousedown=layout.grab(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
+        g class=css onmousedown=layout.press(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
             + a.to_html(p, none)
 
 def live_arrow_html(g: Graph, f: Flow) -> Html:
@@ -349,42 +423,85 @@ def last_date() -> str:
     return (books.entries[len(books.entries) - 1].date if len(books.entries) > 0 else "")
 
 def record_html() -> Html:
-    let source: str = (layout.source if layout.source != "" else "(click an account)")
-    let target: str = (layout.target if layout.target != "" else ("(click another)" if layout.source != "" else ""))
     let message_class: str = ("message refused" if refused else "message")
-    let date: str = last_date()
-    let delete_label: str = f"Delete account {layout.source}"
+    let hint: str = ("To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
+                     if layout.source == "" else
+                     f"{layout.source} is frozen: drag an arrow from it to the account the money reaches (or click that account). Click {layout.source} again, or press Escape, to let it go.")
     html:
         div class="record":
-            p:
-                strong: "A transaction: "
-                span: f"from {source} to {target}"
-            p:
-                input id="date" value=date placeholder="2012-01-31" size="10"
-                input id="what" placeholder="what happened" size="34"
-                input id="amount" placeholder="amount, before VAT" size="14"
-                select id="vat":
-                    option value="0": "no VAT"
-                    option value="6": "6% VAT"
-                    option value="12": "12% VAT"
-                    option value="21": "21% VAT"
-                button id="record" onclick=record_entry(): "Record"
-                button id="clear" onclick=layout.unpick(): "Clear"
-                if layout.source != "" and layout.target == "":
-                    button id="delete-account" onclick=delete_account(): delete_label
-            p:
-                strong: "An account: "
-                input id="number" placeholder="number, 613100" size="12"
-                select id="kind":
-                    option value="asset": "asset"
-                    option value="liability": "liability"
-                    option value="equity": "equity"
-                    option value="revenue": "revenue"
-                    option value="expense": "expense"
-                input id="name" placeholder="name" size="20"
-                button id="open" onclick=open_account(): "Open"
+            p: hint
             if message != "":
                 p class=message_class: message
+
+# The accounts, one row each with its number, kind and balance and a button
+# to delete it, and a last row to open a new one.
+def account_row_html(i: int) -> Html:
+    let a: AccountRow = books.accounts[i]
+    let css: str = css_of(graph.account(a.name))
+    html:
+        tr:
+            td: a.number
+            td class=css: a.name
+            td: kind_text(a.kind)
+            td class="num": money(graph.balance(a.name))
+            td:
+                button class="delete" onclick=delete_account(a.name): "Delete"
+
+def accounts_html() -> Html:
+    html:
+        table class="accounts":
+            tr:
+                th: "Number"
+                th: "Account"
+                th: "Kind"
+                th: "Balance"
+                th: ""
+            for i in range(len(books.accounts)):
+                + account_row_html(i)
+            tr class="new":
+                td:
+                    input id="number" placeholder="613100" size="8"
+                td:
+                    input id="name" placeholder="a new account" size="16"
+                td:
+                    select id="kind":
+                        option value="asset": "asset"
+                        option value="liability": "liability"
+                        option value="equity": "equity"
+                        option value="revenue": "revenue"
+                        option value="expense": "expense"
+                td: ""
+                td:
+                    button id="open" onclick=open_account(): "Open"
+
+const ACCOUNTS_TEXT: str = "Every account, with its number in the chart of accounts, its kind and its balance. An account starts at zero; money coming in adds to it, money going out subtracts, and as every transaction is counted once as positive and once as negative, all the balances add up to zero: the books balance. Open a new account on the last row; an account can be deleted once no transaction touches it."
+
+# The transaction from the frozen account to the one the arrow was dropped
+# on: when, what, how much. Enter records it, Escape closes it.
+def popup_html() -> Html:
+    let title: str = f"{layout.source}  →  {layout.target}"
+    let date: str = last_date()
+    html:
+        div:
+            div class="backdrop" onclick=close_popup()
+            div class="popup":
+                h3: title
+                label: "Date"
+                input id="date" value=date placeholder="2012-01-31"
+                label: "What happened"
+                input id="what" placeholder="a chair for the office"
+                label: "Amount, before VAT"
+                input id="amount" placeholder="605.00"
+                label: "VAT"
+                select id="vat":
+                    option value="0": "no VAT"
+                    option value="6": "6%"
+                    option value="12": "12%"
+                    option value="21": "21%"
+                if popup_message != "":
+                    p class="message refused": popup_message
+                button id="record" onclick=record_entry(): "Record"
+                button id="cancel" onclick=close_popup(): "Cancel"
 
 # The transactions as the books write them, one row each, with what each did
 # to every account, and a button to delete it.
@@ -416,6 +533,7 @@ def journal_html() -> Html:
                 + journal_row_html(i)
 
 def live_graph_html(g: Graph) -> Html:
+    let rubber: str = (layout.rubber_d() if layout.drawing else "")
     html:
         svg id="graph" viewBox=layout.view_box() class="graph":
             defs:
@@ -425,6 +543,8 @@ def live_graph_html(g: Graph) -> Html:
                 + live_arrow_html(g, f)
             for a in g.accounts:
                 + live_node_html(g, a)
+            if layout.drawing and rubber != "":
+                path class="rubber" d=rubber
             if layout.tip != "":
                 + layout.tip_html()
 
@@ -439,14 +559,30 @@ def on_move(e: Event):
     layout.mouse_x = (float(m.clientX) - box.left) * scale
     layout.mouse_y = (float(m.clientY) - box.top) * scale
     layout.move_to(layout.mouse_x, layout.mouse_y)      # when an account is held
-    if layout.held >= 0 or layout.tip != "":
+    if layout.held >= 0 or layout.tip != "" or layout.drawing:
         redraw()
 
 def on_up(e: Event):
-    layout.drop()
+    let was_open: bool = layout.popup
+    layout.release()
+    redraw()
+    if layout.popup and not was_open:
+        discard_timeout(setTimeout(focus_what, 30))       # the popup is drawn: type straight into it
+
+def discard_timeout(t: TimeOut):
+    pass
+
+def on_key(e: Event):
+    let k: KeyboardEvent = KeyboardEvent(e)
+    if k.key == "Escape":
+        close_popup()
+        redraw()
+    elif k.key == "Enter" and layout.popup:
+        record_entry()
+        redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. To record a transaction, click the account the money leaves, then the one it reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. To delete a transaction, press Delete on its row below the graph; to delete an account, click it, then Delete account (the ledger keeps an account while a transaction touches it). Hover over an account or an arrow to see its transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Hover over an account or an arrow to see its transactions."
 
 def main():
     def render() -> Html:
@@ -454,13 +590,17 @@ def main():
             section_html("Accounts are nodes, transactions are edges",
                 GRAPH_TEXT + " Drag an account to move it.",
                 [record_html(), live_graph_html(graph), journal_html()])]
-        for s in sections_after_graph(graph):
-            sections.append(s)
+        sections.append(section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()]))
+        let after: []Html = sections_after_graph(graph)
+        for i in range(1, len(after)):          # its first, the balances, is the table above
+            sections.append(after[i])
         let wide: str = ("wide" if layout.graph_only else "")
         html:
             div class=wide:
                 style: STYLE + LIVE_STYLE
                 + live_button_html()
+                if layout.popup:
+                    + popup_html()
                 if layout.graph_only:
                     + record_html()
                     + live_graph_html(graph)
@@ -473,6 +613,7 @@ def main():
     setRenderer(render)
     document.addEventListener("mousemove", on_move)
     document.addEventListener("mouseup", on_up)
+    document.addEventListener("keydown", on_key)
     load()
 
 if __name__ == "__main__":       # not when another module imports this
