@@ -151,6 +151,7 @@ STANDALONE := \
     test_min3_notimpl.ady \
     test_option_literals.ady \
     test_fstring_flags.ady \
+    test_fstring_leading_newline.ady \
     test_seq_field_concat.ady \
     test_distinct_float_range.ady \
     test_narrowed_type.ady \
@@ -310,7 +311,7 @@ COMPILE_ONLY := \
 # is the one they get, so the self-contained loop leaves them out.
 BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
-    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
+    test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat

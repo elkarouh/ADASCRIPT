@@ -2346,7 +2346,7 @@ def to_nim(self, prec=None):
         inner = _apply_conversions(inner)
         inner = _fix_hex_escapes(inner)
         inner = inner.replace('\\"', '"')
-        result = 'fmt"""' + inner + '"""'
+        result = 'fmt"""' + _keep_leading_newline(inner) + '"""'
     elif result.startswith('fmt"') and result.endswith('"'):
         inner = result[4:-1]
         inner = _apply_conversions(inner)
@@ -2359,12 +2359,23 @@ def to_nim(self, prec=None):
             # A literal newline is only legal inside a triple-quoted string,
             # and _fix_hex_escapes has just turned every \n into one.
             inner = inner.replace('\\"', '"')
-            result = 'fmt"""' + inner + '"""'
+            result = 'fmt"""' + _keep_leading_newline(inner) + '"""'
         else:
             result = 'fmt"' + inner + '"'
     if getattr(ParserState, "_nim_in_template", False):
         result = _fmt_in_template(result)
     return result
+
+
+def _keep_leading_newline(inner):
+    """INNER, the text of a triple-quoted literal, made safe to start with a
+    newline: Nim drops a newline that comes straight after the opening
+    quotes, so one that is meant is written twice."""
+    if inner.startswith('\r\n'):
+        return '\r\n' + inner
+    if inner.startswith('\n'):
+        return '\n' + inner
+    return inner
 
 
 def _fmt_in_template(fmt_str):

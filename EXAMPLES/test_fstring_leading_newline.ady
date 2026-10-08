@@ -1,0 +1,21 @@
+# An f-string that begins with a newline keeps it. Nim's fmt writes such a
+# string as a triple-quoted literal, and Nim drops a newline that comes
+# straight after the opening quotes.
+let n: int = 3
+let a: str = f"\nx{n}"
+let b: str = f"\n\ny{n}"
+let c: str = f"z\n{n}"
+let d: str = f"\n{n}\n"
+let e: str = f"\n\"q\"{n}"
+assert a == "\nx3"
+assert b == "\n\ny3"
+assert c == "z\n3"
+assert d == "\n3\n"
+assert e == "\n\"q\"3"
+
+# Built up line by line, as a tooltip is.
+var tip: str = "title"
+for i in range(2):
+    tip += f"\nrow {i}"
+assert tip == "title\nrow 0\nrow 1"
+print len(a), len(b), len(c), len(d), len(e), len(tip)
