@@ -108,7 +108,7 @@ def account_tip(g: Graph, a: Account) -> str:
     for t in g.transactions_for(a):
         let change: Cents_T = (t.amount if t.target == a else Cents_T(-int(t.amount)))
         running += change
-        tip += "\n" + f"{t.date}   {signed(change)}   = {money(running)}   {t.what}"
+        tip += "\n" + f"{t.date}   {signed(change)}   -> {money(running)}   {t.what}"
     return tip
 
 # An account as a node at P: a circle with its name in it. TIP shows when the
