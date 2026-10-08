@@ -133,8 +133,9 @@ def tip_of(g: Graph, f: Flow) -> str:
 # A flow as an arrow from the rim of the circle at A to the rim of the one
 # at B, with the amount at its middle. It bows BEND to the right of the
 # straight line, as seen going from A to B, so the arrow back bows the other
-# way. TIP shows when the mouse is over it: a wider invisible path under the
-# arrow makes it easy to point at.
+# way. TIP shows when the mouse is over it, as the browser's tooltip (the live
+# page, which cannot, passes "" and shows its own): a wider invisible path
+# under the arrow makes it easy to point at.
 def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
     let dx: float = b.x - a.x
     let dy: float = b.y - a.y
@@ -154,7 +155,8 @@ def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
     let ly: str = px(label.y)
     html:
         g class="arrow":
-            title: tip
+            if tip != "":
+                title: tip
             path class="hit" d=d
             path class="edge" d=d
             stext class="amount" x=lx y=ly: money(f.amount)

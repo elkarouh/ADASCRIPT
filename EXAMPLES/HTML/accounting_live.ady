@@ -15,10 +15,19 @@ Needs karax: `nimble install karax@1.5.0`.
 from dom nimport Event, MouseEvent, BoundingRect, document, getElementById, getBoundingClientRect, addEventListener
 from karax/karax nimport setRenderer, redraw
 from accounting_model import Account, Flow, Graph, kleppmann
-from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, place, bend_of, tip_of, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, px, place, bend_of, tip_of, to_html, section_html, sections_after_graph
 
 const WIDTH: float = 780.0
 const HEIGHT: float = 390.0
+
+const LIVE_STYLE: str = """
+g.node { cursor: grab; }
+svg.graph { user-select: none; }
+g.tip { pointer-events: none; }
+g.tip rect { fill: #fffbe6; stroke: #888; }
+text.tipline { font-size: 11px; white-space: pre; }
+text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
+"""
 
 # Where each account sits, starting where accounting_gui.ady puts it.
 @virtual
@@ -26,6 +35,9 @@ class Layout:
     var names: []str
     var points: []Point
     var held: int = -1                  # the account being dragged, or -1
+    var tip: str = ""                   # what the arrow under the mouse lists, or ""
+    var mouse_x: float = 0.0            # where the mouse is, in the drawing's units
+    var mouse_y: float = 0.0
 
     def start(self, g: Graph):
         for a in g.accounts:
@@ -43,6 +55,37 @@ class Layout:
 
     def grab(self, a: Account):
         self.held = self.index(a)
+        self.tip = ""
+
+    # The browser shows an SVG <title> as a tooltip, but karax builds this
+    # one outside SVG, so the live page draws its own, in the drawing: a box
+    # of the tip's lines beside the mouse, on the side that has room.
+    def show(self, tip: str):
+        if self.held < 0:
+            self.tip = tip
+
+    def hide(self):
+        self.tip = ""
+
+    def tip_html(self) -> Html:
+        let lines: []str = self.tip.split("\n")
+        var widest: int = 0
+        for line in lines:
+            widest = max(widest, len(line))
+        let w: float = float(widest) * 6.2 + 16.0
+        let h: float = float(len(lines)) * 15.0 + 8.0
+        let x: float = (self.mouse_x + 14.0 if self.mouse_x + 14.0 + w <= WIDTH else max(self.mouse_x - 14.0 - w, 0.0))
+        let y: float = (self.mouse_y + 14.0 if self.mouse_y + 14.0 + h <= HEIGHT else max(self.mouse_y - 14.0 - h, 0.0))
+        let top: float = y + 16.0
+        let left: float = x + 8.0
+        html:
+            g class="tip":
+                rect x=px(x) y=px(y) width=px(w) height=px(h) rx="3"
+                for i in range(len(lines)):
+                    if i == 0:
+                        stext class="tiphead" x=px(left) y=px(top): lines[i]
+                    else:
+                        stext class="tipline" x=px(left) y=px(top+float(i)*15.0): lines[i]
 
     # The held account to (X, Y), kept whole inside the drawing.
     def move_to(self, x: float, y: float):
@@ -69,9 +112,10 @@ def live_node_html(a: Account) -> Html:
 def live_arrow_html(g: Graph, f: Flow) -> Html:
     let a: Point = layout.at(f.source)
     let b: Point = layout.at(f.target)
+    let tip: str = tip_of(g, f)
     html:
-        g:
-            + f.to_html(a, b, bend_of(g, f), tip_of(g, f))
+        g onmouseover=layout.show(tip) onmouseout=layout.hide():
+            + f.to_html(a, b, bend_of(g, f), "")
 
 def live_graph_html(g: Graph) -> Html:
     html:
@@ -83,19 +127,22 @@ def live_graph_html(g: Graph) -> Html:
                 + live_arrow_html(g, f)
             for a in g.accounts:
                 + live_node_html(a)
+            if layout.tip != "":
+                + layout.tip_html()
 
 # ---------------------------------------------------------------------
 # The mouse: a press on a node grabs it (above), these move it and drop it
 # ---------------------------------------------------------------------
 
 def on_move(e: Event):
-    if layout.held < 0:
-        return
     let m: MouseEvent = MouseEvent(e)
     let box: BoundingRect = document.getElementById("graph").getBoundingClientRect()
     let scale: float = WIDTH / box.width    # the svg is drawn at the page's width
-    layout.move_to((float(m.clientX) - box.left) * scale, (float(m.clientY) - box.top) * scale)
-    redraw()
+    layout.mouse_x = (float(m.clientX) - box.left) * scale
+    layout.mouse_y = (float(m.clientY) - box.top) * scale
+    layout.move_to(layout.mouse_x, layout.mouse_y)      # when an account is held
+    if layout.held >= 0 or layout.tip != "":
+        redraw()
 
 def on_up(e: Event):
     layout.drop()
@@ -115,11 +162,12 @@ def main():
             sections.append(s)
         html:
             div:
-                style: STYLE + "g.node { cursor: grab; } svg.graph { user-select: none; }"
+                style: STYLE + LIVE_STYLE
                 h1: TITLE
                 p: INTRO
                 for s in sections:
                     + s
+
 
     setRenderer(render)
     document.addEventListener("mousemove", on_move)
