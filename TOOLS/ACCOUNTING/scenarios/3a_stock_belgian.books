@@ -1,9 +1,10 @@
-# scenarios/3_stock.books: loaded by ledger_server into 3_stock.db the first time it is picked,
+# scenarios/3a_stock_belgian.books: loaded by ledger_server into 3a_stock_belgian.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
-title	3. Stock: purchases (604) and the stock variation (609)
+title	3a. Stock, the Belgian way: purchases (604) and the stock variation (609)
 about	The Belgian way (PCMN/MAR): material bought for resale goes straight to 604 Purchases (achats, aankopen), a cost. At the year end the stock is counted, and what is still there goes back to 340 Stock, an asset, through 609 Stock variation (variation des stocks, voorraadwijziging), which lowers the cost of the year.
 about	Here 5,000 of material is bought and 3,000 of it sold for 5,000; 2,000 is still in stock on 31 December. The costs are 5,000 of purchases less a 2,000 increase in stock: 3,000, so the profit is 2,000.
 about	A stock increase leaves 609 with a credit balance, so the graph and the profit and loss show it like a revenue; the Belgian annual accounts keep it among the costs, as a negative amount next to 604.
+about	Scenario 3b has the same transactions done the international way; the profit and the stock come out the same.
 about	Try it: if the stock went down instead, the variation would be a cost: an arrow from Stock to Stock variation.
 currency	USD
 account	100000	equity	Capital

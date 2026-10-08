@@ -1,0 +1,35 @@
+# scenarios/3b_stock_international.books: loaded by ledger_server into 3b_stock_international.db the first time it is picked,
+# and again by Start over. Amounts are in cents.
+title	3b. Stock, the international way: an asset until sold, then cost of sales
+about	The international way (IFRS, the perpetual inventory): material bought for resale is not a cost when it is bought: it goes to Stock, an asset. When it is sold, its cost moves from Stock to Cost of sales, in the same period as the sale's revenue, so the profit on each sale shows: 5,000 less 3,000.
+about	Here 5,000 of material is bought and 3,000 of it sold for 5,000; the 2,000 left simply stays in Stock, and no count is needed to find the year's cost: Cost of sales is 3,000, so the profit is 2,000.
+about	Scenario 3a has the same transactions done the Belgian way, through 604 Purchases and 609 Stock variation; the profit and the stock come out the same.
+currency	USD
+account	100000	equity	Capital
+account	550000	asset	Bank account
+account	440000	liability	Suppliers
+account	340000	asset	Stock
+account	400001	asset	Customer 1
+account	700000	revenue	Sales
+account	600000	expense	Cost of sales
+entry	2011-01-02	The founder puts in savings
+posting	Capital	-500000
+posting	Bank account	500000
+entry	2011-01-15	Material bought on credit for 3,000
+posting	Suppliers	-300000
+posting	Stock	300000
+entry	2011-02-01	The supplier is paid
+posting	Bank account	-300000
+posting	Suppliers	300000
+entry	2011-03-01	The material is sold to customer 1 for 5,000
+posting	Sales	-500000
+posting	Customer 1	500000
+entry	2011-03-01	The material sold leaves the stock: it cost 3,000
+posting	Stock	-300000
+posting	Cost of sales	300000
+entry	2011-03-31	Customer 1 pays
+posting	Customer 1	-500000
+posting	Bank account	500000
+entry	2011-11-20	More material bought for 2,000, paid at once
+posting	Bank account	-200000
+posting	Stock	200000
