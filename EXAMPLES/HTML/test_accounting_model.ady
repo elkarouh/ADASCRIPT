@@ -5,7 +5,7 @@ that kleppmann() adds.
 
     ady2nim c -r test_accounting_model.ady
 """
-from accounting_model import Cents_T, Graph, kleppmann
+from accounting_model import Cents_T, Flow, Graph, Transaction, kleppmann
 
 let g: Graph = kleppmann()
 
@@ -39,5 +39,15 @@ assert g.profit_and_loss()[0].label == "Revenue: Sales"
 # two, one from Sales and one from VAT to pay.
 assert len(g.edges) == 15
 assert len(g.flows) == 13
+
+# A flow's transactions, with their dates: Capital to Bank account is two.
+var capital_to_bank: Flow = g.flows[0]
+for f in g.flows:
+    if f.source.name == "Capital" and f.target.name == "Bank account":
+        capital_to_bank = f
+let ts: []Transaction = g.transactions_of(capital_to_bank)
+assert len(ts) == 2
+assert ts[0].date == "2011-01-05" and ts[1].date == "2011-03-01"
+assert ts[0].amount + ts[1].amount == capital_to_bank.amount
 
 print "accounting model: all checks passed"

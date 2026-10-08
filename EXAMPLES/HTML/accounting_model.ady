@@ -34,7 +34,9 @@ class Account:
         self.name = name
         self.colour = colour
 
+# A date is written as ISO text, 2011-03-07, which sorts as it should.
 type Transaction is record:
+    date:   str
     what:   str
     source: Account
     target: Account
@@ -80,10 +82,10 @@ class Graph:
         return self.account(name).balance
 
     # One edge: money flows from source to target.
-    def transfer(self, what: str, source: Account, target: Account, amount: Cents_T):
+    def transfer(self, date: str, what: str, source: Account, target: Account, amount: Cents_T):
         source.balance -= amount
         target.balance += amount
-        self.edges.append(Transaction(what, source, target, amount))
+        self.edges.append(Transaction(date, what, source, target, amount))
         for i in range(len(self.flows)):
             if self.flows[i].source == source and self.flows[i].target == target:
                 self.flows[i].amount += amount
@@ -93,18 +95,26 @@ class Graph:
     # A purchase with VAT: one transaction, three accounts. SOURCE pays NET
     # to TARGET and the VAT on it to VAT, where it waits to be claimed back
     # from the tax office: VAT to recover, an asset.
-    def purchase_with_vat(self, what: str, source: Account, target: Account,
+    def purchase_with_vat(self, date: str, what: str, source: Account, target: Account,
                           vat: Account, net: Cents_T, rate: int):
-        self.transfer(what, source, target, net)
-        self.transfer(f"{what}: VAT at {rate}%", source, vat, vat_on(net, rate))
+        self.transfer(date, what, source, target, net)
+        self.transfer(date, f"{what}: VAT at {rate}%", source, vat, vat_on(net, rate))
 
     # A sale with VAT, the other way round: TARGET, the customer, owes NET to
     # SOURCE, the revenue, and the VAT on it to VAT, which the company collects
     # for the tax office: VAT to pay, a liability.
-    def sale_with_vat(self, what: str, source: Account, target: Account,
+    def sale_with_vat(self, date: str, what: str, source: Account, target: Account,
                       vat: Account, net: Cents_T, rate: int):
-        self.transfer(what, source, target, net)
-        self.transfer(f"{what}: VAT at {rate}%", vat, target, vat_on(net, rate))
+        self.transfer(date, what, source, target, net)
+        self.transfer(date, f"{what}: VAT at {rate}%", vat, target, vat_on(net, rate))
+
+    # The transactions that make up flow F, in the order they were made.
+    def transactions_of(self, f: Flow) -> []Transaction:
+        var found: []Transaction = []
+        for t in self.edges:
+            if t.source == f.source and t.target == f.target:
+                found.append(t)
+        return found
 
     # Zero when the books balance: every edge is once positive, once negative.
     def total(self) -> Cents_T:
@@ -159,8 +169,8 @@ class Graph:
                 lines.append(Line(f"Equity: {a.name}", -a.balance))
         return lines
 
-# The article's company, every transaction in the order it tells them, and
-# changes of ours: the chair is bought and customer 1's order sold with VAT,
+# The article's company, every transaction in the order it tells them (the
+# article gives no dates; these are ours), and changes of ours: the chair is bought and customer 1's order sold with VAT,
 # each one transaction that touches three accounts, and a credit note sends
 # money back along an edge, so the graph has a flow both ways between two
 # accounts.
@@ -179,17 +189,17 @@ def kleppmann() -> Graph:
     let vat_to_recover: Account = g.add_account("VAT to recover", GREEN)
     let vat_to_pay: Account = g.add_account("VAT to pay", GREEN)
 
-    g.transfer("A bagel on the company credit card", card, food, 500)
-    g.purchase_with_vat("A chair, paid by cheque from the bank account", bank, furniture, vat_to_recover, 50000, 21)
-    g.transfer("The founder puts in savings", capital, bank, 500000)
-    g.transfer("The credit card bill is paid from the bank", bank, card, 500)
-    g.transfer("A Super Burrito on the credit card", card, food, 800)
-    g.sale_with_vat("Sale to customer 1, agreed at 5,000", sales, customer1, vat_to_pay, 500000, 21)
-    g.transfer("Sale to customer 2, agreed at 5,000", sales, customer2, 500000)
-    g.transfer("Customer 1 pays in full, VAT included", customer1, bank, 605000)
-    g.transfer("Customer 2 pays half up front", customer2, bank, 250000)
-    g.transfer("Y Combinator invests", capital, bank, 2000000)
-    g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
-    g.transfer("The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
-    g.transfer("Customer 2 returns part of the order: a credit note of 500", customer2, sales, 50000)
+    g.transfer("2011-01-03", "A bagel on the company credit card", card, food, 500)
+    g.purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", bank, furniture, vat_to_recover, 50000, 21)
+    g.transfer("2011-01-05", "The founder puts in savings", capital, bank, 500000)
+    g.transfer("2011-01-31", "The credit card bill is paid from the bank", bank, card, 500)
+    g.transfer("2011-02-01", "A Super Burrito on the credit card", card, food, 800)
+    g.sale_with_vat("2011-02-07", "Sale to customer 1, agreed at 5,000", sales, customer1, vat_to_pay, 500000, 21)
+    g.transfer("2011-02-08", "Sale to customer 2, agreed at 5,000", sales, customer2, 500000)
+    g.transfer("2011-02-21", "Customer 1 pays in full, VAT included", customer1, bank, 605000)
+    g.transfer("2011-02-22", "Customer 2 pays half up front", customer2, bank, 250000)
+    g.transfer("2011-03-01", "Y Combinator invests", capital, bank, 2000000)
+    g.transfer("2011-03-31", "Salaries, paid from the bank", bank, payroll, 800000)
+    g.transfer("2011-04-04", "Customer 2 returns part of the order: a credit note of 500", customer2, sales, 50000)
+    g.transfer("2011-12-31", "The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
     return g

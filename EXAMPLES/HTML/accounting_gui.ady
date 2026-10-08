@@ -26,6 +26,8 @@ td.blue { background: #d6e6f8; }
 td.pink { background: #f8d6e6; }
 svg.graph { width: 100%; height: auto; margin: 1em 0; }
 path.edge { fill: none; stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
+path.hit { fill: none; stroke: transparent; stroke-width: 12; }
+g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
 polygon { fill: #555; }
 circle.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
 circle.blue { fill: #d6e6f8; stroke: #5a80b0; stroke-width: 1.5; }
@@ -120,11 +122,20 @@ def bend_of(g: Graph, f: Flow) -> float:
             return 30.0
     return 0.0
 
+# What hovering over F's arrow shows: each of its transactions, one a line,
+# with its date and amount.
+def tip_of(g: Graph, f: Flow) -> str:
+    var tip: str = f"{f.source.name} to {f.target.name}"
+    for t in g.transactions_of(f):
+        tip += "\n" + f"{t.date}   {money(t.amount)}   {t.what}"
+    return tip
+
 # A flow as an arrow from the rim of the circle at A to the rim of the one
 # at B, with the amount at its middle. It bows BEND to the right of the
 # straight line, as seen going from A to B, so the arrow back bows the other
-# way.
-def to_html(f: Flow, a: Point, b: Point, bend: float) -> Html:
+# way. TIP shows when the mouse is over it: a wider invisible path under the
+# arrow makes it easy to point at.
+def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
     let dx: float = b.x - a.x
     let dy: float = b.y - a.y
     let length: float = sqrt(dx * dx + dy * dy)
@@ -142,7 +153,9 @@ def to_html(f: Flow, a: Point, b: Point, bend: float) -> Html:
     let lx: str = px(label.x)
     let ly: str = px(label.y)
     html:
-        g:
+        g class="arrow":
+            title: tip
+            path class="hit" d=d
             path class="edge" d=d
             stext class="amount" x=lx y=ly: money(f.amount)
 
@@ -153,7 +166,7 @@ def to_html(g: Graph) -> Html:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
             for f in g.flows:
-                + f.to_html(place(f.source), place(f.target), bend_of(g, f))
+                + f.to_html(place(f.source), place(f.target), bend_of(g, f), tip_of(g, f))
             for a in g.accounts:
                 + a.to_html(place(a))
 
@@ -161,12 +174,14 @@ def to_html(edges: []Transaction) -> Html:
     html:
         table:
             tr:
+                th: "Date"
                 th: "Transaction"
                 th: "From"
                 th: "To"
                 th: "Amount"
             for t in edges:
                 tr:
+                    td: t.date
                     td: t.what
                     td class=css_of(t.source): t.source.name
                     td class=css_of(t.target): t.target.name
