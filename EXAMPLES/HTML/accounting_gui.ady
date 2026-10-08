@@ -210,14 +210,14 @@ const TITLE: str = "Accounting for computer scientists"
 const INTRO: str = "Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program."
 
 def main():
-    let g: Graph = kleppmann()
-    assert g.total() == 0                   # the books balance
-    assert g.net_assets() == g.equity()     # and so does the balance sheet
+    let books: Graph = kleppmann()
+    assert books.total() == 0                   # the books balance
+    assert books.net_assets() == books.equity()     # and so does the balance sheet
 
     var sections: []Html = [
         section_html("Accounts are nodes, transactions are edges", GRAPH_TEXT,
-            [g.to_html(), g.edges.to_html()])]
-    for s in sections_after_graph(g):
+            [books.to_html(), books.edges.to_html()])]
+    for s in sections_after_graph(books):
         sections.append(s)
     print "<!doctype html>"
     print page_html(TITLE, INTRO, sections)
