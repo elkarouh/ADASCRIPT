@@ -54,7 +54,6 @@ class Layout:
     def drop(self):
         self.held = -1
 
-var books: Graph = Graph()              # set by main, as the page is built
 var layout: Layout = Layout()
 
 # ---------------------------------------------------------------------
@@ -102,7 +101,7 @@ def on_up(e: Event):
     layout.drop()
 
 def main():
-    books = kleppmann()
+    let books: Graph = kleppmann()
     layout.start(books)
     assert books.total() == 0                   # the books balance
     assert books.net_assets() == books.equity()     # and so does the balance sheet
