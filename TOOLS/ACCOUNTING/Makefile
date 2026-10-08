@@ -12,7 +12,10 @@
 #
 # $(OPEN) is xdg-open, or open on a Mac; `make gui OPEN=firefox` picks one.
 
-ADY2NIM ?= ady2nim
+# This checkout's own transpiler, so that its STDLIB (the db module the ledger
+# imports) is the one used, whatever ady2nim is first on PATH.
+PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
+ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8802
 
