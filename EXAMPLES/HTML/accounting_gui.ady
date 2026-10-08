@@ -64,8 +64,10 @@ type Point is record:
 
 def place(a: Account) -> Point:
     case a.name:
+        when "VAT to pay":
+            return Point(80.0, 50.0)
         when "Sales":
-            return Point(80.0, 120.0)
+            return Point(80.0, 190.0)
         when "Customer 1":
             return Point(270.0, 50.0)
         when "Customer 2":
@@ -76,7 +78,7 @@ def place(a: Account) -> Point:
             return Point(480.0, 50.0)
         when "Bank account":
             return Point(480.0, 190.0)
-        when "VAT":
+        when "VAT to recover":
             return Point(270.0, 330.0)
         when "Furniture":
             return Point(480.0, 330.0)

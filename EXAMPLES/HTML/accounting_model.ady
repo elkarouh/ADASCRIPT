@@ -51,6 +51,10 @@ type Line is record:
     label:  str
     amount: Cents_T
 
+# The VAT on NET at RATE percent, rounded to the cent.
+def vat_on(net: Cents_T, rate: int) -> Cents_T:
+    return Cents_T((int(net) * rate + 50) // 100)
+
 class Graph:
     var accounts: []Account
     var edges:    []Transaction
@@ -87,13 +91,20 @@ class Graph:
         self.flows.append(Flow(source, target, amount))
 
     # A purchase with VAT: one transaction, three accounts. SOURCE pays NET
-    # to TARGET and the VAT on it, RATE percent rounded to the cent, to VAT,
-    # where it waits to be claimed back from the tax office.
+    # to TARGET and the VAT on it to VAT, where it waits to be claimed back
+    # from the tax office: VAT to recover, an asset.
     def purchase_with_vat(self, what: str, source: Account, target: Account,
                           vat: Account, net: Cents_T, rate: int):
-        let tax: Cents_T = Cents_T((int(net) * rate + 50) // 100)
         self.transfer(what, source, target, net)
-        self.transfer(f"{what}: VAT at {rate}%", source, vat, tax)
+        self.transfer(f"{what}: VAT at {rate}%", source, vat, vat_on(net, rate))
+
+    # A sale with VAT, the other way round: TARGET, the customer, owes NET to
+    # SOURCE, the revenue, and the VAT on it to VAT, which the company collects
+    # for the tax office: VAT to pay, a liability.
+    def sale_with_vat(self, what: str, source: Account, target: Account,
+                      vat: Account, net: Cents_T, rate: int):
+        self.transfer(what, source, target, net)
+        self.transfer(f"{what}: VAT at {rate}%", vat, target, vat_on(net, rate))
 
     # Zero when the books balance: every edge is once positive, once negative.
     def total(self) -> Cents_T:
@@ -149,9 +160,10 @@ class Graph:
         return lines
 
 # The article's company, every transaction in the order it tells them, and
-# two changes of ours: the chair is bought with VAT, one transaction that
-# touches three accounts, and a credit note sends money back along an edge, so
-# the graph has a flow both ways between two accounts.
+# changes of ours: the chair is bought and customer 1's order sold with VAT,
+# each one transaction that touches three accounts, and a credit note sends
+# money back along an edge, so the graph has a flow both ways between two
+# accounts.
 def kleppmann() -> Graph:
     var g: Graph = Graph()
     let sales: Account = g.add_account("Sales", BLUE)
@@ -164,16 +176,17 @@ def kleppmann() -> Graph:
     let payroll: Account = g.add_account("Payroll", BLUE)
     let food: Account = g.add_account("Food", BLUE)
     let depreciation: Account = g.add_account("Depreciation", BLUE)
-    let vat: Account = g.add_account("VAT", GREEN)
+    let vat_to_recover: Account = g.add_account("VAT to recover", GREEN)
+    let vat_to_pay: Account = g.add_account("VAT to pay", GREEN)
 
     g.transfer("A bagel on the company credit card", card, food, 500)
-    g.purchase_with_vat("A chair, paid by cheque from the bank account", bank, furniture, vat, 50000, 21)
+    g.purchase_with_vat("A chair, paid by cheque from the bank account", bank, furniture, vat_to_recover, 50000, 21)
     g.transfer("The founder puts in savings", capital, bank, 500000)
     g.transfer("The credit card bill is paid from the bank", bank, card, 500)
     g.transfer("A Super Burrito on the credit card", card, food, 800)
-    g.transfer("Sale to customer 1, agreed at 5,000", sales, customer1, 500000)
+    g.sale_with_vat("Sale to customer 1, agreed at 5,000", sales, customer1, vat_to_pay, 500000, 21)
     g.transfer("Sale to customer 2, agreed at 5,000", sales, customer2, 500000)
-    g.transfer("Customer 1 pays in full", customer1, bank, 500000)
+    g.transfer("Customer 1 pays in full, VAT included", customer1, bank, 605000)
     g.transfer("Customer 2 pays half up front", customer2, bank, 250000)
     g.transfer("Y Combinator invests", capital, bank, 2000000)
     g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
