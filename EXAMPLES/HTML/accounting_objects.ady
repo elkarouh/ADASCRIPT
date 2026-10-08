@@ -14,7 +14,7 @@ https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html)
 Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
-from accounting_model import Account, Cents_T, Colour_T, Flow, Graph, Line, Transaction, kleppmann
+from accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
 
 const STYLE: str = """
 body { font-family: sans-serif; max-width: 52em; margin: 2em auto; padding: 0 1em; line-height: 1.45; }
@@ -38,10 +38,7 @@ tr.total td { font-weight: bold; border-top: 2px solid #333; }
 
 const NODE_RADIUS: float = 42.0
 
-# Money is kept in cents; it is shown in dollars. The scale is the type, so
-# Dollars_T(c) converts, and the format does the rest: 1234567 -> "12,345.67".
-type Dollars_T is 100 * Cents_T
-
+# 1234567 cents -> "12,345.67": Dollars_T converts, the format groups.
 def money(c: Cents_T) -> str:
     return f"{Dollars_T(c):,.2f}"
 

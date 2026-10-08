@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """The accounting model on its own, no GUI: the article's figures.
 
-    ady2nim c -r test_accounting_model.ady     (or: ady2py)
+    ady2nim c -r test_accounting_model.ady
 """
 from accounting_model import Cents_T, Graph, kleppmann
 

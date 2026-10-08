@@ -9,10 +9,14 @@ statements are read off the colours the article gives the accounts: blue
 owed) and pink (what the shareholders put in) make the balance sheet.
 
 Nothing here draws anything: test_accounting_model.ady checks it on its own,
-on both backends, and accounting_view.ady renders it.
+and accounting_objects.ady renders it. Nim only: the Python backend does not
+build a scaled unit such as Dollars_T.
 """
 
+# Money is kept in whole cents, so sums are exact; it is read in dollars.
+# The scale is the type: Dollars_T(c) is c read in dollars.
 type Cents_T is distinct int
+type Dollars_T is 100 * Cents_T
 
 # The article's colours: green is what you own or owe, blue is revenue and
 # expense, pink is what the shareholders put in.
