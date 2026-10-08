@@ -173,7 +173,8 @@ if [[ -n "${cache}" ]]; then
   # a named revision already checked out: nothing more to do (see above);
   # otherwise, the file at the first named revision that has it, else at
   # the tip
-  if [[ -n "${revs}" ]] && [[ -z "${fresh}" ]] && git -C "${work}" cat-file -e "HEAD:${file}" 2>/dev/null; then
+  if [[ -n "${revs}" ]] && [[ -z "${fresh}" ]] && [[ -e "${work}/${file}" ]] &&
+     git -C "${work}" cat-file -e "HEAD:${file}" 2>/dev/null; then
     exit 0
   fi
   at=""
@@ -182,7 +183,10 @@ if [[ -n "${cache}" ]]; then
   done
   [[ -n "${at}" ]] || at=$(git -C "${work}" rev-parse -q --verify origin/HEAD) || at=""
   [[ -n "${at}" ]] || die "${file} is at none of:${revs}"
-  if [[ "${at}" != "$(git -C "${work}" rev-parse -q --verify HEAD 2>/dev/null)" ]]; then
+  # a previous run can have died between recording this commit and
+  # materialising the file (an interrupted process, a full disk): the
+  # on-disk check re-checks it out rather than trusting HEAD alone
+  if [[ "${at}" != "$(git -C "${work}" rev-parse -q --verify HEAD 2>/dev/null)" ]] || [[ ! -e "${work}/${file}" ]]; then
     git -C "${work}" -c advice.detachedHead=false checkout -q -f "${at}" || die "could not check out ${at} in ${work}"
   fi
   git -C "${work}" cat-file -e "${at}:${file}" 2>/dev/null || die "no such file: ${target} is not in ${sub} at ${at}"

@@ -332,11 +332,14 @@ class Cache(Checkouts):
         # a named revision already checked out: nothing more to do (see
         # above); otherwise, the file at the first named revision that has
         # it, else at the tip
-        return if revs != [] and not fresh and git_ok(work, ["cat-file", "-e", "HEAD:" + f.file])
+        return if revs != [] and not fresh and -e (work / f.file) and git_ok(work, ["cat-file", "-e", "HEAD:" + f.file])
         let having: []Rev_T = [rev for rev in revs if git_ok(work, ["cat-file", "-e", rev + ":" + f.file])]
         let at: Rev_T = having[0] if having != [] else git_out(work, ["rev-parse", "-q", "--verify", "origin/HEAD"])
         return Failure_T(message=f"{f.file} is at none of:" + "".join([" " + r for r in revs])) if at == ""
-        if at != git_out(work, ["rev-parse", "-q", "--verify", "HEAD"]):
+        # a previous run can have died between recording this commit and
+        # materialising the file (an interrupted process, a full disk): the
+        # on-disk check below re-checks it out rather than trusting HEAD alone
+        if at != git_out(work, ["rev-parse", "-q", "--verify", "HEAD"]) or not -e (work / f.file):
             do:
                 check_out(work, at)
         do:
