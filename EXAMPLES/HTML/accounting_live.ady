@@ -15,7 +15,7 @@ Needs karax: `nimble install karax@1.5.0`.
 from dom nimport Event, MouseEvent, BoundingRect, document, getElementById, getBoundingClientRect, addEventListener
 from karax/karax nimport setRenderer, redraw
 from accounting_model import Account, Flow, Graph, kleppmann
-from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, px, place, bend_of, tip_of, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, px, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 
 const WIDTH: float = 780.0
 const HEIGHT: float = 390.0
@@ -103,11 +103,13 @@ var layout: Layout = Layout()
 # Rendering: the graph at the layout's points, the rest as on the static page
 # ---------------------------------------------------------------------
 
-def live_node_html(a: Account) -> Html:
+def live_node_html(g: Graph, a: Account) -> Html:
     let p: Point = layout.at(a)
+    let tip: str = account_tip(g, a)
+    let none: str = ""                  # the page's own tooltip shows it, not a <title>
     html:
-        g class="node" onmousedown=layout.grab(a):
-            + a.to_html(p)
+        g class="node" onmousedown=layout.grab(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
+            + a.to_html(p, none)
 
 def live_arrow_html(g: Graph, f: Flow) -> Html:
     let a: Point = layout.at(f.source)
@@ -126,7 +128,7 @@ def live_graph_html(g: Graph) -> Html:
             for f in g.flows:
                 + live_arrow_html(g, f)
             for a in g.accounts:
-                + live_node_html(a)
+                + live_node_html(g, a)
             if layout.tip != "":
                 + layout.tip_html()
 

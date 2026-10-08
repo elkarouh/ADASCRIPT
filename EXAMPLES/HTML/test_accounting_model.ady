@@ -50,4 +50,11 @@ assert len(ts) == 2
 assert ts[0].date == "2011-01-05" and ts[1].date == "2011-03-01"
 assert ts[0].amount + ts[1].amount == capital_to_bank.amount
 
+# an account's transactions, signed and added up, give its balance
+for a in g.accounts:
+    var sum: Cents_T = 0
+    for t in g.transactions_for(a):
+        sum += (t.amount if t.target == a else Cents_T(-int(t.amount)))
+    assert sum == a.balance
+
 print "accounting model: all checks passed"

@@ -93,16 +93,34 @@ def place(a: Account) -> Point:
 
 # ---------------------------------------------------------------------
 # Rendering: a to_html for each thing of the model that is drawn, called as
-# a method (a.to_html(p), g.to_html()) though the model knows nothing of it
+# a method (a.to_html(p, tip), g.to_html()) though the model knows nothing of it
 # ---------------------------------------------------------------------
 
-# An account as a node at P: a circle with its name in it.
-def to_html(a: Account, p: Point) -> Html:
+# +5,000.00 or -500.00: the change a transaction makes to an account.
+def signed(c: Cents_T) -> str:
+    return ("+" if c >= 0 else "-") + money(Cents_T(abs(int(c))))
+
+# What hovering over account A shows: its balance, then each transaction that
+# touches it with its date, the change it made and the balance after it.
+def account_tip(g: Graph, a: Account) -> str:
+    var tip: str = f"{a.name}: balance {money(a.balance)}"
+    var running: Cents_T = 0
+    for t in g.transactions_for(a):
+        let change: Cents_T = (t.amount if t.target == a else Cents_T(-int(t.amount)))
+        running += change
+        tip += "\n" + f"{t.date}   {signed(change)}   = {money(running)}   {t.what}"
+    return tip
+
+# An account as a node at P: a circle with its name in it. TIP shows when the
+# mouse is over it, as for an arrow below.
+def to_html(a: Account, p: Point, tip: str) -> Html:
     let cx: str = px(p.x)
     let cy: str = px(p.y)
     let css: str = css_of(a)
     html:
         g:
+            if tip != "":
+                title: tip
             circle class=css cx=cx cy=cy r="42"
             stext class="label" x=cx y=cy: a.name
 
@@ -170,7 +188,7 @@ def to_html(g: Graph) -> Html:
             for f in g.flows:
                 + f.to_html(place(f.source), place(f.target), bend_of(g, f), tip_of(g, f))
             for a in g.accounts:
-                + a.to_html(place(a))
+                + a.to_html(place(a), account_tip(g, a))
 
 def to_html(edges: []Transaction) -> Html:
     html:

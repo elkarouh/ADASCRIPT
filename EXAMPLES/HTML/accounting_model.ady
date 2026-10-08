@@ -116,6 +116,15 @@ class Graph:
                 found.append(t)
         return found
 
+    # The transactions that touch account A, in the order they were made: the
+    # ones that bring money in and the ones that take it out.
+    def transactions_for(self, a: Account) -> []Transaction:
+        var found: []Transaction = []
+        for t in self.edges:
+            if t.source == a or t.target == a:
+                found.append(t)
+        return found
+
     # Zero when the books balance: every edge is once positive, once negative.
     def total(self) -> Cents_T:
         var sum: Cents_T = 0
