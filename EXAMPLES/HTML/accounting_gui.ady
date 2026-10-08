@@ -30,7 +30,7 @@ path.hit { fill: none; stroke: transparent; stroke-width: 12; }
 g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
 polygon { fill: #555; }
 circle.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
-circle.blue { fill: #d6e6f8; stroke: #5a80b0; stroke-width: 1.5; }
+circle.blue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 4; }
 circle.pink { fill: #f8d6e6; stroke: #b05a85; stroke-width: 1.5; }
 text.label { text-anchor: middle; dominant-baseline: middle; font-size: 11px; }
 text.amount { text-anchor: middle; font-size: 11px; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
