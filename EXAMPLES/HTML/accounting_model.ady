@@ -149,9 +149,9 @@ class Graph:
         return lines
 
 # The article's company, every transaction in the order it tells them, and
-# two more of ours: a credit note that sends money back along an edge, so the
-# graph has a flow both ways between two accounts, and a purchase with VAT,
-# one transaction that touches three accounts.
+# two changes of ours: the chair is bought with VAT, one transaction that
+# touches three accounts, and a credit note sends money back along an edge, so
+# the graph has a flow both ways between two accounts.
 def kleppmann() -> Graph:
     var g: Graph = Graph()
     let sales: Account = g.add_account("Sales", BLUE)
@@ -167,7 +167,7 @@ def kleppmann() -> Graph:
     let vat: Account = g.add_account("VAT", GREEN)
 
     g.transfer("A bagel on the company credit card", card, food, 500)
-    g.transfer("A chair, paid by cheque from the bank account", bank, furniture, 50000)
+    g.purchase_with_vat("A chair, paid by cheque from the bank account", bank, furniture, vat, 50000, 21)
     g.transfer("The founder puts in savings", capital, bank, 500000)
     g.transfer("The credit card bill is paid from the bank", bank, card, 500)
     g.transfer("A Super Burrito on the credit card", card, food, 800)
@@ -179,5 +179,4 @@ def kleppmann() -> Graph:
     g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
     g.transfer("The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
     g.transfer("Customer 2 returns part of the order: a credit note of 500", customer2, sales, 50000)
-    g.purchase_with_vat("A desk at 400, paid from the bank", bank, furniture, vat, 40000, 21)
     return g
