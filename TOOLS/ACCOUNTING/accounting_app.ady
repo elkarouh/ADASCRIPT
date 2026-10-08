@@ -18,11 +18,18 @@ from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeou
 from karax/karax nimport setRenderer, redraw
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
-from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, place, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
 const WIDTH: float = 980.0
 const HEIGHT: float = 670.0
+const TOP_Y: float = 50.0 + 40.0        # the first row, under the side's title
+const ROW_STEP: float = 120.0
+const LABEL_ROOM: float = 50.0          # under the horizontal line, the profit and loss's titles
+
+# Account number A before B: by length, then digit by digit.
+def number_before(a: str, b: str) -> bool:
+    return len(a) < len(b) or (len(a) == len(b) and a < b)
 
 const LIVE_STYLE: str = """
 g.node { cursor: grab; }
@@ -57,6 +64,11 @@ table.accounts input, table.accounts select { font-size: 0.9em; }
 svg.graph { user-select: none; }
 div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone breaks out of the text column */
 g.tip { pointer-events: none; }
+g.sides { pointer-events: none; }
+path.split { stroke: #888; stroke-width: 2; stroke-dasharray: 10 6; fill: none; }
+text.side { font-size: 14px; font-weight: bold; fill: #666; }
+text.left { text-anchor: end; }
+text.right { text-anchor: start; }
 g.tip rect { fill: #fffbe6; stroke: #888; }
 text.tipline { font-size: 11px; white-space: pre; }
 text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
@@ -80,33 +92,72 @@ class Layout:
     var target: str = ""                # the account the arrow from it was dropped on, or ""
     var drawing: bool = False           # an arrow is being drawn from the frozen account
     var popup: bool = False             # the transaction's popup is open
+    var split_x: float = WIDTH / 2.0      # the vertical line: Activa left, Passiva right
+    var pl_y: float = 0.0               # the horizontal line above the profit and loss
+    var page_height: float = HEIGHT       # the drawing's height in the page, kept while the graph is alone
+    var top_y: float = 0.0              # the top of the balance sheet (moved down with the graph alone)
+    var has_pl: bool = False            # whether there are costs or revenue to put below it
 
-    # An account of G that has no place yet gets the example's (place), or
-    # the first spot on the grid that no account is near.
-    def sync(self, g: Graph):
-        for a in g.accounts:
-            if a.name not in self.names:
-                var p: Point = place(a)
-                if p.x < 0.0:
-                    p = self.free_spot()
-                self.names.append(a.name)
-                self.points.append(p)
+    # The accounts laid out as a balance sheet: a vertical line, the assets
+    # (Activa) left of it and equity and debts (Passiva) right; below a
+    # horizontal line the profit and loss, costs left and revenue right, as
+    # the Belgian layout has them. Each side in account-number order, two to a
+    # row. Laid out again whenever the accounts change, so a new one lands in
+    # its place; dragging moves one until then.
+    def sync(self, rows: []AccountRow):
+        var same: bool = len(rows) == len(self.names)
+        for r in rows:
+            if r.name not in self.names:
+                same = False
+        if not same:
+            self.arrange(rows)
         if not self.graph_only:
+            self.height = 300.0                 # as tall as the accounts need
             for p in self.points:
-                self.height = max(self.height, p.y + NODE_RADIUS + 18.0)
+                self.height = max(self.height, p.y + NODE_RADIUS + 30.0)
 
-    def free_spot(self) -> Point:
-        var row: int = 0
-        while True:
-            for x in [80.0, 270.0, 480.0, 700.0]:
-                let y: float = 50.0 + 140.0 * float(row)
-                var taken: bool = False
-                for p in self.points:
-                    if abs(p.x - x) < 2.0 * NODE_RADIUS and abs(p.y - y) < 2.0 * NODE_RADIUS:
-                        taken = True
-                if not taken:
-                    return Point(x, y)
-            row += 1
+    def arrange(self, rows: []AccountRow):
+        var sorted: []AccountRow = rows
+        for i in range(1, len(sorted)):          # by number: few accounts, an insertion sort
+            var j: int = i
+            while j > 0 and number_before(sorted[j].number, sorted[j - 1].number):
+                let t: AccountRow = sorted[j]
+                sorted[j] = sorted[j - 1]
+                sorted[j - 1] = t
+                j -= 1
+        var activa: []str = []
+        var passiva: []str = []
+        var costs: []str = []
+        var revenue: []str = []
+        for r in sorted:
+            case r.kind:
+                when ASSET:
+                    activa.append(r.name)
+                when LIABILITY | EQUITY:
+                    passiva.append(r.name)
+                when EXPENSE:
+                    costs.append(r.name)
+                when REVENUE:
+                    revenue.append(r.name)
+        let mid: float = self.width / 2.0
+        self.split_x = mid
+        self.top_y = 0.0
+        self.names = []
+        self.points = []
+        let top_rows: int = max((len(activa) + 1) // 2, (len(passiva) + 1) // 2)
+        self.place_side(activa, mid - 370.0, TOP_Y)
+        self.place_side(passiva, mid + 150.0, TOP_Y)
+        self.has_pl = len(costs) + len(revenue) > 0
+        self.pl_y = TOP_Y + float(max(top_rows, 1)) * ROW_STEP - 30.0
+        let pl_top: float = self.pl_y + 30.0 + LABEL_ROOM
+        self.place_side(costs, mid - 370.0, pl_top)
+        self.place_side(revenue, mid + 150.0, pl_top)
+
+    # NAMES two to a row, from (X, Y): X and X + 220.
+    def place_side(self, names: []str, x: float, y: float):
+        for i in range(len(names)):
+            self.names.append(names[i])
+            self.points.append(Point(x + 220.0 * float(i % 2), y + ROW_STEP * float(i // 2)))
 
     # A transaction is drawn: a click on an account freezes it (it no longer
     # moves), an arrow is dragged from it to another account, and letting go
@@ -244,22 +295,20 @@ class Layout:
     # again, the accounts moved back (and kept inside if they strayed).
     def toggle_graph_only(self):
         let was_width: float = self.width
-        let was_height: float = self.height
         self.graph_only = not self.graph_only
         self.tip = ""
         if self.graph_only:
+            self.page_height = self.height
             self.width = float(window.innerWidth) - 20.0
-            self.height = max(float(window.innerHeight) - 90.0, HEIGHT)
+            self.height = max(float(window.innerHeight) - 90.0, self.page_height)
         else:
             self.width = WIDTH
-            self.height = HEIGHT
-            for p in self.points:
-                self.height = max(self.height, p.y + NODE_RADIUS + 18.0)
+            self.height = self.page_height     # as it was, so the accounts move back where they were
         let dx: float = (self.width - was_width) / 2.0
-        let dy: float = (self.height - was_height) / 2.0
+        self.split_x += dx                     # centred across; the extra height goes below
         for i in range(len(self.points)):
             self.held = i
-            self.move_to(self.points[i].x + dx, self.points[i].y + dy)
+            self.move_to(self.points[i].x + dx, self.points[i].y)
         self.held = -1
 
     def view_box(self) -> str:
@@ -307,7 +356,7 @@ def on_books(status: int, response: cstring):
             if replaced:
                 layout.reset()
                 replaced = False
-            layout.sync(graph)
+            layout.sync(books.accounts)
             if message.startswith("Asking"):
                 say("", False)
 
@@ -729,6 +778,26 @@ def journal_html() -> Html:
             for i in range(len(books.entries)):
                 + journal_row_html(i)
 
+# The balance sheet's lines and the titles of its sides, under the graph.
+def sides_html() -> Html:
+    let x: float = layout.split_x
+    let y: float = layout.pl_y
+    let down: str = f"M {px(x)} {px(layout.top_y + 8.0)} L {px(x)} {px(layout.height - 8.0)}"
+    let across: str = f"M 8 {px(y)} L {px(layout.width - 8.0)} {px(y)}"
+    let lx: str = px(x - 16.0)
+    let rx: str = px(x + 16.0)
+    let ty: str = px(layout.top_y + 28.0)
+    let by: str = px(y + 30.0)
+    html:
+        g class="sides":
+            path class="split" d=down
+            stext class="side left" x=lx y=ty: "Activa: what the company owns"
+            stext class="side right" x=rx y=ty: "Passiva: what it owes, to its owners and others"
+            if layout.has_pl:
+                path class="split" d=across
+                stext class="side left" x=lx y=by: "Costs (charges)"
+                stext class="side right" x=rx y=by: "Revenue (produits)"
+
 def live_graph_html(g: Graph) -> Html:
     let rubber: str = (layout.rubber_d() if layout.drawing else "")
     html:
@@ -738,6 +807,7 @@ def live_graph_html(g: Graph) -> Html:
                     polygon points="0 0, 10 3.5, 0 7"
                 marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
                     polygon class="now" points="0 0, 4.3 1.5, 0 3"
+            + sides_html()
             for f in g.flows:
                 + live_arrow_html(g, f)
             for a in g.accounts:

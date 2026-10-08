@@ -30,6 +30,10 @@ Save as keeps your version as a scenario of its own.
 The page draws the scenario's books: the accounts as nodes (drag them
 about), the money that moved between them as arrows, the transactions below
 the graph, then the accounts, the profit and loss and the balance sheet.
+The drawing is laid out like a balance sheet: a dashed line down the middle
+puts the assets (activa) on the left and the liabilities and equity
+(passiva) on the right; below a dashed line across, the costs sit on the
+left and the revenue on the right, as in a profit and loss account.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the
