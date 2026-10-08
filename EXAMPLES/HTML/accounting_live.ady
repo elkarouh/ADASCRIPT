@@ -101,9 +101,12 @@ class Layout:
     def drop(self):
         self.held = -1
 
-    # The graph alone fills the window, one drawing unit per pixel; back in
-    # the page it returns to WIDTH x HEIGHT, and the accounts are pulled in.
+    # The graph alone fills the window, one drawing unit per pixel, the
+    # accounts moved to its middle; back in the page it is WIDTH x HEIGHT
+    # again, the accounts moved back (and kept inside if they strayed).
     def toggle_graph_only(self):
+        let was_width: float = self.width
+        let was_height: float = self.height
         self.graph_only = not self.graph_only
         self.tip = ""
         if self.graph_only:
@@ -112,10 +115,12 @@ class Layout:
         else:
             self.width = WIDTH
             self.height = HEIGHT
-            for i in range(len(self.points)):
-                self.held = i
-                self.move_to(self.points[i].x, self.points[i].y)
-            self.held = -1
+        let dx: float = (self.width - was_width) / 2.0
+        let dy: float = (self.height - was_height) / 2.0
+        for i in range(len(self.points)):
+            self.held = i
+            self.move_to(self.points[i].x + dx, self.points[i].y + dy)
+        self.held = -1
 
     def view_box(self) -> str:
         return f"0 0 {self.width:.0f} {self.height:.0f}"
