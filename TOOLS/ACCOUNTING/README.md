@@ -18,7 +18,7 @@ the graph, then the accounts, the profit and loss and the balance sheet.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the
-account the money reaches and let go there (or just click that account): a
+account the money reaches, holding the button down, and let go there: a
 popup asks for the date, what happened, the amount and the VAT. Enter
 records it, Escape or Cancel closes it; a click on the frozen account, or
 Escape, lets it go. With VAT, the amount is before VAT, and the VAT goes to

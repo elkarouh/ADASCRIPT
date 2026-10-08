@@ -2,7 +2,7 @@
 #ady2nim-args js
 """The books of the ledger, drawn in the browser and kept by clicking: the
 accounts are nodes to drag, the money that moved between them arrows, and
-two clicks and an amount record a transaction.
+a click, a dragged arrow and an amount record a transaction.
 
     make app       (builds the page and ledger_server, runs it, opens the page)
 
@@ -139,8 +139,9 @@ class Layout:
         return abs(self.mouse_x - self.grabbed_x) < 4.0 and abs(self.mouse_y - self.grabbed_y) < 4.0
 
     # The mouse let go: an arrow ends on its target, or a click lets the
-    # frozen account go; a held account is dropped, or, if it did not move,
-    # frozen (or, with another frozen, taken as the target).
+    # frozen account go; a held account is dropped, or, if it did not move
+    # and none is frozen, frozen. Only an arrow dragged onto an account opens
+    # the popup: a click on it, or the mouse passing over it, does not.
     def release(self):
         if self.drawing:
             self.drawing = False
@@ -153,11 +154,8 @@ class Layout:
             let name: str = self.names[self.held]
             let clicked: bool = self.still()
             self.held = -1
-            if clicked:
-                if self.source == "":
-                    self.source = name
-                else:
-                    self.open_popup(name)
+            if clicked and self.source == "":
+                self.source = name
 
     def index(self, a: Account) -> int:
         for i in range(len(self.names)):
@@ -426,7 +424,7 @@ def record_html() -> Html:
     let message_class: str = ("message refused" if refused else "message")
     let hint: str = ("To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
                      if layout.source == "" else
-                     f"{layout.source} is frozen: drag an arrow from it to the account the money reaches (or click that account). Click {layout.source} again, or press Escape, to let it go.")
+                     f"{layout.source} is frozen: drag an arrow from it to the account the money reaches. Click {layout.source} again, or press Escape, to let it go.")
     html:
         div class="record":
             p: hint
@@ -558,6 +556,8 @@ def on_move(e: Event):
     let scale: float = layout.width / box.width    # the svg is drawn at the page's width
     layout.mouse_x = (float(m.clientX) - box.left) * scale
     layout.mouse_y = (float(m.clientY) - box.top) * scale
+    if layout.drawing and m.buttons == 0:               # let go where on_up did not see it: no arrow
+        layout.drawing = False
     layout.move_to(layout.mouse_x, layout.mouse_y)      # when an account is held
     if layout.held >= 0 or layout.tip != "" or layout.drawing:
         redraw()
