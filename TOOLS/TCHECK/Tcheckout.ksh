@@ -87,7 +87,7 @@ parse_target() {        # <system>/<subsystem>/<path> -> target system sub file
   sub=${system}/${rest%%/*}; file=${rest#*/}
 }
 
-[[ -n "${cache}" ]] || [[ -n "${root}" ]] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
+[[ -n "${cache}" || -n "${root}" ]] || cache=${TCHECK_NM_CACHE:-$HOME/Downloads/.cache/tcheck/NM}
 
 if [[ -n "${all}" ]]; then
   # every file -l lists, taken out one by one: the others still, when one
@@ -113,7 +113,7 @@ if [[ -n "${cache}" ]]; then
     for repo in "${cache}"/*/*; do
       [[ -e "${repo}/.git" ]] || continue
       path=${repo#"${cache}"/}
-      [[ -z "${only}" ]] || [[ "${path}" = "${only}" ]] || continue
+      [[ -z "${only}" || "${path}" = "${only}" ]] || continue
       git -C "${repo}" sparse-checkout list | sed "s|^/*|${path}/|"
     done
     exit 0
@@ -173,7 +173,7 @@ if [[ -n "${cache}" ]]; then
   # a named revision already checked out: nothing more to do (see above);
   # otherwise, the file at the first named revision that has it, else at
   # the tip
-  if [[ -n "${revs}" ]] && [[ -z "${fresh}" ]] && [[ -e "${work}/${file}" ]] &&
+  if [[ -n "${revs}" && -z "${fresh}" && -e "${work}/${file}" ]] &&
      git -C "${work}" cat-file -e "HEAD:${file}" 2>/dev/null; then
     exit 0
   fi
@@ -186,7 +186,7 @@ if [[ -n "${cache}" ]]; then
   # a previous run can have died between recording this commit and
   # materialising the file (an interrupted process, a full disk): the
   # on-disk check re-checks it out rather than trusting HEAD alone
-  if [[ "${at}" != "$(git -C "${work}" rev-parse -q --verify HEAD 2>/dev/null)" ]] || [[ ! -e "${work}/${file}" ]]; then
+  if [[ "${at}" != "$(git -C "${work}" rev-parse -q --verify HEAD 2>/dev/null)" || ! -e "${work}/${file}" ]]; then
     git -C "${work}" -c advice.detachedHead=false checkout -q -f "${at}" || die "could not check out ${at} in ${work}"
   fi
   git -C "${work}" cat-file -e "${at}:${file}" 2>/dev/null || die "no such file: ${target} is not in ${sub} at ${at}"
@@ -221,7 +221,7 @@ if [[ ${mode} = list ]]; then
   [[ $# -le 1 ]] || die "usage: ${PROG} [-root DIR] -l [<system>/<subsystem>]"
   only=${1%/}
   submodule_paths | while read -r name path; do
-    [[ -z "${only}" ]] || [[ "${path}" = "${only}" ]] || continue
+    [[ -z "${only}" || "${path}" = "${only}" ]] || continue
     checked_out "${root}/${path}" && sparse "${root}/${path}" || continue
     git -C "${root}/${path}" sparse-checkout list | sed "s|^/*|${path}/|"
   done
