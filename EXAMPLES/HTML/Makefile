@@ -58,5 +58,9 @@ test:
 	$(ADY2PY) test_accounting_model.ady > build/test_accounting_model.py
 	python3 build/test_accounting_model.py
 
+# Everything generated: build/, any page written next to the sources (all
+# .html but index.html), the counter's script, and the binaries ady2nim
+# leaves beside each .ady.
 clean:
-	rm -rf build html_counter.js
+	rm -rf build html_counter.js $(filter-out index.html,$(wildcard *.html)) \
+	    $(basename $(wildcard *.ady))
