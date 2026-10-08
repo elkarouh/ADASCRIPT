@@ -12,7 +12,7 @@ document's mousemove and mouseup move it and let it go, and karax redraws.
 
 Needs karax: `nimble install karax@1.5.0`.
 """
-from dom nimport Event, MouseEvent, BoundingRect, document, getElementById, getBoundingClientRect, addEventListener
+from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementById, getBoundingClientRect, addEventListener
 from karax/karax nimport setRenderer, redraw
 from accounting_model import Account, Flow, Graph, kleppmann
 from accounting_gui import STYLE, GRAPH_TEXT, TITLE, INTRO, NODE_RADIUS, Point, px, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
@@ -23,6 +23,7 @@ const HEIGHT: float = 390.0
 const LIVE_STYLE: str = """
 g.node { cursor: grab; }
 svg.graph { user-select: none; }
+div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone breaks out of the text column */
 g.tip { pointer-events: none; }
 g.tip rect { fill: #fffbe6; stroke: #888; }
 text.tipline { font-size: 11px; white-space: pre; }
@@ -38,6 +39,8 @@ class Layout:
     var tip: str = ""                   # what the arrow under the mouse lists, or ""
     var mouse_x: float = 0.0            # where the mouse is, in the drawing's units
     var mouse_y: float = 0.0
+    var width: float = WIDTH            # the drawing's size: WIDTH x HEIGHT, or the window's when graph_only
+    var height: float = HEIGHT
     var graph_only: bool = False        # True: the graph alone, without the text and tables
 
     def start(self, g: Graph):
@@ -75,8 +78,8 @@ class Layout:
             widest = max(widest, len(line))
         let w: float = float(widest) * 6.2 + 16.0
         let h: float = float(len(lines)) * 15.0 + 8.0
-        let x: float = (self.mouse_x + 14.0 if self.mouse_x + 14.0 + w <= WIDTH else max(self.mouse_x - 14.0 - w, 0.0))
-        let y: float = (self.mouse_y + 14.0 if self.mouse_y + 14.0 + h <= HEIGHT else max(self.mouse_y - 14.0 - h, 0.0))
+        let x: float = (self.mouse_x + 14.0 if self.mouse_x + 14.0 + w <= self.width else max(self.mouse_x - 14.0 - w, 0.0))
+        let y: float = (self.mouse_y + 14.0 if self.mouse_y + 14.0 + h <= self.height else max(self.mouse_y - 14.0 - h, 0.0))
         let top: float = y + 16.0
         let left: float = x + 8.0
         html:
@@ -92,15 +95,30 @@ class Layout:
     def move_to(self, x: float, y: float):
         if self.held >= 0:
             self.points[self.held] = Point(
-                min(max(x, NODE_RADIUS), WIDTH - NODE_RADIUS),
-                min(max(y, NODE_RADIUS), HEIGHT - NODE_RADIUS))
+                min(max(x, NODE_RADIUS), self.width - NODE_RADIUS),
+                min(max(y, NODE_RADIUS), self.height - NODE_RADIUS))
 
     def drop(self):
         self.held = -1
 
+    # The graph alone fills the window, one drawing unit per pixel; back in
+    # the page it returns to WIDTH x HEIGHT, and the accounts are pulled in.
     def toggle_graph_only(self):
         self.graph_only = not self.graph_only
         self.tip = ""
+        if self.graph_only:
+            self.width = float(window.innerWidth) - 20.0
+            self.height = max(float(window.innerHeight) - 90.0, HEIGHT)
+        else:
+            self.width = WIDTH
+            self.height = HEIGHT
+            for i in range(len(self.points)):
+                self.held = i
+                self.move_to(self.points[i].x, self.points[i].y)
+            self.held = -1
+
+    def view_box(self) -> str:
+        return f"0 0 {self.width:.0f} {self.height:.0f}"
 
 var layout: Layout = Layout()
 
@@ -132,7 +150,7 @@ def live_button_html() -> Html:
 
 def live_graph_html(g: Graph) -> Html:
     html:
-        svg id="graph" viewBox="0 0 780 390" class="graph":
+        svg id="graph" viewBox=layout.view_box() class="graph":
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
@@ -150,7 +168,7 @@ def live_graph_html(g: Graph) -> Html:
 def on_move(e: Event):
     let m: MouseEvent = MouseEvent(e)
     let box: BoundingRect = document.getElementById("graph").getBoundingClientRect()
-    let scale: float = WIDTH / box.width    # the svg is drawn at the page's width
+    let scale: float = layout.width / box.width    # the svg is drawn at the page's width
     layout.mouse_x = (float(m.clientX) - box.left) * scale
     layout.mouse_y = (float(m.clientY) - box.top) * scale
     layout.move_to(layout.mouse_x, layout.mouse_y)      # when an account is held
@@ -173,8 +191,9 @@ def main():
                 [live_graph_html(books), books.edges.to_html()])]
         for s in sections_after_graph(books):
             sections.append(s)
+        let wide: str = ("wide" if layout.graph_only else "")
         html:
-            div:
+            div class=wide:
                 style: STYLE + LIVE_STYLE
                 + live_button_html()
                 if layout.graph_only:
