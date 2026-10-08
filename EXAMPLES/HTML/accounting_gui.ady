@@ -30,7 +30,8 @@ path.hit { fill: none; stroke: transparent; stroke-width: 12; }
 g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
 polygon { fill: #555; }
 circle.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
-circle.blue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 4; }
+circle.revenue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 4; }
+circle.expense { fill: #fbd29c; stroke: #c06a00; stroke-width: 4; }
 circle.pink { fill: #f8d6e6; stroke: #b05a85; stroke-width: 1.5; }
 text.label { text-anchor: middle; dominant-baseline: middle; font-size: 11px; }
 text.amount { text-anchor: middle; font-size: 11px; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
@@ -52,7 +53,7 @@ def css_of(a: Account) -> str:
         when GREEN:
             return "green"
         when BLUE:
-            return "blue"
+            return ("revenue" if a.balance < 0 else "expense")    # revenue is a negative balance
         when PINK:
             return "pink"
 
@@ -265,7 +266,7 @@ def sections_after_graph(g: Graph) -> []Html:
              g.equity_lines().to_html("Total equity", g.equity())]),
     ]
 
-const GRAPH_TEXT: str = "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and expense, pink for the money its shareholders put in."
+const GRAPH_TEXT: str = "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and orange for expense (both with a thick border), pink for the money its shareholders put in."
 
 const TITLE: str = "Accounting for computer scientists"
 const INTRO: str = "Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program."
