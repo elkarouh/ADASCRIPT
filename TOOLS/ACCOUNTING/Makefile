@@ -6,8 +6,7 @@
 #   make app        the tool: the books drawn in the browser, kept by clicking
 #                   (ledger_server serves accounting_app; each scenario,
 #                   scenarios/NAME.books, gets a database NAME.db there)
-#   make ledger     build the ledger's command line (./ledger -h)
-#   make example    a fresh accounting.db, holding the example company's year
+#   make ledger     build the ledger's command line (./ledger -h, ./ledger list)
 #   make gui        the example as a static web page      (accounting_gui.ady)
 #   make test       the model and the ledger, no GUI (Nim only)
 #   make all        build the programs and the pages, open none
@@ -21,7 +20,7 @@ ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8802
 
-.PHONY: all app ledger ledger_server example gui test clean
+.PHONY: all app ledger ledger_server gui test clean
 
 all: ledger ledger_server build/accounting_gui.html build/accounting_app.js
 
@@ -34,12 +33,6 @@ ledger_server: ledger_server.ady ledger.ady books_text.ady accounting_model.ady
 	@echo "building ledger_server"
 	@$(ADY2NIM) c ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
-
-# A fresh database each time: the example goes in an empty one.
-example: ledger
-	rm -f accounting.db
-	./ledger example
-	./ledger show
 
 build/accounting_gui.html: accounting_gui.ady accounting_model.ady
 	@mkdir -p build
@@ -66,4 +59,4 @@ test:
 	$(ADY2NIM) c -r test_ledger.ady 2>/dev/null
 
 clean:
-	rm -rf build *.js accounting.db scenarios/*.db $(basename $(wildcard *.ady))
+	rm -rf build *.js scenarios/*.db $(basename $(wildcard *.ady))

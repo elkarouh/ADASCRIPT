@@ -24,18 +24,16 @@ A scenario is a pair of files in scenarios/, beside the config file:
 NAME.books, the books as text, and NAME.db, the database the page changes,
 made from NAME.books the first time NAME is shown and again by Start over.
 """
-from os nimport walkFiles, removeFile, fileExists, splitFile
-from algorithm nimport sort
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from accounting_model import BookFailure_T, Entry
 from books_text import AccountRow, Books, parse_books, text_of_books
-from ledger import Config, Ledger, read_config
+from ledger import Config, Ledger, Scenarios, read_config
 
-var config: Config = Config(Path("accounting.db"), "USD", [])
+var config: Config = Config("USD", [])
 var books: Ledger = Ledger(":memory:")
 var www: Path = Path("build")            # where the page is: build/, beside the config file
-var scenarios: Path = Path("scenarios")  # the scenarios, beside the config file
+var scenarios: Scenarios = Scenarios(Path("scenarios"))   # beside the config file
 var current: str = ""                    # the scenario shown
 
 const PAGES: []str = ["app.html", "accounting_app.js"]
@@ -49,96 +47,36 @@ def answer(r: None | !BookFailure_T) -> str:
     return "ok"
 
 # ---------------------------------------------------------------------
-# Scenarios
+# Scenarios (ledger.ady's Scenarios): the one shown, and the others
 # ---------------------------------------------------------------------
-
-def books_file(name: str) -> Path:
-    return scenarios / (name + ".books")
-
-def db_file(name: str) -> Path:
-    return scenarios / (name + ".db")
-
-# The scenarios there are, by name, in order.
-def scenario_names() -> []str:
-    var names: []str = []
-    for f in walkFiles(str(scenarios / "*.books")):
-        names.append(splitFile(f).name)
-    names.sort()
-    return names
-
-def title_of(name: str) -> str:
-    let text: str | !PathFailure_T = books_file(name).read_text()
-    if text is PathFailure_T:
-        return name
-    for line in text.split("\n"):
-        if line.startswith("title\t"):
-            return line[6:]
-    return name
 
 def scenarios_text() -> str:
     var text: str = f"current\t{current}\n"
-    for name in scenario_names():
-        text += f"scenario\t{name}\t{title_of(name)}\n"
+    for name in scenarios.names():
+        text += f"scenario\t{name}\t{scenarios.title_of(name)}\n"
     return text
-
-# A name a scenario's files can have: letters, digits, _ and -.
-def good_name(name: str) -> bool:
-    if name == "" or len(name) > 60:
-        return False
-    for c in name:
-        if not (c.isAlphaNumeric() or c == '_' or c == '-'):
-            return False
-    return True
-
-# Scenario NAME's database made afresh from its .books file.
-def make_db(name: str) -> None | !BookFailure_T:
-    let db: str = str(db_file(name))
-    do:
-        text <- books_file(name).read_text() else BookFailure_T(f"cannot read {books_file(name)}")
-        b <- parse_books(text)
-    if fileExists(db):
-        removeFile(db)
-    var made: Ledger = Ledger(db)
-    let loaded: None | !BookFailure_T = made.load(b)
-    made.close()
-    if loaded is BookFailure_T:
-        removeFile(db)
-        return BookFailure_T(f"{name}.books: {loaded.detail}")
 
 # Scenario NAME shown, its database made from its .books file first if it
 # has none, or if FRESH (Start over).
 def show(name: str, fresh: bool) -> None | !BookFailure_T:
-    if not good_name(name) or not fileExists(str(books_file(name))):
+    if not scenarios.exists(name):
         return BookFailure_T(f"there is no scenario {name}")
     if current != "":
         books.close()
-    if fresh or not fileExists(str(db_file(name))):
-        let made: None | !BookFailure_T = make_db(name)
-        if made is BookFailure_T:
-            if current != "":
-                books = Ledger(str(db_file(current)))
-            return made
-    books = Ledger(str(db_file(name)))
+    let opened: Ledger | !BookFailure_T = scenarios.open(name, fresh)
+    if opened is BookFailure_T:
+        if current != "":
+            books = Ledger(str(scenarios.db_file(current)))
+        return opened
+    else:
+        books = opened
     current = name
     return None
 
-# The books shown, saved as scenario NAME (NAME.books, then NAME.db from
-# it), and shown.
+# The books shown, saved as scenario NAME, and shown.
 def save_as(name: str) -> None | !BookFailure_T:
-    if not good_name(name):
-        return BookFailure_T(f"'{name}': a scenario's name is letters, digits, _ and -")
-    if fileExists(str(books_file(name))):
-        return BookFailure_T(f"there is already a scenario {name}")
-    var b: Books = books.books(config.currency)
-    b.ids = []
-    for e in b.entries:
-        b.ids.append(0)                 # a scenario's entries have no number yet
-    if b.title == "" or b.title == title_of(current):
-        b.title = f"{b.title} ({name})" if b.title != "" else name
-    let written: None | !PathFailure_T = books_file(name).write_text(
-        f"# scenarios/{name}.books, saved from {current} by the page.\n" + text_of_books(b))
-    if written is PathFailure_T:
-        return BookFailure_T(f"{written.op} {written.path}: {written.reason}")
+    do:
+        scenarios.save_as(books, current, name, config.currency)
     return show(name, True)
 
 # What the page posts to PATH, done; the answer to send back.
@@ -222,14 +160,14 @@ def main():
     else:
         config = read
     www = conf_path.parent / "build"
-    scenarios = conf_path.parent / "scenarios"
-    let names: []str = scenario_names()
+    scenarios = Scenarios(conf_path.parent / "scenarios")
+    let names: []str = scenarios.names()
     if len(names) == 0:
-        die(f"no scenario in {scenarios}: no *.books file")
+        die(f"no scenario in {scenarios.dir}: no *.books file")
     let shown: None | !BookFailure_T = show((first if first != "" else names[0]), False)
     if shown is BookFailure_T:
         die(shown.detail)
-    print f"scenario {current} of {scenarios}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    print f"scenario {current} of {scenarios.dir}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))
 

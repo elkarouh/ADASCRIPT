@@ -1,33 +1,39 @@
 #!/usr/bin/env ady2nim
-"""ledger -- the books of accounting_model.ady, kept in an SQLite database.
+"""ledger -- the books of accounting_model.ady, kept in an SQLite database,
+one per scenario, and a command line to keep them.
 
-    ledger [--config FILE] [--db FILE] COMMAND ...
+    ledger [--config FILE] list                    the scenarios, with their titles
+    ledger [--config FILE] new NAME                a new scenario: the config's chart, no transaction
+    ledger [--config FILE] SCENARIO COMMAND ...
 
-    init                          create the database, with the accounts of the config file
-    example                       init, then record the example company's year
+    show                          the accounts and their balances, and the statements
+    journal                       every transaction, numbered, with what it did to each account
     account NUMBER KIND NAME...   open an account: KIND is asset, liability, equity,
                                   revenue or expense
     add DATE WHAT ACCOUNT=AMOUNT...
                                   record a transaction: each ACCOUNT (a number or a name)
                                   gets AMOUNT, negative to take it out; they add up to zero
-    show                          the accounts and their balances, and the statements
-    journal                       every transaction, numbered, with what it did to each account
     delete NUMBER                 delete transaction NUMBER, as journal numbers it
     delete-account ACCOUNT        delete an account no transaction touches
-    load FILE                     write the books of FILE (scenarios/*.books) into an empty ledger
-    export                        the books as text, as load reads them
+    start-over                    the scenario back as its .books file has it
+    save-as NAME                  the books, saved as a new scenario NAME
+    export                        the books as text, as a .books file holds them
 
-The config file (accounting.conf in the current directory, or --config) names the
-database and holds the chart of accounts; --db names another database.
+A scenario is scenarios/NAME.books, beside the config file (accounting.conf
+in the current directory, or --config), and NAME.db there, made from it the
+first time NAME is used: the same books the page shows (ledger_server.ady).
 A transaction or an account that does not fit the books is refused, and
 nothing is written.
 
-    ledger example
-    ledger add 2012-01-02 "Printer paper" "Bank account=-12.10" Food=10.00 "VAT to recover=2.10"
-    ledger show
+    ledger list
+    ledger 2_vat show
+    ledger 2_vat add 2011-05-02 "Printer paper" "Bank account=-12.10" Furniture=10.00 "VAT to recover=2.10"
+    ledger 2_vat start-over
 """
 from db import DB
 from math nimport round
+from os nimport walkFiles, removeFile, fileExists, splitFile
+from algorithm nimport sort
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, example_entries, money_text
 from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
 
@@ -36,7 +42,6 @@ from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, 
 # ---------------------------------------------------------------------
 
 type Config is record:
-    database: Path
     currency: str
     accounts: []AccountRow
 
@@ -48,13 +53,12 @@ def is_number(word: str) -> bool:
             return False
     return True
 
-# The settings and accounts of the config file at PATH. A relative database
-# path is taken from the config file's directory.
+# The settings and accounts of the config file at PATH.
 def read_config(path: Path) -> Config | !BookFailure_T:
     let text: str | !PathFailure_T = path.read_text()
     if text is PathFailure_T:
         return bad(f"{text.op} {text.path}: {text.reason}")
-    var config: Config = Config(path.parent / "accounting.db", "USD", [])
+    var config: Config = Config("USD", [])
     var n: int = 0
     for raw in text.split("\n"):
         n += 1
@@ -71,8 +75,6 @@ def read_config(path: Path) -> Config | !BookFailure_T:
                 return bad(f"{path}:{n}: {kind.detail}")
             else:
                 config.accounts.append(AccountRow(words[0], kind, rest[len(words[1]):].strip()))
-        elif words[0] == "database":
-            config.database = path.parent / rest
         elif words[0] == "currency":
             config.currency = rest
         else:
@@ -259,24 +261,117 @@ def record_example(ledger: Ledger) -> None | !BookFailure_T:
             ledger.record(e)
 
 # ---------------------------------------------------------------------
+# Scenarios: NAME.books, the books as text, and NAME.db, made from it
+# ---------------------------------------------------------------------
+
+# A name a scenario's files can have: letters, digits, _ and -.
+def good_name(name: str) -> bool:
+    if name == "" or len(name) > 60:
+        return False
+    for c in name:
+        if not (c.isAlphaNumeric() or c == '_' or c == '-'):
+            return False
+    return True
+
+class Scenarios:
+    var dir: Path
+
+    def __init__(self, dir: Path):
+        self.dir = dir
+
+    def books_file(self, name: str) -> Path:
+        return self.dir / (name + ".books")
+
+    def db_file(self, name: str) -> Path:
+        return self.dir / (name + ".db")
+
+    def exists(self, name: str) -> bool:
+        return good_name(name) and fileExists(str(self.books_file(name)))
+
+    # The scenarios there are, by name, in order.
+    def names(self) -> []str:
+        var found: []str = []
+        for f in walkFiles(str(self.dir / "*.books")):
+            found.append(splitFile(f).name)
+        found.sort()
+        return found
+
+    def title_of(self, name: str) -> str:
+        let text: str | !PathFailure_T = self.books_file(name).read_text()
+        if text is PathFailure_T:
+            return name
+        for line in text.split("\n"):
+            if line.startswith("title\t"):
+                return line[6:]
+        return name
+
+    # NAME's database made afresh from its .books file.
+    def make_db(self, name: str) -> None | !BookFailure_T:
+        let db: str = str(self.db_file(name))
+        do:
+            text <- self.books_file(name).read_text() else BookFailure_T(f"cannot read {self.books_file(name)}")
+            b <- parse_books(text)
+        if fileExists(db):
+            removeFile(db)
+        var made: Ledger = Ledger(db)
+        let loaded: None | !BookFailure_T = made.load(b)
+        made.close()
+        if loaded is BookFailure_T:
+            removeFile(db)
+            return BookFailure_T(f"{name}.books: {loaded.detail}")
+
+    # NAME's ledger, its database made from its .books file first if it has
+    # none, or if FRESH (start over).
+    def open(self, name: str, fresh: bool) -> Ledger | !BookFailure_T:
+        if not self.exists(name):
+            return BookFailure_T(f"there is no scenario {name}")
+        if fresh or not fileExists(str(self.db_file(name))):
+            do:
+                self.make_db(name)
+        return Ledger(str(self.db_file(name)))
+
+    # Books B written as a new scenario NAME, the file starting with NOTE.
+    def write_books(self, name: str, b: Books, note: str) -> None | !BookFailure_T:
+        if not good_name(name):
+            return BookFailure_T(f"'{name}': a scenario's name is letters, digits, _ and -")
+        if fileExists(str(self.books_file(name))):
+            return BookFailure_T(f"there is already a scenario {name}")
+        var written: Books = b
+        written.ids = []
+        for e in b.entries:
+            written.ids.append(0)       # a scenario's entries have no number yet
+        let done: None | !PathFailure_T = self.books_file(name).write_text(f"# {note}\n" + text_of_books(written))
+        if done is PathFailure_T:
+            return BookFailure_T(f"{done.op} {done.path}: {done.reason}")
+
+    # The books KEPT, of scenario FROM_NAME, saved as a new scenario NAME.
+    def save_as(self, kept: Ledger, from_name: str, name: str, currency: str) -> None | !BookFailure_T:
+        var books_kept: Ledger = kept
+        var b: Books = books_kept.books(currency)
+        if b.title == "" or b.title == self.title_of(from_name):
+            b.title = (f"{b.title} ({name})" if b.title != "" else name)
+        return self.write_books(name, b, f"scenarios/{name}.books, saved from {from_name}.")
+
+# ---------------------------------------------------------------------
 # The command line
 # ---------------------------------------------------------------------
 
-const USAGE: str = """usage: ledger [--config FILE] [--db FILE] COMMAND ...
+const USAGE: str = """usage: ledger [--config FILE] list
+       ledger [--config FILE] new NAME
+       ledger [--config FILE] SCENARIO COMMAND ...
 
-    init                          create the database, with the accounts of the config file
-    example                       init, then record the example company's year
+    show                          the accounts and their balances, and the statements
+    journal                       every transaction, numbered, with what it did to each account
     account NUMBER KIND NAME...   open an account: KIND is asset, liability, equity,
                                   revenue or expense
     add DATE WHAT ACCOUNT=AMOUNT...
                                   record a transaction: each ACCOUNT (a number or a name)
                                   gets AMOUNT, negative to take it out; they add up to zero
-    show                          the accounts and their balances, and the statements
-    journal                       every transaction, numbered, with what it did to each account
     delete NUMBER                 delete transaction NUMBER, as journal numbers it
     delete-account ACCOUNT        delete an account no transaction touches
-    load FILE                     write the books of FILE (scenarios/*.books) into an empty ledger
-    export                        the books as text, as load reads them"""
+    start-over                    the scenario back as its .books file has it
+    save-as NAME                  the books, saved as a new scenario NAME
+    export                        the books as text, as a .books file holds them"""
 
 # 12.10 or -605 as cents.
 def cents_of(word: str) -> Cents_T | !BookFailure_T:
@@ -330,50 +425,30 @@ def journal(ledger: Ledger):
         for p in e.postings:
             print f"    {p.account:<20} {signed_text(p.amount):>12}"
 
-def main():
-    var conf_path: Path = Path("accounting.conf")
-    var db_path: str = ""
-    var words: []str = []
-    var i: int = 0
-    let args: []str = $@
-    while i < len(args):
-        if args[i] == "--config" and i + 1 < len(args):
-            conf_path = Path(args[i + 1])
-            i += 2
-        elif args[i] == "--db" and i + 1 < len(args):
-            db_path = args[i + 1]
-            i += 2
-        elif args[i] == "-h" or args[i] == "--help":
-            print USAGE
-            quit(0)
-        else:
-            words.append(args[i])
-            i += 1
-    die("no command, see -h") if len(words) == 0
-
-    let read: Config | !BookFailure_T = read_config(conf_path)
-    if read is BookFailure_T:
-        die(read.detail)
+# COMMAND (WORDS[0]) on the books of scenario NAME.
+def run_command(scenarios: Scenarios, config: Config, name: str, words: []str):
+    let command: str = words[0]
+    let opened: Ledger | !BookFailure_T = scenarios.open(name, command == "start-over")
+    if opened is BookFailure_T:
+        die(opened.detail)
     else:
-        let config: Config = read
-        var ledger: Ledger = Ledger(db_path if db_path != "" else str(config.database))
-        let command: str = words[0]
+        var ledger: Ledger = opened
         var done: None | !BookFailure_T = None
         case command:
-            when "init":
-                let opened: int | !BookFailure_T = open_chart(ledger, config)
-                if opened is BookFailure_T:
-                    done = opened
-                else:
-                    print f"{opened} accounts opened"
-            when "example":
-                let opened: int | !BookFailure_T = open_chart(ledger, config)
-                if opened is BookFailure_T:
-                    done = opened
-                else:
-                    done = record_example(ledger)
-                    if done is None:
-                        print f"{ledger.count('transactions')} transactions recorded"
+            when "show":
+                show(ledger, config)
+            when "journal":
+                journal(ledger)
+            when "start-over":
+                print f"{name}: {ledger.count('transactions')} transactions, as {name}.books has them"
+            when "export":
+                stdout.write(text_of_books(ledger.books(config.currency)))
+            when "save-as":
+                if len(words) != 2:
+                    die("save-as NAME")
+                done = scenarios.save_as(ledger, name, words[1], config.currency)
+                if done is None:
+                    print f"saved as scenario {words[1]}"
             when "account":
                 if len(words) < 4:
                     die("account NUMBER KIND NAME")
@@ -397,10 +472,6 @@ def main():
                 done = ledger.record(Entry(words[1], words[2], postings))
                 if done is None:
                     print "recorded"
-            when "show":
-                show(ledger, config)
-            when "journal":
-                journal(ledger)
             when "delete":
                 if len(words) != 2:
                     die("delete NUMBER   (the transaction's number, as journal shows it)")
@@ -411,22 +482,6 @@ def main():
                     done = ledger.delete_entry(id)
                     if done is None:
                         print f"transaction {id} deleted"
-            when "load":
-                if len(words) != 2:
-                    die("load FILE")
-                let text: str | !PathFailure_T = Path(words[1]).read_text()
-                if text is PathFailure_T:
-                    die(f"{text.op} {text.path}: {text.reason}")
-                else:
-                    let loaded: Books | !BookFailure_T = parse_books(text)
-                    if loaded is BookFailure_T:
-                        die(f"{words[1]}: {loaded.detail}")
-                    else:
-                        done = ledger.load(loaded)
-                        if done is None:
-                            print f"{ledger.count('accounts')} accounts, {ledger.count('transactions')} transactions loaded"
-            when "export":
-                stdout.write(text_of_books(ledger.books(config.currency)))
             when "delete-account":
                 if len(words) < 2:
                     die("delete-account ACCOUNT")
@@ -438,6 +493,44 @@ def main():
         ledger.close()
         if done is BookFailure_T:
             die(done.detail)
+
+def main():
+    var conf_path: Path = Path("accounting.conf")
+    var words: []str = []
+    var i: int = 0
+    let args: []str = $@
+    while i < len(args):
+        if args[i] == "--config" and i + 1 < len(args):
+            conf_path = Path(args[i + 1])
+            i += 2
+        elif args[i] == "-h" or args[i] == "--help":
+            print USAGE
+            quit(0)
+        else:
+            words.append(args[i])
+            i += 1
+    die("no command, see -h") if len(words) == 0
+
+    let read: Config | !BookFailure_T = read_config(conf_path)
+    if read is BookFailure_T:
+        die(read.detail)
+    else:
+        let config: Config = read
+        let scenarios: Scenarios = Scenarios(conf_path.parent / "scenarios")
+        if words[0] == "list":
+            for name in scenarios.names():
+                print f"{name:<24} {scenarios.title_of(name)}"
+        elif words[0] == "new":
+            die("new NAME") if len(words) != 2
+            var b: Books = Books(config.currency, config.accounts, [], [], words[1], "")
+            let made: None | !BookFailure_T = scenarios.write_books(words[1], b, f"scenarios/{words[1]}.books: the chart of {conf_path.name}, no transaction yet.")
+            if made is BookFailure_T:
+                die(made.detail)
+            print f"scenario {words[1]}: {len(config.accounts)} accounts, no transaction"
+        elif len(words) < 2:
+            die(f"{words[0]}: a scenario, then a command (see -h); `ledger list` lists the scenarios")
+        else:
+            run_command(scenarios, config, words[0], words[1:])
 
 if __name__ == "__main__":
     main()

@@ -45,7 +45,6 @@ def cents(word: str) -> Cents_T:
 let config: Config = config_of(Path("accounting.conf"))
 assert len(config.accounts) == 19
 assert config.currency == "USD"
-assert config.database.name == "accounting.db"
 
 var books: Ledger = Ledger(":memory:")
 assert number_of(open_chart(books, config)) == 19

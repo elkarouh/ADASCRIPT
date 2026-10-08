@@ -60,34 +60,38 @@ a title, about lines, the accounts, the transactions), and `NAME.db`, the
 database the page changes. ledger_server makes NAME.db from NAME.books the
 first time NAME is shown, and again on Start over; Save as writes the books
 shown to a new NAME.books. A new scenario is a new .books file: write it by
-hand, or record it in the page and Save as. `./ledger --db X.db load
-scenarios/NAME.books` and `./ledger --db X.db export` do the same on the
-command line. `ledger_server --scenario NAME` starts on NAME, else on the
-first.
+hand, record it in the page and Save as, or start one with `./ledger new
+NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 
 | File | What it is |
 |---|---|
 | `accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
-| `ledger.ady` | the books in an SQLite database, and a command line to keep them |
+| `ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
 | `ledger_server.ady` | serves the page, and the books to it; records what the page sends |
 | `books_text.ady` | the books as text, as the server and the page pass them |
 | `accounting_app.ady` | the page: the books drawn, and recorded by clicking |
-| `accounting.conf` | the ledger's settings and the chart of accounts it starts with |
+| `accounting.conf` | the currency and the chart of accounts a new scenario starts with |
 | `scenarios/*.books` | the scenarios the page offers |
 | `accounting_gui.ady` | the example as a static web page (`make gui`) |
 | `test_accounting_model.ady`, `test_ledger.ady` | the tests (`make test`) |
 
 ## The ledger
 
+The page's scenarios, on the command line: the same files, the same books.
+
 ```
 make ledger
-./ledger example                 # accounting.db, with Kleppmann's example company's whole year
-./ledger show                    # balances, profit and loss, balance sheet
-./ledger journal                 # every transaction, numbered, and what it did to each account
-./ledger delete 3                # transaction 3, as journal numbers it
-./ledger delete-account Fuel     # an account no transaction touches
-./ledger account 613100 expense Fuel
-./ledger add 2012-01-02 "Printer paper" "Bank account=-12.10" Food=10.00 "VAT to recover=2.10"
+./ledger list                          # the scenarios, with their titles
+./ledger 2_vat show                    # balances, profit and loss, balance sheet
+./ledger 2_vat journal                 # every transaction, numbered, and what it did to each account
+./ledger 2_vat add 2011-05-02 "Printer paper" "Bank account=-12.10" Furniture=10.00 "VAT to recover=2.10"
+./ledger 2_vat delete 6                # transaction 6, as journal numbers it
+./ledger 2_vat account 613100 expense Fuel
+./ledger 2_vat delete-account Fuel     # an account no transaction touches
+./ledger 2_vat start-over              # back as 2_vat.books has it
+./ledger 2_vat save-as vat_mine        # a new scenario, from these books
+./ledger 2_vat export                  # the books as a .books file holds them
+./ledger new mine                      # a new scenario: the config's chart, no transaction
 ```
 
 A transaction is a date, a description, and postings `ACCOUNT=AMOUNT`: the
@@ -99,7 +103,6 @@ sides (the graph could not tell which pays which); nothing is written then.
 ### accounting.conf
 
 ```
-database  accounting.db     # beside the config file, unless absolute
 currency  USD
 
 # number  kind        name
@@ -112,8 +115,8 @@ The numbers follow the Belgian chart of accounts (the first digit is the
 class: 1 equity and long-term debts, 2 fixed assets, 3 stock, 4 receivables
 and payables, 5 cash, 6 costs, 7 revenue); the kind is one of asset,
 liability, equity, revenue, expense, and decides the account's colour.
-`ledger init` opens the accounts of the config file that the database does
-not have yet. `--config FILE` and `--db FILE` choose others.
+`ledger new NAME` starts a scenario with these accounts. `--config FILE`
+chooses another config, and with it the scenarios/ beside it.
 
 ### The database
 
