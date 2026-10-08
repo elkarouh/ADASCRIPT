@@ -1,0 +1,35 @@
+#!/usr/bin/env ady2nim
+"""The accounting model on its own, no GUI: the article's figures.
+
+    ady2nim c -r test_accounting_model.ady     (or: ady2py)
+"""
+from accounting_model import Cents_T, Graph, kleppmann
+
+let g: Graph = kleppmann()
+
+# The two checks the article names.
+assert g.total() == 0
+assert g.net_assets() == g.equity()
+
+# Balances, in cents.
+assert g.balance("Bank account") == 2399500
+assert g.balance("Credit card") == -800
+assert g.balance("Furniture") == 37500
+assert g.balance("Customer 1") == 0
+assert g.balance("Customer 2") == 250000
+assert g.balance("Sales") == -1000000
+assert g.balance("Capital") == -2500000
+assert g.balance("Food") == 1300
+
+# The statements.
+assert g.profit() == 186200
+assert g.net_assets() == 2686200
+assert g.equity() == 2686200
+assert len(g.profit_and_loss()) == 4
+assert g.profit_and_loss()[0].label == "Revenue: Sales"
+
+# Two transactions between the same accounts are one flow.
+assert len(g.edges) == 12
+assert len(g.flows) == 10
+
+print "accounting model: all checks passed"

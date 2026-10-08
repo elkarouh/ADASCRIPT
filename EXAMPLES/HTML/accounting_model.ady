@@ -1,0 +1,164 @@
+"""The accounting of Martin Kleppmann's "Accounting for Computer Scientists"
+(2011, https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html),
+with no GUI in it.
+
+An account is a node, a transaction is an edge carrying an amount from one
+account to another, and a balance is what came in less what went out. The
+statements are read off the colours the article gives the accounts: blue
+(revenue and expense) makes the profit and loss, green (what is owned or
+owed) and pink (what the shareholders put in) make the balance sheet.
+
+Nothing here draws anything: test_accounting_model.ady checks it on its own,
+on both backends, and accounting_view.ady renders it.
+"""
+
+type Cents_T is distinct int
+
+# The article's colours: green is what you own or owe, blue is revenue and
+# expense, pink is what the shareholders put in.
+type Colour_T is enum GREEN, BLUE, PINK
+
+# A node of the graph. @virtual makes it a reference: the graph, its
+# transactions and whoever holds the account all share the one balance.
+@virtual
+class Account:
+    var name:    str
+    var colour:  Colour_T
+    var balance: Cents_T = 0
+
+    def __init__(self, name: str, colour: Colour_T):
+        self.name = name
+        self.colour = colour
+
+type Transaction is record:
+    what:   str
+    source: Account
+    target: Account
+    amount: Cents_T
+
+# What has flowed from one account to another, all transactions together.
+type Flow is record:
+    source: Account
+    target: Account
+    amount: Cents_T
+
+# One line of a statement.
+type Line is record:
+    label:  str
+    amount: Cents_T
+
+class Graph:
+    var accounts: []Account
+    var edges:    []Transaction
+    var flows:    []Flow
+
+    def __init__(self):
+        self.accounts = []
+        self.edges = []
+        self.flows = []
+
+    def add_account(self, name: str, colour: Colour_T) -> Account:
+        let a: Account = Account(name, colour)
+        self.accounts.append(a)
+        return a
+
+    def account(self, name: str) -> Account:
+        for a in self.accounts:
+            if a.name == name:
+                return a
+        raise KeyError(f"no account {name}")
+
+    def balance(self, name: str) -> Cents_T:
+        return self.account(name).balance
+
+    # One edge: money flows from source to target.
+    def transfer(self, what: str, source: Account, target: Account, amount: Cents_T):
+        source.balance -= amount
+        target.balance += amount
+        self.edges.append(Transaction(what, source, target, amount))
+        for i in range(len(self.flows)):
+            if self.flows[i].source == source and self.flows[i].target == target:
+                self.flows[i].amount += amount
+                return
+        self.flows.append(Flow(source, target, amount))
+
+    # Zero when the books balance: every edge is once positive, once negative.
+    def total(self) -> Cents_T:
+        var sum: Cents_T = 0
+        for a in self.accounts:
+            sum += a.balance
+        return sum
+
+    def sum_of(self, colour: Colour_T) -> Cents_T:
+        var sum: Cents_T = 0
+        for a in self.accounts:
+            if a.colour == colour:
+                sum += a.balance
+        return sum
+
+    # A negative balance on a blue account is revenue, so the sign flips.
+    def profit(self) -> Cents_T:
+        return -self.sum_of(BLUE)
+
+    # Assets less liabilities: the green accounts.
+    def net_assets(self) -> Cents_T:
+        return self.sum_of(GREEN)
+
+    # What the shareholders put in, and the profit made with it.
+    def equity(self) -> Cents_T:
+        return self.profit() - self.sum_of(PINK)
+
+    def profit_and_loss(self) -> []Line:
+        var lines: []Line = []
+        for a in self.accounts:
+            if a.colour == BLUE and a.balance < 0:
+                lines.append(Line(f"Revenue: {a.name}", -a.balance))
+        for a in self.accounts:
+            if a.colour == BLUE and a.balance > 0:
+                lines.append(Line(f"Expenses: {a.name}", a.balance))
+        return lines
+
+    def assets_and_liabilities(self) -> []Line:
+        var lines: []Line = []
+        for a in self.accounts:
+            if a.colour == GREEN and a.balance > 0:
+                lines.append(Line(f"Assets: {a.name}", a.balance))
+        for a in self.accounts:
+            if a.colour == GREEN and a.balance < 0:
+                lines.append(Line(f"Less liabilities: {a.name}", a.balance))
+        return lines
+
+    def equity_lines(self) -> []Line:
+        var lines: []Line = [Line("Equity: profit", self.profit())]
+        for a in self.accounts:
+            if a.colour == PINK:
+                lines.append(Line(f"Equity: {a.name}", -a.balance))
+        return lines
+
+# The article's company, every transaction in the order it tells them.
+def kleppmann() -> Graph:
+    var g: Graph = Graph()
+    let sales: Account = g.add_account("Sales", BLUE)
+    let customer1: Account = g.add_account("Customer 1", GREEN)
+    let customer2: Account = g.add_account("Customer 2", GREEN)
+    let capital: Account = g.add_account("Capital", PINK)
+    let card: Account = g.add_account("Credit card", GREEN)
+    let bank: Account = g.add_account("Bank account", GREEN)
+    let furniture: Account = g.add_account("Furniture", GREEN)
+    let payroll: Account = g.add_account("Payroll", BLUE)
+    let food: Account = g.add_account("Food", BLUE)
+    let depreciation: Account = g.add_account("Depreciation", BLUE)
+
+    g.transfer("A bagel on the company credit card", card, food, 500)
+    g.transfer("A chair, paid by cheque from the bank account", bank, furniture, 50000)
+    g.transfer("The founder puts in savings", capital, bank, 500000)
+    g.transfer("The credit card bill is paid from the bank", bank, card, 500)
+    g.transfer("A Super Burrito on the credit card", card, food, 800)
+    g.transfer("Sale to customer 1, agreed at 5,000", sales, customer1, 500000)
+    g.transfer("Sale to customer 2, agreed at 5,000", sales, customer2, 500000)
+    g.transfer("Customer 1 pays in full", customer1, bank, 500000)
+    g.transfer("Customer 2 pays half up front", customer2, bank, 250000)
+    g.transfer("Y Combinator invests", capital, bank, 2000000)
+    g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
+    g.transfer("The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
+    return g

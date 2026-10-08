@@ -1,42 +1,20 @@
 #!/usr/bin/env ady2nim
-"""Accounting for computer scientists, as a web page: accounts are objects.
+"""Accounting for computer scientists, as a web page.
 
-    ady2nim c -r accounting_objects.ady > accounting_objects.html
+    ady2nim c -r accounting_objects.ady > accounting_objects.html   (or: make objects)
 
-The same company and the same page as accounting_drawn.ady, written the other
-way round: an `Account` is an object that knows its own name, colour, place
-and balance and renders itself (as a circle in the drawing, as a row in the
-balance table), and a `Graph` holds the `Account` objects, moves money
-between them, and draws the arrows and the layout. See Martin Kleppmann's
-"Accounting for Computer Scientists" (2011,
+The accounting itself is accounting_model.ady: Account and Graph objects
+with no GUI in them, tested on their own by test_accounting_model.ady. This
+file only renders them: the graph drawn as an SVG (circles for the accounts,
+arrows for the money flowing), the transactions, the balances, the profit and
+loss statement and the balance sheet. See Martin Kleppmann's "Accounting for
+Computer Scientists" (2011,
 https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html).
 
-Needs karax: `nimble install karax`.
+Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
-
-type Cents_T is distinct int
-
-# The article colours its nodes: green is what you own or owe, blue is
-# revenue and expense, pink is what the shareholders put in.
-type Colour_T is enum GREEN, BLUE, PINK
-
-const NODE_RADIUS: float = 42.0
-
-# 1234567 cents -> "12,345.67"
-def money(c: Cents_T) -> str:
-    let a: Cents_T = abs(c)
-    let whole: str = f"{a // 100}"
-    var grouped: str = ""
-    for i in range(len(whole)):
-        if i > 0 and (len(whole) - i) % 3 == 0:
-            grouped += ","
-        grouped += whole[i]
-    let sign: str = "-" if c < 0 else ""
-    return f"{sign}{grouped}.{a % 100:02d}"
-
-def px(v: float) -> str:
-    return f"{v:.1f}"
+from accounting_model import Account, Cents_T, Colour_T, Flow, Graph, Line, Transaction, kleppmann
 
 const STYLE: str = """
 body { font-family: sans-serif; max-width: 52em; margin: 2em auto; padding: 0 1em; line-height: 1.45; }
@@ -58,359 +36,192 @@ table.statement { min-width: 22em; }
 tr.total td { font-weight: bold; border-top: 2px solid #333; }
 """
 
+const NODE_RADIUS: float = 42.0
+
+# 1234567 cents -> "12,345.67"
+def money(c: Cents_T) -> str:
+    let a: Cents_T = abs(c)
+    let whole: str = f"{a // 100}"
+    var grouped: str = ""
+    for i in range(len(whole)):
+        if i > 0 and (len(whole) - i) % 3 == 0:
+            grouped += ","
+        grouped += whole[i]
+    let sign: str = "-" if c < 0 else ""
+    return f"{sign}{grouped}.{a % 100:02d}"
+
+def px(v: float) -> str:
+    return f"{v:.1f}"
+
+def css_of(a: Account) -> str:
+    case a.colour:
+        when GREEN:
+            return "green"
+        when BLUE:
+            return "blue"
+        when PINK:
+            return "pink"
+
 # ---------------------------------------------------------------------
-# Widgets: each knows how to render itself
+# The layout: where each account sits in the drawing
 # ---------------------------------------------------------------------
 
-# What a Section or a Page holds: anything with a to_html. Only what goes
-# into one of those lists is a Widget; an Account and an Arrow are drawn by
-# the Graph and the tables, which know their types.
-@virtual
-class Widget:
-    def to_html(self) -> Html:
-        html:
-            div class="widget"
+type Point is record:
+    x: float
+    y: float
 
-# A node of the graph. Money flowing in adds to its balance, money flowing
-# out subtracts. @virtual makes it a reference: the graph, the transactions
-# and the variables of main() all share the one account.
-@virtual
-class Account:
-    var name:    str
-    var colour:  Colour_T
-    var x:       float
-    var y:       float
-    var balance: Cents_T = 0
+def place(a: Account) -> Point:
+    case a.name:
+        when "Sales":
+            return Point(80.0, 120.0)
+        when "Customer 1":
+            return Point(270.0, 50.0)
+        when "Customer 2":
+            return Point(270.0, 190.0)
+        when "Capital":
+            return Point(80.0, 330.0)
+        when "Credit card":
+            return Point(480.0, 50.0)
+        when "Bank account":
+            return Point(480.0, 190.0)
+        when "Furniture":
+            return Point(480.0, 330.0)
+        when "Payroll":
+            return Point(700.0, 190.0)
+        when "Food":
+            return Point(700.0, 50.0)
+        when others:
+            return Point(700.0, 330.0)        # Depreciation
 
-    def __init__(self, name: str, colour: Colour_T, x: float, y: float):
-        self.name = name
-        self.colour = colour
-        self.x = x
-        self.y = y
+# ---------------------------------------------------------------------
+# Rendering: one function per thing on the page
+# ---------------------------------------------------------------------
 
-    def css(self) -> str:
-        case self.colour:
-            when GREEN:
-                return "green"
-            when BLUE:
-                return "blue"
-            when PINK:
-                return "pink"
+# An account as a node: a circle with its name in it.
+def node_html(a: Account) -> Html:
+    let p: Point = place(a)
+    let cx: str = px(p.x)
+    let cy: str = px(p.y)
+    let css: str = css_of(a)
+    html:
+        g:
+            circle class=css cx=cx cy=cy r="42"
+            stext class="label" x=cx y=cy: a.name
 
-    def cx(self) -> str:
-        return px(self.x)
+# A flow as an arrow from the rim of one circle to the rim of the other,
+# with the amount in the middle.
+def arrow_html(f: Flow) -> Html:
+    let a: Point = place(f.source)
+    let b: Point = place(f.target)
+    let dx: float = b.x - a.x
+    let dy: float = b.y - a.y
+    let length: float = sqrt(dx * dx + dy * dy)
+    let ux: float = dx / length
+    let uy: float = dy / length
+    let tip: float = NODE_RADIUS + 2.0           # the head stops short of the circle
+    let x1: str = px(a.x + ux * NODE_RADIUS)
+    let y1: str = px(a.y + uy * NODE_RADIUS)
+    let x2: str = px(b.x - ux * tip)
+    let y2: str = px(b.y - uy * tip)
+    let lx: str = px((a.x + b.x) / 2.0)
+    let ly: str = px((a.y + b.y) / 2.0 - 6.0)
+    html:
+        g:
+            line class="edge" x1=x1 y1=y1 x2=x2 y2=y2
+            stext class="amount" x=lx y=ly: money(f.amount)
 
-    def cy(self) -> str:
-        return px(self.y)
+def graph_html(g: Graph) -> Html:
+    html:
+        svg viewBox="0 0 780 390" class="graph":
+            defs:
+                marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                    polygon points="0 0, 10 3.5, 0 7"
+            for f in g.flows:
+                + arrow_html(f)
+            for a in g.accounts:
+                + node_html(a)
 
-    # As a node of the drawing: a circle with the name in it.
-    def to_html(self) -> Html:
-        html:
-            g:
-                circle class=self.css() cx=self.cx() cy=self.cy() r="42"
-                stext class="label" x=self.cx() y=self.cy(): self.name
-
-    # As a row of the balance table.
-    def row_html(self) -> Html:
-        html:
+def edges_html(edges: []Transaction) -> Html:
+    html:
+        table:
             tr:
-                td class=self.css(): self.name
-                td class="num": money(self.balance)
-
-type Transaction is record:
-    what:   str
-    source: Account
-    target: Account
-    amount: Cents_T
-
-# What has flowed from one account to another, all transactions together.
-type Flow is record:
-    source: Account
-    target: Account
-    amount: Cents_T
-
-# An arrow from the rim of one circle to the rim of the other, with the
-# amount in the middle.
-class Arrow:
-    var x1:     str
-    var y1:     str
-    var x2:     str
-    var y2:     str
-    var lx:     str
-    var ly:     str
-    var amount: str
-
-    def __init__(self, source: Account, target: Account, amount: Cents_T):
-        let dx: float = target.x - source.x
-        let dy: float = target.y - source.y
-        let length: float = sqrt(dx * dx + dy * dy)
-        let ux: float = dx / length
-        let uy: float = dy / length
-        let tip: float = NODE_RADIUS + 2.0       # the head stops short of the circle
-        self.x1 = px(source.x + ux * NODE_RADIUS)
-        self.y1 = px(source.y + uy * NODE_RADIUS)
-        self.x2 = px(target.x - ux * tip)
-        self.y2 = px(target.y - uy * tip)
-        self.lx = px((source.x + target.x) / 2.0)
-        self.ly = px((source.y + target.y) / 2.0 - 6.0)
-        self.amount = money(amount)
-
-    def to_html(self) -> Html:
-        html:
-            g:
-                line class="edge" x1=self.x1 y1=self.y1 x2=self.x2 y2=self.y2
-                stext class="amount" x=self.lx y=self.ly: self.amount
-
-# The accounts, the transactions between them, and the drawing of both.
-class Graph(Widget):
-    var accounts: []Account
-    var edges:    []Transaction
-    var flows:    []Flow
-
-    def __init__(self):
-        self.accounts = []
-        self.edges = []
-        self.flows = []
-
-    def add_account(self, name: str, colour: Colour_T, x: float, y: float) -> Account:
-        let a: Account = Account(name, colour, x, y)
-        self.accounts.append(a)
-        return a
-
-    # One edge: money flows from source to target.
-    def transfer(self, what: str, source: Account, target: Account, amount: Cents_T):
-        source.balance -= amount
-        target.balance += amount
-        self.edges.append(Transaction(what, source, target, amount))
-        for i in range(len(self.flows)):
-            if self.flows[i].source == source and self.flows[i].target == target:
-                self.flows[i].amount += amount
-                return
-        self.flows.append(Flow(source, target, amount))
-
-    # One arrow per pair of accounts, its amount the sum of the flows.
-    def arrows(self) -> []Arrow:
-        var out: []Arrow = []
-        for f in self.flows:
-            out.append(Arrow(f.source, f.target, f.amount))
-        return out
-
-    # The books balance when everything that came in went out of somewhere.
-    def total(self) -> Cents_T:
-        var sum: Cents_T = 0
-        for a in self.accounts:
-            sum += a.balance
-        return sum
-
-    def to_html(self) -> Html:
-        html:
-            svg viewBox="0 0 780 390" class="graph":
-                defs:
-                    marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
-                        polygon points="0 0, 10 3.5, 0 7"
-                for arrow in self.arrows():
-                    + arrow.to_html()
-                for a in self.accounts:
-                    + a.to_html()
-
-class Prose(Widget):
-    var text: str
-
-    def __init__(self, text: str):
-        self.text = text
-
-    def to_html(self) -> Html:
-        html:
-            p: self.text
-
-class Section(Widget):
-    var title:    str
-    var children: []Widget
-
-    def __init__(self, title: str):
-        self.title = title
-        self.children = []
-
-    def add(self, child: Widget):
-        self.children.append(child)
-
-    def to_html(self) -> Html:
-        html:
-            section:
-                h2: self.title
-                for child in self.children:
-                    + child.to_html()
-
-class EdgeTable(Widget):
-    var edges: []Transaction
-
-    def __init__(self, edges: []Transaction):
-        self.edges = edges
-
-    def to_html(self) -> Html:
-        html:
-            table:
+                th: "Transaction"
+                th: "From"
+                th: "To"
+                th: "Amount"
+            for t in edges:
                 tr:
-                    th: "Transaction"
-                    th: "From"
-                    th: "To"
-                    th: "Amount"
-                for t in self.edges:
-                    tr:
-                        td: t.what
-                        td class=t.source.css(): t.source.name
-                        td class=t.target.css(): t.target.name
-                        td class="num": money(t.amount)
+                    td: t.what
+                    td class=css_of(t.source): t.source.name
+                    td class=css_of(t.target): t.target.name
+                    td class="num": money(t.amount)
 
-class BalanceTable(Widget):
-    var accounts: []Account
-
-    def __init__(self, accounts: []Account):
-        self.accounts = accounts
-
-    def to_html(self) -> Html:
-        html:
-            table:
+def balances_html(accounts: []Account) -> Html:
+    html:
+        table:
+            tr:
+                th: "Account"
+                th: "Balance"
+            for a in accounts:
                 tr:
-                    th: "Account"
-                    th: "Balance"
-                for a in self.accounts:
-                    + a.row_html()
+                    td class=css_of(a): a.name
+                    td class="num": money(a.balance)
 
-# A statement is a list of labelled lines and a total.
-type Line is record:
-    label:  str
-    amount: Cents_T
+def statement_html(lines: []Line, total_label: str, total: Cents_T) -> Html:
+    html:
+        table class="statement":
+            for l in lines:
+                tr:
+                    td: l.label
+                    td class="num": money(l.amount)
+            tr class="total":
+                td: total_label
+                td class="num": money(total)
 
-class Statement(Widget):
-    var lines: []Line
-    var total_label: str
-    var total: Cents_T
+def section_html(title: str, text: str, parts: []Html) -> Html:
+    html:
+        section:
+            h2: title
+            p: text
+            for part in parts:
+                + part
 
-    def __init__(self, lines: []Line, total_label: str, total: Cents_T):
-        self.lines = lines
-        self.total_label = total_label
-        self.total = total
-
-    def to_html(self) -> Html:
-        html:
-            table class="statement":
-                for l in self.lines:
-                    tr:
-                        td: l.label
-                        td class="num": money(l.amount)
-                tr class="total":
-                    td: self.total_label
-                    td class="num": money(self.total)
-
-class Page(Widget):
-    var title: str
-    var body:  []Widget
-
-    def __init__(self, title: str):
-        self.title = title
-        self.body = []
-
-    def add(self, child: Widget):
-        self.body.append(child)
-
-    def to_html(self) -> Html:
-        html:
-            html lang="en":
-                head:
-                    meta charset="utf-8"
-                    title: self.title
-                    style: STYLE
-                body:
-                    h1: self.title
-                    for child in self.body:
-                        + child.to_html()
-
-# ---------------------------------------------------------------------
-# The page
-# ---------------------------------------------------------------------
+def page_html(title: str, text: str, sections: []Html) -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: title
+                style: STYLE
+            body:
+                h1: title
+                p: text
+                for s in sections:
+                    + s
 
 def main():
-    let g: Graph = Graph()    # a plain object: the accounts hold their own balances
-    let sales: Account = g.add_account("Sales", BLUE, 80.0, 120.0)
-    let customer1: Account = g.add_account("Customer 1", GREEN, 270.0, 50.0)
-    let customer2: Account = g.add_account("Customer 2", GREEN, 270.0, 190.0)
-    let capital: Account = g.add_account("Capital", PINK, 80.0, 330.0)
-    let card: Account = g.add_account("Credit card", GREEN, 480.0, 50.0)
-    let bank: Account = g.add_account("Bank account", GREEN, 480.0, 190.0)
-    let furniture: Account = g.add_account("Furniture", GREEN, 480.0, 330.0)
-    let payroll: Account = g.add_account("Payroll", BLUE, 700.0, 190.0)
-    let food: Account = g.add_account("Food", BLUE, 700.0, 50.0)
-    let depreciation: Account = g.add_account("Depreciation", BLUE, 700.0, 330.0)
+    let g: Graph = kleppmann()
+    assert g.total() == 0                   # the books balance
+    assert g.net_assets() == g.equity()     # and so does the balance sheet
 
-    g.transfer("A bagel on the company credit card", card, food, 500)
-    g.transfer("A chair, paid by cheque from the bank account", bank, furniture, 50000)
-    g.transfer("The founder puts in savings", capital, bank, 500000)
-    g.transfer("The credit card bill is paid from the bank", bank, card, 500)
-    g.transfer("A Super Burrito on the credit card", card, food, 800)
-    g.transfer("Sale to customer 1, agreed at 5,000", sales, customer1, 500000)
-    g.transfer("Sale to customer 2, agreed at 5,000", sales, customer2, 500000)
-    g.transfer("Customer 1 pays in full", customer1, bank, 500000)
-    g.transfer("Customer 2 pays half up front", customer2, bank, 250000)
-    g.transfer("Y Combinator invests", capital, bank, 2000000)
-    g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
-    g.transfer("The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
-
-    # Check 1: each transaction is once positive and once negative.
-    assert g.total() == 0
-
-    # Revenue and expenses are the blue nodes; a negative balance is a profit.
-    let revenue: Cents_T = -sales.balance
-    let expenses: Cents_T = payroll.balance + depreciation.balance + food.balance
-    let profit: Cents_T = revenue - expenses
-
-    let debtors: Cents_T = customer1.balance + customer2.balance
-    let assets: Cents_T = bank.balance + debtors + furniture.balance
-    let liabilities: Cents_T = -card.balance
-    let equity_capital: Cents_T = -capital.balance
-    let equity: Cents_T = profit + equity_capital
-
-    # Check 2: assets less liabilities equal equity.
-    assert assets - liabilities == equity
-
-    let edges: Section = Section("Accounts are nodes, transactions are edges")
-    edges.add(Prose("Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and expense, pink for the money its shareholders put in."))
-    edges.add(g)
-    edges.add(EdgeTable(g.edges))
-
-    let bal: Section = Section("Balances")
-    bal.add(Prose("An account starts at zero. Money coming in adds to it, money going out subtracts. Every transaction is counted once as positive and once as negative, so all the balances add up to zero: that is what accountants call balancing the books."))
-    bal.add(BalanceTable(g.accounts))
-
-    let pnl: Section = Section("Profit and loss")
-    pnl.add(Prose("Only the blue accounts: revenue less expenses. A negative balance on a blue account is revenue, so the sign flips when it is reported."))
-    pnl.add(Statement([
-        Line("Revenue: sales", revenue),
-        Line("Expenses: payroll", payroll.balance),
-        Line("Expenses: depreciation", depreciation.balance),
-        Line("Expenses: food", food.balance),
-    ], "Profit", profit))
-
-    let sheet: Section = Section("Balance sheet")
-    sheet.add(Prose("The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customer 2 still owes half."))
-    sheet.add(Statement([
-        Line("Assets: bank account", bank.balance),
-        Line("Assets: debtors", debtors),
-        Line("Assets: furniture", furniture.balance),
-        Line("Less liabilities: credit card", -liabilities),
-    ], "Assets less liabilities", assets - liabilities))
-    sheet.add(Statement([
-        Line("Equity: profit", profit),
-        Line("Equity: capital", equity_capital),
-    ], "Total equity", equity))
-
-    let page: Page = Page("Accounting for computer scientists")
-    page.add(Prose("Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program."))
-    page.add(edges)
-    page.add(bal)
-    page.add(pnl)
-    page.add(sheet)
+    let sections: []Html = [
+        section_html("Accounts are nodes, transactions are edges",
+            "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns or owes, blue for revenue and expense, pink for the money its shareholders put in.",
+            [graph_html(g), edges_html(g.edges)]),
+        section_html("Balances",
+            "An account starts at zero. Money coming in adds to it, money going out subtracts. Every transaction is counted once as positive and once as negative, so all the balances add up to zero: that is what accountants call balancing the books.",
+            [balances_html(g.accounts)]),
+        section_html("Profit and loss",
+            "Only the blue accounts: revenue less expenses. A negative balance on a blue account is revenue, so the sign flips when it is reported.",
+            [statement_html(g.profit_and_loss(), "Profit", g.profit())]),
+        section_html("Balance sheet",
+            "The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customer 2 still owes half.",
+            [statement_html(g.assets_and_liabilities(), "Assets less liabilities", g.net_assets()),
+             statement_html(g.equity_lines(), "Total equity", g.equity())]),
+    ]
     print "<!doctype html>"
-    print page.to_html()
+    print page_html("Accounting for computer scientists",
+        "Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program.",
+        sections)
 
 main()

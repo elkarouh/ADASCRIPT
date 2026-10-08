@@ -1419,6 +1419,14 @@ test: compile
 	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | cmp -s - $(EXDIR)/HTML/$$n.expected \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
+	    printf '  %-42s' "HTML/test_accounting_model.ady (nim)"; \
+	    $(ADY2NIM) c -r $(EXDIR)/HTML/test_accounting_model.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    printf '  %-42s' "HTML/test_accounting_model.ady (python)"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/HTML/test_accounting_model.ady > $(TMPDIR)/test_accounting_model.py \
+	        && $(PYTHON) $(TMPDIR)/test_accounting_model.py >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(TMPDIR)/test_accounting_model.py; \
 	    printf '  %-42s' "HTML/html_counter.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(EXDIR)/HTML/html_counter.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \

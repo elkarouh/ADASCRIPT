@@ -7,18 +7,20 @@
 #   make card       one widget                               (html_card.ady)
 #   make app        a page as a tree of widgets              (html_app.ady)
 #   make counter    a counter in the browser, with events    (html_counter.ady)
+#   make test       the accounting model on its own, no GUI, both backends
 #   make all        build every page into build/, open none
 #
 # Each target builds its page into build/ and opens it in the browser:
 # $(OPEN) is xdg-open, or open on a Mac; `make tables OPEN=firefox` picks one.
 
 ADY2NIM ?= ady2nim
+ADY2PY  ?= ady2py
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8801
 
 PAGES := html_card html_app accounting_graph accounting_drawn accounting_objects
 
-.PHONY: all tables drawn objects card app counter clean
+.PHONY: all tables drawn objects card app counter test clean
 
 all: $(PAGES:%=build/%.html) build/html_counter.js
 
@@ -54,6 +56,13 @@ counter: build/html_counter.js
 	@echo "serving http://127.0.0.1:$(PORT)/index.html (Ctrl-C to stop)"
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/index.html) &
 	cd build && python3 -m http.server $(PORT) --bind 127.0.0.1
+
+# accounting_model.ady has no GUI in it, so it is tested without karax.
+test:
+	$(ADY2NIM) c -r test_accounting_model.ady 2>/dev/null
+	@mkdir -p build
+	$(ADY2PY) test_accounting_model.ady > build/test_accounting_model.py
+	python3 build/test_accounting_model.py
 
 clean:
 	rm -rf build html_counter.js

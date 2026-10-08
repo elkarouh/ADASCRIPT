@@ -248,20 +248,20 @@ tr.total td { font-weight: bold; border-top: 2px solid #333; }
       <p>Only the blue accounts: revenue less expenses. A negative balance on a blue account is revenue, so the sign flips when it is reported.</p>
       <table class="statement">
         <tr>
-          <td>Revenue: sales</td>
+          <td>Revenue: Sales</td>
           <td class="num">10,000.00</td>
         </tr>
         <tr>
-          <td>Expenses: payroll</td>
+          <td>Expenses: Payroll</td>
           <td class="num">8,000.00</td>
         </tr>
         <tr>
-          <td>Expenses: depreciation</td>
-          <td class="num">125.00</td>
+          <td>Expenses: Food</td>
+          <td class="num">13.00</td>
         </tr>
         <tr>
-          <td>Expenses: food</td>
-          <td class="num">13.00</td>
+          <td>Expenses: Depreciation</td>
+          <td class="num">125.00</td>
         </tr>
         <tr class="total">
           <td>Profit</td>
@@ -274,19 +274,19 @@ tr.total td { font-weight: bold; border-top: 2px solid #333; }
       <p>The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customer 2 still owes half.</p>
       <table class="statement">
         <tr>
-          <td>Assets: bank account</td>
-          <td class="num">23,995.00</td>
-        </tr>
-        <tr>
-          <td>Assets: debtors</td>
+          <td>Assets: Customer 2</td>
           <td class="num">2,500.00</td>
         </tr>
         <tr>
-          <td>Assets: furniture</td>
+          <td>Assets: Bank account</td>
+          <td class="num">23,995.00</td>
+        </tr>
+        <tr>
+          <td>Assets: Furniture</td>
           <td class="num">375.00</td>
         </tr>
         <tr>
-          <td>Less liabilities: credit card</td>
+          <td>Less liabilities: Credit card</td>
           <td class="num">-8.00</td>
         </tr>
         <tr class="total">
@@ -300,7 +300,7 @@ tr.total td { font-weight: bold; border-top: 2px solid #333; }
           <td class="num">1,862.00</td>
         </tr>
         <tr>
-          <td>Equity: capital</td>
+          <td>Equity: Capital</td>
           <td class="num">25,000.00</td>
         </tr>
         <tr class="total">
