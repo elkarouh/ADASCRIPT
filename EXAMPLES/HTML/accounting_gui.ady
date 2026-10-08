@@ -127,7 +127,7 @@ def bend_of(g: Graph, f: Flow) -> float:
 def tip_of(g: Graph, f: Flow) -> str:
     var tip: str = f"{f.source.name} to {f.target.name}"
     for t in g.transactions_of(f):
-        tip += "\n" + f"{t.date}   {money(t.amount)}   {t.what}"
+        tip += f"\n{t.date}   {money(t.amount)}   {t.what}"
     return tip
 
 # A flow as an arrow from the rim of the circle at A to the rim of the one
