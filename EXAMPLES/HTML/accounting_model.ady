@@ -86,6 +86,15 @@ class Graph:
                 return
         self.flows.append(Flow(source, target, amount))
 
+    # A purchase with VAT: one transaction, three accounts. SOURCE pays NET
+    # to TARGET and the VAT on it, RATE percent rounded to the cent, to VAT,
+    # where it waits to be claimed back from the tax office.
+    def purchase_with_vat(self, what: str, source: Account, target: Account,
+                          vat: Account, net: Cents_T, rate: int):
+        let tax: Cents_T = Cents_T((int(net) * rate + 50) // 100)
+        self.transfer(what, source, target, net)
+        self.transfer(f"{what}: VAT at {rate}%", source, vat, tax)
+
     # Zero when the books balance: every edge is once positive, once negative.
     def total(self) -> Cents_T:
         var sum: Cents_T = 0
@@ -140,8 +149,9 @@ class Graph:
         return lines
 
 # The article's company, every transaction in the order it tells them, and
-# one more of ours: a credit note that sends money back along an edge, so the
-# graph has a flow both ways between two accounts.
+# two more of ours: a credit note that sends money back along an edge, so the
+# graph has a flow both ways between two accounts, and a purchase with VAT,
+# one transaction that touches three accounts.
 def kleppmann() -> Graph:
     var g: Graph = Graph()
     let sales: Account = g.add_account("Sales", BLUE)
@@ -154,6 +164,7 @@ def kleppmann() -> Graph:
     let payroll: Account = g.add_account("Payroll", BLUE)
     let food: Account = g.add_account("Food", BLUE)
     let depreciation: Account = g.add_account("Depreciation", BLUE)
+    let vat: Account = g.add_account("VAT", GREEN)
 
     g.transfer("A bagel on the company credit card", card, food, 500)
     g.transfer("A chair, paid by cheque from the bank account", bank, furniture, 50000)
@@ -168,4 +179,5 @@ def kleppmann() -> Graph:
     g.transfer("Salaries, paid from the bank", bank, payroll, 800000)
     g.transfer("The chair loses a quarter of its value to depreciation", furniture, depreciation, 12500)
     g.transfer("Customer 2 returns part of the order: a credit note of 500", customer2, sales, 50000)
+    g.purchase_with_vat("A desk at 400, paid from the bank", bank, furniture, vat, 40000, 21)
     return g

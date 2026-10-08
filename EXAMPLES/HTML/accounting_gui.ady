@@ -76,6 +76,8 @@ def place(a: Account) -> Point:
             return Point(480.0, 50.0)
         when "Bank account":
             return Point(480.0, 190.0)
+        when "VAT":
+            return Point(270.0, 330.0)
         when "Furniture":
             return Point(480.0, 330.0)
         when "Payroll":

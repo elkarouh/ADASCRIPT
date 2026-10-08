@@ -1,6 +1,6 @@
 #!/usr/bin/env ady2nim
 """The accounting model on its own, no GUI: the article's figures, with the
-credit note to customer 2 that kleppmann() adds.
+credit note to customer 2 and the desk bought with VAT that kleppmann() adds.
 
     ady2nim c -r test_accounting_model.ady
 """
@@ -13,14 +13,15 @@ assert g.total() == 0
 assert g.net_assets() == g.equity()
 
 # Balances, in cents.
-assert g.balance("Bank account") == 2399500
+assert g.balance("Bank account") == 2351100    # less the desk, 400 + 84 VAT
 assert g.balance("Credit card") == -800
-assert g.balance("Furniture") == 37500
+assert g.balance("Furniture") == 77500
 assert g.balance("Customer 1") == 0
 assert g.balance("Customer 2") == 200000
 assert g.balance("Sales") == -950000
 assert g.balance("Capital") == -2500000
 assert g.balance("Food") == 1300
+assert g.balance("VAT") == 8400                # 21% of 400, to claim back
 
 # The statements.
 assert g.profit() == 136200
@@ -30,8 +31,9 @@ assert len(g.profit_and_loss()) == 4
 assert g.profit_and_loss()[0].label == "Revenue: Sales"
 
 # Two transactions between the same accounts, the same way, are one flow;
-# the credit note goes the other way, so it is a flow of its own.
-assert len(g.edges) == 13
-assert len(g.flows) == 11
+# the credit note goes the other way, so it is a flow of its own. The desk is
+# two edges, one to Furniture (joining the chair's flow) and one to VAT.
+assert len(g.edges) == 15
+assert len(g.flows) == 12
 
 print "accounting model: all checks passed"
