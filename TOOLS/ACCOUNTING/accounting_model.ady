@@ -94,19 +94,21 @@ type Line is record:
 def money_text(c: Cents_T) -> str:
     return f"{Dollars_T(c):,.2f}"
 
-# The VAT rates there are (Belgium's), each member's value its percentage:
-# a rate is picked from these, never typed, so 2.1% or 210% cannot happen.
-type VatRate_T is enum NO_VAT = 0, REDUCED = 6, INTERMEDIATE = 12, STANDARD = 21
+# The VAT rates there are (Belgium's): a rate is picked from these, never
+# typed, so 2.1% or 210% cannot happen. A plain enum, its percentages beside
+# it, so that `for rate in VatRate_T` lists them (an enum whose values skip
+# numbers, 0, 6, 12, 21, cannot be iterated).
+type VatRate_T is enum NO_VAT, REDUCED, INTERMEDIATE, STANDARD
 
-const VAT_RATES: []VatRate_T = [NO_VAT, REDUCED, INTERMEDIATE, STANDARD]
+const PERCENT: [VatRate_T]int = [NO_VAT: 0, REDUCED: 6, INTERMEDIATE: 12, STANDARD: 21]
 
 # 21% or "no VAT", as the page and a transaction's description say it.
 def vat_text(rate: VatRate_T) -> str:
-    return ("no VAT" if rate == NO_VAT else f"{ord(rate)}% VAT")
+    return ("no VAT" if rate == NO_VAT else f"{PERCENT[rate]}% VAT")
 
 # The VAT on NET at RATE, rounded to the cent.
 def vat_on(net: Cents_T, rate: VatRate_T) -> Cents_T:
-    return Cents_T((int(net) * ord(rate) + 50) // 100)
+    return Cents_T((int(net) * PERCENT[rate] + 50) // 100)
 
 class Graph:
     var accounts: []Account

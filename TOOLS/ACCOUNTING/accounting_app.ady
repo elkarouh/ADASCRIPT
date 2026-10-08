@@ -17,7 +17,7 @@ from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementBy
 from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeout, TimeOut, KeyboardEvent
 from karax/karax nimport setRenderer, redraw
 from karax/kajax nimport ajaxGet, ajaxPost
-from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, VAT_RATES, entry, purchase_with_vat, sale_with_vat, vat_text
+from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, place, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
@@ -692,7 +692,7 @@ def popup_html() -> Html:
                 input id="amount" placeholder="605.00"
                 label: "VAT"
                 select id="vat":
-                    for rate in VAT_RATES:
+                    for rate in VatRate_T:
                         + vat_option_html(rate)
                 if popup_message != "":
                     p class="message refused": popup_message
