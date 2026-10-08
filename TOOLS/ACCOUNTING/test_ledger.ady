@@ -113,6 +113,21 @@ assert books.open_account("6x", kind("expense"), "Odd") is BookFailure_T
 assert kind_named("cost") is BookFailure_T
 assert kind_named("Revenue") is not BookFailure_T
 
+# Deleting: a transaction by its number, an account only once no transaction
+# touches it.
+assert books.delete_account("Fuel") is None                          # no transactions yet
+assert books.delete_account("Fuel") is BookFailure_T                 # gone
+assert books.delete_account("Food") is BookFailure_T                 # has transactions
+let before: int = books.count("transactions")
+let (numbered, ids) = books.numbered_entries()
+assert numbered[len(numbered) - 1].what == "Printer paper"
+assert books.delete_entry(ids[len(ids) - 1]) is None
+assert books.count("transactions") == before - 1
+assert books.count("postings") == 37
+assert books.graph().balance("Food") == 1300
+assert books.delete_entry(ids[len(ids) - 1]) is BookFailure_T        # gone too
+assert books.delete_entry(9999) is BookFailure_T
+
 # Amounts as typed.
 assert cents("12.10") == 1210
 assert cents("-605") == -60500

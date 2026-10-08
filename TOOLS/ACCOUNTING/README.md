@@ -19,7 +19,10 @@ account the money leaves (red), then the one it reaches (green), and give a
 date, what happened and the amount. With VAT, the amount is before VAT, and
 the VAT goes to the account numbered 411... (a purchase: VAT to recover) or,
 when the money leaves a revenue account, 451... (a sale: VAT to pay). An
-account is opened with a number, a kind and a name. The page checks what it
+account is opened with a number, a kind and a name. A transaction is
+deleted with the Delete button on its row in the table below the graph; an
+account by clicking it, then Delete account, which the ledger allows only
+once no transaction touches it. The page checks what it
 sends as the ledger does, and the ledger refuses what does not fit the
 books, saying why. Hover over an account or an arrow to see its
 transactions; "Graph only" gives the drawing the whole window.
@@ -44,7 +47,9 @@ The first `make app` makes accounting.db with the example company's year;
 make ledger
 ./ledger example                 # accounting.db, with the example company's year
 ./ledger show                    # balances, profit and loss, balance sheet
-./ledger journal                 # every transaction, and what it did to each account
+./ledger journal                 # every transaction, numbered, and what it did to each account
+./ledger delete 3                # transaction 3, as journal numbers it
+./ledger delete-account Fuel     # an account no transaction touches
 ./ledger account 613100 expense Fuel
 ./ledger add 2012-01-02 "Printer paper" "Bank account=-12.10" Food=10.00 "VAT to recover=2.10"
 ```

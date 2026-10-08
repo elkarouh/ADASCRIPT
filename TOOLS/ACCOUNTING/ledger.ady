@@ -11,7 +11,9 @@
                                   record a transaction: each ACCOUNT (a number or a name)
                                   gets AMOUNT, negative to take it out; they add up to zero
     show                          the accounts and their balances, and the statements
-    journal                       every transaction, with what it did to each account
+    journal                       every transaction, numbered, with what it did to each account
+    delete NUMBER                 delete transaction NUMBER, as journal numbers it
+    delete-account ACCOUNT        delete an account no transaction touches
 
 The config file (accounting.conf in the current directory, or --config) names the
 database and holds the chart of accounts; --db names another database.
@@ -143,7 +145,13 @@ class Ledger:
 
     # The transactions, by date, each with its postings in the order written.
     def entries(self) -> []Entry:
+        return self.books("").entries
+
+    # The transactions, by date, each with its postings in the order written,
+    # and their numbers.
+    def numbered_entries(self) -> ([]Entry, []int):
         var found: []Entry = []
+        var ids: []int = []
         for t in self.db.rows("SELECT id, date, what FROM transactions ORDER BY date, id"):
             var postings: []Posting = []
             for p in self.db.rows("""SELECT a.name, p.amount FROM postings p
@@ -151,7 +159,32 @@ class Ledger:
                                      WHERE p.tx IS ? ORDER BY p.rowid""", [t[0]]):
                 postings.append(Posting(p[0], Cents_T(int(p[1]))))
             found.append(Entry(t[1], t[2], postings))
-        return found
+            ids.append(int(t[0]))
+        return (found, ids)
+
+    # Transaction ID, gone, and its postings with it.
+    def delete_entry(self, id: int) -> None | !BookFailure_T:
+        if self.db.value("SELECT id FROM transactions WHERE id IS ?", [str(id)]) == "":
+            return bad(f"there is no transaction {id}")
+        self.db.exec("BEGIN")
+        try:
+            self.db.exec("DELETE FROM postings WHERE tx IS ?", [str(id)])
+            self.db.exec("DELETE FROM transactions WHERE id IS ?", [str(id)])
+            self.db.exec("COMMIT")
+        except:
+            self.db.exec("ROLLBACK")
+            raise
+
+    # The account named or numbered WORD, closed: only when no transaction
+    # touches it, for the books keep what was recorded.
+    def delete_account(self, word: str) -> None | !BookFailure_T:
+        let name: str = self.name_of(word)
+        if name == "":
+            return bad(f"there is no account {word}")
+        let used: str = self.db.value("SELECT COUNT(DISTINCT tx) FROM postings WHERE account IS ?", [self.number_of(name)])
+        if used != "0":
+            return bad(f"{name} is in {used} transaction{('' if used == '1' else 's')}: delete {('it' if used == '1' else 'them')} first")
+        self.db.exec("DELETE FROM accounts WHERE name IS ?", [name])
 
     def kinds(self) -> [][]str:
         return self.db.rows("SELECT number, name, kind FROM accounts ORDER BY number")
@@ -165,7 +198,8 @@ class Ledger:
                 raise ValueError(f"the database has an account of kind {row[1]}")
             else:
                 accounts.append(AccountRow(row[0], kind, row[2]))
-        return Books(currency, accounts, self.entries())
+        let (entries, ids) = self.numbered_entries()
+        return Books(currency, accounts, entries, ids)
 
     def graph(self) -> Graph:
         return graph_of(self.books(""))
@@ -205,7 +239,9 @@ const USAGE: str = """usage: ledger [--config FILE] [--db FILE] COMMAND ...
                                   record a transaction: each ACCOUNT (a number or a name)
                                   gets AMOUNT, negative to take it out; they add up to zero
     show                          the accounts and their balances, and the statements
-    journal                       every transaction, with what it did to each account"""
+    journal                       every transaction, numbered, with what it did to each account
+    delete NUMBER                 delete transaction NUMBER, as journal numbers it
+    delete-account ACCOUNT        delete an account no transaction touches"""
 
 # 12.10 or -605 as cents.
 def cents_of(word: str) -> Cents_T | !BookFailure_T:
@@ -252,8 +288,10 @@ def show(ledger: Ledger, config: Config):
     print ("The books balance." if g.total() == 0 and g.net_assets() == g.equity() else "THE BOOKS DO NOT BALANCE.")
 
 def journal(ledger: Ledger):
-    for e in ledger.entries():
-        print f"{e.date}  {e.what}"
+    let (entries, ids) = ledger.numbered_entries()
+    for i in range(len(entries)):
+        let e: Entry = entries[i]
+        print f"{ids[i]:>4}  {e.date}  {e.what}"
         for p in e.postings:
             print f"    {p.account:<20} {signed_text(p.amount):>12}"
 
@@ -328,6 +366,22 @@ def main():
                 show(ledger, config)
             when "journal":
                 journal(ledger)
+            when "delete":
+                if len(words) != 2:
+                    die("delete NUMBER   (the transaction's number, as journal shows it)")
+                let id: int | !ParseFailure_T = parse_int(words[1])
+                if id is ParseFailure_T:
+                    die(f"{words[1]} is not a transaction's number")
+                else:
+                    done = ledger.delete_entry(id)
+                    if done is None:
+                        print f"transaction {id} deleted"
+            when "delete-account":
+                if len(words) < 2:
+                    die("delete-account ACCOUNT")
+                done = ledger.delete_account(" ".join(words[1:]))
+                if done is None:
+                    print "account deleted"
             when others:
                 die(f"no command {command}, see -h")
         ledger.close()

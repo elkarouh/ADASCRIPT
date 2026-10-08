@@ -9,6 +9,8 @@ config file) and, as text (books_text.ady), the books and what the page adds:
     GET  /books      the accounts and every transaction
     POST /account    one account line: opens it
     POST /entry      one entry and its postings: records it
+    POST /delete-entry     a transaction's number: deletes it
+    POST /delete-account   an account's name: deletes it, if no transaction touches it
 
 A POST answers "ok", or "error", a tab, and why the books refuse it. The
 database is the config file's (accounting.conf), or --db's.
@@ -35,6 +37,14 @@ def answer(r: None | !BookFailure_T) -> str:
 
 # What the page posts to PATH, done; the answer to send back.
 def post(path: str, body: str) -> str:
+    if path == "/delete-entry":
+        let id: int | !ParseFailure_T = parse_int(body.strip())
+        if id is ParseFailure_T:
+            return "error\t" + body + " is not a transaction's number"
+        else:
+            return answer(books.delete_entry(id))
+    if path == "/delete-account":
+        return answer(books.delete_account(body.strip()))
     let read: Books | !BookFailure_T = parse_books(body)
     if read is BookFailure_T:
         return "error\t" + read.detail

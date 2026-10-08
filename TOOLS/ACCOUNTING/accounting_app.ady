@@ -14,11 +14,11 @@ sent to the server, which records it unless the books refuse it.
 Needs karax: `nimble install karax@1.5.0`.
 """
 from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementById, getBoundingClientRect, addEventListener
-from dom nimport value, InputElement
+from dom nimport value, InputElement, confirm
 from karax/karax nimport setRenderer, redraw
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, entry, purchase_with_vat, sale_with_vat
-from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, px, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, money, px, signed, place, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, parse_books
 
 const WIDTH: float = 780.0
@@ -32,6 +32,7 @@ div.record { background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; pa
 div.record input, div.record select, div.record button { margin: 0.2em 0.3em 0.2em 0; font-size: 0.95em; }
 p.message { font-weight: bold; }
 p.refused { color: #b71c1c; }
+button.delete { font-size: 0.8em; }
 svg.graph { user-select: none; }
 div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone breaks out of the text column */
 g.tip { pointer-events: none; }
@@ -187,7 +188,7 @@ var layout: Layout = Layout()
 # The books, as the server last sent them, and what the page sends it
 # ---------------------------------------------------------------------
 
-var books: Books = Books("", [], [])
+var books: Books = Books("", [], [], [])
 var graph: Graph = Graph()
 var message: str = "Asking the ledger for the books..."
 var refused: bool = False               # whether the message says why something was refused
@@ -288,6 +289,22 @@ def record_entry():
             clear_fields(["what", "amount"])
             ajaxPost("/entry", NO_HEADERS, entry_lines(made), on_answer)
 
+# Transaction I of the books, deleted, once the learner says so.
+def delete_entry(i: int):
+    let e: Entry = books.entries[i]
+    if window.confirm(f"Delete the transaction of {e.date}, {e.what}?"):
+        say(f"Deleted: {e.what}", False)
+        ajaxPost("/delete-entry", NO_HEADERS, str(books.ids[i]), on_answer)
+
+# The picked account, deleted: the ledger refuses while a transaction
+# touches it.
+def delete_account():
+    let name: str = layout.source
+    if name != "" and window.confirm(f"Delete the account {name}?"):
+        say(f"Deleted: {name}", False)
+        layout.unpick()
+        ajaxPost("/delete-account", NO_HEADERS, name, on_answer)
+
 def open_account():
     let number: str = field_text("number")
     let name: str = field_text("name")
@@ -336,6 +353,7 @@ def record_html() -> Html:
     let target: str = (layout.target if layout.target != "" else ("(click another)" if layout.source != "" else ""))
     let message_class: str = ("message refused" if refused else "message")
     let date: str = last_date()
+    let delete_label: str = f"Delete account {layout.source}"
     html:
         div class="record":
             p:
@@ -352,6 +370,8 @@ def record_html() -> Html:
                     option value="21": "21% VAT"
                 button id="record" onclick=record_entry(): "Record"
                 button id="clear" onclick=layout.unpick(): "Clear"
+                if layout.source != "" and layout.target == "":
+                    button id="delete-account" onclick=delete_account(): delete_label
             p:
                 strong: "An account: "
                 input id="number" placeholder="number, 613100" size="12"
@@ -365,6 +385,35 @@ def record_html() -> Html:
                 button id="open" onclick=open_account(): "Open"
             if message != "":
                 p class=message_class: message
+
+# The transactions as the books write them, one row each, with what each did
+# to every account, and a button to delete it.
+def postings_text(e: Entry) -> str:
+    var parts: []str = []
+    for p in e.postings:
+        parts.append(f"{p.account} {signed(p.amount)}")
+    return ", ".join(parts)
+
+def journal_row_html(i: int) -> Html:
+    let e: Entry = books.entries[i]
+    html:
+        tr:
+            td: e.date
+            td: e.what
+            td: postings_text(e)
+            td:
+                button class="delete" onclick=delete_entry(i): "Delete"
+
+def journal_html() -> Html:
+    html:
+        table:
+            tr:
+                th: "Date"
+                th: "Transaction"
+                th: "What it did to each account"
+                th: ""
+            for i in range(len(books.entries)):
+                + journal_row_html(i)
 
 def live_graph_html(g: Graph) -> Html:
     html:
@@ -397,14 +446,14 @@ def on_up(e: Event):
     layout.drop()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. To record a transaction, click the account the money leaves, then the one it reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Hover over an account or an arrow to see its transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. To record a transaction, click the account the money leaves, then the one it reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. To delete a transaction, press Delete on its row below the graph; to delete an account, click it, then Delete account (the ledger keeps an account while a transaction touches it). Hover over an account or an arrow to see its transactions."
 
 def main():
     def render() -> Html:
         var sections: []Html = [
             section_html("Accounts are nodes, transactions are edges",
                 GRAPH_TEXT + " Drag an account to move it.",
-                [record_html(), live_graph_html(graph), graph.edges.to_html()])]
+                [record_html(), live_graph_html(graph), journal_html()])]
         for s in sections_after_graph(graph):
             sections.append(s)
         let wide: str = ("wide" if layout.graph_only else "")

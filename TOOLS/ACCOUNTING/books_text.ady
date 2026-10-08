@@ -4,12 +4,13 @@ posting, the fields separated by tabs.
 
     currency  USD
     account   550000  asset  Bank account
-    entry     2011-01-04  A chair (21% VAT)
+    entry     2011-01-04  A chair (21% VAT)  2
     posting   Bank account  -60500
     posting   Furniture  50000
     posting   VAT to recover  10500
 
-Amounts are in cents. The server builds the text from its database and the
+Amounts are in cents. An entry from the ledger ends with its number there,
+by which the page asks for it to be deleted; one the page writes has none. The server builds the text from its database and the
 page reads it; the page writes one account or one entry the same way, and
 the server reads it. Nothing here needs a database or a browser, so both
 compile it.
@@ -26,6 +27,7 @@ type Books is record:
     currency: str
     accounts: []AccountRow
     entries:  []Entry
+    ids:      []int                 # the ledger's number of each entry, 0 for none
 
 def bad(detail: str) -> BookFailure_T:
     return BookFailure_T(detail)
@@ -47,8 +49,8 @@ def field(s: str) -> str:
 def account_line(a: AccountRow) -> str:
     return f"account\t{field(a.number)}\t{kind_text(a.kind)}\t{field(a.name)}"
 
-def entry_lines(e: Entry) -> str:
-    var text: str = f"entry\t{field(e.date)}\t{field(e.what)}"
+def entry_lines(e: Entry, id: int = 0) -> str:
+    var text: str = f"entry\t{field(e.date)}\t{field(e.what)}" + (f"\t{id}" if id > 0 else "")
     for p in e.postings:
         text += "\n" + f"posting\t{field(p.account)}\t{int(p.amount)}"
     return text
@@ -57,13 +59,13 @@ def text_of_books(b: Books) -> str:
     var lines: []str = [f"currency\t{field(b.currency)}"]
     for a in b.accounts:
         lines.append(account_line(a))
-    for e in b.entries:
-        lines.append(entry_lines(e))
+    for i in range(len(b.entries)):
+        lines.append(entry_lines(b.entries[i], b.ids[i]))
     return "\n".join(lines) + "\n"
 
 # TEXT read back. An entry's postings are the posting lines that follow it.
 def parse_books(text: str) -> Books | !BookFailure_T:
-    var b: Books = Books("", [], [])
+    var b: Books = Books("", [], [], [])
     var n: int = 0
     for line in text.split("\n"):
         n += 1
@@ -78,8 +80,13 @@ def parse_books(text: str) -> Books | !BookFailure_T:
                 return bad(f"line {n}: {kind.detail}")
             else:
                 b.accounts.append(AccountRow(f[1], kind, f[3]))
-        elif f[0] == "entry" and len(f) == 3:
-            b.entries.append(Entry(f[1], f[2], []))
+        elif f[0] == "entry" and (len(f) == 3 or len(f) == 4):
+            let id: int | !ParseFailure_T = parse_int(f[3] if len(f) == 4 else "0")
+            if id is ParseFailure_T:
+                return bad(f"line {n}: {f[3]} is not an entry's number")
+            else:
+                b.entries.append(Entry(f[1], f[2], []))
+                b.ids.append(id)
         elif f[0] == "posting" and len(f) == 3 and len(b.entries) > 0:
             let amount: int | !ParseFailure_T = parse_int(f[2])
             if amount is ParseFailure_T:
