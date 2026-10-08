@@ -38,17 +38,12 @@ tr.total td { font-weight: bold; border-top: 2px solid #333; }
 
 const NODE_RADIUS: float = 42.0
 
-# 1234567 cents -> "12,345.67"
+# Money is kept in cents; it is shown in dollars. The scale is the type, so
+# Dollars_T(c) converts, and the format does the rest: 1234567 -> "12,345.67".
+type Dollars_T is 100 * Cents_T
+
 def money(c: Cents_T) -> str:
-    let a: Cents_T = abs(c)
-    let whole: str = f"{a // 100}"
-    var grouped: str = ""
-    for i in range(len(whole)):
-        if i > 0 and (len(whole) - i) % 3 == 0:
-            grouped += ","
-        grouped += whole[i]
-    let sign: str = "-" if c < 0 else ""
-    return f"{sign}{grouped}.{a % 100:02d}"
+    return f"{Dollars_T(c):,.2f}"
 
 def px(v: float) -> str:
     return f"{v:.1f}"
