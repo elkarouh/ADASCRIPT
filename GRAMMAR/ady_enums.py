@@ -4,7 +4,8 @@ Either every member has a value or none does -- a reader never has to work out w
 an unwritten one is. The values give the order: strictly ascending, and `ord`, `<` and
 `case` follow them. Where they are consecutive (1, 2, 3 or 0, 1, 2) the enum is as
 good as any other; where they are not (0, 2, 5) Nim refuses an array indexed by it,
-a `for` over it, and `succ` and `pred`, so Adascript refuses them on both backends.
+and `succ` and `pred`, so Adascript refuses them on both backends. A `for` over it
+visits its members, in order, never a value no member has (Nim's std/enumutils).
 
 The backends read members from the parse tree with `member`, hand what they found to
 `checked`, and ask `has_gaps` where a gap matters.

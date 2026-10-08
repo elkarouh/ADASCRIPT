@@ -431,8 +431,6 @@ def to_py(self, indent=0):
     target = self.nodes[0].to_py()
     iterable = self.nodes[1].to_py()
     from hek_py_expr import _builtin_ordinal_domain
-    from ady_enums import refuse_if_gapped_type
-    refuse_if_gapped_type(iterable, getattr(ParserState, "tick_types", {}).get(iterable), "iterated")
     iterable = _builtin_ordinal_domain(iterable) or iterable
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_py(indent + 1)

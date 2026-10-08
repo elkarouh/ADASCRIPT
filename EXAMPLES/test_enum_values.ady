@@ -2,8 +2,8 @@
 """Test: enum members with values, on both backends. Either every member has a value or
 none does, and the values give the order: `ord`, `<` and `case` follow them. Values that
 follow one another (1, 2, 3) leave the enum as good as any other; values that skip a number
-(0, 5, 6) cannot index an array, be iterated or be stepped, and are refused (see the
-Makefile). The output is compared between the backends.
+(0, 5, 6) can be iterated, member by member, but cannot index an array or be stepped, and
+those are refused (see the Makefile). The output is compared between the backends.
 """
 type Key_T is enum DOWN = 258, UP = 259, LEFT = 260, RIGHT = 261
 type Level_T is enum LOW = 1, MID = 2, HIGH = 3
@@ -51,6 +51,20 @@ case g:
     when NONE: print "none"
     when SOME: print "some"
     when MANY: print "many"
+
+# and iterate: each member once, in order, never a value no member has
+var members: int = 0
+var values: int = 0
+for each in Gap_T:
+    members += 1
+    values += ord(each)
+assert members == 3 and values == 11
+var first: Gap_T = MANY
+for each in Gap_T:
+    if each < first:
+        first = each
+assert first == NONE
+print members, values
 
 # the same as before for a plain enum: members compare, in the order they are written
 let c: Plain_T = GREEN

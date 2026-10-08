@@ -800,11 +800,11 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
       body (`setTimeout(pick_shown, 50)` with `pick_shown` defined below) is
       "undeclared identifier" in the Nim, though calling one before its def
       works elsewhere: forward declarations miss a function passed as a value.
-- [ ] an enum whose member values skip numbers (`type VatRate_T is enum
-      NO_VAT = 0, REDUCED = 6, INTERMEDIATE = 12, STANDARD = 21`) cannot be
-      iterated (`for rate in VatRate_T`), nor index an array or take
-      'Next/'Prev -- Nim refuses holey enums there too (DOCS/BOOK §3.1a). So
-      listing such an enum's members means writing them out again by hand.
-      The ledger uses a plain enum and `const PERCENT: [VatRate_T]int`
-      instead. Iteration could be offered anyway: the transpiler knows the
-      members, and could emit the loop over their literal list.
+- [x] an enum whose member values skip numbers (`type VatRate_T is enum
+      NO_VAT = 0, REDUCED = 6, INTERMEDIATE = 12, STANDARD = 21`) could not be
+      iterated (`for rate in VatRate_T`), so listing its members meant writing
+      them out again by hand. Fixed: `for x in E` visits the members, each once
+      and in order, never a value no member has (Nim: std/enumutils' items;
+      Python: Enum iteration). Still refused, a gap leaving their meaning open:
+      `[E]T` (a slot per member or per value?) and 'Next/'Prev (the next member
+      or the next value?) -- DOCS/BOOK §3.1a.

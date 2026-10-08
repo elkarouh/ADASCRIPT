@@ -800,13 +800,12 @@ test: compile
 	@# only `import M` binds M: a from-import, `*` included, gives A and B and not M.A
 	@printf 'from ady_refuse_mod import helper\nprint ady_refuse_mod.other()\n' > $(TMPDIR)/ady_refuse_35.ady
 	@printf 'from ady_refuse_mod import *\nprint ady_refuse_mod.other()\n' > $(TMPDIR)/ady_refuse_36.ady
-	@# enum values: all or none, ascending; gaps cannot index, iterate or step
+	@# enum values: all or none, ascending; gaps cannot index or step (iterating is fine)
 	@printf 'type K is enum A = 1, B, C = 3\nprint 1\n' > $(TMPDIR)/ady_refuse_28.ady
 	@printf 'type K is enum A = 5, B = 1\nprint 1\n' > $(TMPDIR)/ady_refuse_29.ady
 	@printf 'type K is enum A = 1, B = 1\nprint 1\n' > $(TMPDIR)/ady_refuse_30.ady
 	@printf 'type K is enum:\n    A = 0\n    B\nprint 1\n' > $(TMPDIR)/ady_refuse_31.ady
 	@printf 'type K is enum A = 0, B = 2\nvar t: [K]int\nprint 1\n' > $(TMPDIR)/ady_refuse_32.ady
-	@printf 'type K is enum A = 0, B = 2\nfor x in K:\n    print x\n' > $(TMPDIR)/ady_refuse_33.ady
 	@printf "type K is enum A = 0, B = 2\nlet v: K = A\nprint v'Next\n" > $(TMPDIR)/ady_refuse_34.ady
 	@# a record has fields only: a method in its body was dropped without a word
 	@printf 'type Pt is record:\n    x: float\n\n    def norm(self) -> float:\n        return self.x\nprint 1\n' > $(TMPDIR)/ady_refuse_37.ady
@@ -848,7 +847,6 @@ test: compile
 	             "30:a repeated value:they must ascend" \
 	             "31:a mix, in the block form:either every member has a value or none does" \
 	             "32:a gapped enum as an array index:cannot be used as an array index" \
-	             "33:a gapped enum iterated:cannot be iterated" \
 	             "34:'Next of a gapped enum:cannot be stepped" \
 	             "37:a method in a record body:a record has fields only" \
 	             "38:Python's atan on nimport math:it is 'arctan'" \

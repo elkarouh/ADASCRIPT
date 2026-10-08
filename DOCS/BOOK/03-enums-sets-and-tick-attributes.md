@@ -52,9 +52,12 @@ Either every member has a value or none does; a mix is refused, so a reader neve
 work out what an unwritten one is. The values give the order and must ascend: `ord(UP)` is
 `259`, `DOWN < UP`, and a `case` or a set follows them. `Key_T(259)` is `UP`, the integer read
 as the value. Values that follow one another (`1, 2, 3`) leave the enum as good as any
-other. Values that skip a number (`0, 5, 6`) still order, compare and `case`, but cannot
-index an array (`[E]T`), be iterated (`for x in E`) or be stepped with `'Next` and `'Prev`,
-which Nim refuses for them too; Adascript says so on both backends.
+other. Values that skip a number (`0, 5, 6`) still order, compare, `case` and iterate --
+`for x in E` visits the members, each once and in order, never a value no member has, as
+if the members were listed (`for x in [NONE, SOME, MANY]`) -- but cannot index an array
+(`[E]T`) or be stepped with `'Next` and `'Prev`: one slot per member or one per value, the
+next member or the next value, a gap leaves both open, and Nim refuses them too. Adascript
+says so on both backends.
 
 Reading a member from a string is `parse_enum(E, s)`, an `E | !ParseFailure_T`
 (§10.12): the member named exactly `s`, or a failure the caller looks at where
