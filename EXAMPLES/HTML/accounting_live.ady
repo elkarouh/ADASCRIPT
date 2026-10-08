@@ -85,21 +85,6 @@ def live_graph_html(g: Graph) -> Html:
             for a in g.accounts:
                 + live_node_html(a)
 
-def render() -> Html:
-    var sections: []Html = [
-        section_html("Accounts are nodes, transactions are edges",
-            GRAPH_TEXT + " Drag an account to move it.",
-            [live_graph_html(books), books.edges.to_html()])]
-    for s in sections_after_graph(books):
-        sections.append(s)
-    html:
-        div:
-            style: STYLE + "g.node { cursor: grab; } svg.graph { user-select: none; }"
-            h1: TITLE
-            p: INTRO
-            for s in sections:
-                + s
-
 # ---------------------------------------------------------------------
 # The mouse: a press on a node grabs it (above), these move it and drop it
 # ---------------------------------------------------------------------
@@ -121,6 +106,21 @@ def main():
     layout.start(books)
     assert books.total() == 0                   # the books balance
     assert books.net_assets() == books.equity()     # and so does the balance sheet
+
+    def render() -> Html:
+        var sections: []Html = [
+            section_html("Accounts are nodes, transactions are edges",
+                GRAPH_TEXT + " Drag an account to move it.",
+                [live_graph_html(books), books.edges.to_html()])]
+        for s in sections_after_graph(books):
+            sections.append(s)
+        html:
+            div:
+                style: STYLE + "g.node { cursor: grab; } svg.graph { user-select: none; }"
+                h1: TITLE
+                p: INTRO
+                for s in sections:
+                    + s
 
     setRenderer(render)
     document.addEventListener("mousemove", on_move)
