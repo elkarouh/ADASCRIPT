@@ -1436,6 +1436,17 @@ test: compile
 	    rm -f $(EXDIR)/HTML/html_counter.js $(EXDIR)/HTML/accounting_live.js; \
 	fi
 
+	@# TOOLS/ACCOUNTING: the model and the ledger it keeps in SQLite, run from
+	@# their directory, where test_ledger.ady reads accounting.conf.
+	@echo "=== TOOLS/ACCOUNTING (model, ledger) ==="
+	@if [ -z "$(call nim_has,db_connector/db_sqlite)" ]; then echo "  SKIPPED, db_connector not installed"; else \
+	    for t in test_accounting_model test_ledger; do \
+	        printf '  %-42s' "ACCOUNTING/$$t.ady (nim)"; \
+	        (cd $(TOOLDIR)/ACCOUNTING && $(ADY2NIM) c -r $$t.ady >/dev/null 2>&1) \
+	            && echo OK || { echo FAIL; exit 1; }; \
+	    done; \
+	fi
+
 	@echo ""
 	@echo "All tests passed."
 

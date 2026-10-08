@@ -1,0 +1,106 @@
+#!/usr/bin/env ady2nim
+"""The ledger on an in-memory database: the chart of accounts of
+accounting.conf and the example's year give the same books as kleppmann(),
+and what does not fit the books is refused without a trace.
+
+    ady2nim c -r test_ledger.ady
+"""
+from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
+from ledger import Config, Ledger, cents_of, kind_named, open_chart, read_config, record_example
+
+# The value of a step that must not fail here.
+def config_of(path: Path) -> Config:
+    let r: Config | !BookFailure_T = read_config(path)
+    case r:
+        when BookFailure_T:
+            raise ValueError(r.detail)
+        when Config:
+            return r
+
+def number_of(r: int | !BookFailure_T) -> int:
+    case r:
+        when BookFailure_T:
+            raise ValueError(r.detail)
+        when int:
+            return r
+
+def kind(word: str) -> Kind_T:
+    let r: Kind_T | !BookFailure_T = kind_named(word)
+    case r:
+        when BookFailure_T:
+            raise ValueError(r.detail)
+        when Kind_T:
+            return r
+
+def cents(word: str) -> Cents_T:
+    let r: Cents_T | !BookFailure_T = cents_of(word)
+    case r:
+        when BookFailure_T:
+            raise ValueError(r.detail)
+        when Cents_T:
+            return r
+
+let config: Config = config_of(Path("accounting.conf"))
+assert len(config.accounts) == 15
+assert config.currency == "USD"
+assert config.database.name == "accounting.db"
+
+var books: Ledger = Ledger(":memory:")
+assert number_of(open_chart(books, config)) == 15
+assert number_of(open_chart(books, config)) == 0                  # opening the chart twice opens nothing twice
+assert record_example(books) is None
+assert books.count("transactions") == 17
+assert books.count("postings") == 37               # 14 entries of two postings, 3 of three
+assert record_example(books) is BookFailure_T      # the example goes in an empty ledger only
+
+# The same books as the model's own example: every account, its balance and
+# its colour, and the edges and flows drawn from them.
+let stored: Graph = books.graph()
+let built: Graph = kleppmann()
+assert len(stored.accounts) == len(built.accounts)
+for a in built.accounts:
+    assert stored.account(a.name).balance == a.balance
+    assert stored.account(a.name).colour == a.colour
+assert len(stored.edges) == len(built.edges)
+assert len(stored.flows) == len(built.flows)
+assert stored.profit() == built.profit()
+assert stored.total() == 0
+
+# Entries come back as they were written.
+let entries: []Entry = books.entries()
+assert entries[1].what == example_entries()[1].what
+assert len(entries[1].postings) == 3
+assert entries[1].postings[2].account == "VAT to recover"
+assert entries[1].postings[2].amount == 10500
+
+# What does not fit is refused, and leaves nothing behind.
+def refused(e: Entry) -> bool:
+    let before: int = books.count("postings")
+    let r: None | !BookFailure_T = books.record(e)
+    return r is BookFailure_T and books.count("postings") == before
+
+assert refused(Entry("2012-01-01", "does not add up", [Posting("Bank account", -1000), Posting("Food", 900)]))
+assert refused(Entry("2012-01-01", "no such account", [Posting("Bank", -1000), Posting("Food", 1000)]))
+assert refused(Entry("2012-01-01", "goes nowhere", [Posting("Bank account", 0), Posting("Food", 0)]))
+assert refused(Entry("2012-01-01", "many to many", [Posting("Bank account", -600), Posting("Credit card", -400),
+                                                     Posting("Food", 500), Posting("Payroll", 500)]))
+assert books.record(Entry("2012-01-02", "Printer paper", [Posting("Bank account", -1210), Posting("Food", 1000),
+                                                            Posting("VAT to recover", 210)])) is None
+assert books.graph().balance("Food") == 2300
+
+# Accounts: a number is unique, so is a name, and a kind is one of five.
+assert books.open_account("613100", kind("expense"), "Fuel") is None
+assert books.open_account("613100", kind("expense"), "Fuel again") is BookFailure_T
+assert books.open_account("613200", kind("expense"), "Fuel") is BookFailure_T
+assert books.open_account("6x", kind("expense"), "Odd") is BookFailure_T
+assert kind_named("cost") is BookFailure_T
+assert kind_named("Revenue") is not BookFailure_T
+
+# Amounts as typed.
+assert cents("12.10") == 1210
+assert cents("-605") == -60500
+assert cents("1,210.00") == 121000
+assert cents_of("twelve") is BookFailure_T
+
+books.close()
+print "ledger: all checks passed"

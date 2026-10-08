@@ -1,0 +1,322 @@
+"""The accounting of Martin Kleppmann's "Accounting for Computer Scientists"
+(2011, https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html),
+with no GUI in it.
+
+An account is a node, a transaction is an edge carrying an amount from one
+account to another, and a balance is what came in less what went out. The
+statements are read off the colours the article gives the accounts: blue
+(revenue and expense) makes the profit and loss, green (what is owned or
+owed) and pink (what the shareholders put in) make the balance sheet.
+
+A transaction is written as an Entry: postings that each add an amount to an
+account (negative takes it out) and add up to zero. A purchase with VAT is
+one entry of three postings; the graph draws it as two edges.
+
+Nothing here draws anything or stores anything: test_accounting_model.ady
+checks it on its own, accounting_gui.ady renders it, ledger.ady keeps it in
+an SQLite database. Nim only: the Python backend does not
+build a scaled unit such as Dollars_T.
+"""
+
+# Money is kept in whole cents, so sums are exact; it is read in dollars.
+# The scale is the type: Dollars_T(c) is c read in dollars.
+type Cents_T is distinct int
+type Dollars_T is 100 * Cents_T
+
+# The article's colours: green is what you own or owe, blue is revenue and
+# expense, pink is what the shareholders put in.
+type Colour_T is enum GREEN, BLUE, PINK
+
+# What an account is, as a chart of accounts says: the colour follows from
+# it, an asset and a liability are green, revenue and expense blue.
+type Kind_T is enum ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+
+def colour_of(k: Kind_T) -> Colour_T:
+    case k:
+        when ASSET | LIABILITY:
+            return GREEN
+        when REVENUE | EXPENSE:
+            return BLUE
+        when EQUITY:
+            return PINK
+
+# Why the books refuse something: an entry that does not balance, an account
+# that is not there, a line of the config file that cannot be read.
+type BookFailure_T is record:
+    detail: str
+
+# A node of the graph. @virtual makes it a reference: the graph, its
+# transactions and whoever holds the account all share the one balance.
+@virtual
+class Account:
+    var name:    str
+    var colour:  Colour_T
+    var balance: Cents_T = 0
+
+    def __init__(self, name: str, colour: Colour_T):
+        self.name = name
+        self.colour = colour
+
+# A date is written as ISO text, 2011-03-07, which sorts as it should.
+type Transaction is record:
+    date:   str
+    what:   str
+    source: Account
+    target: Account
+    amount: Cents_T
+
+# What has flowed from one account to another, all transactions together.
+type Flow is record:
+    source: Account
+    target: Account
+    amount: Cents_T
+
+# What one transaction does to one account: AMOUNT added to it, or taken
+# out when negative. The account is named, so an entry can be written down,
+# stored and read back before there is a graph to post it to.
+type Posting is record:
+    account: str
+    amount:  Cents_T
+
+# A transaction as the books write it: on DATE, WHAT happened, and its
+# postings, which add up to zero.
+type Entry is record:
+    date:     str
+    what:     str
+    postings: []Posting
+
+# One line of a statement.
+type Line is record:
+    label:  str
+    amount: Cents_T
+
+# C in dollars, 1,234.56.
+def money_text(c: Cents_T) -> str:
+    return f"{Dollars_T(c):,.2f}"
+
+# The VAT on NET at RATE percent, rounded to the cent.
+def vat_on(net: Cents_T, rate: int) -> Cents_T:
+    return Cents_T((int(net) * rate + 50) // 100)
+
+class Graph:
+    var accounts: []Account
+    var edges:    []Transaction
+    var flows:    []Flow
+
+    def __init__(self):
+        self.accounts = []
+        self.edges = []
+        self.flows = []
+
+    def add_account(self, name: str, colour: Colour_T) -> Account:
+        let a: Account = Account(name, colour)
+        self.accounts.append(a)
+        return a
+
+    def account(self, name: str) -> Account:
+        for a in self.accounts:
+            if a.name == name:
+                return a
+        raise KeyError(f"no account {name}")
+
+    def balance(self, name: str) -> Cents_T:
+        return self.account(name).balance
+
+    # One edge: money flows from source to target.
+    def transfer(self, date: str, what: str, source: Account, target: Account, amount: Cents_T):
+        source.balance -= amount
+        target.balance += amount
+        self.edges.append(Transaction(date, what, source, target, amount))
+        for i in range(len(self.flows)):
+            if self.flows[i].source == source and self.flows[i].target == target:
+                self.flows[i].amount += amount
+                return
+        self.flows.append(Flow(source, target, amount))
+
+    def has(self, name: str) -> bool:
+        for a in self.accounts:
+            if a.name == name:
+                return True
+        return False
+
+    # Whether entry E can be posted: its accounts are all in the graph, its
+    # postings add up to zero, and one side of it is a single account (see
+    # post).
+    def check(self, e: Entry) -> None | !BookFailure_T:
+        var sum: Cents_T = 0
+        var ins: int = 0
+        var outs: int = 0
+        for p in e.postings:
+            if not self.has(p.account):
+                return BookFailure_T(f"{e.date} {e.what}: there is no account {p.account}")
+            sum += p.amount
+            if p.amount > 0:
+                ins += 1
+            elif p.amount < 0:
+                outs += 1
+        if ins == 0 or outs == 0:
+            return BookFailure_T(f"{e.date} {e.what}: money must leave one account and reach another")
+        if sum != 0:
+            return BookFailure_T(f"{e.date} {e.what}: the postings add up to {money_text(sum)}, not 0")
+        if ins > 1 and outs > 1:
+            return BookFailure_T(f"{e.date} {e.what}: one side must be a single account")
+
+    # A checked entry E as edges. Money flows from the accounts it takes out
+    # of to the ones it adds to, so one side is a single account: one source
+    # paying several targets (a purchase with VAT), or several sources owing
+    # one target (a sale with VAT).
+    def post(self, e: Entry):
+        var ins: []Posting = []
+        var outs: []Posting = []
+        for p in e.postings:
+            if p.amount > 0:
+                ins.append(p)
+            elif p.amount < 0:
+                outs.append(p)
+        if len(outs) == 1:
+            for p in ins:
+                self.transfer(e.date, e.what, self.account(outs[0].account), self.account(p.account), p.amount)
+        else:
+            for p in outs:
+                self.transfer(e.date, e.what, self.account(p.account), self.account(ins[0].account), -p.amount)
+
+    # The transactions that make up flow F, in the order they were made.
+    def transactions_of(self, f: Flow) -> []Transaction:
+        var found: []Transaction = []
+        for t in self.edges:
+            if t.source == f.source and t.target == f.target:
+                found.append(t)
+        return found
+
+    # The transactions that touch account A, in the order they were made: the
+    # ones that bring money in and the ones that take it out.
+    def transactions_for(self, a: Account) -> []Transaction:
+        var found: []Transaction = []
+        for t in self.edges:
+            if t.source == a or t.target == a:
+                found.append(t)
+        return found
+
+    # Zero when the books balance: every edge is once positive, once negative.
+    def total(self) -> Cents_T:
+        var sum: Cents_T = 0
+        for a in self.accounts:
+            sum += a.balance
+        return sum
+
+    def sum_of(self, colour: Colour_T) -> Cents_T:
+        var sum: Cents_T = 0
+        for a in self.accounts:
+            if a.colour == colour:
+                sum += a.balance
+        return sum
+
+    # A negative balance on a blue account is revenue, so the sign flips.
+    def profit(self) -> Cents_T:
+        return -self.sum_of(BLUE)
+
+    # Assets less liabilities: the green accounts.
+    def net_assets(self) -> Cents_T:
+        return self.sum_of(GREEN)
+
+    # What the shareholders put in, and the profit made with it.
+    def equity(self) -> Cents_T:
+        return self.profit() - self.sum_of(PINK)
+
+    def profit_and_loss(self) -> []Line:
+        var lines: []Line = []
+        for a in self.accounts:
+            if a.colour == BLUE and a.balance < 0:
+                lines.append(Line(f"Revenue: {a.name}", -a.balance))
+        for a in self.accounts:
+            if a.colour == BLUE and a.balance > 0:
+                lines.append(Line(f"Expenses: {a.name}", a.balance))
+        return lines
+
+    def assets_and_liabilities(self) -> []Line:
+        var lines: []Line = []
+        for a in self.accounts:
+            if a.colour == GREEN and a.balance > 0:
+                lines.append(Line(f"Assets: {a.name}", a.balance))
+        for a in self.accounts:
+            if a.colour == GREEN and a.balance < 0:
+                lines.append(Line(f"Less liabilities: {a.name}", a.balance))
+        return lines
+
+    def equity_lines(self) -> []Line:
+        var lines: []Line = [Line("Equity: profit", self.profit())]
+        for a in self.accounts:
+            if a.colour == PINK:
+                lines.append(Line(f"Equity: {a.name}", -a.balance))
+        return lines
+
+# The article's company, every transaction in the order it tells them (the
+# article gives no dates; these are ours), and changes of ours: the chair is bought and customer 1's order sold with VAT,
+# each one transaction that touches three accounts, and a credit note sends
+# money back along an edge, so the graph has a flow both ways between two
+# accounts.
+# Entries as the article writes them.
+
+# AMOUNT moves from SOURCE to TARGET.
+def entry(date: str, what: str, source: str, target: str, amount: Cents_T) -> Entry:
+    return Entry(date, what, [Posting(source, -amount), Posting(target, amount)])
+
+# A purchase with VAT: one transaction, three accounts. SOURCE pays NET to
+# TARGET and the VAT on it to VAT, where it waits to be claimed back from the
+# tax office: VAT to recover, an asset.
+def purchase_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: int) -> Entry:
+    let tax: Cents_T = vat_on(net, rate)
+    return Entry(date, f"{what} ({rate}% VAT)",
+                 [Posting(source, -(net + tax)), Posting(target, net), Posting(vat, tax)])
+
+# A sale with VAT, the other way round: TARGET, the customer, owes NET to
+# SOURCE, the revenue, and the VAT on it to VAT, which the company collects
+# for the tax office: VAT to pay, a liability.
+def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: int) -> Entry:
+    let tax: Cents_T = vat_on(net, rate)
+    return Entry(date, f"{what} ({rate}% VAT)",
+                 [Posting(source, -net), Posting(vat, -tax), Posting(target, net + tax)])
+
+# The article's company, the VAT on the chair and on customer 1's order, the
+# credit note to customer 2, and stock bought on credit and a bank loan.
+def example_entries() -> []Entry:
+    return [
+        entry("2011-01-03", "A bagel on the company credit card", "Credit card", "Food", 500),
+        purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank account", "Furniture", "VAT to recover", 50000, 21),
+        entry("2011-01-05", "The founder puts in savings", "Capital", "Bank account", 500000),
+        entry("2011-01-31", "The credit card bill is paid from the bank", "Bank account", "Credit card", 500),
+        entry("2011-02-01", "A Super Burrito on the credit card", "Credit card", "Food", 800),
+        sale_with_vat("2011-02-07", "Sale to customer 1, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, 21),
+        entry("2011-02-08", "Sale to customer 2, agreed at 5,000", "Sales", "Customer 2", 500000),
+        entry("2011-02-21", "Customer 1 pays in full, VAT included", "Customer 1", "Bank account", 605000),
+        entry("2011-02-22", "Customer 2 pays half up front", "Customer 2", "Bank account", 250000),
+        entry("2011-03-01", "Y Combinator invests", "Capital", "Bank account", 2000000),
+        purchase_with_vat("2011-03-10", "Stock bought on credit from a supplier", "Suppliers", "Stock", "VAT to recover", 100000, 21),
+        entry("2011-03-31", "Salaries, paid from the bank", "Bank account", "Payroll", 800000),
+        entry("2011-04-04", "Customer 2 returns part of the order: a credit note of 500", "Customer 2", "Sales", 50000),
+        entry("2011-04-15", "Half of the supplier's invoice is paid from the bank", "Bank account", "Suppliers", 60500),
+        entry("2011-05-02", "The bank lends 10,000", "Loans", "Bank account", 1000000),
+        entry("2011-06-30", "1,000 of the loan is repaid", "Bank account", "Loans", 100000),
+        entry("2011-12-31", "The chair loses a quarter of its value to depreciation", "Furniture", "Depreciation", 12500)]
+
+def kleppmann() -> Graph:
+    var g: Graph = Graph()
+    g.add_account("Sales", BLUE)
+    g.add_account("Customer 1", GREEN)
+    g.add_account("Customer 2", GREEN)
+    g.add_account("Capital", PINK)
+    g.add_account("Credit card", GREEN)
+    g.add_account("Bank account", GREEN)
+    g.add_account("Furniture", GREEN)
+    g.add_account("Payroll", BLUE)
+    g.add_account("Food", BLUE)
+    g.add_account("Depreciation", BLUE)
+    g.add_account("VAT to recover", GREEN)
+    g.add_account("VAT to pay", GREEN)
+    g.add_account("Suppliers", GREEN)
+    g.add_account("Stock", GREEN)
+    g.add_account("Loans", GREEN)
+
+    for e in example_entries():
+        g.post(e)
+    return g

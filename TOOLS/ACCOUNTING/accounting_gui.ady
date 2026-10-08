@@ -1,0 +1,295 @@
+#!/usr/bin/env ady2nim
+"""Accounting for computer scientists, as a web page.
+
+    ady2nim c -r accounting_gui.ady > accounting_gui.html   (or: make gui)
+
+The accounting itself is accounting_model.ady: Account and Graph objects
+with no GUI in them, tested on their own by test_accounting_model.ady. This
+file only renders them: the graph drawn as an SVG (circles for the accounts,
+arrows for the money flowing), the transactions, the balances, the profit and
+loss statement and the balance sheet. See Martin Kleppmann's "Accounting for
+Computer Scientists" (2011,
+https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html).
+
+Needs karax: `nimble install karax@1.5.0`.
+"""
+from math nimport sqrt
+from accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
+
+const STYLE: str = """
+body { font-family: sans-serif; max-width: 52em; margin: 2em auto; padding: 0 1em; line-height: 1.45; }
+table { border-collapse: collapse; margin: 1em 0; }
+th, td { border: 1px solid #bbb; padding: 0.3em 0.7em; text-align: left; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.green { background: #d6f0d6; }
+td.blue { background: #d6e6f8; }
+td.pink { background: #f8d6e6; }
+svg.graph { width: 100%; height: auto; margin: 1em 0; }
+path.edge { fill: none; stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
+path.hit { fill: none; stroke: transparent; stroke-width: 12; }
+g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
+polygon { fill: #555; }
+circle.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
+circle.liability { fill: #e3d6f5; stroke: #7a52b0; stroke-width: 1.5; }
+circle.revenue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 4; }
+circle.expense { fill: #fbd29c; stroke: #c06a00; stroke-width: 4; }
+circle.pink { fill: #f8d6e6; stroke: #b05a85; stroke-width: 1.5; }
+text.label { text-anchor: middle; dominant-baseline: middle; font-size: 11px; }
+text.amount { text-anchor: middle; font-size: 11px; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+table.statement { min-width: 22em; }
+tr.total td { font-weight: bold; border-top: 2px solid #333; }
+"""
+
+const NODE_RADIUS: float = 42.0
+
+# 1234567 cents -> "12,345.67": Dollars_T converts, the format groups.
+def money(c: Cents_T) -> str:
+    return f"{Dollars_T(c):,.2f}"
+
+def px(v: float) -> str:
+    return f"{v:.1f}"
+
+def css_of(a: Account) -> str:
+    case a.colour:
+        when GREEN:
+            return ("liability" if a.balance < 0 else "green")      # an asset is owned, a liability owed
+        when BLUE:
+            return ("revenue" if a.balance < 0 else "expense")    # revenue is a negative balance
+        when PINK:
+            return "pink"
+
+# ---------------------------------------------------------------------
+# The layout: where each account sits in the drawing
+# ---------------------------------------------------------------------
+
+type Point is record:
+    x: float
+    y: float
+
+def place(a: Account) -> Point:
+    case a.name:
+        when "VAT to pay":
+            return Point(80.0, 50.0)
+        when "Sales":
+            return Point(80.0, 190.0)
+        when "Customer 1":
+            return Point(270.0, 50.0)
+        when "Customer 2":
+            return Point(270.0, 190.0)
+        when "Capital":
+            return Point(80.0, 330.0)
+        when "Credit card":
+            return Point(480.0, 50.0)
+        when "Bank account":
+            return Point(480.0, 190.0)
+        when "VAT to recover":
+            return Point(270.0, 330.0)
+        when "Furniture":
+            return Point(480.0, 330.0)
+        when "Payroll":
+            return Point(700.0, 190.0)
+        when "Food":
+            return Point(700.0, 50.0)
+        when "Suppliers":
+            return Point(270.0, 470.0)
+        when "Stock":
+            return Point(480.0, 470.0)
+        when "Loans":
+            return Point(700.0, 470.0)
+        when others:
+            return Point(700.0, 330.0)        # Depreciation
+
+# ---------------------------------------------------------------------
+# Rendering: a to_html for each thing of the model that is drawn, called as
+# a method (a.to_html(p, tip), g.to_html()) though the model knows nothing of it
+# ---------------------------------------------------------------------
+
+# +5,000.00 or -500.00: the change a transaction makes to an account.
+def signed(c: Cents_T) -> str:
+    return ("+" if c >= 0 else "-") + money(Cents_T(abs(int(c))))
+
+# What hovering over account A shows: its balance, then each transaction that
+# touches it with its date, the change it made and the balance after it.
+def account_tip(g: Graph, a: Account) -> str:
+    var tip: str = f"{a.name}: balance {money(a.balance)}"
+    var running: Cents_T = 0
+    for t in g.transactions_for(a):
+        let change: Cents_T = (t.amount if t.target == a else Cents_T(-int(t.amount)))
+        running += change
+        tip += "\n" + f"{t.date}   {signed(change)}   -> {money(running)}   {t.what}"
+    return tip
+
+# An account as a node at P: a circle with its name in it. TIP shows when the
+# mouse is over it, as for an arrow below.
+def to_html(a: Account, p: Point, tip: str) -> Html:
+    let cx: str = px(p.x)
+    let cy: str = px(p.y)
+    let css: str = css_of(a)
+    html:
+        g:
+            if tip != "":
+                title: tip
+            circle class=css cx=cx cy=cy r="42"
+            stext class="label" x=cx y=cy: a.name
+
+# The point D along the way from P to Q.
+def toward(p: Point, q: Point, d: float) -> Point:
+    let dx: float = q.x - p.x
+    let dy: float = q.y - p.y
+    let length: float = sqrt(dx * dx + dy * dy)
+    return Point(p.x + dx / length * d, p.y + dy / length * d)
+
+# How far F's arrow bows out: money flowing both ways between two accounts
+# makes two arrows, bowed to either side so that both, and their amounts,
+# show; any other arrow is straight.
+def bend_of(g: Graph, f: Flow) -> float:
+    for other in g.flows:
+        if other.source == f.target and other.target == f.source:
+            return 30.0
+    return 0.0
+
+# What hovering over F's arrow shows: each of its transactions, one a line,
+# with its date and amount.
+def tip_of(g: Graph, f: Flow) -> str:
+    var tip: str = f"{f.source.name} to {f.target.name}"
+    for t in g.transactions_of(f):
+        tip += f"\n{t.date}   {money(t.amount)}   {t.what}"
+    return tip
+
+# A flow as an arrow from the rim of the circle at A to the rim of the one
+# at B, with the amount at its middle. It bows BEND to the right of the
+# straight line, as seen going from A to B, so the arrow back bows the other
+# way. TIP shows when the mouse is over it, as the browser's tooltip (the live
+# page, which cannot, passes "" and shows its own): a wider invisible path
+# under the arrow makes it easy to point at.
+def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
+    let dx: float = b.x - a.x
+    let dy: float = b.y - a.y
+    let length: float = sqrt(dx * dx + dy * dy)
+    let top: Point = Point((a.x + b.x) / 2.0 - dy / length * bend,
+                           (a.y + b.y) / 2.0 + dx / length * bend)
+    # the curve's control point: the curve passes through TOP halfway
+    let c: Point = Point(2.0 * top.x - (a.x + b.x) / 2.0, 2.0 * top.y - (a.y + b.y) / 2.0)
+    let start: Point = toward(a, c, NODE_RADIUS)
+    let stop: Point = toward(b, c, NODE_RADIUS + 2.0)    # the head stops short of the circle
+    let d: str = f"M {px(start.x)} {px(start.y)} Q {px(c.x)} {px(c.y)} {px(stop.x)} {px(stop.y)}"
+    # the amount just above a straight arrow, just outside a bowed one
+    var label: Point = Point(top.x, top.y - 6.0)
+    if bend != 0.0:
+        label = Point(top.x - dy / length * 14.0, top.y + dx / length * 14.0 + 4.0)
+    let lx: str = px(label.x)
+    let ly: str = px(label.y)
+    html:
+        g class="arrow":
+            if tip != "":
+                title: tip
+            path class="hit" d=d
+            path class="edge" d=d
+            stext class="amount" x=lx y=ly: money(f.amount)
+
+def to_html(g: Graph) -> Html:
+    html:
+        svg viewBox="0 0 780 530" class="graph":
+            defs:
+                marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                    polygon points="0 0, 10 3.5, 0 7"
+            for f in g.flows:
+                + f.to_html(place(f.source), place(f.target), bend_of(g, f), tip_of(g, f))
+            for a in g.accounts:
+                + a.to_html(place(a), account_tip(g, a))
+
+def to_html(edges: []Transaction) -> Html:
+    html:
+        table:
+            tr:
+                th: "Date"
+                th: "Transaction"
+                th: "From"
+                th: "To"
+                th: "Amount"
+            for t in edges:
+                tr:
+                    td: t.date
+                    td: t.what
+                    td class=css_of(t.source): t.source.name
+                    td class=css_of(t.target): t.target.name
+                    td class="num": money(t.amount)
+
+def to_html(accounts: []Account) -> Html:
+    html:
+        table:
+            tr:
+                th: "Account"
+                th: "Balance"
+            for a in accounts:
+                tr:
+                    td class=css_of(a): a.name
+                    td class="num": money(a.balance)
+
+def to_html(lines: []Line, total_label: str, total: Cents_T) -> Html:
+    html:
+        table class="statement":
+            for l in lines:
+                tr:
+                    td: l.label
+                    td class="num": money(l.amount)
+            tr class="total":
+                td: total_label
+                td class="num": money(total)
+
+def section_html(title: str, text: str, parts: []Html) -> Html:
+    html:
+        section:
+            h2: title
+            p: text
+            for part in parts:
+                + part
+
+def page_html(title: str, text: str, sections: []Html) -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: title
+                style: STYLE
+            body:
+                h1: title
+                p: text
+                for s in sections:
+                    + s
+
+# The page's sections, below the graph; accounting_live.ady shows them too.
+def sections_after_graph(g: Graph) -> []Html:
+    return [
+        section_html("Balances",
+            "An account starts at zero. Money coming in adds to it, money going out subtracts. Every transaction is counted once as positive and once as negative, so all the balances add up to zero: that is what accountants call balancing the books.",
+            [g.accounts.to_html()]),
+        section_html("Profit and loss",
+            "Only the blue accounts: revenue less expenses. A negative balance on a blue account is revenue, so the sign flips when it is reported.",
+            [g.profit_and_loss().to_html("Profit", g.profit())]),
+        section_html("Balance sheet",
+            "The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customer 2 still owes 2,000 of its order.",
+            [g.assets_and_liabilities().to_html("Assets less liabilities", g.net_assets()),
+             g.equity_lines().to_html("Total equity", g.equity())]),
+    ]
+
+const GRAPH_TEXT: str = "Each arrow is an edge of the graph: an amount flowing from one account to another, and several transactions between the same two accounts are drawn as one arrow with their sum. An account can be a bank account, a card, a customer, or an abstract category such as food or furniture. Accounts are coloured: green for what the company owns (assets) and purple for what it owes (liabilities), blue for revenue and orange for expense (both with a thick border), pink for the money its shareholders put in."
+
+const TITLE: str = "Accounting for computer scientists"
+const INTRO: str = "Basic accounting is graph theory. The company below is the example of Martin Kleppmann's article of that name, worked out by a program."
+
+def main():
+    let books: Graph = kleppmann()
+    assert books.total() == 0                   # the books balance
+    assert books.net_assets() == books.equity()     # and so does the balance sheet
+
+    var sections: []Html = [
+        section_html("Accounts are nodes, transactions are edges", GRAPH_TEXT,
+            [books.to_html(), books.edges.to_html()])]
+    for s in sections_after_graph(books):
+        sections.append(s)
+    print "<!doctype html>"
+    print page_html(TITLE, INTRO, sections)
+
+if __name__ == "__main__":       # not when accounting_live.ady imports this
+    main()

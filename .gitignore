@@ -110,3 +110,11 @@ TOOLS/PGREP/test/Pgrep_py.py
 TOOLS/PGREP/test/pgrep_py
 node_modules/
 EXAMPLES/HTML/build/
+
+# The accounting tool: its program, tests and pages, and the database it keeps.
+TOOLS/ACCOUNTING/ledger
+TOOLS/ACCOUNTING/test_ledger
+TOOLS/ACCOUNTING/test_accounting_model
+TOOLS/ACCOUNTING/accounting_gui
+TOOLS/ACCOUNTING/accounting.db
+TOOLS/ACCOUNTING/build/

@@ -772,3 +772,22 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
       `Cents_T`, a `distinct int`) emits a bare `130000` and Nim reports a type mismatch.
       The literal takes the declared type next to a name or a field, but not next to
       `f(...)[i]`. Workaround in the example: unpack with `let (revenue, expenses, profit) = ...`.
+
+## Found writing TOOLS/ACCOUNTING/ledger.ady
+
+- [ ] a parameter is made `var` when its name, followed by ` = `, appears
+      inside a string literal: `self.db.value("SELECT number FROM accounts
+      WHERE name = ?", [name])` made `name` a `var string`, and every caller
+      passing a `let` or a field was refused ("expression is immutable, not
+      var"). The mutation scan should skip string contents. The ledger writes
+      `WHERE name IS ?` to stay clear of it.
+- [ ] a stale transpile is kept when a dependency failed to parse: compiling
+      test_accounting_model.ady while accounting_model.ady had a parse error
+      cached the test's Nim without the model's types (`g.total() == 0` lost
+      its `Cents_T(0)`), and fixing the model did not refresh it -- the test
+      kept failing until `~/.cache/adascript/cache-<hash>` was removed. A
+      failed dependency should leave nothing cached, or the cache key should
+      cover the dependencies' contents.
+- [ ] `assert r is not F` does not narrow `r` for the lines after it (an `if
+      r is F: die(...)` does not either, without `else:`), so a test takes a
+      value that must not fail through a helper with `case r:`.
