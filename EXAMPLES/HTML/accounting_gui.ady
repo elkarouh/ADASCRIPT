@@ -25,7 +25,7 @@ td.green { background: #d6f0d6; }
 td.blue { background: #d6e6f8; }
 td.pink { background: #f8d6e6; }
 svg.graph { width: 100%; height: auto; margin: 1em 0; }
-line.edge { stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
+path.edge { fill: none; stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
 polygon { fill: #555; }
 circle.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
 circle.blue { fill: #d6e6f8; stroke: #5a80b0; stroke-width: 1.5; }
@@ -100,24 +100,46 @@ def to_html(a: Account, p: Point) -> Html:
             circle class=css cx=cx cy=cy r="42"
             stext class="label" x=cx y=cy: a.name
 
+# The point D along the way from P to Q.
+def toward(p: Point, q: Point, d: float) -> Point:
+    let dx: float = q.x - p.x
+    let dy: float = q.y - p.y
+    let length: float = sqrt(dx * dx + dy * dy)
+    return Point(p.x + dx / length * d, p.y + dy / length * d)
+
+# How far F's arrow bows out: money flowing both ways between two accounts
+# makes two arrows, bowed to either side so that both, and their amounts,
+# show; any other arrow is straight.
+def bend_of(g: Graph, f: Flow) -> float:
+    for other in g.flows:
+        if other.source == f.target and other.target == f.source:
+            return 30.0
+    return 0.0
+
 # A flow as an arrow from the rim of the circle at A to the rim of the one
-# at B, with the amount in the middle.
-def to_html(f: Flow, a: Point, b: Point) -> Html:
+# at B, with the amount at its middle. It bows BEND to the right of the
+# straight line, as seen going from A to B, so the arrow back bows the other
+# way.
+def to_html(f: Flow, a: Point, b: Point, bend: float) -> Html:
     let dx: float = b.x - a.x
     let dy: float = b.y - a.y
     let length: float = sqrt(dx * dx + dy * dy)
-    let ux: float = dx / length
-    let uy: float = dy / length
-    let tip: float = NODE_RADIUS + 2.0           # the head stops short of the circle
-    let x1: str = px(a.x + ux * NODE_RADIUS)
-    let y1: str = px(a.y + uy * NODE_RADIUS)
-    let x2: str = px(b.x - ux * tip)
-    let y2: str = px(b.y - uy * tip)
-    let lx: str = px((a.x + b.x) / 2.0)
-    let ly: str = px((a.y + b.y) / 2.0 - 6.0)
+    let top: Point = Point((a.x + b.x) / 2.0 - dy / length * bend,
+                           (a.y + b.y) / 2.0 + dx / length * bend)
+    # the curve's control point: the curve passes through TOP halfway
+    let c: Point = Point(2.0 * top.x - (a.x + b.x) / 2.0, 2.0 * top.y - (a.y + b.y) / 2.0)
+    let start: Point = toward(a, c, NODE_RADIUS)
+    let stop: Point = toward(b, c, NODE_RADIUS + 2.0)    # the head stops short of the circle
+    let d: str = f"M {px(start.x)} {px(start.y)} Q {px(c.x)} {px(c.y)} {px(stop.x)} {px(stop.y)}"
+    # the amount just above a straight arrow, just outside a bowed one
+    var label: Point = Point(top.x, top.y - 6.0)
+    if bend != 0.0:
+        label = Point(top.x - dy / length * 14.0, top.y + dx / length * 14.0 + 4.0)
+    let lx: str = px(label.x)
+    let ly: str = px(label.y)
     html:
         g:
-            line class="edge" x1=x1 y1=y1 x2=x2 y2=y2
+            path class="edge" d=d
             stext class="amount" x=lx y=ly: money(f.amount)
 
 def to_html(g: Graph) -> Html:
@@ -127,7 +149,7 @@ def to_html(g: Graph) -> Html:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
             for f in g.flows:
-                + f.to_html(place(f.source), place(f.target))
+                + f.to_html(place(f.source), place(f.target), bend_of(g, f))
             for a in g.accounts:
                 + a.to_html(place(a))
 
