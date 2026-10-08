@@ -62,6 +62,9 @@ tr.total td { font-weight: bold; border-top: 2px solid #333; }
 # Widgets: each knows how to render itself
 # ---------------------------------------------------------------------
 
+# What a Section or a Page holds: anything with a to_html. Only what goes
+# into one of those lists is a Widget; an Account and an Arrow are drawn by
+# the Graph and the tables, which know their types.
 @virtual
 class Widget:
     def to_html(self) -> Html:
@@ -69,9 +72,10 @@ class Widget:
             div class="widget"
 
 # A node of the graph. Money flowing in adds to its balance, money flowing
-# out subtracts.
+# out subtracts. @virtual makes it a reference: the graph, the transactions
+# and the variables of main() all share the one account.
 @virtual
-class Account(Widget):
+class Account:
     var name:    str
     var colour:  Colour_T
     var x:       float
@@ -127,7 +131,7 @@ type Flow is record:
 
 # An arrow from the rim of one circle to the rim of the other, with the
 # amount in the middle.
-class Arrow(Widget):
+class Arrow:
     var x1:     str
     var y1:     str
     var x2:     str
