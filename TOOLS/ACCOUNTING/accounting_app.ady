@@ -65,7 +65,7 @@ class Layout:
     var mouse_y: float = 0.0
     var width: float = WIDTH            # the drawing's size: WIDTH x HEIGHT, or the window's when graph_only
     var height: float = HEIGHT
-    var graph_only: bool = False        # True: the graph alone, without the text and tables
+    var graph_only: bool = False        # True: the graph and its transactions, without the text and the other tables
     var grabbed_x: float = 0.0          # where the held account was grabbed: a press that
     var grabbed_y: float = 0.0          # does not move it is a click, which picks it
     var source: str = ""                # the frozen account, where the money leaves, or ""
@@ -696,6 +696,7 @@ def main():
                 if layout.graph_only:
                     + record_html()
                     + live_graph_html(graph)
+                    + journal_html()
                 else:
                     h1: APP_TITLE
                     p: APP_INTRO

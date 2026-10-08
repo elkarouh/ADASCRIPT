@@ -46,7 +46,7 @@ Rarer things happen in the tables: each transaction and each account has a
 Delete button (an account only goes once no transaction touches it), and
 the last row of the accounts opens a new one. Hover over an account or an
 arrow to see its transactions; "Graph only" gives the drawing the whole
-window.
+window, with the transactions table under it.
 
 ### Scenarios
 
