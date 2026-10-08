@@ -3556,6 +3556,21 @@ An attribute value is a string or an expression without spaces
 (`id=self.id`); `class` and `for` are fine as attribute names, and
 `data-id` is written `data_id`. The block needs exactly one root tag.
 
+**What the block accepts.** Expressions and control flow are Adascript; the
+tag lines are the block's own. Four things follow:
+
+- A tag's text is a string: `td: t.what` works, an `int` is written
+  `td: str(n)` or `td: f"{n}"`.
+- Only the line forms above: a `let`, an assignment or a bare call is not
+  one of them, so it goes before `html:` (a function may hold any statements
+  before its block).
+- `case`/`when` does not work inside the block (its `when` lines are read as
+  tags); use `if`/`elif`, or a helper function that returns the string.
+- `+ expr` takes a name or a call on one: `+ part`, `+ child.to_html()`,
+  `+ arrow_html(f, a, b)`. A call on a call's result (`+ f(x).to_html()`)
+  is refused by karax, so bind it first; and a function named like a tag
+  (`g`, `p`, `a`, `b`, `i`, `table` ...) is read as that tag.
+
 **A page as a tree of objects.** Each object knows how to render itself, and a
 parent asks its children for theirs with `+`:
 
@@ -3619,7 +3634,7 @@ own fields is `@virtual`, so the handler and the page share one object.
 A page with a handler builds only under `ady2nim js` (`#ady2nim-args js` on
 the second line); it needs a `<div id="ROOT">` and the compiled script in an
 HTML file. `EXAMPLES/HTML/html_counter.ady` and its `index.html` are the whole
-program, and `make run` there serves it. Handlers that take the event object
+program, and `make counter` there serves it. Handlers that take the event object
 are not built.
 
 ---
