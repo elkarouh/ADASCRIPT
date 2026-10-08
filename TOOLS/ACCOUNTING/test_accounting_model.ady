@@ -24,26 +24,28 @@ assert g.balance("Customer 2") == 200000
 assert g.balance("Sales") == -950000
 assert g.balance("Capital") == -2500000
 assert g.balance("Food") == 1300
-assert g.balance("VAT to recover") == 31500    # 21% of 500 and of 1,000, to claim back
-assert g.balance("Stock") == 100000            # bought on credit, 1,000 net
-assert g.balance("Suppliers") == -60500        # 1,210 owed, 605 paid
+assert g.balance("VAT to recover") == 94500    # 21% of 500, 3,000 and 1,000, to claim back
+assert g.balance("Stock") == 100000            # 3,000 and 1,000 bought on credit, 3,000 sold
+assert g.balance("Suppliers") == -423500       # 3,630 and 1,210 owed, 605 paid
+assert g.balance("Cost of sales") == 300000    # what the material sold to customer 1 cost
 assert g.balance("Loans") == -900000           # 10,000 borrowed, 1,000 repaid
 assert g.balance("VAT to pay") == -105000      # 21% of 5,000, owed to the tax office
 
 # The statements.
-assert g.profit() == 136200
-assert g.net_assets() == 2636200       # the loan and the stock change assets and liabilities alike
-assert g.equity() == 2636200
-assert len(g.profit_and_loss()) == 4
+assert g.profit() == -163800         # the material sold for 5,000 cost 3,000
+assert g.net_assets() == 2336200       # the loan and the stock change assets and liabilities alike
+assert g.equity() == 2336200
+assert len(g.profit_and_loss()) == 5
 assert g.profit_and_loss()[0].label == "Revenue: Sales"
 
 # Two transactions between the same accounts, the same way, are one flow;
 # the credit note goes the other way, so it is a flow of its own. The chair is
 # two edges, one to Furniture and one to VAT to recover; the sale to customer 1
 # two, one from Sales and one from VAT to pay; the stock is two, from Suppliers;
-# the loan and its repayment go opposite ways, so they are two flows.
-assert len(g.edges) == 20
-assert len(g.flows) == 18
+# so is the material bought for stock; the loan and its repayment go
+# opposite ways, so they are two flows.
+assert len(g.edges) == 23
+assert len(g.flows) == 19
 
 # A flow's transactions, with their dates: Capital to Bank account is two.
 var capital_to_bank: Flow = g.flows[0]

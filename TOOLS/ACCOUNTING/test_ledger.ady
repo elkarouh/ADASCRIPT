@@ -42,16 +42,16 @@ def cents(word: str) -> Cents_T:
             return r
 
 let config: Config = config_of(Path("accounting.conf"))
-assert len(config.accounts) == 15
+assert len(config.accounts) == 16
 assert config.currency == "USD"
 assert config.database.name == "accounting.db"
 
 var books: Ledger = Ledger(":memory:")
-assert number_of(open_chart(books, config)) == 15
+assert number_of(open_chart(books, config)) == 16
 assert number_of(open_chart(books, config)) == 0                  # opening the chart twice opens nothing twice
 assert record_example(books) is None
-assert books.count("transactions") == 17
-assert books.count("postings") == 37               # 14 entries of two postings, 3 of three
+assert books.count("transactions") == 19
+assert books.count("postings") == 42               # 15 entries of two postings, 4 of three
 assert record_example(books) is BookFailure_T      # the example goes in an empty ledger only
 
 # The same books as the model's own example: every account, its balance and
@@ -82,7 +82,7 @@ case got:
     when BookFailure_T:
         raise ValueError(got.detail)
     when Books:
-        assert len(got.accounts) == 15 and len(got.entries) == 17
+        assert len(got.accounts) == 16 and len(got.entries) == 19
         assert got.currency == "USD"
         let drawn: Graph = graph_of(got)
         for a in built.accounts:
@@ -123,7 +123,7 @@ let (numbered, ids) = books.numbered_entries()
 assert numbered[len(numbered) - 1].what == "Printer paper"
 assert books.delete_entry(ids[len(ids) - 1]) is None
 assert books.count("transactions") == before - 1
-assert books.count("postings") == 37
+assert books.count("postings") == 42
 assert books.graph().balance("Food") == 1300
 assert books.delete_entry(ids[len(ids) - 1]) is BookFailure_T        # gone too
 assert books.delete_entry(9999) is BookFailure_T

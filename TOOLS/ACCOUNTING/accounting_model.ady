@@ -278,15 +278,17 @@ def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net:
                  [Posting(source, -net), Posting(vat, -tax), Posting(target, net + tax)])
 
 # The article's company, the VAT on the chair and on customer 1's order, the
-# credit note to customer 2, and stock bought on credit and a bank loan.
+# credit note to customer 2, stock bought on credit (part of it sold to customer 1, at its cost) and a bank loan.
 def example_entries() -> []Entry:
     return [
         entry("2011-01-03", "A bagel on the company credit card", "Credit card", "Food", 500),
         purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank account", "Furniture", "VAT to recover", 50000, 21),
         entry("2011-01-05", "The founder puts in savings", "Capital", "Bank account", 500000),
+        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000, kept in stock", "Suppliers", "Stock", "VAT to recover", 300000, 21),
         entry("2011-01-31", "The credit card bill is paid from the bank", "Bank account", "Credit card", 500),
         entry("2011-02-01", "A Super Burrito on the credit card", "Credit card", "Food", 800),
-        sale_with_vat("2011-02-07", "Sale to customer 1, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, 21),
+        sale_with_vat("2011-02-07", "Sale to customer 1 of the material in stock, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, 21),
+        entry("2011-02-07", "The material sold to customer 1 leaves the stock: it cost 3,000", "Stock", "Cost of sales", 300000),
         entry("2011-02-08", "Sale to customer 2, agreed at 5,000", "Sales", "Customer 2", 500000),
         entry("2011-02-21", "Customer 1 pays in full, VAT included", "Customer 1", "Bank account", 605000),
         entry("2011-02-22", "Customer 2 pays half up front", "Customer 2", "Bank account", 250000),
@@ -316,6 +318,7 @@ def kleppmann() -> Graph:
     g.add_account("Suppliers", GREEN)
     g.add_account("Stock", GREEN)
     g.add_account("Loans", GREEN)
+    g.add_account("Cost of sales", BLUE)
 
     for e in example_entries():
         g.post(e)

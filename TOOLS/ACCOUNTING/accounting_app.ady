@@ -22,7 +22,7 @@ from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money,
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
 const WIDTH: float = 780.0
-const HEIGHT: float = 530.0
+const HEIGHT: float = 670.0
 
 const LIVE_STYLE: str = """
 g.node { cursor: grab; }

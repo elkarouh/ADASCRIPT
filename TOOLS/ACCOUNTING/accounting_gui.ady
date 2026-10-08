@@ -98,6 +98,8 @@ def place(a: Account) -> Point:
             return Point(480.0, 470.0)
         when "Loans":
             return Point(700.0, 470.0)
+        when "Cost of sales":
+            return Point(480.0, 610.0)
         when "Depreciation":
             return Point(700.0, 330.0)
         when others:
@@ -193,7 +195,7 @@ def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
 
 def to_html(g: Graph) -> Html:
     html:
-        svg viewBox="0 0 780 530" class="graph":
+        svg viewBox="0 0 780 670" class="graph":
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
