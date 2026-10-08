@@ -1,6 +1,6 @@
-# scenarios/10_blank.books: loaded by ledger_server into 10_blank.db the first time it is picked,
+# scenarios/11_blank.books: loaded by ledger_server into 11_blank.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
-title	10. Start from scratch
+title	11. Start from scratch
 about	The whole chart of accounts, and no transaction yet: the books of a company of your own. Record its first transaction by freezing Capital and dragging an arrow to Bank account.
 currency	USD
 account	100000	equity	Capital
@@ -12,6 +12,7 @@ account	400001	asset	Customer 1
 account	400002	asset	Customer 2
 account	411000	asset	VAT to recover
 account	440000	liability	Suppliers
+account	450000	liability	Income tax due
 account	451000	liability	VAT to pay
 account	453000	liability	Withholding tax due
 account	454000	liability	Social security due
@@ -32,5 +33,6 @@ account	621000	expense	Employer social security
 account	630000	expense	Depreciation
 account	634000	expense	Bad debts
 account	650000	expense	Interest
+account	670000	expense	Income tax
 account	700000	revenue	Sales
 account	720000	revenue	Own work capitalised

@@ -27,7 +27,8 @@ company's books that show one idea, with a few lines saying which.
 | 7. A customer's deposit | money received before delivery is a liability, not revenue, until the goods are invoiced |
 | 8. A credit note and a bad debt | a credit note cancels part of a sale; an unpaid debt is written off as a cost |
 | 9. The year end | prepaid and accrued expenses put each cost in the year it belongs to |
-| 10. Start from scratch | the whole chart of accounts, no transaction yet |
+| 10. A small company's year | the whole of one year, each kind of transaction once, down to the stock count, the depreciation and the income tax |
+| 11. Start from scratch | the whole chart of accounts, no transaction yet |
 
 Change a scenario as you like: Start over brings it back as it was, and
 Save as keeps your version as a scenario of its own.
