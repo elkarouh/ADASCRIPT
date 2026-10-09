@@ -94,6 +94,19 @@ account as they stood after each ("Bank: transaction 4 of 10
 where a customer's debt comes from and how it is settled, or what a VAT
 account collects before it is paid; Show all lets the account go.
 
+"Exercise" turns the scenario into a quiz. The graph shows the books as
+they stood before a transaction, the transaction is told in words in the
+card ("Goods for resale bought on credit: 8,000 plus 21% VAT"), and the
+student draws the arrow: click the account the money leaves, then drag to
+the account it reaches. A right arrow is confirmed with what the
+transaction did to each account (here Bank -6,050.00, VAT receivable
++1,050.00, Furniture and equipment +5,000.00), and the next transaction is
+asked; a wrong one says whether it goes the other way round, or just not
+that one, and "Show the answer" gives up on it. Only the transactions
+solved so far are listed, the score counts the ones right at the first
+try, and "Stop the exercise" goes back to the books. Nothing is recorded:
+the books are not changed.
+
 "Close the year" (shown while there is a cost or revenue balance to close)
 does what an accountant does on 31 December: it posts two entries dated the
 end of the last transaction's year, one moving each cost into retained

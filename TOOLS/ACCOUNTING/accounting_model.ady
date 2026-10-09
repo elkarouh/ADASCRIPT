@@ -259,6 +259,19 @@ class Graph:
                 lines.append(Line(f"Equity: {a.name}", -a.balance))
         return lines
 
+# Whether entry E moves money from account SOURCE to account TARGET: SOURCE
+# is one the entry takes money out of, TARGET one it puts money into (a sale
+# with VAT takes it from Sales and from VAT payable, both to the customer).
+def moves(e: Entry, source: str, target: str) -> bool:
+    var leaves: bool = False
+    var reaches: bool = False
+    for p in e.postings:
+        if p.account == source and p.amount < 0:
+            leaves = True
+        if p.account == target and p.amount > 0:
+            reaches = True
+    return leaves and reaches
+
 # The article's company, every transaction in the order it tells them (the
 # article gives no dates; these are ours), and changes of ours: the chair is bought and customer A's order sold with VAT,
 # each one transaction that touches three accounts, and a credit note sends

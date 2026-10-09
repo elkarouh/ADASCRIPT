@@ -18,7 +18,7 @@ from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeou
 from karax/karax nimport setRenderer, redraw
 from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
-from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
+from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, moves, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, closing_entries, entry_lines, graph_of, kind_named, kind_text, parse_books
 
@@ -383,7 +383,7 @@ class Layout:
             self.drawing = False
             let under: str = self.node_at(self.mouse_x, self.mouse_y)
             if under != "" and under != self.source:
-                self.open_popup(under)
+                arrow_drawn(under)
             elif under == self.source and self.still():
                 self.unfreeze()
         elif self.held >= 0:
@@ -547,6 +547,10 @@ var replaced: bool = False              # another scenario, or this one started 
 # The replay (below): the transactions one at a time
 var step: int = -1                      # the transaction shown last; -1: not replaying, all shown
 var playing: bool = False
+var exercising: bool = False            # the exercise: the transactions to be drawn, one at a time
+var ex_index: int = 0                   # the transaction asked for; the ones before it are solved
+var ex_score: int = 0                   # the ones got right at the first try
+var ex_tries: int = 0                   # wrong tries at this one
 var only: str = ""                      # the account whose transactions alone are replayed, or "": all
 var tick_pending: bool = False          # a tick is on its way: no second one
 var replayed: Graph = Graph()           # the books up to and with transaction STEP
@@ -946,13 +950,10 @@ const STEP_MS: int = 1800                # how long each transaction is shown wh
 
 # The graph drawn: the books as they stood at STEP while replaying, else all of them.
 def shown() -> Graph:
-    return (replayed if step >= 0 else graph)
+    return (replayed if step >= 0 or exercising else graph)
 
-def replay_to(i: int):
-    step = i
-    var upto: Books = books
-    upto.entries = books.entries[:i + 1]
-    replayed = graph_of(upto)
+# Transaction I's arrows and accounts marked, as the one just shown.
+def mark_now(i: int):
     var alone: Books = books
     alone.entries = [books.entries[i]]
     now_arrows = []
@@ -961,6 +962,13 @@ def replay_to(i: int):
     now_accounts = []
     for p in books.entries[i].postings:
         now_accounts.append(p.account)
+
+def replay_to(i: int):
+    step = i
+    var upto: Books = books
+    upto.entries = books.entries[:i + 1]
+    replayed = graph_of(upto)
+    mark_now(i)
 
 # The transactions replayed, by number: those touching ONLY, or all.
 def replayable() -> []int:
@@ -1038,6 +1046,79 @@ def stop_replay():
     playing = False
     step = -1
     only = ""
+    exercising = False
+
+# ---------------------------------------------------------------------
+# The exercise: the books as they stood, the next transaction told in
+# words, and the arrow for it to be drawn
+# ---------------------------------------------------------------------
+
+# The books as they stand before transaction EX_INDEX, the last one solved marked.
+def ex_show():
+    step = ex_index - 1
+    var upto: Books = books
+    upto.entries = books.entries[:ex_index]
+    replayed = graph_of(upto)
+    now_arrows = []
+    now_accounts = []
+    if ex_index > 0:
+        mark_now(ex_index - 1)
+    redraw()
+
+def start_exercise():
+    if len(books.entries) == 0:
+        return
+    stop_replay()
+    layout.unfreeze()
+    exercising = True
+    ex_index = 0
+    ex_score = 0
+    ex_tries = 0
+    say("Draw the arrow for the transaction below: click the account the money leaves, then drag to the one it reaches.", False)
+    ex_show()
+
+def stop_exercise():
+    stop_replay()
+    layout.unfreeze()
+    say(f"Exercise stopped: {ex_score} right at the first try.", False)
+    redraw()
+
+# The transaction solved, the next asked for.
+def ex_next(told: str, refusal: bool):
+    ex_index += 1
+    ex_tries = 0
+    layout.unfreeze()
+    if ex_index >= len(books.entries):
+        say(f"{told} That was the last one: {ex_score} right at the first try, out of {len(books.entries)}.", False)
+    else:
+        say(told, refusal)
+    ex_show()
+
+# An arrow drawn from the frozen account to TARGET: a popup to record it,
+# or, in the exercise, an answer to the question.
+def arrow_drawn(target: str):
+    if not exercising:
+        layout.open_popup(target)
+        return
+    let source: str = layout.source
+    let e: Entry = books.entries[ex_index]
+    if moves(e, source, target):
+        if ex_tries == 0:
+            ex_score += 1
+        ex_next(f"Right: money leaves {source} and reaches {target}. The transaction did {postings_text(e)}.", False)
+    else:
+        ex_tries += 1
+        layout.unfreeze()
+        if moves(e, target, source):
+            say("Other way round: the arrow goes from the account the money leaves to the one it reaches.", True)
+        else:
+            say(f"Not {source} to {target}. Which account gives, and which one receives?" + (" Or press Show the answer." if ex_tries >= 2 else ""), True)
+        redraw()
+
+# Give up this transaction: its answer told, the next one asked.
+def show_answer():
+    let e: Entry = books.entries[ex_index]
+    ex_next(f"The answer: {postings_text(e)}.", False)
 
 # The replay buttons and, while replaying, the transaction shown, its own words large.
 def replay_html() -> Html:
@@ -1050,21 +1131,36 @@ def replay_html() -> Html:
     let play_label: str = (f"Play {layout.source}'s transactions" if layout.source != "" else
                            f"Play {only}'s transactions" if only != "" else "Play the transactions")
     let what: str = (books.entries[step].what if step >= 0 else "")
+    let asked: bool = exercising and ex_index < n
+    let ex_which: str = (f"Exercise: transaction {ex_index + 1} of {n}, {books.entries[ex_index].date}, {ex_score} right so far" if asked else f"Exercise finished: {ex_score} right at the first try, out of {n}")
+    let ex_what: str = (books.entries[ex_index].what if asked else "")
     html:
         div class="replaying":
-            p class="replay":
-                if playing:
-                    button id="pause" onclick=pause(): "Pause"
-                else:
-                    button id="play" onclick=play(): play_label
-                button id="back" onclick=step_by(-1): "Previous"
-                button id="next" onclick=step_by(1): "Next"
-                if step >= 0:
-                    button id="all" onclick=stop_replay(): "Show all"
-            if step >= 0:
+            if exercising:
+                p class="replay":
+                    if asked:
+                        button id="answer" onclick=show_answer(): "Show the answer"
+                    button id="stop-exercise" onclick=stop_exercise(): "Stop the exercise"
                 div class="caption":
-                    span class="which": which
-                    span class="what": what
+                    span class="which": ex_which
+                    if asked:
+                        span class="what": ex_what
+            else:
+                p class="replay":
+                    if playing:
+                        button id="pause" onclick=pause(): "Pause"
+                    else:
+                        button id="play" onclick=play(): play_label
+                    button id="back" onclick=step_by(-1): "Previous"
+                    button id="next" onclick=step_by(1): "Next"
+                    if step >= 0:
+                        button id="all" onclick=stop_replay(): "Show all"
+                    if len(books.entries) > 0:
+                        button id="exercise" title="Draw the arrows of the transactions yourself, one at a time" onclick=start_exercise(): "Exercise"
+                if step >= 0:
+                    div class="caption":
+                        span class="which": which
+                        span class="what": what
 
 # The scenario picker, Start over, Save as, and what the scenario is about.
 def scenario_option_html(i: int) -> Html:
@@ -1092,14 +1188,16 @@ def last_date() -> str:
 
 def record_html() -> Html:
     let message_class: str = ("message refused" if refused else "message")
-    let hint: str = ("To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
+    let hint: str = ("Click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches." if exercising and layout.source == "" else
+                     f"{layout.source} is frozen: drag an arrow from it to the account the money reaches. Click {layout.source} again to let it go." if exercising else
+                     "To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
                      if layout.source == "" else
                      f"{layout.source} is frozen: drag an arrow from it to the account the money reaches. Click {layout.source} again, or press Escape, to let it go. Play, Previous and Next replay its transactions alone.")
     html:
         div class="record":
             + replay_html()
             p: hint
-            if closable() and step < 0:
+            if closable() and step < 0 and not exercising:
                 p:
                     button id="close-year" title="Move the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero" onclick=close_year(): "Close the year"
             if message != "":
@@ -1206,7 +1304,7 @@ def journal_html() -> Html:
                 th: "Transaction"
                 th: "What it did to each account"
                 th: ""
-            for i in range(len(books.entries)):
+            for i in range(ex_index if exercising else len(books.entries)):
                 + journal_row_html(i)
 
 # What the accounts of a quarter of G add up to, as that quarter counts
@@ -1320,7 +1418,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
 
 def main():
     def render() -> Html:
