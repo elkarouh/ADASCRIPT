@@ -1224,6 +1224,8 @@ def replay_html() -> Html:
                         button id="all" onclick=stop_replay(): "Show all"
                     if len(books.entries) > 0:
                         button id="exercise" title="Draw the arrows of the transactions yourself, one at a time" onclick=start_exercise(): "Exercise"
+                    if closable() and step < 0:
+                        button id="close-year" title="Move the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero" onclick=close_year(): "Close the year"
                 if len(days) > 1:
                     p class="slider":
                         span: "Books as at "
@@ -1270,9 +1272,6 @@ def record_html() -> Html:
         div class="record":
             + replay_html()
             p: help_text(hint) if (layout.source == "" and not exercising) else hint
-            if closable() and step < 0 and not exercising:
-                p:
-                    button id="close-year" title="Move the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero" onclick=close_year(): "Close the year"
             if message != "":
                 p class=message_class: message
 
