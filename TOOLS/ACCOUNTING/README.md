@@ -94,6 +94,19 @@ account as they stood after each ("Bank: transaction 4 of 10
 where a customer's debt comes from and how it is settled, or what a VAT
 account collects before it is paid; Show all lets the account go.
 
+"Debit and credit" writes the books the way an accountant does. The
+transactions list becomes a journal: each transaction has a line for every
+account it touches, the debits first and the credits, indented, after them
+(Furniture and equipment 5,000.00 and VAT receivable 1,050.00 in debit,
+Bank 6,050.00 in credit), and the accounts table shows each balance as a
+debit or a credit. Below the accounts, each account touched is drawn as a T:
+its debits on the left, its credits on the right, and the balance, the
+bigger side less the smaller, under it. An arrow in the graph goes from the
+account that is credited to the account that is debited; assets and
+expenses grow on the debit side, liabilities, equity and revenue on the
+credit side. The T-accounts follow the replay and the exercise, counting only the
+transactions shown so far. "Plus and minus" brings the first view back.
+
 "Exercise" turns the scenario into a quiz. The graph shows the books as
 they stood before a transaction, the transaction is told in words in the
 card ("Goods for resale bought on credit: 8,000 plus 21% VAT"), and the

@@ -18,7 +18,7 @@ from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeou
 from karax/karax nimport setRenderer, redraw
 from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
-from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, moves, purchase_with_vat, sale_with_vat, vat_text
+from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, Posting, VatRate_T, entry, moves, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, closing_entries, entry_lines, graph_of, kind_named, kind_text, parse_books
 
@@ -58,6 +58,25 @@ g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
 g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
 tr.now td { background: #ffe0b2; font-weight: bold; }
 tr.later td { color: #bbb; }
+tbody.now td { background: #ffe0b2; font-weight: bold; }
+tbody.later td { color: #bbb; }
+tbody.entry td { border-top: 2px solid #999; }
+tbody.entry tr + tr td { border-top: 1px solid #ddd; }
+td.credit { padding-left: 2.5em; }
+div.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 0.8em; align-items: start; }
+div.taccount { border: 1px solid #999; border-radius: 4px; background: #fff; font-size: 0.9em; }
+div.taccount h4 { margin: 0; padding: 4px 8px; border-bottom: 2px solid #333; font-size: 1em; }
+div.taccount h4.green { background: #d6f0d6; }
+div.taccount h4.liability { background: #e3d6f5; }
+div.taccount h4.revenue { background: #a9cdf5; }
+div.taccount h4.expense { background: #fbd29c; }
+div.taccount h4.untouched { background: #eee; }
+div.taccount h4.pink { background: #f8d6e6; }
+div.tbody { display: grid; grid-template-columns: 1fr 1fr; min-height: 2.4em; }
+div.tdebit { padding: 4px 8px; text-align: right; border-right: 2px solid #333; font-variant-numeric: tabular-nums; }
+div.tcredit { padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+div.tbody p { margin: 0; }
+p.tbalance { margin: 0; padding: 3px 8px; border-top: 1px solid #999; background: #f6f6f6; font-weight: bold; }
 p.refused { color: #b71c1c; }
 button.delete { font-size: 0.8em; }
 table.accounts tr.new td { background: #f6f6f6; }
@@ -547,6 +566,7 @@ var replaced: bool = False              # another scenario, or this one started 
 # The replay (below): the transactions one at a time
 var step: int = -1                      # the transaction shown last; -1: not replaying, all shown
 var playing: bool = False
+var debit_credit: bool = False          # the journal and accounts as debits and credits, and the T-accounts, not as plus and minus
 var exercising: bool = False            # the exercise: the transactions to be drawn, one at a time
 var ex_index: int = 0                   # the transaction asked for; the ones before it are solved
 var ex_score: int = 0                   # the ones got right at the first try
@@ -898,6 +918,9 @@ def tidy():
     improve()
     layout.sync(books.accounts)
 
+def toggle_debit_credit():
+    debit_credit = not debit_credit
+
 # Circles or boxes: the accounts laid out afresh in the other shape.
 def toggle_shape():
     stop_replay()
@@ -935,11 +958,13 @@ def improve():
 def live_button_html() -> Html:
     let label: str = ("Show everything" if layout.graph_only else "Graph only")
     let shape_label: str = ("Circles" if layout.as_boxes else "Boxes")
+    let dc_label: str = ("Plus and minus" if debit_credit else "Debit and credit")
     html:
         p:
             button id="graph-only" onclick=layout.toggle_graph_only(): label
             button id="shape" onclick=toggle_shape(): shape_label
             button id="tidy" title="Lay the accounts out again, each in its quarter, placed to keep the arrows short and off other accounts" onclick=tidy(): "Tidy up"
+            button id="debit-credit" title="Write the transactions as debits and credits, and show each account as a T" onclick=toggle_debit_credit(): dc_label
 
 # ---------------------------------------------------------------------
 # The replay: the transactions one at a time, each highlighted on the graph
@@ -1208,12 +1233,17 @@ def record_html() -> Html:
 def account_row_html(i: int) -> Html:
     let a: AccountRow = books.accounts[i]
     let css: str = css_of(shown().account(a.name))
+    let balance: Cents_T = shown().balance(a.name)
     html:
         tr:
             td: a.number
             td class=css: a.name
             td: kind_text(a.kind)
-            td class="num": money(shown().balance(a.name))
+            if debit_credit:
+                td class="num": (money(balance) if balance > 0 else "")
+                td class="num": (money(Cents_T(-int(balance))) if balance < 0 else "")
+            else:
+                td class="num": money(balance)
             td:
                 button class="delete" onclick=delete_account(a.name): "Delete"
 
@@ -1224,7 +1254,11 @@ def accounts_html() -> Html:
                 th: "Number"
                 th: "Account"
                 th: "Kind"
-                th: "Balance"
+                if debit_credit:
+                    th: "Debit"
+                    th: "Credit"
+                else:
+                    th: "Balance"
                 th: ""
             for i in range(len(books.accounts)):
                 + account_row_html(i)
@@ -1241,6 +1275,8 @@ def accounts_html() -> Html:
                         option value="revenue": "revenue"
                         option value="expense": "expense"
                 td: ""
+                if debit_credit:
+                    td: ""
                 td:
                     button id="open" onclick=open_account(): "Open"
 
@@ -1296,16 +1332,119 @@ def journal_row_html(i: int) -> Html:
             td:
                 button class="delete" onclick=delete_entry(i): "Delete"
 
-def journal_html() -> Html:
+# The postings of E as a journal writes them: the debits first, then the credits.
+def journal_order(e: Entry) -> []Posting:
+    var ordered: []Posting = []
+    for p in e.postings:
+        if p.amount > 0:
+            ordered.append(p)
+    for p in e.postings:
+        if p.amount < 0:
+            ordered.append(p)
+    return ordered
+
+def posting_row_html(i: int, k: int) -> Html:
+    let e: Entry = books.entries[i]
+    let p: Posting = journal_order(e)[k]
+    let credit: bool = p.amount < 0
+    let account_css: str = ("credit" if credit else "debit")
     html:
-        table:
-            tr:
-                th: "Date"
-                th: "Transaction"
-                th: "What it did to each account"
-                th: ""
-            for i in range(ex_index if exercising else len(books.entries)):
-                + journal_row_html(i)
+        tr:
+            td: (e.date if k == 0 else "")
+            td: (e.what if k == 0 else "")
+            td class=account_css: p.account
+            td class="num": (money(p.amount) if not credit else "")
+            td class="num": (money(Cents_T(-int(p.amount))) if credit else "")
+            td:
+                if k == 0:
+                    button class="delete" onclick=delete_entry(i): "Delete"
+
+# Transaction I written as a journal does: each debit and credit on a line of its own.
+def journal_entry_html(i: int) -> Html:
+    let css: str = ("entry" if step < 0 else ("entry now" if i == step else ("entry later" if i > step else "entry")))
+    html:
+        tbody class=css:
+            for k in range(len(books.entries[i].postings)):
+                + posting_row_html(i, k)
+
+def journal_html() -> Html:
+    if debit_credit:
+        html:
+            table:
+                tr:
+                    th: "Date"
+                    th: "Transaction"
+                    th: "Account"
+                    th: "Debit"
+                    th: "Credit"
+                    th: ""
+                for i in range(ex_index if exercising else len(books.entries)):
+                    + journal_entry_html(i)
+    else:
+        html:
+            table:
+                tr:
+                    th: "Date"
+                    th: "Transaction"
+                    th: "What it did to each account"
+                    th: ""
+                for i in range(ex_index if exercising else len(books.entries)):
+                    + journal_row_html(i)
+
+# ---------------------------------------------------------------------
+# The T-accounts: each account's debits on its left, its credits on its right
+# ---------------------------------------------------------------------
+
+const T_TEXT: str = "Every transaction is written twice, as a debit in one account and a credit in another, for the same amount. An account is a T: its debits on the left, its credits on the right, and its balance is the bigger side less the smaller. Assets and expenses grow on the debit side; liabilities, equity and revenue grow on the credit side. In the graph, an arrow goes from the account that is credited to the account that is debited."
+
+# How many transactions the T-accounts count: the ones shown so far.
+def counted_entries() -> int:
+    if exercising:
+        return ex_index
+    return (step + 1 if step >= 0 else len(books.entries))
+
+def t_account_html(i: int) -> Html:
+    let row: AccountRow = books.accounts[i]
+    var debits: []Cents_T = []
+    var credits: []Cents_T = []
+    for k in range(counted_entries()):
+        for p in books.entries[k].postings:
+            if p.account == row.name:
+                if p.amount > 0:
+                    debits.append(p.amount)
+                else:
+                    credits.append(Cents_T(-int(p.amount)))
+    let balance: Cents_T = shown().balance(row.name)
+    let words: str = ("" if balance == 0 else (" debit" if balance > 0 else " credit"))
+    let owed: str = f"Balance {money(Cents_T(abs(int(balance))))}{words}"
+    let css: str = css_of(shown().account(row.name))
+    let heading: str = f"{row.number} {row.name}"
+    html:
+        div class="taccount":
+            h4 class=css: heading
+            div class="tbody":
+                div class="tdebit":
+                    for d in debits:
+                        p: money(d)
+                div class="tcredit":
+                    for c in credits:
+                        p: money(c)
+            p class="tbalance": owed
+
+# Whether any counted transaction touches account I.
+def t_touched(i: int) -> bool:
+    for k in range(counted_entries()):
+        for p in books.entries[k].postings:
+            if p.account == books.accounts[i].name:
+                return True
+    return False
+
+def t_accounts_html() -> Html:
+    html:
+        div class="tgrid":
+            for i in range(len(books.accounts)):
+                if t_touched(i):
+                    + t_account_html(i)
 
 # What the accounts of a quarter of G add up to, as that quarter counts
 # them: activa and costs as owned or spent, passiva and revenue as owed or
@@ -1418,7 +1557,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Debit and credit writes the transactions as a journal does and shows each account as a T; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
 
 def main():
     def render() -> Html:
@@ -1427,6 +1566,8 @@ def main():
                 GRAPH_TEXT + " Drag an account to move it.",
                 [record_html(), live_graph_html(shown()), journal_html()])]
         sections.append(section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()]))
+        if debit_credit:
+            sections.append(section_html("T-accounts", T_TEXT, [t_accounts_html()]))
         let after: []Html = sections_after_graph(shown())
         for i in range(1, len(after)):          # its first, the balances, is the table above
             sections.append(after[i])
