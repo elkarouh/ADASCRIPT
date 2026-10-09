@@ -1565,9 +1565,9 @@ def main():
             section_html("Accounts are nodes, transactions are edges",
                 GRAPH_TEXT + " Drag an account to move it.",
                 [record_html(), live_graph_html(shown()), journal_html()])]
-        sections.append(section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()]))
-        if debit_credit:
+        if debit_credit:                        # right under the journal, where the button was pressed
             sections.append(section_html("T-accounts", T_TEXT, [t_accounts_html()]))
+        sections.append(section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()]))
         let after: []Html = sections_after_graph(shown())
         for i in range(1, len(after)):          # its first, the balances, is the table above
             sections.append(after[i])

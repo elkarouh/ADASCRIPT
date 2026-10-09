@@ -99,7 +99,7 @@ transactions list becomes a journal: each transaction has a line for every
 account it touches, the debits first and the credits, indented, after them
 (Furniture and equipment 5,000.00 and VAT receivable 1,050.00 in debit,
 Bank 6,050.00 in credit), and the accounts table shows each balance as a
-debit or a credit. Below the accounts, each account touched is drawn as a T:
+debit or a credit. Under the transactions, each account touched is drawn as a T:
 its debits on the left, its credits on the right, and the balance, the
 bigger side less the smaller, under it. An arrow in the graph goes from the
 account that is credited to the account that is debited; assets and
