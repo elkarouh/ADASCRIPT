@@ -57,6 +57,15 @@ other amount; both are worked out again whenever an account moves.
 If the accounts have been dragged into a mess, Tidy up (beside Save as) lays them out again:
 each in its quarter, and within it placed so that the arrows are short and
 run over as few other accounts as possible.
+With more than a dozen accounts, "Group by" (beside Play) draws the accounts whose numbers
+start with the same digits as one node: 2 digits turns 143 accounts of an ERP into about forty,
+a node's amount is the sum of its accounts and an arrow between two nodes is the sum of the
+transactions between them (those inside a group vanish). Hover over a group to see its accounts;
+click it to open it: its accounts are drawn on their own, the other groups stay closed, and
+Close groups folds them again. A big chart starts grouped by as many digits as leave about thirty
+nodes. The page counts in whole numbers below 2,147,483,648 cents, so a grouping whose sums
+would pass that is refused: group by more digits. A group cannot be frozen or be the end of
+a new arrow, and the Exercise waits until no account is grouped.
 The small circle where the two dashed lines cross resizes the quarters:
 drag it, and when you let go the accounts are tidied into their new
 quarters.

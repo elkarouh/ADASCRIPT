@@ -432,7 +432,7 @@ class Layout:
         elif self.drawing:
             self.drawing = False
             let under: str = self.node_at(self.mouse_x, self.mouse_y)
-            if under != "" and under != self.source:
+            if under != "" and under != self.source and not is_group(under):
                 arrow_drawn(under)
             elif under == self.source and self.still():
                 self.unfreeze()
@@ -441,7 +441,10 @@ class Layout:
             let clicked: bool = self.still()
             self.held = -1
             if clicked and self.source == "":
-                self.source = name
+                if is_group(name):
+                    open_group(name)
+                else:
+                    self.source = name
 
     def index(self, a: Account) -> int:
         for i in range(len(self.names)):
@@ -566,6 +569,16 @@ var layout: Layout = Layout()
 
 var books: Books = Books("", [], [], [], "", "")
 var graph: Graph = Graph()
+var view: Graph = Graph()               # the graph drawn: graph, with the accounts of a group merged into one node
+var detail: int = 0                     # 0: every account is a node; N: accounts whose numbers start alike (N digits) are one
+var opened: []str = []                  # the groups opened again, by key
+var view_accounts: []AccountRow = []    # the accounts drawn: the books', or groups in their place
+var view_from: []str = []               # an account in a group ...
+var view_to: []str = []                 # ... and the group's name
+var group_names: []str = []
+var group_keys: []str = []
+var group_members: []str = []           # each group's accounts, a line each, for its tip
+var group_seen: []int = []
 var message: str = "Asking the ledger for the books..."
 var refused: bool = False               # whether the message says why something was refused
 var popup_message: str = ""             # why the popup's transaction cannot be recorded yet
@@ -589,6 +602,222 @@ var replayed: Graph = Graph()           # the books up to and with transaction S
 var now_arrows: []str = []              # its arrows, "source\ttarget"
 var now_accounts: []str = []            # the accounts it touches
 
+# ---------------------------------------------------------------------
+# Groups: with many accounts, those whose numbers start alike are drawn as
+# one node, which a click opens
+# ---------------------------------------------------------------------
+
+def prefix_of(number: str, digits: int) -> str:
+    return (number[:digits] if len(number) > digits else number)
+
+def key_of(r: AccountRow, digits: int) -> str:
+    return prefix_of(r.number, digits) + "/" + str(int(r.kind))
+
+# The groups there would be at DIGITS.
+def groups_at(digits: int) -> int:
+    var keys: []str = []
+    for r in books.accounts:
+        let k: str = key_of(r, digits)
+        if k not in keys:
+            keys.append(k)
+    return len(keys)
+
+# A big chart starts grouped, to the longest prefix that leaves about thirty nodes; a small one, not.
+def auto_detail() -> int:
+    if len(books.accounts) <= 40:
+        return 0
+    var best: int = 1
+    for d in range(1, 7):
+        if groups_at(d) <= 30:
+            best = d
+    while best > 0 and not fits(best):          # the groups add up to more than this page can count
+        best += 1
+        if best > longest_number():
+            best = 0
+    return best
+
+def longest_number() -> int:
+    var most: int = 0
+    for r in books.accounts:
+        most = max(most, len(r.number))
+    return most
+
+# Whether the books grouped to DIGITS add up, in each group and each arrow, to what the page can
+# count (a whole number below 2,147,483,648 cents): the groups' sums are bigger than the accounts'.
+def fits(digits: int) -> bool:
+    let was: int = detail
+    let was_open: []str = opened
+    detail = digits
+    opened = []
+    refresh_view()
+    let vb: Books = view_books(books)
+    var names: []str = []
+    var sums: []float = []
+    var pairs: []str = []
+    var flows: []float = []
+    var most: float = 0.0
+    for e in vb.entries:
+        var ins: []Posting = []
+        var outs: []Posting = []
+        for p in e.postings:
+            if p.amount > 0:
+                ins.append(p)
+            else:
+                outs.append(p)
+        var from_names: []str = []
+        var to_names: []str = []
+        var cents: []float = []
+        if len(outs) == 1:
+            for p in ins:
+                from_names.append(outs[0].account)
+                to_names.append(p.account)
+                cents.append(float(int(p.amount)))
+        else:
+            for p in outs:
+                from_names.append(p.account)
+                to_names.append(ins[0].account)
+                cents.append(float(-int(p.amount)))
+        for k in range(len(cents)):
+            for side in range(2):
+                let who: str = (from_names[k] if side == 0 else to_names[k])
+                let at: int = (names.index(who) if who in names else -1)
+                if at < 0:
+                    names.append(who)
+                    sums.append(0.0)
+                let i: int = (at if at >= 0 else len(names) - 1)
+                sums[i] += (-cents[k] if side == 0 else cents[k])
+                most = max(most, abs(sums[i]))
+            let pair: str = from_names[k] + "\t" + to_names[k]
+            let pat: int = (pairs.index(pair) if pair in pairs else -1)
+            if pat < 0:
+                pairs.append(pair)
+                flows.append(0.0)
+            let j: int = (pat if pat >= 0 else len(pairs) - 1)
+            flows[j] += cents[k]
+            most = max(most, flows[j])
+    detail = was
+    opened = was_open
+    refresh_view()
+    return most < 2000000000.0
+
+def refresh_view():
+    view_accounts = []
+    view_from = []
+    view_to = []
+    group_names = []
+    group_keys = []
+    group_members = []
+    group_seen = []
+    if detail == 0:
+        view_accounts = books.accounts
+        return
+    var keys: []str = []
+    for r in books.accounts:
+        keys.append(key_of(r, detail))
+    for i in range(len(books.accounts)):
+        let r: AccountRow = books.accounts[i]
+        var n: int = 0
+        for k in keys:
+            if k == keys[i]:
+                n += 1
+        if n == 1 or keys[i] in opened:
+            view_accounts.append(r)
+        else:
+            let name: str = f"{prefix_of(r.number, detail)}… {r.name} +{n - 1}"
+            if keys[i] not in group_keys:
+                group_keys.append(keys[i])
+                group_names.append(name)
+                group_members.append("")
+                group_seen.append(0)
+                view_accounts.append(AccountRow(prefix_of(r.number, detail), r.kind, name))
+            let at: int = group_keys.index(keys[i])
+            if group_seen[at] < 12:
+                let line: str = f"{r.number} {r.name}"
+                group_members[at] = (line if group_members[at] == "" else group_members[at] + "\n" + line)
+            elif group_seen[at] == 12:
+                group_members[at] = group_members[at] + "\n..."
+            group_seen[at] += 1
+            view_from.append(r.name)
+            view_to.append(group_names[at])
+
+def view_name(name: str) -> str:
+    for i in range(len(view_from)):
+        if view_from[i] == name:
+            return view_to[i]
+    return name
+
+# The books B with every account of a group one account, the transactions
+# inside a group gone and the others adding up what they did to it.
+def view_books(b: Books) -> Books:
+    if len(group_names) == 0:
+        return b
+    var out: Books = b
+    out.accounts = view_accounts
+    out.entries = []
+    out.ids = []
+    for e in b.entries:
+        var merged: []Posting = []
+        for p in e.postings:
+            let n: str = view_name(p.account)
+            var at: int = -1
+            for k in range(len(merged)):
+                if merged[k].account == n:
+                    at = k
+            if at >= 0:
+                merged[at].amount = Cents_T(int(merged[at].amount) + int(p.amount))
+            else:
+                merged.append(Posting(n, p.amount))
+        var kept: []Posting = []
+        for p in merged:
+            if int(p.amount) != 0:
+                kept.append(p)
+        if len(kept) >= 2:
+            out.entries.append(Entry(e.date, e.what, kept))
+            out.ids.append(0)
+    return out
+
+def is_group(name: str) -> bool:
+    return name in group_names
+
+def rebuild_view():
+    refresh_view()
+    view = graph_of(view_books(books))
+
+# The accounts laid out afresh, after the groups changed.
+def relayout():
+    stop_replay()
+    rebuild_view()
+    layout.reset()
+    layout.sync(view_accounts)
+    if len(view_accounts) <= 40:
+        tidy()
+
+def open_group(name: str):
+    opened.append(group_keys[group_names.index(name)])
+    relayout()
+
+def close_groups():
+    opened = []
+    relayout()
+
+def pick_detail():
+    let picker: Element = document.getElementById("detail")
+    if picker != nil:
+        InputElement(picker).value = str(detail)
+
+def choose_detail():
+    let v: str = field_text("detail")
+    for d in range(0, 7):
+        if str(d) == v:
+            if d > 0 and not fits(d):
+                say(f"Grouped by {d} digit(s), the amounts add up to more than this page can count: group by more digits.", True)
+            else:
+                say("", False)
+                detail = d
+    opened = []
+    relayout()
+    discard_timeout(setTimeout(pick_detail, 50))
+
 def say(text: str, is_refusal: bool):
     message = text
     refused = is_refusal
@@ -602,13 +831,18 @@ def on_books(status: int, response: cstring):
         when BookFailure_T:
             say("The ledger sent books this page cannot read: " + read.detail, True)
         when Books:
+            let first: bool = len(books.accounts) == 0
             books = read
             graph = graph_of(books)
             stop_replay()
-            if replaced:
+            if replaced or first:
                 layout.reset()
                 replaced = False
-            layout.sync(books.accounts)
+                opened = []
+                detail = auto_detail()
+            rebuild_view()
+            layout.sync(view_accounts)
+            discard_timeout(setTimeout(pick_detail, 50))
             if message.startswith("Asking"):
                 say("", False)
 
@@ -856,7 +1090,9 @@ def number_of(name: str) -> str:
 def live_node_html(g: Graph, a: Account) -> Html:
     let p: Point = layout.at(a)
     let number: str = number_of(a.name)
-    let tip: str = (account_tip(g, a) if number == "" else number + " " + account_tip(g, a))
+    var tip: str = (account_tip(g, a) if number == "" else number + " " + account_tip(g, a))
+    if is_group(a.name):
+        tip = f"{a.name}: balance {money(a.balance)}\n" + group_members[group_names.index(a.name)] + "\nClick to open the group"
     let none: str = ""                  # the page's own tooltip shows it, not a <title>
     let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else
                     ("node now" if step >= 0 and a.name in now_accounts else "node")))
@@ -883,7 +1119,7 @@ def tall_of(name: str) -> float:
         return NODE_RADIUS
     var ins: int = 0
     var outs: int = 0
-    for f in graph.flows:
+    for f in view.flows:
         if f.target.name == name:
             ins += 1
         if f.source.name == name:
@@ -914,7 +1150,7 @@ def runs_over(i: int, a: Point, b: Point) -> bool:
 # arrow that runs over another account and so has to bend around it.
 def layout_cost() -> float:
     var cost: float = 0.0
-    for f in graph.flows:
+    for f in view.flows:
         let source: int = layout.names.index(f.source.name)
         let target: int = layout.names.index(f.target.name)
         let a: Point = layout.points[source]
@@ -931,9 +1167,9 @@ def layout_cost() -> float:
 def tidy():
     stop_replay()
     layout.order = []
-    layout.fill(books.accounts)
+    layout.fill(view_accounts)
     improve()
-    layout.sync(books.accounts)
+    layout.sync(view_accounts)
 
 def toggle_debit_credit():
     debit_credit = not debit_credit
@@ -964,7 +1200,7 @@ def improve():
                     let name: str = layout.order[i]
                     layout.order[i] = layout.order[j]
                     layout.order[j] = name
-                    layout.fill(books.accounts)
+                    layout.fill(view_accounts)
                     let cost: float = layout_cost()
                     if cost < best - 0.5:
                         best = cost
@@ -972,7 +1208,7 @@ def improve():
                     else:
                         layout.order[j] = layout.order[i]
                         layout.order[i] = name
-    layout.fill(books.accounts)
+    layout.fill(view_accounts)
 
 def debit_credit_button_html() -> Html:
     let dc_label: str = ("Plus and minus" if debit_credit else "Debit and credit")
@@ -989,24 +1225,24 @@ const STEP_MS: int = 1800                # how long each transaction is shown wh
 
 # The graph drawn: the books as they stood at STEP while replaying, else all of them.
 def shown() -> Graph:
-    return (replayed if step >= 0 or exercising else graph)
+    return (replayed if step >= 0 or exercising else view)
 
 # Transaction I's arrows and accounts marked, as the one just shown.
 def mark_now(i: int):
     var alone: Books = books
     alone.entries = [books.entries[i]]
     now_arrows = []
-    for f in graph_of(alone).flows:
+    for f in graph_of(view_books(alone)).flows:
         now_arrows.append(f.source.name + "\t" + f.target.name)
     now_accounts = []
     for p in books.entries[i].postings:
-        now_accounts.append(p.account)
+        now_accounts.append(view_name(p.account))
 
 def replay_to(i: int):
     step = i
     var upto: Books = books
     upto.entries = books.entries[:i + 1]
-    replayed = graph_of(upto)
+    replayed = graph_of(view_books(upto))
     mark_now(i)
 
 # The transactions replayed, by number: those touching ONLY, or all.
@@ -1126,7 +1362,7 @@ def ex_show():
     step = ex_index - 1
     var upto: Books = books
     upto.entries = books.entries[:ex_index]
-    replayed = graph_of(upto)
+    replayed = graph_of(view_books(upto))
     now_arrows = []
     now_accounts = []
     if ex_index > 0:
@@ -1189,6 +1425,22 @@ def show_answer():
     ex_next(f"The answer: {postings_text(e)}.", False)
 
 # The replay buttons and, while replaying, the transaction shown, its own words large.
+def detail_option_html(d: int) -> Html:
+    let label: str = ("All accounts" if d == 0 else (f"{d} digit" if d == 1 else f"{d} digits"))
+    html:
+        option value=str(d): label
+
+# Group the accounts by the first digits of their numbers.
+def detail_html() -> Html:
+    html:
+        span class="detail":
+            span: "Group by "
+            select id="detail" title="Draw the accounts whose numbers start alike as one node; click a node to open it" onchange=choose_detail():
+                for d in range(0, longest_number()):
+                    + detail_option_html(d)
+            if len(opened) > 0:
+                button id="close-groups" onclick=close_groups(): "Close groups"
+
 def replay_html() -> Html:
     let n: int = len(books.entries)
     let found: []int = replayable()
@@ -1227,8 +1479,10 @@ def replay_html() -> Html:
                     button id="next" onclick=step_by(1): "Next"
                     if step >= 0:
                         button id="all" onclick=stop_replay(): "Show all"
-                    if len(books.entries) > 0:
+                    if len(books.entries) > 0 and len(group_names) == 0:
                         button id="exercise" title="Draw the arrows of the transactions yourself, one at a time" onclick=start_exercise(): "Exercise"
+                    if len(books.accounts) > 12:
+                        + detail_html()
                     if closable() and step < 0:
                         button id="close-year" title="Move the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero" onclick=close_year(): "Close the year"
                 if len(days) > 1:
@@ -1532,7 +1786,7 @@ def t_accounts_html() -> Html:
 # costs, revenue.
 def quarter_total(g: Graph, quarter: int) -> Cents_T:
     var total: Cents_T = 0
-    for row in books.accounts:
+    for row in view_accounts:
         var q: int = 0
         case row.kind:
             when ASSET:
