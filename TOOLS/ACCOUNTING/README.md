@@ -12,6 +12,13 @@ statements are read off the balances. It started as the example in
 make app            # builds everything, starts ledger_server, opens http://127.0.0.1:8802/
 ```
 
+The graph and its controls (scenario picker, replay, date slider, Exercise,
+Close the year) stay at the top; below them four tabs hold the detail views:
+Transactions (the journal, with the Debit and credit toggle), T-accounts,
+Accounts (the table, and opening an account) and Statements (profit and loss,
+balance sheet, ratios). The chosen tab is kept when you switch scenario, and
+the introduction is folded behind "About this page".
+
 The page shows one scenario at a time, picked at its top: a small
 company's books that show one idea, with a few lines saying which.
 

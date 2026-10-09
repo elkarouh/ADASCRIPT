@@ -31,6 +31,10 @@ def number_before(a: str, b: str) -> bool:
     return len(a) < len(b) or (len(a) == len(b) and a < b)
 
 const LIVE_STYLE: str = """
+div.tabs { margin: 1.2em 0 0; border-bottom: 2px solid #c9dcf0; }
+div.tabs button { font-size: 1em; padding: 0.4em 1.1em; margin: 0 0.2em -2px 0; border: 2px solid #c9dcf0; border-bottom: none; border-radius: 6px 6px 0 0; background: #eef4fb; cursor: pointer; }
+div.tabs button.selected { background: #fff; font-weight: bold; border-bottom: 2px solid #fff; }
+button.about { font-size: 0.9em; border: none; background: none; color: #1565c0; cursor: pointer; text-decoration: underline; }
 g.node { cursor: grab; }
 g.from circle, g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
 g.from { cursor: crosshair; }
@@ -568,6 +572,8 @@ var replaced: bool = False              # another scenario, or this one started 
 # The replay (below): the transactions one at a time
 var step: int = -1                      # the transaction shown last; -1: not replaying, all shown
 var playing: bool = False
+var tab: str = "Transactions"          # which of TABS is showing under the graph
+var about_open: bool = False            # the introduction, folded away until asked for
 var debit_credit: bool = False          # the journal and accounts as debits and credits, and the T-accounts, not as plus and minus
 var exercising: bool = False            # the exercise: the transactions to be drawn, one at a time
 var ex_index: int = 0                   # the transaction asked for; the ones before it are solved
@@ -922,6 +928,12 @@ def tidy():
 
 def toggle_debit_credit():
     debit_credit = not debit_credit
+
+def choose_tab(name: str):
+    tab = name
+
+def toggle_about():
+    about_open = not about_open
 
 # Circles or boxes: the accounts laid out afresh in the other shape.
 def toggle_shape():
@@ -1623,19 +1635,43 @@ def on_key(e: Event):
 const APP_TITLE: str = "Accounting, as graph theory"
 const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Slide the date to see the books as they stood on each day; Debit and credit writes the transactions as a journal does and shows each account as a T; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
 
+const TABS: []str = ["Transactions", "T-accounts", "Accounts", "Statements"]
+
+def tab_button(name: str) -> Html:
+    let chosen: str = ("selected" if name == tab else "")
+    html:
+        button class=chosen onclick=choose_tab(name): name
+
+def tabs_html() -> Html:
+    html:
+        div class="tabs":
+            for name in TABS:
+                + tab_button(name)
+
+def tab_body() -> []Html:
+    if tab == "Transactions":
+        return [journal_html()]
+    if tab == "T-accounts":
+        return [section_html("T-accounts", T_TEXT, [t_accounts_html()])]
+    if tab == "Accounts":
+        return [section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()])]
+    let after: []Html = sections_after_graph(shown())
+    var out: []Html = []
+    for i in range(1, len(after)):              # its first, the balances, is the Accounts table
+        out.append(after[i])
+    out.append(section_html("Ratios", RATIOS_TEXT, [ratios_html()]))
+    return out
+
 def main():
     def render() -> Html:
         var sections: []Html = [
             section_html("Accounts are nodes, transactions are edges",
                 GRAPH_TEXT + " Drag an account to move it.",
-                [record_html(), live_graph_html(shown()), journal_html()])]
-        if debit_credit:                        # right under the journal, where the button was pressed
-            sections.append(section_html("T-accounts", T_TEXT, [t_accounts_html()]))
-        sections.append(section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()]))
-        let after: []Html = sections_after_graph(shown())
-        for i in range(1, len(after)):          # its first, the balances, is the table above
-            sections.append(after[i])
-        sections.append(section_html("Ratios", RATIOS_TEXT, [ratios_html()]))
+                [record_html(), live_graph_html(shown())])]
+        sections.append(tabs_html())
+        for part in tab_body():
+            sections.append(part)
+        let about_label: str = ("Hide the introduction" if about_open else "About this page")
         let wide: str = ("wide" if layout.graph_only else "")
         html:
             div class=wide:
@@ -1649,7 +1685,9 @@ def main():
                     + journal_html()
                 else:
                     h1: APP_TITLE
-                    p: APP_INTRO
+                    button class="about" onclick=toggle_about(): about_label
+                    if about_open:
+                        p: APP_INTRO
                     + scenario_html()
                     for s in sections:
                         + s
