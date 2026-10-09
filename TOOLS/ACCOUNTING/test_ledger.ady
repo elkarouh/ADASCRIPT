@@ -193,7 +193,7 @@ for file in walkFiles("scenarios/*.books"):
                         assert ratios[3].value == "76.0%", ratios[3].value            # solvency: 45,280 of 59,600
                         assert ratios[4].value == "42.1%", ratios[4].value            # net margin: 25,280 of 60,000
                     scenarios += 1
-assert scenarios == 12
+assert scenarios == 13
 
 # A scenario made and deleted: its files gone, and refused the second time.
 removeDir("/tmp/test_ledger_scenarios")

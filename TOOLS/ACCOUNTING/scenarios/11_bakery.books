@@ -1,0 +1,236 @@
+# scenarios/11_bakery.books: made by make_bakery.py. Amounts are in cents.
+title	11. A bakery-cafe's year: monthly takings, quarterly bills
+about	A made-up small bakery-cafe with a shop and some catering: the owner's money and a bank loan buy the ovens; takings are booked monthly with 21% VAT; ingredients, rent, energy, wages, social contributions and loan interest are booked quarterly, as are the catering invoices and the VAT returns.
+about	At the year end the ovens are depreciated and the income tax on the profit is owed. About sixty entries in all: few enough to follow a whole year in the graph.
+currency	USD
+account	100000	equity	Share capital
+account	173000	liability	Bank loans
+account	240000	asset	Ovens and equipment
+account	400000	asset	Trade receivables
+account	411000	asset	VAT receivable
+account	440000	liability	Trade payables
+account	450000	liability	Income tax payable
+account	451000	liability	VAT payable
+account	453000	liability	Withholding tax payable
+account	550000	asset	Bank
+account	604000	expense	Ingredients
+account	610000	expense	Rent
+account	612000	expense	Energy
+account	620000	expense	Wages and salaries
+account	621000	expense	Social contributions
+account	630000	expense	Depreciation
+account	650000	expense	Interest expense
+account	670000	expense	Income tax
+account	700000	revenue	Shop sales
+account	701000	revenue	Catering
+entry	2024-01-02	The owner puts in 30,000
+posting	Bank	3000000
+posting	Share capital	-3000000
+entry	2024-01-03	The bank lends 20,000 for the ovens
+posting	Bank	2000000
+posting	Bank loans	-2000000
+entry	2024-01-05	Two ovens and a counter, paid
+posting	Ovens and equipment	2400000
+posting	VAT receivable	504000
+posting	Bank	-2904000
+entry	2024-01-28	Shop takings, month 01 (cash and cards)
+posting	Bank	1185800
+posting	Shop sales	-980000
+posting	VAT payable	-205800
+entry	2024-02-28	Shop takings, month 02 (cash and cards)
+posting	Bank	1258400
+posting	Shop sales	-1040000
+posting	VAT payable	-218400
+entry	2024-03-01	Rent of the shop, Q1
+posting	Rent	300000
+posting	VAT receivable	63000
+posting	Bank	-363000
+entry	2024-03-15	Flour, butter, coffee and the rest, Q1, on credit
+posting	Ingredients	1300000
+posting	VAT receivable	273000
+posting	Trade payables	-1573000
+entry	2024-03-20	Gas and electricity, Q1
+posting	Energy	210000
+posting	VAT receivable	44100
+posting	Bank	-254100
+entry	2024-03-20	Catering invoices of Q1 (offices, a wedding), on credit
+posting	Trade receivables	387200
+posting	Catering	-320000
+posting	VAT payable	-67200
+entry	2024-03-25	Wages of the baker and two shop assistants, Q1: 14,000 gross, 3,500 withheld
+posting	Wages and salaries	1400000
+posting	Bank	-1050000
+posting	Withholding tax payable	-350000
+entry	2024-03-26	Employer's social contributions, Q1
+posting	Social contributions	350000
+posting	Bank	-350000
+entry	2024-03-27	Interest on the loan, Q1
+posting	Interest expense	25000
+posting	Bank	-25000
+entry	2024-03-28	Shop takings, month 03 (cash and cards)
+posting	Bank	1464100
+posting	Shop sales	-1210000
+posting	VAT payable	-254100
+entry	2024-04-10	The supplier of Q1 is paid
+posting	Trade payables	1573000
+posting	Bank	-1573000
+entry	2024-04-15	Withholding tax of Q1 paid to the tax office
+posting	Withholding tax payable	350000
+posting	Bank	-350000
+entry	2024-04-20	VAT return Q1: -1,386 paid
+posting	VAT payable	745500
+posting	VAT receivable	-884100
+posting	Bank	138600
+entry	2024-04-25	The customers of Q1 pay
+posting	Bank	387200
+posting	Trade receivables	-387200
+entry	2024-04-28	Shop takings, month 04 (cash and cards)
+posting	Bank	1609300
+posting	Shop sales	-1330000
+posting	VAT payable	-279300
+entry	2024-05-28	Shop takings, month 05 (cash and cards)
+posting	Bank	1766600
+posting	Shop sales	-1460000
+posting	VAT payable	-306600
+entry	2024-06-01	Rent of the shop, Q2
+posting	Rent	300000
+posting	VAT receivable	63000
+posting	Bank	-363000
+entry	2024-06-15	Flour, butter, coffee and the rest, Q2, on credit
+posting	Ingredients	1550000
+posting	VAT receivable	325500
+posting	Trade payables	-1875500
+entry	2024-06-20	Gas and electricity, Q2
+posting	Energy	140000
+posting	VAT receivable	29400
+posting	Bank	-169400
+entry	2024-06-20	Catering invoices of Q2 (offices, a wedding), on credit
+posting	Trade receivables	496100
+posting	Catering	-410000
+posting	VAT payable	-86100
+entry	2024-06-25	Wages of the baker and two shop assistants, Q2: 14,000 gross, 3,500 withheld
+posting	Wages and salaries	1400000
+posting	Bank	-1050000
+posting	Withholding tax payable	-350000
+entry	2024-06-26	Employer's social contributions, Q2
+posting	Social contributions	350000
+posting	Bank	-350000
+entry	2024-06-27	Interest on the loan, Q2
+posting	Interest expense	25000
+posting	Bank	-25000
+entry	2024-06-28	Shop takings, month 06 (cash and cards)
+posting	Bank	1839200
+posting	Shop sales	-1520000
+posting	VAT payable	-319200
+entry	2024-07-10	The supplier of Q2 is paid
+posting	Trade payables	1875500
+posting	Bank	-1875500
+entry	2024-07-15	Withholding tax of Q2 paid to the tax office
+posting	Withholding tax payable	350000
+posting	Bank	-350000
+entry	2024-07-20	VAT return Q2: 5,733 paid
+posting	VAT payable	991200
+posting	VAT receivable	-417900
+posting	Bank	-573300
+entry	2024-07-25	The customers of Q2 pay
+posting	Bank	496100
+posting	Trade receivables	-496100
+entry	2024-07-28	Shop takings, month 07 (cash and cards)
+posting	Bank	1923900
+posting	Shop sales	-1590000
+posting	VAT payable	-333900
+entry	2024-08-28	Shop takings, month 08 (cash and cards)
+posting	Bank	1827100
+posting	Shop sales	-1510000
+posting	VAT payable	-317100
+entry	2024-09-01	Rent of the shop, Q3
+posting	Rent	300000
+posting	VAT receivable	63000
+posting	Bank	-363000
+entry	2024-09-15	Flour, butter, coffee and the rest, Q3, on credit
+posting	Ingredients	1700000
+posting	VAT receivable	357000
+posting	Trade payables	-2057000
+entry	2024-09-20	Gas and electricity, Q3
+posting	Energy	110000
+posting	VAT receivable	23100
+posting	Bank	-133100
+entry	2024-09-20	Catering invoices of Q3 (offices, a wedding), on credit
+posting	Trade receivables	435600
+posting	Catering	-360000
+posting	VAT payable	-75600
+entry	2024-09-25	Wages of the baker and two shop assistants, Q3: 14,000 gross, 3,500 withheld
+posting	Wages and salaries	1400000
+posting	Bank	-1050000
+posting	Withholding tax payable	-350000
+entry	2024-09-26	Employer's social contributions, Q3
+posting	Social contributions	350000
+posting	Bank	-350000
+entry	2024-09-27	Interest on the loan, Q3
+posting	Interest expense	25000
+posting	Bank	-25000
+entry	2024-09-28	Shop takings, month 09 (cash and cards)
+posting	Bank	1669800
+posting	Shop sales	-1380000
+posting	VAT payable	-289800
+entry	2024-10-10	The supplier of Q3 is paid
+posting	Trade payables	2057000
+posting	Bank	-2057000
+entry	2024-10-15	Withholding tax of Q3 paid to the tax office
+posting	Withholding tax payable	350000
+posting	Bank	-350000
+entry	2024-10-20	VAT return Q3: 5,733 paid
+posting	VAT payable	1016400
+posting	VAT receivable	-443100
+posting	Bank	-573300
+entry	2024-10-25	The customers of Q3 pay
+posting	Bank	435600
+posting	Trade receivables	-435600
+entry	2024-10-28	Shop takings, month 10 (cash and cards)
+posting	Bank	1560900
+posting	Shop sales	-1290000
+posting	VAT payable	-270900
+entry	2024-11-28	Shop takings, month 11 (cash and cards)
+posting	Bank	1500400
+posting	Shop sales	-1240000
+posting	VAT payable	-260400
+entry	2024-12-01	Rent of the shop, Q4
+posting	Rent	300000
+posting	VAT receivable	63000
+posting	Bank	-363000
+entry	2024-12-15	Flour, butter, coffee and the rest, Q4, on credit
+posting	Ingredients	1600000
+posting	VAT receivable	336000
+posting	Trade payables	-1936000
+entry	2024-12-20	Gas and electricity, Q4
+posting	Energy	190000
+posting	VAT receivable	39900
+posting	Bank	-229900
+entry	2024-12-20	Catering invoices of Q4 (offices, a wedding), on credit
+posting	Trade receivables	822800
+posting	Catering	-680000
+posting	VAT payable	-142800
+entry	2024-12-25	Wages of the baker and two shop assistants, Q4: 14,000 gross, 3,500 withheld
+posting	Wages and salaries	1400000
+posting	Bank	-1050000
+posting	Withholding tax payable	-350000
+entry	2024-12-26	Employer's social contributions, Q4
+posting	Social contributions	350000
+posting	Bank	-350000
+entry	2024-12-27	Interest on the loan, Q4
+posting	Interest expense	25000
+posting	Bank	-25000
+entry	2024-12-28	Shop takings, month 12 (cash and cards)
+posting	Bank	2020700
+posting	Shop sales	-1670000
+posting	VAT payable	-350700
+entry	2024-12-31	The ovens and counter lose a fifth of their value
+posting	Depreciation	480000
+posting	Ovens and equipment	-480000
+entry	2024-12-31	Income tax, 25% of the profit of 24,100, owed
+posting	Income tax	602500
+posting	Income tax payable	-602500
+entry	2025-01-20	VAT return Q4: 5,859 paid
+posting	VAT payable	1024800
+posting	VAT receivable	-438900
+posting	Bank	-585900

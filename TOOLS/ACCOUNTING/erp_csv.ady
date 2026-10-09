@@ -150,12 +150,12 @@ def books_of_erp(journal: str, chart: str) -> Books | !BookFailure_T:
             collector.declare(account, account, kind, name)
         if currency == "" and c_cur >= 0:
             currency = f[c_cur]
-        let cents: int = cents_of(f[c_dr]) - cents_of(f[c_cr])
+        let cents: int = erp_cents(f[c_dr]) - erp_cents(f[c_cr])
         legs.append(Leg(account, cents, True, True))
     return collector.books(journal, "ERP", (currency if currency != "" else "USD"))
 
 # 1234.5 as 123450 cents; 0 for an empty or unreadable field.
-def cents_of(word: str) -> int:
+def erp_cents(word: str) -> int:
     let r: float | !ParseFailure_T = parse_float(word.strip())
     if r is ParseFailure_T:
         return 0
