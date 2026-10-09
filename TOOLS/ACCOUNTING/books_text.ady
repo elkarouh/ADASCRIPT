@@ -19,7 +19,7 @@ page reads it; the page writes one account or one entry the same way, and
 the server reads it. Nothing here needs a database or a browser, so both
 compile it.
 """
-from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of
+from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, money_text
 
 # An account as a chart of accounts lists it.
 type AccountRow is record:
@@ -145,6 +145,59 @@ def closing_entries(b: Books, date: str, equity: str) -> []Entry:
         revenue.append(Posting(equity, -earned))
         made.append(Entry(date, "Closing the year: the revenue goes to retained earnings", revenue))
     return made
+
+# A ratio of the books: its name, its value as text and what it tells.
+type Ratio is record:
+    name:    str
+    value:   str
+    meaning: str
+
+# TOP over BOTTOM as a number with two decimals, or a percentage, or "-"
+# when there is nothing to divide by.
+def ratio_text(top: Cents_T, bottom: Cents_T, percent: bool) -> str:
+    if bottom == 0:
+        return "-"
+    let r: float = float(int(top)) / float(int(bottom))
+    return (f"{r * 100.0:.1f}%" if percent else f"{r:.2f}")
+
+# The ratios an accountant reads off the balance sheet of books B as G has
+# them. What the chart of accounts numbers say sorts the accounts: assets
+# numbered 2... are fixed, 3... is stock, the others current; liabilities
+# numbered 1... are long term (the loans), the others current (due within
+# the year).
+def ratios_of(b: Books, g: Graph) -> []Ratio:
+    var current_assets: Cents_T = 0
+    var fixed_assets: Cents_T = 0
+    var stock: Cents_T = 0
+    var current_debts: Cents_T = 0
+    var revenue: Cents_T = 0
+    for a in b.accounts:
+        let bal: Cents_T = g.balance(a.name)
+        if a.kind == ASSET:
+            if a.number.startswith("2"):
+                fixed_assets += bal
+            else:
+                current_assets += bal
+                if a.number.startswith("3"):
+                    stock += bal
+        elif a.kind == LIABILITY:
+            if not a.number.startswith("1"):
+                current_debts += -bal
+        if a.kind == REVENUE and bal < 0:
+            revenue += -bal
+    let total_assets: Cents_T = current_assets + fixed_assets
+    return [
+        Ratio("Working capital", money_text(current_assets - current_debts),
+              "what is left of the current assets (stock, receivables, cash) once the debts due within the year are paid"),
+        Ratio("Current ratio", ratio_text(current_assets, current_debts, False),
+              "current assets over current debts: above 1, the short debts are covered"),
+        Ratio("Quick ratio", ratio_text(current_assets - stock, current_debts, False),
+              "the same without the stock, which takes time to sell: the debts covered by cash and receivables"),
+        Ratio("Solvency", ratio_text(g.equity(), total_assets, True),
+              "equity over total assets: the share of what the company owns that is its own, not borrowed"),
+        Ratio("Net margin", ratio_text(g.profit(), revenue, True),
+              "profit over sales and the like (the revenue accounts): what is kept of each dollar sold"),
+    ]
 
 def graph_of(b: Books) -> Graph:
     var g: Graph = Graph()

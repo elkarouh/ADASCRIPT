@@ -6,7 +6,7 @@ and what does not fit the books is refused without a trace.
     ady2nim c -r test_ledger.ady
 """
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
-from books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books, graph_of
+from books_text import AccountRow, Books, Ratio, closing_entries, ratios_of, kind_named, parse_books, text_of_books, graph_of
 from ledger import Config, Ledger, cents_of, open_chart, read_config, record_example
 from os nimport walkFiles
 
@@ -175,6 +175,15 @@ for file in walkFiles("scenarios/*.books"):
                             assert after.balance(row.name) == 0, file
                     assert after.net_assets() == g.net_assets(), file
                     assert after.balance("Retained earnings") == -g.profit(), file
+                    if file.endswith("10_small_company.books"):
+                        # the year's end: 55,600 of current assets against 6,320 of debts
+                        let ratios: []Ratio = ratios_of(read, g)
+                        assert len(ratios) == 5
+                        assert ratios[0].value == "49,280.00", ratios[0].value        # working capital
+                        assert ratios[1].value == "8.80", ratios[1].value             # current ratio
+                        assert ratios[2].value == "8.48", ratios[2].value             # quick ratio: 53,600 over 6,320
+                        assert ratios[3].value == "76.0%", ratios[3].value            # solvency: 45,280 of 59,600
+                        assert ratios[4].value == "42.1%", ratios[4].value            # net margin: 25,280 of 60,000
                     scenarios += 1
 assert scenarios == 12
 print "ledger: all checks passed"

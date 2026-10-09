@@ -102,6 +102,16 @@ whatever the replay was doing before. It is the quickest way to ask what
 the balance sheet looked like at the end of March. Activa and Passiva differ
 by the costs less the revenue so far, until the year is closed.
 
+Under the balance sheet, five ratios are read off it, as a banker would:
+working capital (the current assets less the debts due within the year),
+the current ratio (the same two, divided), the quick ratio (without the
+stock), solvency (equity over total assets) and net margin (profit over
+revenue), each with a line saying what it tells. They are those of the books
+as shown, so they move with the replay and the date slider: the current
+ratio of scenario 10 is 8.80 at the year's end and 2.76 after the first
+purchase on credit. The chart's numbers say which accounts are fixed assets
+(2...), stock (3...), long-term debt (1... liabilities) or current.
+
 "Debit and credit" writes the books the way an accountant does. The
 transactions list becomes a journal: each transaction has a line for every
 account it touches, the debits first and the credits, indented, after them

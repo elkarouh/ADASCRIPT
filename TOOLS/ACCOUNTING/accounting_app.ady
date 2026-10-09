@@ -20,7 +20,7 @@ from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, Posting, VatRate_T, entry, moves, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
-from books_text import AccountRow, Books, account_line, closing_entries, entry_lines, graph_of, kind_named, kind_text, parse_books
+from books_text import AccountRow, Books, Ratio, account_line, closing_entries, entry_lines, graph_of, kind_named, kind_text, parse_books, ratios_of
 
 const WIDTH: float = 980.0
 const HEIGHT: float = 670.0
@@ -1432,6 +1432,30 @@ def journal_html() -> Html:
                     + journal_row_html(i)
 
 # ---------------------------------------------------------------------
+# The ratios: the balance sheet read the way a banker reads it
+# ---------------------------------------------------------------------
+
+const RATIOS_TEXT: str = "What an accountant or a banker reads off the balance sheet, for the books as shown: they change with every transaction, with the replay and with the date slider. Current means due or turned into cash within the year."
+
+def ratio_row_html(r: Ratio) -> Html:
+    html:
+        tr:
+            td: r.name
+            td class="num": r.value
+            td: r.meaning
+
+def ratios_html() -> Html:
+    let found: []Ratio = ratios_of(books, shown())
+    html:
+        table:
+            tr:
+                th: "Ratio"
+                th: "Value"
+                th: "What it tells"
+            for r in found:
+                + ratio_row_html(r)
+
+# ---------------------------------------------------------------------
 # The T-accounts: each account's debits on its left, its credits on its right
 # ---------------------------------------------------------------------
 
@@ -1611,6 +1635,7 @@ def main():
         let after: []Html = sections_after_graph(shown())
         for i in range(1, len(after)):          # its first, the balances, is the table above
             sections.append(after[i])
+        sections.append(section_html("Ratios", RATIOS_TEXT, [ratios_html()]))
         let wide: str = ("wide" if layout.graph_only else "")
         html:
             div class=wide:

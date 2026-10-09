@@ -589,7 +589,7 @@ def sections_after_graph(g: Graph) -> []Html:
             "Only the blue accounts: revenue less expenses. A negative balance on a blue account is revenue, so the sign flips when it is reported.",
             [g.profit_and_loss().to_html("Profit", g.profit())]),
         section_html("Balance sheet",
-            "The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customer 2 still owes 2,000 of its order.",
+            "The green accounts on one side, the pink accounts and the profit on the other. Profit is not cash: the bank holds less than the 25,000 invested plus the sales, because customers may still owe part of their orders.",
             [g.assets_and_liabilities().to_html("Assets less liabilities", g.net_assets()),
              g.equity_lines().to_html("Total equity", g.equity())]),
     ]
