@@ -225,6 +225,30 @@ Real files to try are in the piecash project: `simple_sample.gnucash`,
 `investment.gnucash` and `book_schtx.gnucash`, under `gnucash_books/` at
 https://github.com/sdementen/piecash.
 
+### Reading a Beancount file
+
+```
+ledger import-beancount NAME FILE.beancount
+```
+
+Beancount is a plain-text double-entry format (Ledger and hledger journals
+look much alike). The `ledger` command reads its transactions the same way:
+
+- Assets, Liabilities, Equity, Income and Expenses give the five kinds, and
+  an account is named by as many last parts of its path as tell it from the
+  others (`Y2013:US:Federal`).
+- Amounts are counted in the file's operating currency; a commodity bought at
+  a cost (`8 ITOT {101.25 USD}`) counts at its cost, one with only a price
+  at that price, and one with neither (vacation hours) is left out.
+- A transaction with several debits against several credits (a pay slip)
+  cannot be one entry, whose one side is a single account: it becomes two
+  entries through a `Clearing` account. The scenario's description counts
+  them.
+
+A realistic file to try is Beancount's own example, 1,226 transactions of
+three years of a household's life (pay slips, taxes, rent, cards, shares):
+https://raw.githubusercontent.com/beancount/beancount/v2/examples/example.beancount
+
 ### accounting.conf
 
 ```

@@ -1,0 +1,85 @@
+#!/usr/bin/env ady2nim
+"""beancount.ady on a small Beancount file: an elided amount, a payee and a
+narration, a commodity bought at a cost and sold at a price, hours that cannot
+be counted, a pay slip with several debits against several credits, and the
+directives that are ignored.
+
+    ady2nim c -r test_beancount.ady
+"""
+from os nimport removeFile, fileExists
+from accounting_model import BookFailure_T, Graph
+from books_text import Books, graph_of, text_of_books
+from beancount import books_of_beancount
+
+const FIXTURE: str = "/tmp/test_beancount_file.beancount"
+
+const FILE: str = """option "operating_currency" "USD"
+2013-01-01 open Assets:Bank:Checking USD
+2013-01-01 commodity USD
+
+2013-01-01 * "Opening Balance"
+  Assets:Bank:Checking           1000.00 USD
+  Equity:Opening-Balances
+
+2013-01-04 * "Landlord" "Paying the rent"
+  Expenses:Rent                   400.00 USD
+  Assets:Bank:Checking
+    note: "metadata is ignored"
+  ; and so are comments
+
+2013-01-05 * "Buy shares"
+  Assets:Broker:ITOT                 8 ITOT {101.25 USD}
+  Assets:Bank:Checking          -810.00 USD
+
+2013-01-20 * "Sell shares"
+  Assets:Broker:ITOT                -8 ITOT {101.25 USD} @ 105.75 USD
+  Assets:Bank:Checking           846.00 USD
+  Income:Gains                   -36.00 USD
+
+2013-01-31 * "Pay slip"
+  Assets:Bank:Checking           700.00 USD
+  Expenses:Taxes                 250.00 USD
+  Assets:Vacation                      5 VACHR
+  Income:Vacation                     -5 VACHR
+  Income:Salary                 -900.00 USD
+  Income:Bonus                   -50.00 USD
+
+2013-02-01 price ITOT 106.00 USD
+2013-02-01 balance Assets:Bank:Checking 1000.00 USD
+"""
+
+def main() -> None:
+    if fileExists(FIXTURE):
+        removeFile(FIXTURE)
+    let wrote: None | !PathFailure_T = Path(FIXTURE).write_text(FILE)
+    assert not (wrote is PathFailure_T)
+    let read: Books | !BookFailure_T = books_of_beancount(FIXTURE)
+    case read:
+        when BookFailure_T:
+            raise ValueError(read.detail)
+        when Books:
+            let b: Books = read
+            assert b.currency == "USD"
+            # 4 transactions in one entry each, the pay slip in two through Clearing
+            assert len(b.entries) == 6
+            assert b.entries[1].what == "Landlord - Paying the rent"
+            let text: str = text_of_books(b)
+            assert text.contains("\texpense\tRent"), text
+            assert text.contains("\tliability\tClearing"), text
+            assert text.contains("\trevenue\tGains"), text
+            assert text.contains("\tasset\tITOT"), text
+            assert not text.contains("VACHR"), text
+            assert b.about.contains("1 transaction(s) with several debits"), b.about
+            let g: Graph = graph_of(b)
+            assert g.total() == 0
+            assert g.balance("Clearing") == 0
+            assert g.balance("ITOT") == 0                  # bought and sold at cost
+            assert g.balance("Gains") == -3600
+            assert g.balance("Salary") == -90000
+    removeFile(FIXTURE)
+    let missing: Books | !BookFailure_T = books_of_beancount("/tmp/there_is_no_such_file.beancount")
+    assert missing is BookFailure_T, "a missing file was read"
+    print "beancount: all checks passed"
+
+if __name__ == "__main__":
+    main()

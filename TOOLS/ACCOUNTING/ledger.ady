@@ -5,6 +5,7 @@ one per scenario, and a command line to keep them.
     ledger [--config FILE] list                    the scenarios, with their titles
     ledger [--config FILE] new NAME                a new scenario: the config's chart, no transaction
     ledger [--config FILE] import-gnucash NAME FILE   a new scenario NAME, read from a GnuCash sqlite3 file
+    ledger [--config FILE] import-beancount NAME FILE  the same, from a Beancount file
     ledger [--config FILE] SCENARIO COMMAND ...
 
     show                          the accounts and their balances, and the statements
@@ -38,6 +39,7 @@ from times nimport toUnix
 from algorithm nimport sort
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, example_entries, money_text
 from gnucash import books_of_gnucash
+from beancount import books_of_beancount
 from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
 
 # ---------------------------------------------------------------------
@@ -380,6 +382,7 @@ class Scenarios:
 const USAGE: str = """usage: ledger [--config FILE] list
        ledger [--config FILE] new NAME
        ledger [--config FILE] import-gnucash NAME FILE
+       ledger [--config FILE] import-beancount NAME FILE
        ledger [--config FILE] SCENARIO COMMAND ...
 
     show                          the accounts and their balances, and the statements
@@ -559,6 +562,16 @@ def main():
                 if made is BookFailure_T:
                     die(made.detail)
                 print f"scenario {words[1]}: {len(read_books.accounts)} accounts, {len(read_books.entries)} transactions"
+        elif words[0] == "import-beancount":
+            die("import-beancount NAME FILE") if len(words) != 3
+            let bean_books: Books | !BookFailure_T = books_of_beancount(words[2])
+            if bean_books is BookFailure_T:
+                die(bean_books.detail)
+            else:
+                let made: None | !BookFailure_T = scenarios.write_books(words[1], bean_books, f"scenarios/{words[1]}.books, read from {words[2]}.")
+                if made is BookFailure_T:
+                    die(made.detail)
+                print f"scenario {words[1]}: {len(bean_books.accounts)} accounts, {len(bean_books.entries)} transactions"
         elif len(words) < 2:
             die(f"{words[0]}: a scenario, then a command (see -h); `ledger list` lists the scenarios")
         else:
