@@ -9,7 +9,6 @@
 # -------------------------------------------------------
 
 PYTHON := $(shell command -v python3.12 2>/dev/null || command -v python3.14)
-export PYTHONPATH := $(HOME)/Downloads/hparsec:$(PYTHONPATH)
 ADY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
 # Scratch space: each user's own. Two people running the tests on one
