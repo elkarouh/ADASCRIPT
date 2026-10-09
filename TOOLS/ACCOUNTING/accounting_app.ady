@@ -570,10 +570,14 @@ def live_arrow_html(g: Graph, f: Flow) -> Html:
     let a: Point = layout.at(f.source)
     let b: Point = layout.at(f.target)
     let tip: str = tip_of(g, f)
+    var others: []Point = []
+    for i in range(len(layout.names)):
+        if layout.names[i] != f.source.name and layout.names[i] != f.target.name:
+            others.append(layout.points[i])
     let css: str = ("now" if step >= 0 and (f.source.name + "\t" + f.target.name) in now_arrows else "")
     html:
         g class=css onmouseover=layout.show(tip) onmouseout=layout.hide():
-            + f.to_html(a, b, bend_of(g, f), "")
+            + f.to_html(a, b, bend_of(g, f, a, b, others, Point(layout.width, layout.height)), "")
 
 def live_button_html() -> Html:
     let label: str = ("Show everything" if layout.graph_only else "Graph only")
