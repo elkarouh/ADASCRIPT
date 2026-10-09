@@ -16,6 +16,7 @@ Needs karax: `nimble install karax@1.5.0`.
 from dom nimport Event, MouseEvent, BoundingRect, document, window, getElementById, getBoundingClientRect, addEventListener
 from dom nimport value, Element, InputElement, confirm, prompt, focus, setTimeout, TimeOut, KeyboardEvent
 from karax/karax nimport setRenderer, redraw
+from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
@@ -579,11 +580,72 @@ def live_arrow_html(g: Graph, f: Flow) -> Html:
         g class=css onmouseover=layout.show(tip) onmouseout=layout.hide():
             + f.to_html(a, b, bend_of(g, f, a, b, others, Point(layout.width, layout.height)), "")
 
+# How far the account at P is from the straight line between A and B, or
+# a long way when it is beyond either end.
+def off_line(p: Point, a: Point, b: Point) -> float:
+    let dx: float = b.x - a.x
+    let dy: float = b.y - a.y
+    let length2: float = dx * dx + dy * dy
+    if length2 == 0.0:
+        return 1000.0
+    let t: float = ((p.x - a.x) * dx + (p.y - a.y) * dy) / length2
+    if t <= 0.0 or t >= 1.0:
+        return 1000.0
+    let qx: float = a.x + t * dx - p.x
+    let qy: float = a.y + t * dy - p.y
+    return sqrt(qx * qx + qy * qy)
+
+# What a layout costs: the length of its arrows, and a lot more for each
+# arrow that runs over another account and so has to bend around it.
+def layout_cost(sources: []int, targets: []int) -> float:
+    var cost: float = 0.0
+    for k in range(len(sources)):
+        let a: Point = layout.points[sources[k]]
+        let b: Point = layout.points[targets[k]]
+        cost += sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
+        for i in range(len(layout.points)):
+            if i != sources[k] and i != targets[k] and off_line(layout.points[i], a, b) < NODE_RADIUS + 10.0:
+                cost += 400.0
+    return cost
+
+# Tidy up: the accounts laid out afresh in their quarters, then, within each
+# quarter, two accounts swapped places whenever that makes the arrows
+# shorter or takes one off an account, until no swap helps.
+def tidy():
+    stop_replay()
+    layout.arrange(books.accounts)
+    var sources: []int = []
+    var targets: []int = []
+    for f in graph.flows:
+        sources.append(layout.names.index(f.source.name))
+        targets.append(layout.names.index(f.target.name))
+    var best: float = layout_cost(sources, targets)
+    var better: bool = True
+    var passes: int = 0
+    while better and passes < 8:
+        better = False
+        passes += 1
+        for i in range(len(layout.points)):
+            for j in range(i + 1, len(layout.points)):
+                if layout.lefts[i] == layout.lefts[j] and layout.tops[i] == layout.tops[j]:
+                    let p: Point = layout.points[i]
+                    layout.points[i] = layout.points[j]
+                    layout.points[j] = p
+                    let cost: float = layout_cost(sources, targets)
+                    if cost < best - 0.5:
+                        best = cost
+                        better = True
+                    else:
+                        layout.points[j] = layout.points[i]
+                        layout.points[i] = p
+    layout.sync(books.accounts)
+
 def live_button_html() -> Html:
     let label: str = ("Show everything" if layout.graph_only else "Graph only")
     html:
         p:
             button id="graph-only" onclick=layout.toggle_graph_only(): label
+            button id="tidy" title="Lay the accounts out again, each in its quarter, placed to keep the arrows short and off other accounts" onclick=tidy(): "Tidy up"
 
 # ---------------------------------------------------------------------
 # The replay: the transactions one at a time, each highlighted on the graph
@@ -878,7 +940,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
 
 def main():
     def render() -> Html:

@@ -44,6 +44,9 @@ account can be dragged anywhere inside its own quarter, not out of it.
 Each arrow is a cubic spline, bowed just enough to pass around the other
 accounts and stay inside the drawing; it finds its way again whenever an
 account moves.
+If the accounts have been dragged into a mess, Tidy up lays them out again:
+each in its quarter, and within it placed so that the arrows are short and
+run over as few other accounts as possible.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the
