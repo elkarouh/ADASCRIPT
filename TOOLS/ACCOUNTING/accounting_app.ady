@@ -749,9 +749,17 @@ def open_account():
 # Rendering: the graph at the layout's points, the rest as on the static page
 # ---------------------------------------------------------------------
 
+# Account NAME's number in the chart of accounts, or "".
+def number_of(name: str) -> str:
+    for row in books.accounts:
+        if row.name == name:
+            return row.number
+    return ""
+
 def live_node_html(g: Graph, a: Account) -> Html:
     let p: Point = layout.at(a)
-    let tip: str = account_tip(g, a)
+    let number: str = number_of(a.name)
+    let tip: str = (account_tip(g, a) if number == "" else number + " " + account_tip(g, a))
     let none: str = ""                  # the page's own tooltip shows it, not a <title>
     let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else
                     ("node now" if step >= 0 and a.name in now_accounts else "node")))

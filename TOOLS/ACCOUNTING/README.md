@@ -73,7 +73,8 @@ books, saying why.
 
 Rarer things happen in the tables: each transaction and each account has a
 Delete button (an account only goes once no transaction touches it), and
-the last row of the accounts opens a new one. Hover over an account or an
+the last row of the accounts opens a new one. Hover over an account (its number, name and balance, then its
+transactions) or an
 arrow to see its transactions; "Graph only" gives the drawing the whole
 window, with the transactions table under it.
 
@@ -98,7 +99,8 @@ account collects before it is paid; Show all lets the account go.
 A scenario is `scenarios/NAME.books`, the books as text (`books_text.ady`:
 a title, about lines, the accounts, the transactions), and `NAME.db`, the
 database the page changes. ledger_server makes NAME.db from NAME.books the
-first time NAME is shown, and again on Start over; Save as writes the books
+first time NAME is shown, again on Start over, and again when NAME.books
+is newer than NAME.db (a new version of the scenario came in, with git pull); Save as writes the books
 shown to a new NAME.books. A new scenario is a new .books file: write it by
 hand, record it in the page and Save as, or start one with `./ledger new
 NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.

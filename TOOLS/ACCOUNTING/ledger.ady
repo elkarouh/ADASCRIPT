@@ -32,7 +32,8 @@ nothing is written.
 """
 from db import DB
 from math nimport round
-from os nimport walkFiles, removeFile, fileExists, splitFile
+from os nimport walkFiles, removeFile, fileExists, splitFile, getLastModificationTime
+from times nimport toUnix
 from algorithm nimport sort
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, example_entries, money_text
 from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
@@ -332,12 +333,18 @@ class Scenarios:
             removeFile(db)
             return BookFailure_T(f"{name}.books: {loaded.detail}")
 
+    # Whether NAME's .books file changed after its database was made from it
+    # (a new version of the scenario came in): the database is out of date.
+    def stale(self, name: str) -> bool:
+        let db: str = str(self.db_file(name))
+        return fileExists(db) and getLastModificationTime(str(self.books_file(name))).toUnix() > getLastModificationTime(db).toUnix()
+
     # NAME's ledger, its database made from its .books file first if it has
-    # none, or if FRESH (start over).
+    # none, if the .books file is newer, or if FRESH (start over).
     def open(self, name: str, fresh: bool) -> Ledger | !BookFailure_T:
         if not self.exists(name):
             return BookFailure_T(f"there is no scenario {name}")
-        if fresh or not fileExists(str(self.db_file(name))):
+        if fresh or not fileExists(str(self.db_file(name))) or self.stale(name):
             do:
                 self.make_db(name)
         return Ledger(str(self.db_file(name)))
