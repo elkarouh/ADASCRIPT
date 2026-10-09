@@ -1,0 +1,15 @@
+# A narrowed `f.value` is the parsed number, not a field: another routine's
+# parameter called `value` (a str) does not make `f * 100.0` a string repeat.
+def remember(key: str, value: str) -> str:
+    return key + "=" + value
+
+def cents(word: str) -> int:
+    let f: float | !ParseFailure_T = parse_float(word)
+    if f is ParseFailure_T:
+        return -1
+    else:
+        return int(f * 100.0)
+
+print(remember("a", "1"))
+print(cents("12.10"))
+print(cents("x"))

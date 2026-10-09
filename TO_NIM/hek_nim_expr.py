@@ -1039,7 +1039,9 @@ def _field_type(expr):
             _btype = _re_ft.sub(r"^var\s+", "",
                                 getattr(ParserState, "proc_return_types", {}).get(_called, "") or "")
     _ftype = ParserState.class_field_types.get(_btype, {}).get(field) if _btype else None
-    if not _ftype:
+    if not _ftype and not _re_ft.match(r"^(Result\[|OneOf\d?\[|Option\[)", _btype):
+        # not for a narrowed `f.value`: `value` is not a field some other
+        # routine's parameter of that name has
         _fsym = ParserState.symbol_table.lookup(field)
         _ftype = (_fsym.get("type") or "") if isinstance(_fsym, dict) else ""
     return _ftype or ""
