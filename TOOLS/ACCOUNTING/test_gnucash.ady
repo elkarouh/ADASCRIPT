@@ -1,0 +1,92 @@
+#!/usr/bin/env ady2nim
+"""gnucash.ady on a small file shaped like GnuCash's sqlite3 one: its
+accounts, its transactions and splits, a trading account to ignore, a
+transaction with several debits and credits to leave out, one that nets to nothing, two dates in
+the two ways GnuCash writes them.
+
+    ady2nim c -r test_gnucash.ady
+"""
+from db import DB
+from os nimport removeFile, fileExists
+from accounting_model import BookFailure_T, Graph
+from books_text import Books, graph_of, text_of_books
+from gnucash import books_of_gnucash
+
+const PATH: str = "/tmp/test_gnucash_file.gnucash"
+
+def add_account(db: DB, guid: str, name: str, parent: str, kind: str, code: str) -> None:
+    db.exec("INSERT INTO accounts (guid, name, parent_guid, account_type, code, commodity_guid) VALUES (?, ?, ?, ?, ?, 'eur')",
+            [guid, name, parent, kind, code])
+
+def add_split(db: DB, tx: str, account_guid: str, cents: int) -> None:
+    db.exec("INSERT INTO splits (tx_guid, account_guid, value_num, value_denom) VALUES (?, ?, ?, 100)", [tx, account_guid, str(cents)])
+
+def add_tx(db: DB, guid: str, date: str, what: str) -> None:
+    db.exec("INSERT INTO transactions (guid, post_date, description) VALUES (?, ?, ?)", [guid, date, what])
+
+def main():
+    if fileExists(PATH):
+        removeFile(PATH)
+    let db: DB = DB(PATH)
+    db.exec("CREATE TABLE commodities (guid TEXT, mnemonic TEXT)")
+    db.exec("CREATE TABLE accounts (guid TEXT, name TEXT, parent_guid TEXT, account_type TEXT, code TEXT, commodity_guid TEXT)")
+    db.exec("CREATE TABLE transactions (guid TEXT, post_date TEXT, description TEXT)")
+    db.exec("CREATE TABLE splits (tx_guid TEXT, account_guid TEXT, value_num INTEGER, value_denom INTEGER)")
+    db.exec("INSERT INTO commodities VALUES ('eur', 'EUR')")
+    add_account(db, "root", "Root Account", "", "ROOT", "")
+    add_account(db, "assets", "Assets", "root", "ASSET", "")
+    add_account(db, "bank", "Bank", "assets", "BANK", "550000")
+    add_account(db, "cash", "Cash", "assets", "CASH", "")
+    add_account(db, "equity", "Capital", "root", "EQUITY", "")
+    add_account(db, "sales", "Sales", "root", "INCOME", "")
+    add_account(db, "rent", "Rent", "root", "EXPENSE", "")
+    add_account(db, "tax", "Tax", "root", "LIABILITY", "")
+    add_account(db, "trade", "EUR", "root", "TRADING", "")
+    add_account(db, "unused", "Unused", "root", "EXPENSE", "")
+    add_tx(db, "t1", "2014-11-30 10:59:00", "Capital paid in")
+    add_split(db, "t1", "bank", 100000)
+    add_split(db, "t1", "equity", -100000)
+    add_tx(db, "t2", "20141224230000", "Sale with tax")
+    add_split(db, "t2", "bank", 12100)
+    add_split(db, "t2", "sales", -10000)
+    add_split(db, "t2", "tax", -2100)
+    add_tx(db, "t3", "2015-01-02 10:59:00", "Rent in cash")
+    add_split(db, "t3", "rent", 5000)
+    add_split(db, "t3", "cash", -5000)
+    add_split(db, "t3", "trade", 7)                 # a currency balancing split: ignored
+    add_split(db, "t3", "trade", -7)
+    add_tx(db, "t4", "2015-01-03 10:59:00", "Two against two")
+    add_split(db, "t4", "bank", 300)
+    add_split(db, "t4", "cash", 200)
+    add_split(db, "t4", "sales", -400)
+    add_split(db, "t4", "tax", -100)
+    add_tx(db, "t5", "2015-01-04 10:59:00", "Nothing")
+    add_split(db, "t5", "bank", 0)
+    db.close()
+
+    let read: Books | !BookFailure_T = books_of_gnucash(PATH)
+    case read:
+        when BookFailure_T:
+            raise ValueError(read.detail)
+        when Books:
+            let b: Books = read
+            assert b.currency == "EUR", b.currency
+            assert len(b.accounts) == 6        # the unused account and the trading one are not accounts
+            assert len(b.entries) == 3
+            assert b.entries[1].date == "2014-12-24", b.entries[1].date
+            assert b.about.contains("1 transaction(s) left out")
+            let text: str = text_of_books(b)
+            assert text.contains("account\t550000\tasset\tBank"), text         # its own code kept
+            assert text.contains("\tasset\tCash"), text                        # the others numbered by kind
+            let g: Graph = graph_of(b)
+            assert g.total() == 0
+            assert g.balance("Bank") == 112100
+            assert g.balance("Cash") == -5000
+            assert g.profit() == 5000         # sales 10,000 less rent 5,000; the tax is owed, not earned
+    removeFile(PATH)
+    let missing: Books | !BookFailure_T = books_of_gnucash("/tmp/there_is_no_such_file.gnucash")
+    assert missing is BookFailure_T, "a missing file was read"
+    print "gnucash: all checks passed"
+
+if __name__ == "__main__":
+    main()

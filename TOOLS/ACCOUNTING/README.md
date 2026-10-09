@@ -199,6 +199,32 @@ The ledger refuses a transaction whose postings do not add up to zero, that
 names an account it does not have, or that has several accounts on both
 sides (the graph could not tell which pays which); nothing is written then.
 
+### Reading a GnuCash file
+
+```
+ledger import-gnucash NAME FILE.gnucash     # a new scenario NAME, in scenarios/NAME.books
+```
+
+GnuCash must have saved FILE as sqlite3 (File > Save As > Data Format; its
+default, gzipped XML, is not read). Each account that a transaction touches
+becomes an account, each transaction an entry, so the page shows, replays and
+closes real books like any scenario.
+
+- An account keeps its GnuCash account code when it has a unique one;
+  otherwise it is numbered by kind (assets 550000..., liabilities 480000...,
+  equity 100000..., costs 600000..., revenue 700000...).
+- It is named by its own name, or by its path (Assets:Current:Bank) when two
+  accounts would share a name.
+- GnuCash's trading accounts (it adds them to balance currencies) are
+  ignored; amounts are the splits' values in the transaction's currency.
+- A transaction with several debits *and* several credits cannot be an entry
+  (one side of an entry is a single account); it is left out, and the
+  scenario's description says how many.
+
+Real files to try are in the piecash project: `simple_sample.gnucash`,
+`investment.gnucash` and `book_schtx.gnucash`, under `gnucash_books/` at
+https://github.com/sdementen/piecash.
+
 ### accounting.conf
 
 ```

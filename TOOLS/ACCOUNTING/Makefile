@@ -24,12 +24,12 @@ PORT    ?= 8802
 
 all: ledger ledger_server build/accounting_gui.html build/accounting_app.js
 
-ledger: ledger.ady books_text.ady accounting_model.ady
+ledger: ledger.ady gnucash.ady books_text.ady accounting_model.ady
 	@echo "building ledger"
 	@$(ADY2NIM) c ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-ledger_server: ledger_server.ady ledger.ady books_text.ady accounting_model.ady
+ledger_server: ledger_server.ady ledger.ady gnucash.ady books_text.ady accounting_model.ady
 	@echo "building ledger_server"
 	@$(ADY2NIM) c ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
@@ -57,6 +57,7 @@ app: ledger_server build/accounting_app.js
 test:
 	$(ADY2NIM) c -r test_accounting_model.ady 2>/dev/null
 	$(ADY2NIM) c -r test_ledger.ady 2>/dev/null
+	$(ADY2NIM) c -r test_gnucash.ady 2>/dev/null
 
 clean:
 	rm -rf build *.js scenarios/*.db $(basename $(wildcard *.ady))

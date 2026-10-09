@@ -1,0 +1,216 @@
+#!/usr/bin/env ady2nim
+"""gnucash -- the books of a GnuCash file, read as Books.
+
+GnuCash keeps its books in XML (gzipped, its default) or in SQLite; this
+reads the SQLite ones (File > Save As > Data Format: sqlite3). Each
+non-empty account becomes an account of the books, each transaction an
+entry: a split's value, in the transaction's currency, is a posting, and
+a debit is positive as it is here.
+
+An account's number is its GnuCash account code when it has a unique one,
+else one made up from its kind. An account is named by its own name, or by
+its path (Assets:Current:Bank) when two accounts would share a name.
+
+A transaction with several debits and several credits cannot be an entry
+(one side of an entry is a single account) and is left out, counted in the
+books' description; so are transactions that net to nothing.
+"""
+from db import DB
+from os nimport fileExists, splitFile
+from accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from books_text import AccountRow, Books, bad, field
+
+type Found is record:
+    guid:   str
+    name:   str
+    path:   str
+    parent: str
+    kind:   Kind_T
+    code:   str
+    used:   bool
+
+# GnuCash's account types, as the kinds of this tool; ROOT is none of them.
+def kind_of_type(t: str) -> Kind_T:
+    if t == "LIABILITY" or t == "CREDIT" or t == "PAYABLE":
+        return LIABILITY
+    if t == "EQUITY" or t == "TRADING":
+        return EQUITY
+    if t == "INCOME":
+        return REVENUE
+    if t == "EXPENSE":
+        return EXPENSE
+    return ASSET                     # ASSET, BANK, CASH, STOCK, MUTUAL, RECEIVABLE, CURRENCY
+
+# Where the made-up numbers of a kind start.
+def first_number(k: Kind_T) -> int:
+    if k == EQUITY:
+        return 100000
+    if k == LIABILITY:
+        return 480000
+    if k == REVENUE:
+        return 700000
+    if k == EXPENSE:
+        return 600000
+    return 550000
+
+def is_digits(word: str) -> bool:
+    if len(word) == 0:
+        return False
+    for c in word:
+        if not (c >= '0' and c <= '9'):
+            return False
+    return True
+
+def index_of(guid: str, found: []Found) -> int:
+    for i in range(len(found)):
+        if found[i].guid == guid:
+            return i
+    return -1
+
+def path_of(i: int, found: []Found) -> str:
+    var path: str = found[i].name
+    var up: int = index_of(found[i].parent, found)     # the root is not among them: the chain ends there
+    while up >= 0:
+        path = found[up].name + ":" + path
+        up = index_of(found[up].parent, found)
+    return path
+
+# 2014-11-30 10:59:00 or 20141130105900 as 2014-11-30.
+def date_of(stamp: str) -> str:
+    if len(stamp) >= 8 and is_digits(stamp[:8]):
+        return stamp[:4] + "-" + stamp[4:6] + "-" + stamp[6:8]
+    return stamp[:10]
+
+# Cents of NUM/DENOM, rounded away from zero.
+def cents_from(num: int, denom: int) -> int:
+    let scaled: int = num * 100
+    if denom == 100:
+        return num
+    let half: int = denom // 2
+    return ((scaled + half) // denom if scaled >= 0 else -((-scaled + half) // denom))
+
+# The books of the GnuCash SQLite file at PATH.
+def books_of_gnucash(path: str) -> Books | !BookFailure_T:
+    if not fileExists(path):
+        return bad(f"there is no file {path}")
+    let db: DB = DB(path)
+    if db.value("SELECT name FROM sqlite_master WHERE name IS 'splits'") == "":
+        db.close()
+        return bad(f"{path} is not a GnuCash SQLite file (save it as sqlite3 from GnuCash)")
+    # the accounts, the root and the templates of scheduled transactions apart
+    var found: []Found = []
+    for r in db.rows("SELECT guid, name, parent_guid, account_type, code FROM accounts ORDER BY name"):
+        if r[3] != "ROOT":
+            found.append(Found(r[0], r[1], "", r[2] if r[2] != "NULL" else "", kind_of_type(r[3]), r[4], False))
+    for i in range(len(found)):
+        found[i].path = path_of(i, found)
+    # a trading account only balances the currencies of a transaction that has two
+    var trading: []str = []
+    for r in db.rows("SELECT guid FROM accounts WHERE account_type IS 'TRADING'"):
+        trading.append(r[0])
+    # the transactions, each with its splits
+    var entries: []Entry = []
+    var skipped: int = 0
+    for t in db.rows("SELECT guid, post_date, description FROM transactions ORDER BY post_date, rowid"):
+        var postings: []Posting = []
+        var debits: int = 0
+        var credits: int = 0
+        var known: bool = True
+        for s in db.rows("SELECT account_guid, value_num, value_denom FROM splits WHERE tx_guid IS ? ORDER BY rowid", [t[0]]):
+            let a: int = index_of(s[0], found)
+            if s[0] in trading:
+                continue
+            if a < 0:
+                known = False               # a template of a scheduled transaction, not a transaction
+            else:
+                let cents: int = cents_from(int(s[1]), int(s[2]))
+                var at: int = -1
+                for k in range(len(postings)):
+                    if postings[k].account == found[a].guid:
+                        at = k
+                if at >= 0:
+                    postings[at].amount = Cents_T(int(postings[at].amount) + cents)
+                else:
+                    postings.append(Posting(found[a].guid, Cents_T(cents)))
+        var kept: []Posting = []
+        for p in postings:
+            if int(p.amount) != 0:
+                kept.append(p)
+                if int(p.amount) > 0:
+                    debits += 1
+                else:
+                    credits += 1
+        if known and len(kept) > 0:
+            if debits > 1 and credits > 1:
+                skipped += 1
+            elif debits == 0 or credits == 0:
+                skipped += 1
+            else:
+                for p in kept:
+                    found[index_of(p.account, found)].used = True
+                entries.append(Entry(date_of(t[1]), field(t[2]), kept))
+    var currency: str = db.value("""SELECT c.mnemonic FROM commodities c JOIN accounts a ON a.commodity_guid = c.guid
+                                    WHERE a.account_type IN ('BANK', 'ASSET', 'CASH') ORDER BY a.rowid LIMIT 1""")
+    db.close()
+    # the accounts used, numbered and named
+    var rows: []AccountRow = []
+    var taken: []str = []
+    for acct in found:
+        if acct.used and is_digits(acct.code):
+            taken.append(acct.code)
+    var names: []str = []
+    for acct in found:
+        if acct.used:
+            var same: int = 0
+            for other in found:
+                if other.used and other.name == acct.name:
+                    same += 1
+            names.append(acct.name if same == 1 else acct.path)
+    var n: int = 0
+    var number_of: []str = []
+    for i in range(len(found)):
+        if not found[i].used:
+            number_of.append("")
+        else:
+            var number: str = ""
+            var unique: bool = is_digits(found[i].code)
+            if unique:
+                var twice: int = 0
+                for c in taken:
+                    if c == found[i].code:
+                        twice += 1
+                unique = twice == 1
+            if unique:
+                number = found[i].code
+            else:
+                var start: int = first_number(found[i].kind)
+                while True:
+                    var clash: bool = False
+                    for c in taken:
+                        if c == str(start):
+                            clash = True
+                    if not clash:
+                        break
+                    start += 10
+                number = str(start)
+                taken.append(number)
+            number_of.append(number)
+    var by_guid: []str = []                 # the name of each account, in found's order, "" when unused
+    for i in range(len(found)):
+        if found[i].used:
+            by_guid.append(names[n])
+            rows.append(AccountRow(number_of[i], found[i].kind, names[n]))
+            n += 1
+        else:
+            by_guid.append("")
+    for j in range(len(entries)):
+        for k in range(len(entries[j].postings)):
+            entries[j].postings[k].account = by_guid[index_of(entries[j].postings[k].account, found)]
+    var ids: []int = []
+    for e in entries:
+        ids.append(0)                       # numbers are the ledger's, the entries have none yet
+    let stem: str = splitFile(path)[1]
+    var about: str = f"Read from the GnuCash file {stem}: {len(rows)} accounts, {len(entries)} transactions."
+    if skipped > 0:
+        about += f" {skipped} transaction(s) left out: several debits against several credits."
+    return Books((currency if currency != "" and currency != "NULL" else "EUR"), rows, entries, ids, f"GnuCash: {stem}", about)
