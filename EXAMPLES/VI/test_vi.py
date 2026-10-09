@@ -206,6 +206,14 @@ def chunks(keys):
         yield SEQUENCES.get(key, key)
 
 
+def started(fd, limit=30):
+    """Wait until the program has written something to its terminal: it is up, and has
+    set the terminal the way it wants it. Keys typed before that are taken by the
+    terminal's own line editing, not by the program -- and a loaded machine, with all
+    these programs starting at once, is slower than any fixed wait."""
+    select.select([fd], [], [], limit)
+
+
 def drive(program, path, keys):
     """Run PROGRAM on PATH in a pty, type KEYS, then ^S and ^Q."""
     program = os.path.abspath(program)
@@ -232,6 +240,7 @@ def drive(program, path, keys):
         except OSError:             # the program has quit, as a command can ask
             pass
 
+    started(fd)
     drain(0.6)
     for key in chunks(keys):
         type_(key.encode())
@@ -272,6 +281,7 @@ def screen(program, name, term="xterm"):
                 return
             out += got
 
+    started(fd)
     drain(1.0)
     os.write(fd, b"j")              # the cursor to the second line: the third is not the current one
     drain(0.5)
