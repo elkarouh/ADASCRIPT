@@ -800,6 +800,11 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
       body (`setTimeout(pick_shown, 50)` with `pick_shown` defined below) is
       "undeclared identifier" in the Nim, though calling one before its def
       works elsewhere: forward declarations miss a function passed as a value.
+- [ ] a local `let x: str` makes a field of the same name on another value
+      a string too: in accounting_gui.ady's box_html, with `let x: str =
+      px(...)` in scope, `px(p.x + shape.half_w - 8.0)` came out as
+      `p.x & shape.half_w - 8.0` (string concatenation). The locals are
+      named `left` and `top` instead.
 - [x] an enum whose member values skip numbers (`type VatRate_T is enum
       NO_VAT = 0, REDUCED = 6, INTERMEDIATE = 12, STANDARD = 21`) could not be
       iterated (`for rate in VatRate_T`), so listing its members meant writing
