@@ -7,8 +7,8 @@ and what does not fit the books is refused without a trace.
 """
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
 from books_text import AccountRow, Books, Ratio, closing_entries, ratios_of, kind_named, parse_books, text_of_books, graph_of
-from ledger import Config, Ledger, cents_of, open_chart, read_config, record_example
-from os nimport walkFiles
+from ledger import Config, Ledger, Scenarios, cents_of, open_chart, read_config, record_example
+from os nimport walkFiles, createDir, fileExists, removeDir
 
 # The value of a step that must not fail here.
 def config_of(path: Path) -> Config:
@@ -17,6 +17,14 @@ def config_of(path: Path) -> Config:
         when BookFailure_T:
             raise ValueError(r.detail)
         when Config:
+            return r
+
+def ledger_of(s: Scenarios, name: str) -> Ledger:
+    let r: Ledger | !BookFailure_T = s.open(name, False)
+    case r:
+        when BookFailure_T:
+            raise ValueError(r.detail)
+        when Ledger:
             return r
 
 def number_of(r: int | !BookFailure_T) -> int:
@@ -186,4 +194,20 @@ for file in walkFiles("scenarios/*.books"):
                         assert ratios[4].value == "42.1%", ratios[4].value            # net margin: 25,280 of 60,000
                     scenarios += 1
 assert scenarios == 12
+
+# A scenario made and deleted: its files gone, and refused the second time.
+removeDir("/tmp/test_ledger_scenarios")
+createDir("/tmp/test_ledger_scenarios")
+let temp: Scenarios = Scenarios(Path("/tmp/test_ledger_scenarios"))
+let made: None | !BookFailure_T = temp.write_books("kept", Books("EUR", [], [], [], "Kept", ""), "a test")
+assert not (made is BookFailure_T)
+var kept: Ledger = ledger_of(temp, "kept")
+kept.close()
+assert fileExists("/tmp/test_ledger_scenarios/kept.books") and fileExists("/tmp/test_ledger_scenarios/kept.db")
+let gone: None | !BookFailure_T = temp.delete("kept")
+assert not (gone is BookFailure_T)
+assert not fileExists("/tmp/test_ledger_scenarios/kept.books") and not fileExists("/tmp/test_ledger_scenarios/kept.db")
+let again: None | !BookFailure_T = temp.delete("kept")
+assert again is BookFailure_T
+removeDir("/tmp/test_ledger_scenarios")
 print "ledger: all checks passed"

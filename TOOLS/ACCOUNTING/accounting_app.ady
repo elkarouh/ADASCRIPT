@@ -672,6 +672,11 @@ def save_as():
         say(f"Saved as {name}.", False)
         ajaxPost("/save-as", NO_HEADERS, name, on_switched)
 
+def delete_scenario():
+    if window.confirm("Delete this scenario, and the changes you made in it? It cannot be undone."):
+        say("Scenario deleted.", False)
+        ajaxPost("/delete-scenario", NO_HEADERS, scenario, on_switched)
+
 # The server's answer to a POST: "ok", or "error" and why.
 def on_answer(status: int, response: cstring):
     let answer: str = str(response)
@@ -1255,6 +1260,7 @@ def scenario_html() -> Html:
                         + scenario_option_html(i)
                 button id="start-over" onclick=start_over(): "Start over"
                 button id="save-as" onclick=save_as(): "Save as..."
+                button id="delete-scenario" onclick=delete_scenario(): "Delete scenario"
                 button id="help" onclick=toggle_help(): help_label
                 button id="tidy" title="Lay the accounts out again, each in its quarter, placed to keep the arrows short and off other accounts" onclick=tidy(): "Tidy up"
             if help_open:

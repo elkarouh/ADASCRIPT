@@ -13,6 +13,7 @@ what the page does to them:
     POST /scenario         a scenario's name: shows that one from now on
     POST /start-over       the scenario shown, back as its .books file has it
     POST /save-as          a name: the books shown, saved as a new scenario, shown
+    POST /delete-scenario  the scenario shown, gone with its database; the first one left is shown
     POST /account          one account line: opens it
     POST /entry            one entry and its postings: records it
     POST /delete-entry     a transaction's number: deletes it
@@ -79,12 +80,28 @@ def save_as(name: str) -> None | !BookFailure_T:
         scenarios.save_as(books, current, name, config.currency)
     return show(name, True)
 
+# The scenario shown deleted, and the first one left shown; refused when it is the only one.
+def delete_scenario() -> None | !BookFailure_T:
+    if len(scenarios.names()) < 2:
+        return BookFailure_T("this is the only scenario; make another first")
+    let gone: str = current
+    books.close()
+    current = ""
+    let done: None | !BookFailure_T = scenarios.delete(gone)
+    if done is BookFailure_T:
+        return done
+    for name in scenarios.names():
+        return show(name, False)
+    return None
+
 # What the page posts to PATH, done; the answer to send back.
 def post(path: str, body: str) -> str:
     if path == "/scenario":
         return answer(show(body.strip(), False))
     if path == "/start-over":
         return answer(show(current, True))
+    if path == "/delete-scenario":
+        return answer(delete_scenario())
     if path == "/save-as":
         return answer(save_as(body.strip()))
     if path == "/delete-entry":

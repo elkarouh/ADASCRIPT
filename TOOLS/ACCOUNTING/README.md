@@ -38,7 +38,7 @@ company's books that show one idea, with a few lines saying which.
 | 11. Start from scratch | the whole chart of accounts, no transaction yet |
 
 Change a scenario as you like: Start over brings it back as it was, and
-Save as keeps your version as a scenario of its own.
+Save as keeps your version as a scenario of its own; Delete scenario removes the one shown (after asking), with its database.
 
 The page draws the scenario's books: the accounts as nodes (drag them
 about), the money that moved between them as arrows, the transactions below
@@ -188,6 +188,7 @@ make ledger
 ./ledger 2_vat account 613100 expense Fuel
 ./ledger 2_vat delete-account Fuel     # an account no transaction touches
 ./ledger 2_vat start-over              # back as 2_vat.books has it
+./ledger delete-scenario NAME           # a scenario's .books file and database gone
 ./ledger 2_vat save-as vat_mine        # a new scenario, from these books
 ./ledger 2_vat export                  # the books as a .books file holds them
 ./ledger new mine                      # a new scenario: the config's chart, no transaction

@@ -4,6 +4,7 @@ one per scenario, and a command line to keep them.
 
     ledger [--config FILE] list                    the scenarios, with their titles
     ledger [--config FILE] new NAME                a new scenario: the config's chart, no transaction
+    ledger [--config FILE] delete-scenario NAME       a scenario's .books file and database gone
     ledger [--config FILE] import-gnucash NAME FILE   a new scenario NAME, read from a GnuCash sqlite3 file
     ledger [--config FILE] import-beancount NAME FILE  the same, from a Beancount file
     ledger [--config FILE] SCENARIO COMMAND ...
@@ -367,6 +368,15 @@ class Scenarios:
         if done is PathFailure_T:
             return BookFailure_T(f"{done.op} {done.path}: {done.reason}")
 
+    # Scenario NAME gone: its .books file and its database.
+    def delete(self, name: str) -> None | !BookFailure_T:
+        if not self.exists(name):
+            return BookFailure_T(f"there is no scenario {name}")
+        removeFile(str(self.books_file(name)))
+        if fileExists(str(self.db_file(name))):
+            removeFile(str(self.db_file(name)))
+        return None
+
     # The books KEPT, of scenario FROM_NAME, saved as a new scenario NAME.
     def save_as(self, kept: Ledger, from_name: str, name: str, currency: str) -> None | !BookFailure_T:
         var books_kept: Ledger = kept
@@ -381,6 +391,7 @@ class Scenarios:
 
 const USAGE: str = """usage: ledger [--config FILE] list
        ledger [--config FILE] new NAME
+       ledger [--config FILE] delete-scenario NAME
        ledger [--config FILE] import-gnucash NAME FILE
        ledger [--config FILE] import-beancount NAME FILE
        ledger [--config FILE] SCENARIO COMMAND ...
@@ -552,6 +563,12 @@ def main():
             if made is BookFailure_T:
                 die(made.detail)
             print f"scenario {words[1]}: {len(config.accounts)} accounts, no transaction"
+        elif words[0] == "delete-scenario":
+            die("delete-scenario NAME") if len(words) != 2
+            let gone: None | !BookFailure_T = scenarios.delete(words[1])
+            if gone is BookFailure_T:
+                die(gone.detail)
+            print f"scenario {words[1]} deleted"
         elif words[0] == "import-gnucash":
             die("import-gnucash NAME FILE") if len(words) != 3
             let read_books: Books | !BookFailure_T = books_of_gnucash(words[2])
