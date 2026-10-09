@@ -24,9 +24,7 @@ from books_text import AccountRow, Books, account_line, entry_lines, graph_of, k
 
 const WIDTH: float = 980.0
 const HEIGHT: float = 670.0
-const TOP_Y: float = 50.0 + 40.0        # the first row, under the side's title
 const ROW_STEP: float = 120.0
-const LABEL_ROOM: float = 50.0          # under the horizontal line, the profit and loss's titles
 
 # Account number A before B: by length, then digit by digit.
 def number_before(a: str, b: str) -> bool:
@@ -67,6 +65,8 @@ div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone b
 g.tip { pointer-events: none; }
 g.sides { pointer-events: none; }
 path.split { stroke: #888; stroke-width: 2; stroke-dasharray: 10 6; fill: none; }
+circle.crossing { fill: #fff; stroke: #666; stroke-width: 2; cursor: move; }
+circle.crossing:hover { fill: #ffe0b2; stroke: #e65100; }
 text.side { font-size: 14px; font-weight: bold; fill: #666; }
 text.left { text-anchor: end; }
 text.right { text-anchor: start; }
@@ -74,6 +74,20 @@ g.tip rect { fill: #fffbe6; stroke: #888; }
 text.tipline { font-size: 11px; white-space: pre; }
 text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
 """
+
+const FIRST_ROW: float = 90.0          # the first row of accounts, below the top of its quarter's title
+const COLUMN: float = 150.0            # the least width an account takes in a row
+
+# How many accounts fit side by side in a quarter WIDTH wide, at most N.
+def columns_for(n: int, width: float) -> int:
+    return max(1, min(n, int((width - 20.0) / COLUMN)))
+
+# How many rows N accounts take in a quarter WIDTH wide.
+def rows_for(n: int, width: float) -> int:
+    if n == 0:
+        return 0
+    let cols: int = columns_for(n, width)
+    return (n + cols - 1) // cols
 
 # Where each account sits, starting where accounting_gui.ady puts it.
 @virtual
@@ -100,12 +114,14 @@ class Layout:
     var page_height: float = HEIGHT       # the drawing's height in the page, kept while the graph is alone
     var top_y: float = 0.0              # the top of the balance sheet (moved down with the graph alone)
     var has_pl: bool = False            # whether there are costs or revenue to put below it
+    var crossing: bool = False          # the lines' crossing is being dragged, to resize the quarters
 
     # The accounts laid out as a balance sheet: a vertical line, the assets
     # (Activa) left of it and equity and debts (Passiva) right; below a
     # horizontal line the profit and loss, costs left and revenue right, as
-    # the Belgian layout has them. Each side in account-number order, two to a
-    # row. Laid out again whenever the accounts change, so a new one lands in
+    # the Belgian layout has them. Each quarter in account-number order, as
+    # many to a row as its width takes; dragging the lines' crossing resizes
+    # the quarters. Laid out again whenever the accounts change, so a new one lands in
     # its place; dragging moves one until then.
     def sync(self, rows: []AccountRow):
         var same: bool = len(rows) == len(self.names)
@@ -119,7 +135,29 @@ class Layout:
             for p in self.points:
                 self.height = max(self.height, p.y + NODE_RADIUS + 30.0)
 
+    # The lines where they start: the vertical one in the middle, the
+    # horizontal one below the taller of the two balance-sheet quarters.
     def arrange(self, rows: []AccountRow):
+        self.split_x = self.width / 2.0
+        self.top_y = 0.0
+        var activa: int = 0
+        var passiva: int = 0
+        self.has_pl = False
+        for r in rows:
+            case r.kind:
+                when ASSET:
+                    activa += 1
+                when LIABILITY | EQUITY:
+                    passiva += 1
+                when EXPENSE | REVENUE:
+                    self.has_pl = True
+        let top_rows: int = max(rows_for(activa, self.split_x), rows_for(passiva, self.width - self.split_x))
+        self.pl_y = self.top_y + FIRST_ROW + float(max(top_rows, 1) - 1) * ROW_STEP + NODE_RADIUS + 54.0
+        self.fill(rows)
+
+    # The accounts placed in their quarters as the lines now divide them,
+    # each quarter in account-number order, row by row.
+    def fill(self, rows: []AccountRow):
         var sorted: []AccountRow = rows
         for i in range(1, len(sorted)):          # by number: few accounts, an insertion sort
             var j: int = i
@@ -142,29 +180,41 @@ class Layout:
                     costs.append(r.name)
                 when REVENUE:
                     revenue.append(r.name)
-        let mid: float = self.width / 2.0
-        self.split_x = mid
-        self.top_y = 0.0
         self.names = []
         self.points = []
         self.lefts = []
         self.tops = []
-        let top_rows: int = max((len(activa) + 1) // 2, (len(passiva) + 1) // 2)
-        self.place_side(activa, mid - 370.0, TOP_Y, True, True)
-        self.place_side(passiva, mid + 150.0, TOP_Y, False, True)
-        self.has_pl = len(costs) + len(revenue) > 0
-        self.pl_y = TOP_Y + float(max(top_rows, 1)) * ROW_STEP - 30.0
-        let pl_top: float = self.pl_y + 30.0 + LABEL_ROOM
-        self.place_side(costs, mid - 370.0, pl_top, True, False)
-        self.place_side(revenue, mid + 150.0, pl_top, False, False)
+        let x: float = self.split_x
+        let bottom: float = (self.height if self.graph_only else -1.0)     # in the page, the drawing grows
+        self.place_in(activa, 0.0, x, self.top_y + 30.0, self.pl_y, True, True)
+        self.place_in(passiva, x, self.width, self.top_y + 30.0, self.pl_y, False, True)
+        self.place_in(costs, 0.0, x, self.pl_y + 30.0, bottom, True, False)
+        self.place_in(revenue, x, self.width, self.pl_y + 30.0, bottom, False, False)
 
-    # NAMES two to a row, from (X, Y): X and X + 220, in the quadrant LEFT and TOP say.
-    def place_side(self, names: []str, x: float, y: float, left: bool, top: bool):
-        for i in range(len(names)):
+    # NAMES in rows across the quarter from X0 to X1, from Y0 (below its
+    # title) down, in the quarter LEFT and TOP say. If they would pass Y1
+    # (-1: no limit), the rows come closer and, if need be, more columns.
+    def place_in(self, names: []str, x0: float, x1: float, y0: float, y1: float, left: bool, top: bool):
+        let n: int = len(names)
+        if n == 0:
+            return
+        let first: float = y0 + FIRST_ROW - 30.0
+        let closest: float = 2.0 * NODE_RADIUS + 6.0        # rows no closer than this
+        var cols: int = columns_for(n, x1 - x0)
+        if y1 > 0.0:                                        # too many rows to fit: more, narrower columns
+            let fit: int = max(1, int((y1 - first - NODE_RADIUS - 10.0) / closest) + 1)
+            cols = max(cols, min(n, (n + fit - 1) // fit))
+        let width: float = (x1 - x0) / float(cols)
+        let rows: int = (n + cols - 1) // cols
+        var step: float = ROW_STEP
+        if y1 > 0.0 and rows > 1:
+            let room: float = y1 - first - NODE_RADIUS - 10.0
+            step = min(step, max(room / float(rows - 1), closest))
+        for i in range(n):
             self.names.append(names[i])
             self.lefts.append(left)
             self.tops.append(top)
-            self.points.append(Point(x + 220.0 * float(i % 2), y + ROW_STEP * float(i // 2)))
+            self.points.append(Point(x0 + width * (float(i % cols) + 0.5), first + step * float(i // cols)))
 
     # A transaction is drawn: a click on an account freezes it (it no longer
     # moves), an arrow is dragged from it to another account, and letting go
@@ -223,7 +273,10 @@ class Layout:
     # and none is frozen, frozen. Only an arrow dragged onto an account opens
     # the popup: a click on it, or the mouse passing over it, does not.
     def release(self):
-        if self.drawing:
+        if self.crossing:
+            self.crossing = False
+            tidy()                              # the accounts into their new quarters
+        elif self.drawing:
             self.drawing = False
             let under: str = self.node_at(self.mouse_x, self.mouse_y)
             if under != "" and under != self.source:
@@ -245,6 +298,11 @@ class Layout:
 
     def at(self, a: Account) -> Point:
         return self.points[self.index(a)]
+
+    def grab_crossing(self):
+        if not self.popup and not self.drawing:
+            self.crossing = True
+            self.tip = ""
 
     def grab(self, a: Account):
         self.held = self.index(a)
@@ -287,7 +345,12 @@ class Layout:
     # inside its quadrant, clear of the quadrant's title: an asset left of
     # the vertical line, a cost below the horizontal one, and so on.
     def move_to(self, x: float, y: float):
-        if self.held >= 0:
+        if self.crossing:                       # the lines follow, leaving each quarter room for an account
+            self.split_x = min(max(x, COLUMN), self.width - COLUMN)
+            self.pl_y = max(y, self.top_y + FIRST_ROW + NODE_RADIUS + 20.0)
+            if self.graph_only:
+                self.pl_y = min(self.pl_y, self.height - FIRST_ROW - NODE_RADIUS)
+        elif self.held >= 0:
             let gap: float = NODE_RADIUS + 6.0
             var low_x: float = NODE_RADIUS
             var high_x: float = self.width - NODE_RADIUS
@@ -613,7 +676,7 @@ def layout_cost(sources: []int, targets: []int) -> float:
 # shorter or takes one off an account, until no swap helps.
 def tidy():
     stop_replay()
-    layout.arrange(books.accounts)
+    layout.fill(books.accounts)
     var sources: []int = []
     var targets: []int = []
     for f in graph.flows:
@@ -903,6 +966,9 @@ def live_graph_html(g: Graph) -> Html:
                 + live_node_html(g, a)
             if layout.drawing and rubber != "":
                 path class="rubber" d=rubber
+            if layout.has_pl:
+                circle class="crossing" cx=px(layout.split_x) cy=px(layout.pl_y) r="9" onmousedown=layout.grab_crossing():
+                    title: "Drag to resize the four quarters; the accounts are tidied into them when you let go"
             if layout.tip != "":
                 + layout.tip_html()
 
@@ -919,7 +985,7 @@ def on_move(e: Event):
     if layout.drawing and m.buttons == 0:               # let go where on_up did not see it: no arrow
         layout.drawing = False
     layout.move_to(layout.mouse_x, layout.mouse_y)      # when an account is held
-    if layout.held >= 0 or layout.tip != "" or layout.drawing:
+    if layout.held >= 0 or layout.tip != "" or layout.drawing or layout.crossing:
         redraw()
 
 def on_up(e: Event):
@@ -940,7 +1006,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
 
 def main():
     def render() -> Html:

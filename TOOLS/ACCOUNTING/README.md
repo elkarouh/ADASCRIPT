@@ -47,6 +47,9 @@ account moves.
 If the accounts have been dragged into a mess, Tidy up lays them out again:
 each in its quarter, and within it placed so that the arrows are short and
 run over as few other accounts as possible.
+The small circle where the two dashed lines cross resizes the quarters:
+drag it, and when you let go the accounts are tidied into their new
+quarters.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the
