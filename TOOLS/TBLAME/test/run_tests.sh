@@ -29,19 +29,19 @@ printf 'line1\nline2\nline3\n' > "$REPO/fileA.txt"
 mkdir -p "$REPO/sources"
 cp "$REPO/fileA.txt" "$REPO/sources/fileA.txt"
 git -C "$REPO" add fileA.txt sources/fileA.txt
-GIT_AUTHOR_DATE=2024-01-01T00:00:00 GIT_COMMITTER_DATE=2024-01-01T00:00:00 \
+GIT_AUTHOR_DATE=2024-01-01T00:00:00Z GIT_COMMITTER_DATE=2024-01-01T00:00:00Z \
     git -C "$REPO" commit -q -m "SC-1001 initial fileA"
 git -C "$REPO" tag TESTBASELINE
 
 git -C "$REPO" config user.name "Bob B"
 printf 'line1\nline2-changed\nline3\nline4\n' > "$REPO/fileA.txt"
 git -C "$REPO" add fileA.txt
-GIT_AUTHOR_DATE=2024-02-01T00:00:00 GIT_COMMITTER_DATE=2024-02-01T00:00:00 \
+GIT_AUTHOR_DATE=2024-02-01T00:00:00Z GIT_COMMITTER_DATE=2024-02-01T00:00:00Z \
     git -C "$REPO" commit -q -m "SC-1002 tweak fileA"
 
 printf 'x1\nx2\nx3\n' > "$REPO/fileB.txt"
 git -C "$REPO" add fileB.txt
-GIT_AUTHOR_DATE=2024-03-01T00:00:00 GIT_COMMITTER_DATE=2024-03-01T00:00:00 \
+GIT_AUTHOR_DATE=2024-03-01T00:00:00Z GIT_COMMITTER_DATE=2024-03-01T00:00:00Z \
     git -C "$REPO" commit -q -m "SC-2001 SC-2002 SC-2003 multi-ticket fileB"
 
 # The ksh original checks "{alternate}/.git" at the top level (an alternate
