@@ -64,7 +64,11 @@ transactions between them (those inside a group vanish). Hover over a group to s
 click it to open it: its accounts are drawn on their own, the other groups stay closed, and
 Close groups folds them again. A big chart starts grouped by as many digits as leave about thirty
 nodes. The page counts in whole numbers below 2,147,483,648 cents, so a grouping whose sums
-would pass that is refused: group by more digits. A group cannot be frozen or be the end of
+would pass that is refused: group by more digits. "fold" draws the accounts that fewer than 2, 5, 10, ... transactions touch as one node a kind
+("8 quiet expense"); on the ERP data, fewer than 50 leaves 29 nodes with no grouping at all.
+To make your own groups, hold Shift and click two or more accounts of one kind (a blue dashed
+outline marks them), press "Merge the N picked..." and name the group; click it to take it apart.
+A group cannot be frozen or be the end of
 a new arrow, and the Exercise waits until no account is grouped.
 The small circle where the two dashed lines cross resizes the quarters:
 drag it, and when you let go the accounts are tidied into their new

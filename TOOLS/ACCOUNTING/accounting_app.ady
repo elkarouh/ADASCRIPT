@@ -64,6 +64,7 @@ button.help { font-size: 0.9em; border: none; background: none; color: #1565c0; 
 g.node { cursor: grab; }
 g.from circle, g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
 g.from { cursor: crosshair; }
+g.picked circle, g.picked rect { stroke: #1565c0; stroke-width: 5; stroke-dasharray: 3 3; }
 path.rubber { fill: none; stroke: #c62828; stroke-width: 2.5; stroke-dasharray: 6 4; marker-end: url(#arrow); pointer-events: none; }
 div.backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 10; }
 div.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); z-index: 11; background: #fff;
@@ -403,6 +404,9 @@ class Layout:
     def press(self, a: Account):
         if self.popup:
             return
+        if shifted():
+            pick_account(a.name)
+            return
         if a.name == self.source:
             self.drawing = True
             self.grabbed_x = self.mouse_x
@@ -572,6 +576,11 @@ var graph: Graph = Graph()
 var view: Graph = Graph()               # the graph drawn: graph, with the accounts of a group merged into one node
 var detail: int = 0                     # 0: every account is a node; N: accounts whose numbers start alike (N digits) are one
 var opened: []str = []                  # the groups opened again, by key
+var min_moves: int = 0                  # accounts touched by fewer transactions than this are drawn as one node a kind; 0: none
+var merge_names: []str = []             # the groups the user made: a name ...
+var merge_members: []str = []           # ... and its accounts' names, tab apart
+var picked: []str = []                  # the accounts shift-clicked, to be merged
+var shift_held: bool = False
 var view_accounts: []AccountRow = []    # the accounts drawn: the books', or groups in their place
 var view_from: []str = []               # an account in a group ...
 var view_to: []str = []                 # ... and the group's name
@@ -644,12 +653,7 @@ def longest_number() -> int:
 
 # Whether the books grouped to DIGITS add up, in each group and each arrow, to what the page can
 # count (a whole number below 2,147,483,648 cents): the groups' sums are bigger than the accounts'.
-def fits(digits: int) -> bool:
-    let was: int = detail
-    let was_open: []str = opened
-    detail = digits
-    opened = []
-    refresh_view()
+def view_fits() -> bool:
     let vb: Books = view_books(books)
     var names: []str = []
     var sums: []float = []
@@ -695,11 +699,38 @@ def fits(digits: int) -> bool:
             let j: int = (pat if pat >= 0 else len(pairs) - 1)
             flows[j] += cents[k]
             most = max(most, flows[j])
+    return most < 2000000000.0
+
+# Whether the books grouped to DIGITS, nothing else changed, fit.
+def fits(digits: int) -> bool:
+    let was: int = detail
+    let was_open: []str = opened
+    detail = digits
+    opened = []
+    refresh_view()
+    let ok: bool = view_fits()
     detail = was
     opened = was_open
     refresh_view()
-    return most < 2000000000.0
+    return ok
 
+# How many transactions touch each account.
+def moves_of(name: str) -> int:
+    var n: int = 0
+    for e in books.entries:
+        for p in e.postings:
+            if p.account == name:
+                n += 1
+    return n
+
+def merge_index(name: str) -> int:
+    for m in range(len(merge_names)):
+        if name in merge_members[m].split("\t"):
+            return m
+    return -1
+
+# Each account of the books is itself, or a member of a group: one the user merged, the quiet
+# ones of its kind, or those whose numbers start alike. A group of one is the account.
 def refresh_view():
     view_accounts = []
     view_from = []
@@ -708,28 +739,43 @@ def refresh_view():
     group_keys = []
     group_members = []
     group_seen = []
-    if detail == 0:
+    if detail == 0 and min_moves == 0 and len(merge_names) == 0:
         view_accounts = books.accounts
         return
     var keys: []str = []
     for r in books.accounts:
-        keys.append(key_of(r, detail))
+        var key: str = ""
+        let m: int = merge_index(r.name)
+        if m >= 0:
+            key = "m/" + merge_names[m]
+        elif min_moves > 0 and moves_of(r.name) < min_moves:
+            key = "q/" + str(int(r.kind))
+        elif detail > 0:
+            key = key_of(r, detail)
+        keys.append(key)
     for i in range(len(books.accounts)):
         let r: AccountRow = books.accounts[i]
         var n: int = 0
         for k in keys:
             if k == keys[i]:
                 n += 1
-        if n == 1 or keys[i] in opened:
+        if keys[i] == "" or (n == 1 and not keys[i].startswith("m/")) or keys[i] in opened:
             view_accounts.append(r)
         else:
-            let name: str = f"{prefix_of(r.number, detail)}… {r.name} +{n - 1}"
             if keys[i] not in group_keys:
+                var name: str = f"{prefix_of(r.number, detail)}… {r.name} +{n - 1}"
+                var number: str = prefix_of(r.number, detail)
+                if keys[i].startswith("m/"):
+                    name = keys[i][2:]
+                    number = r.number
+                elif keys[i].startswith("q/"):
+                    name = f"{n} quiet {kind_text(r.kind)}"
+                    number = "999999"
                 group_keys.append(keys[i])
                 group_names.append(name)
                 group_members.append("")
                 group_seen.append(0)
-                view_accounts.append(AccountRow(prefix_of(r.number, detail), r.kind, name))
+                view_accounts.append(AccountRow(number, r.kind, name))
             let at: int = group_keys.index(keys[i])
             if group_seen[at] < 12:
                 let line: str = f"{r.number} {r.name}"
@@ -776,6 +822,9 @@ def view_books(b: Books) -> Books:
             out.ids.append(0)
     return out
 
+def shifted() -> bool:
+    return shift_held
+
 def is_group(name: str) -> bool:
     return name in group_names
 
@@ -792,12 +841,104 @@ def relayout():
     if len(view_accounts) <= 40:
         tidy()
 
+# ITEMS without the one at AT.
+def without(items: []str, at: int) -> []str:
+    var kept: []str = []
+    for i in range(len(items)):
+        if i != at:
+            kept.append(items[i])
+    return kept
+
 def open_group(name: str):
-    opened.append(group_keys[group_names.index(name)])
+    let key: str = group_keys[group_names.index(name)]
+    if key.startswith("m/"):                    # a group the user made: taken apart
+        let at: int = merge_names.index(name)
+        merge_names = without(merge_names, at)
+        merge_members = without(merge_members, at)
+    else:
+        opened.append(key)
     relayout()
+
+# A shift-click picks an account for merging, or lets it go.
+def pick_account(name: str):
+    if is_group(name):
+        return
+    if name in picked:
+        let at: int = picked.index(name)
+        picked = without(picked, at)
+    else:
+        picked.append(name)
+
+def merge_picked():
+    if len(picked) < 2:
+        return
+    let first: AccountRow = account_row(picked[0])
+    for n in picked:
+        if account_row(n).kind != first.kind:
+            say("Merge accounts of one kind only: assets, liabilities, equity, revenue or expenses.", True)
+            return
+    let name: str = str(window.prompt("Name of the merged accounts:", cstring("")))
+    if name == "":
+        return
+    if name in group_names or name in merge_names or books_has(name):
+        say(f"There is already an account or group called {name}.", True)
+        return
+    merge_names.append(name)
+    merge_members.append("\t".join(picked))
+    if not fits_now():
+        merge_names = without(merge_names, len(merge_names) - 1)
+        merge_members = without(merge_members, len(merge_members) - 1)
+        refresh_view()
+        say("Merged, the amounts would add up to more than this page can count.", True)
+        return
+    say("", False)
+    picked = []
+    relayout()
+
+def account_row(name: str) -> AccountRow:
+    for r in books.accounts:
+        if r.name == name:
+            return r
+    return books.accounts[0]
+
+def books_has(name: str) -> bool:
+    for r in books.accounts:
+        if r.name == name:
+            return True
+    return False
+
+# Whether the books as now grouped fit what the page can count.
+def fits_now() -> bool:
+    refresh_view()
+    return view_fits()
+
+def clear_picked():
+    picked = []
+
+def pick_quiet():
+    let picker: Element = document.getElementById("quiet")
+    if picker != nil:
+        InputElement(picker).value = str(min_moves)
+
+def choose_quiet():
+    let v: str = field_text("quiet")
+    let was: int = min_moves
+    for q in [0, 2, 5, 10, 20, 50, 100]:
+        if str(q) == v:
+            min_moves = q
+    if not fits_now():
+        min_moves = was
+        say("Folded together, the quiet accounts would add up to more than this page can count.", True)
+    else:
+        say("", False)
+    opened = []
+    relayout()
+    discard_timeout(setTimeout(pick_quiet, 50))
 
 def close_groups():
     opened = []
+    merge_names = []
+    merge_members = []
     relayout()
 
 def pick_detail():
@@ -839,10 +980,15 @@ def on_books(status: int, response: cstring):
                 layout.reset()
                 replaced = False
                 opened = []
+                min_moves = 0
+                merge_names = []
+                merge_members = []
+                picked = []
                 detail = auto_detail()
             rebuild_view()
             layout.sync(view_accounts)
             discard_timeout(setTimeout(pick_detail, 50))
+            discard_timeout(setTimeout(pick_quiet, 50))
             if message.startswith("Asking"):
                 say("", False)
 
@@ -1095,7 +1241,8 @@ def live_node_html(g: Graph, a: Account) -> Html:
         tip = f"{a.name}: balance {money(a.balance)}\n" + group_members[group_names.index(a.name)] + "\nClick to open the group"
     let none: str = ""                  # the page's own tooltip shows it, not a <title>
     let css: str = ("node from" if a.name == layout.source else ("node to" if a.name == layout.target else
-                    ("node now" if step >= 0 and a.name in now_accounts else "node")))
+                    ("node picked" if a.name in picked else
+                    ("node now" if step >= 0 and a.name in now_accounts else "node"))))
     html:
         g class=css onmousedown=layout.press(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
             if layout.as_boxes:
@@ -1430,16 +1577,28 @@ def detail_option_html(d: int) -> Html:
     html:
         option value=str(d): label
 
-# Group the accounts by the first digits of their numbers.
+def quiet_option_html(q: int) -> Html:
+    let label: str = ("Every account" if q == 0 else f"Fewer than {q} transactions")
+    html:
+        option value=str(q): label
+
+# Group by the first digits of the numbers, fold the quiet accounts, merge the shift-clicked ones.
 def detail_html() -> Html:
+    let merge_label: str = f"Merge the {len(picked)} picked..."
     html:
         span class="detail":
             span: "Group by "
             select id="detail" title="Draw the accounts whose numbers start alike as one node; click a node to open it" onchange=choose_detail():
                 for d in range(0, longest_number()):
                     + detail_option_html(d)
-            if len(opened) > 0:
-                button id="close-groups" onclick=close_groups(): "Close groups"
+            span: " fold "
+            select id="quiet" title="Draw the accounts few transactions touch as one node a kind" onchange=choose_quiet():
+                for q in [0, 2, 5, 10, 20, 50, 100]:
+                    + quiet_option_html(q)
+            if len(picked) >= 2:
+                button id="merge-picked" title="Make the accounts you shift-clicked one node" onclick=merge_picked(): merge_label
+            if len(opened) > 0 or len(merge_names) > 0:
+                button id="close-groups" title="Fold the opened groups, and take the ones you merged apart" onclick=close_groups(): "Close groups"
 
 def replay_html() -> Html:
     let n: int = len(books.entries)
@@ -1881,9 +2040,17 @@ def on_up(e: Event):
         discard_timeout(setTimeout(focus_what, 30))       # the popup is drawn: type straight into it
 
 
+def on_key_up(e: Event):
+    let k: KeyboardEvent = KeyboardEvent(e)
+    if k.key == "Shift":
+        shift_held = False
+
 def on_key(e: Event):
     let k: KeyboardEvent = KeyboardEvent(e)
-    if k.key == "Escape":
+    if k.key == "Shift":
+        shift_held = True
+    elif k.key == "Escape":
+        clear_picked()
         close_popup()
         redraw()
     elif k.key == "Enter" and layout.popup:
@@ -1953,6 +2120,7 @@ def main():
     document.addEventListener("mousemove", on_move)
     document.addEventListener("mouseup", on_up)
     document.addEventListener("keydown", on_key)
+    document.addEventListener("keyup", on_key_up)
     load()
     load_scenarios()
 
