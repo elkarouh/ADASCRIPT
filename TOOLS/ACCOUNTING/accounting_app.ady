@@ -30,6 +30,23 @@ const ROW_STEP: float = 120.0
 def number_before(a: str, b: str) -> bool:
     return len(a) < len(b) or (len(a) == len(b) and a < b)
 
+# About how many pixels the TEXT takes at SIZE px in the page's sans-serif, BOLD or not:
+# letters are not alike, an i is thin and an M wide, so counting them is not enough.
+def text_width(text: str, size: float, bold: bool) -> float:
+    var em: float = 0.0
+    for c in text:
+        if c in "iljtfI.,:;'| !()[]":
+            em += 0.30
+        elif c in "mwMW@%":
+            em += 0.86
+        elif c >= 'A' and c <= 'Z':
+            em += 0.68
+        elif c >= '0' and c <= '9':
+            em += 0.57
+        else:
+            em += 0.55
+    return em * size * (1.1 if bold else 1.0)
+
 const LIVE_STYLE: str = """
 body { max-width: 80em; margin-top: 0.8em; }
 h1 { font-size: 1.15em; margin: 0 0 0.5em; }
@@ -457,10 +474,10 @@ class Layout:
 
     def tip_html(self) -> Html:
         let lines: []str = self.tip.split("\n")
-        var widest: int = 0
-        for line in lines:
-            widest = max(widest, len(line))
-        let w: float = float(widest) * 6.2 + 16.0
+        var widest: float = 0.0
+        for i in range(len(lines)):
+            widest = max(widest, text_width(lines[i], 11.0, i == 0))
+        let w: float = widest + 20.0
         let h: float = float(len(lines)) * 15.0 + 8.0
         let x: float = (self.mouse_x + 14.0 if self.mouse_x + 14.0 + w <= self.width else max(self.mouse_x - 14.0 - w, 0.0))
         let y: float = (self.mouse_y + 14.0 if self.mouse_y + 14.0 + h <= self.height else max(self.mouse_y - 14.0 - h, 0.0))

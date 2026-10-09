@@ -213,8 +213,8 @@ closes real books like any scenario.
 - An account keeps its GnuCash account code when it has a unique one;
   otherwise it is numbered by kind (assets 550000..., liabilities 480000...,
   equity 100000..., costs 600000..., revenue 700000...).
-- It is named by its own name, or by its path (Assets:Current:Bank) when two
-  accounts would share a name.
+- It is named by its own name, or by the last two parts of its path (Brokerage:VEUR) when
+  two accounts would share a name (the whole path if that is still alike).
 - GnuCash's trading accounts (it adds them to balance currencies) are
   ignored; amounts are the splits' values in the transaction's currency.
 - A transaction with several debits *and* several credits cannot be an entry

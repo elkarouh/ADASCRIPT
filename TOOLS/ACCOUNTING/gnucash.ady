@@ -9,7 +9,7 @@ a debit is positive as it is here.
 
 An account's number is its GnuCash account code when it has a unique one,
 else one made up from its kind. An account is named by its own name, or by
-its path (Assets:Current:Bank) when two accounts would share a name.
+the last two parts of its path (Brokerage:VEUR) when two accounts would share a name.
 
 A transaction with several debits and several credits cannot be an entry
 (one side of an entry is a single account) and is left out, counted in the
@@ -66,6 +66,13 @@ def index_of(guid: str, found: []Found) -> int:
         if found[i].guid == guid:
             return i
     return -1
+
+# The last two parts of PATH, Brokerage:VEUR, the whole of it when it has only two.
+def last_two(path: str) -> str:
+    let parts: []str = path.split(":")
+    if len(parts) <= 2:
+        return path
+    return parts[len(parts) - 2] + ":" + parts[len(parts) - 1]
 
 def path_of(i: int, found: []Found) -> str:
     var path: str = found[i].name
@@ -159,13 +166,22 @@ def books_of_gnucash(path: str) -> Books | !BookFailure_T:
         if acct.used and is_digits(acct.code):
             taken.append(acct.code)
     var names: []str = []
+    var paths: []str = []
     for acct in found:
         if acct.used:
             var same: int = 0
             for other in found:
                 if other.used and other.name == acct.name:
                     same += 1
-            names.append(acct.name if same == 1 else acct.path)
+            names.append(acct.name if same == 1 else last_two(acct.path))
+            paths.append(acct.path)
+    for i in range(len(names)):             # two short names still alike: their whole paths
+        var alike: int = 0
+        for other_name in names:
+            if other_name == names[i]:
+                alike += 1
+        if alike > 1:
+            names[i] = paths[i]
     var n: int = 0
     var number_of: []str = []
     for i in range(len(found)):

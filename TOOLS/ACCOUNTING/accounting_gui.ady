@@ -186,6 +186,13 @@ def to_html(a: Account, p: Point, tip: str) -> Html:
 # An account as a box at P, its name on the left and its balance on the
 # right, as on a line of a balance sheet (without its sign: the colour, and
 # the side of the drawing, say whether it is owned or owed).
+# NAME cut to fit ROOM pixels of the box's 12px text, ending in "..." when it is cut.
+def fit_name(name: str, room: float) -> str:
+    let chars: int = int(room / 6.6)
+    if len(name) <= chars or chars < 4:
+        return name
+    return name[:chars - 1] + "\u2026"
+
 def box_html(a: Account, p: Point, shape: Shape) -> Html:
     let left: str = px(p.x - shape.half_w)
     let top: str = px(p.y - shape.half_h)
@@ -196,10 +203,11 @@ def box_html(a: Account, p: Point, shape: Shape) -> Html:
     let bx: str = px(p.x + shape.half_w - 8.0)
     let cy: str = px(p.y)
     let balance: str = money(a.balance if a.balance >= 0 else -a.balance)
+    let shown_name: str = fit_name(a.name, 2.0 * shape.half_w - 16.0 - 10.0 - 6.7 * float(len(balance)))
     html:
         g:
             rect class=css x=left y=top width=w height=h rx="5"
-            stext class="boxname" x=nx y=cy: a.name
+            stext class="boxname" x=nx y=cy: shown_name
             stext class="boxbalance" x=bx y=cy: balance
 
 # The point D along the way from P to Q.
