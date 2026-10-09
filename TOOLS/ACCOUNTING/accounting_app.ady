@@ -78,7 +78,7 @@ text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
 """
 
 const FIRST_ROW: float = 90.0          # the first row of accounts, below the top of its quarter's title
-const TITLE_HALF: float = 34.0         # half the width of a quarter's title, roughly
+const TITLE_HALF: float = 75.0         # half the width of a quarter's title, roughly
 const BOX_GAP: float = 8.0            # between boxes stacked in a column
 const COLUMN: float = 150.0            # the least width an account takes in a row
 
@@ -1097,8 +1097,38 @@ def journal_html() -> Html:
             for i in range(len(books.entries)):
                 + journal_row_html(i)
 
-# The balance sheet's lines and the titles of its sides, under the graph.
-def sides_html() -> Html:
+# What the accounts of a quarter of G add up to, as that quarter counts
+# them: activa and costs as owned or spent, passiva and revenue as owed or
+# earned (their balances are negative); QUARTER 0 to 3 is activa, passiva,
+# costs, revenue.
+def quarter_total(g: Graph, quarter: int) -> Cents_T:
+    var total: Cents_T = 0
+    for row in books.accounts:
+        var q: int = 0
+        case row.kind:
+            when ASSET:
+                q = 0
+            when LIABILITY | EQUITY:
+                q = 1
+            when EXPENSE:
+                q = 2
+            when REVENUE:
+                q = 3
+        if q == quarter:
+            for a in g.accounts:
+                if a.name == row.name:
+                    total += a.balance
+    if quarter % 2 == 1 and total != 0:   # never -0 (the page's numbers are JavaScript's)
+        total = -total
+    return total
+
+# A quarter's title with its total: "Activa (63,600.00)".
+def quarter_title(g: Graph, title: str, quarter: int) -> str:
+    return f"{title} ({money(quarter_total(g, quarter))})"
+
+# The balance sheet's lines and the titles of its sides, with their totals,
+# under the graph G.
+def sides_html(g: Graph) -> Html:
     let x: float = layout.split_x
     let y: float = layout.pl_y
     let down: str = f"M {px(x)} {px(layout.top_y + 8.0)} L {px(x)} {px(layout.height - 8.0)}"
@@ -1107,15 +1137,19 @@ def sides_html() -> Html:
     let rx: str = px(x + 16.0)
     let ty: str = px(layout.top_y + 28.0)
     let by: str = px(y + 30.0)
+    let activa: str = quarter_title(g, "Activa", 0)
+    let passiva: str = quarter_title(g, "Passiva", 1)
+    let costs: str = quarter_title(g, "Costs", 2)
+    let revenue: str = quarter_title(g, "Revenue", 3)
     html:
         g class="sides":
             path class="split" d=down
-            stext class="side left" x=lx y=ty: "Activa"
-            stext class="side right" x=rx y=ty: "Passiva"
+            stext class="side left" x=lx y=ty: activa
+            stext class="side right" x=rx y=ty: passiva
             if layout.has_pl:
                 path class="split" d=across
-                stext class="side left" x=lx y=by: "Costs"
-                stext class="side right" x=rx y=by: "Revenue"
+                stext class="side left" x=lx y=by: costs
+                stext class="side right" x=rx y=by: revenue
 
 def live_graph_html(g: Graph) -> Html:
     let rubber: str = (layout.rubber_d() if layout.drawing else "")
@@ -1127,7 +1161,7 @@ def live_graph_html(g: Graph) -> Html:
                     polygon points="0 0, 10 3.5, 0 7"
                 marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
                     polygon class="now" points="0 0, 4.3 1.5, 0 3"
-            + sides_html()
+            + sides_html(g)
             for i in range(len(g.flows)):
                 + live_arrow_html(g, g.flows[i], routes[i])
             for a in g.accounts:
