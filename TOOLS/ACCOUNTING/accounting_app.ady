@@ -78,7 +78,7 @@ text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
 """
 
 const FIRST_ROW: float = 90.0          # the first row of accounts, below the top of its quarter's title
-const TITLE_HALF: float = 120.0        # half the width of a quarter's title, roughly
+const TITLE_HALF: float = 34.0         # half the width of a quarter's title, roughly
 const BOX_GAP: float = 8.0            # between boxes stacked in a column
 const COLUMN: float = 150.0            # the least width an account takes in a row
 
@@ -1110,12 +1110,12 @@ def sides_html() -> Html:
     html:
         g class="sides":
             path class="split" d=down
-            stext class="side left" x=lx y=ty: "Activa: what the company owns"
-            stext class="side right" x=rx y=ty: "Passiva: what it owes, to its owners and others"
+            stext class="side left" x=lx y=ty: "Activa"
+            stext class="side right" x=rx y=ty: "Passiva"
             if layout.has_pl:
                 path class="split" d=across
-                stext class="side left" x=lx y=by: "Costs (charges)"
-                stext class="side right" x=rx y=by: "Revenue (produits)"
+                stext class="side left" x=lx y=by: "Costs"
+                stext class="side right" x=rx y=by: "Revenue"
 
 def live_graph_html(g: Graph) -> Html:
     let rubber: str = (layout.rubber_d() if layout.drawing else "")
