@@ -89,7 +89,6 @@ button.delete { font-size: 0.8em; }
 table.accounts tr.new td { background: #f6f6f6; }
 table.accounts input, table.accounts select { font-size: 0.9em; }
 svg.graph { user-select: none; }
-div.wide { width: 100vw; margin-left: calc(50% - 50vw); }   /* the graph alone breaks out of the text column */
 g.tip { pointer-events: none; }
 g.sides { pointer-events: none; }
 path.split { stroke: #888; stroke-width: 2; stroke-dasharray: 10 6; fill: none; }
@@ -506,27 +505,6 @@ class Layout:
             return ""
         let start: Point = rim(a, b, self.shape_of(i), 0.0)
         return f"M {start.x:.1f} {start.y:.1f} L {b.x:.1f} {b.y:.1f}"
-
-    # The graph alone fills the window, one drawing unit per pixel, the
-    # accounts moved to its middle; back in the page it is WIDTH x HEIGHT
-    # again, the accounts moved back (and kept inside if they strayed).
-    def toggle_graph_only(self):
-        let was_width: float = self.width
-        self.graph_only = not self.graph_only
-        self.tip = ""
-        if self.graph_only:
-            self.page_height = self.height
-            self.width = float(window.innerWidth) - 20.0
-            self.height = max(float(window.innerHeight) - 90.0, self.page_height)
-        else:
-            self.width = WIDTH
-            self.height = self.page_height     # as it was, so the accounts move back where they were
-        let dx: float = (self.width - was_width) / 2.0
-        self.split_x += dx                     # centred across; the extra height goes below
-        for i in range(len(self.points)):
-            self.held = i
-            self.move_to(self.points[i].x + dx, self.points[i].y)
-        self.held = -1
 
     # Where the quarters' titles are written (their middles, and half their
     # widths), so that no amount covers them: right of the vertical line or
@@ -966,14 +944,11 @@ def improve():
                         layout.order[i] = name
     layout.fill(books.accounts)
 
-def live_button_html() -> Html:
-    let label: str = ("Show everything" if layout.graph_only else "Graph only")
+def debit_credit_button_html() -> Html:
     let dc_label: str = ("Plus and minus" if debit_credit else "Debit and credit")
     html:
         p:
-            button id="graph-only" onclick=layout.toggle_graph_only(): label
-            button id="tidy" title="Lay the accounts out again, each in its quarter, placed to keep the arrows short and off other accounts" onclick=tidy(): "Tidy up"
-            button id="debit-credit" title="Write the transactions as debits and credits, and show each account as a T" onclick=toggle_debit_credit(): dc_label
+            button id="debit-credit" title="Write the transactions as debits and credits" onclick=toggle_debit_credit(): dc_label
 
 # ---------------------------------------------------------------------
 # The replay: the transactions one at a time, each highlighted on the graph
@@ -1254,6 +1229,7 @@ def scenario_html() -> Html:
                         + scenario_option_html(i)
                 button id="start-over" onclick=start_over(): "Start over"
                 button id="save-as" onclick=save_as(): "Save as..."
+                button id="tidy" title="Lay the accounts out again, each in its quarter, placed to keep the arrows short and off other accounts" onclick=tidy(): "Tidy up"
             if help_open:
                 for line in about:
                     p class="about": line
@@ -1656,7 +1632,7 @@ def tabs_html() -> Html:
 
 def tab_body() -> []Html:
     if tab == "Transactions":
-        return [journal_html()]
+        return [debit_credit_button_html(), journal_html()]
     if tab == "T-accounts":
         return [section_html("T-accounts", help_text(T_TEXT), [t_accounts_html()])]
     if tab == "Accounts":
@@ -1675,25 +1651,18 @@ def main():
         for part in tab_body():
             sections.append(part)
         let help_label: str = ("Hide help" if help_open else "Help")
-        let wide: str = ("wide" if layout.graph_only else "")
         html:
-            div class=wide:
+            div:
                 style: STYLE + LIVE_STYLE
-                + live_button_html()
                 if layout.popup:
                     + popup_html()
-                if layout.graph_only:
-                    + record_html()
-                    + live_graph_html(shown())
-                    + journal_html()
-                else:
-                    h1: APP_TITLE
-                    button id="help" class="help" onclick=toggle_help(): help_label
-                    if help_open:
-                        p: APP_INTRO
-                    + scenario_html()
-                    for s in sections:
-                        + s
+                h1: APP_TITLE
+                button id="help" class="help" onclick=toggle_help(): help_label
+                if help_open:
+                    p: APP_INTRO
+                + scenario_html()
+                for s in sections:
+                    + s
 
     setRenderer(render)
     document.addEventListener("mousemove", on_move)

@@ -52,7 +52,7 @@ Each arrow is a spline through two waypoints, pushed aside just enough to
 weave around the other accounts and stay inside the drawing, and each
 amount is written beside its arrow where it covers no account, title or
 other amount; both are worked out again whenever an account moves.
-If the accounts have been dragged into a mess, Tidy up lays them out again:
+If the accounts have been dragged into a mess, Tidy up (beside Save as) lays them out again:
 each in its quarter, and within it placed so that the arrows are short and
 run over as few other accounts as possible.
 The small circle where the two dashed lines cross resizes the quarters:
@@ -80,8 +80,7 @@ Rarer things happen in the tables: each transaction and each account has a
 Delete button (an account only goes once no transaction touches it), and
 the last row of the accounts opens a new one. Hover over an account (its number, name and balance, then its
 transactions) or an
-arrow to see its transactions; "Graph only" gives the drawing the whole
-window, with the transactions table under it.
+arrow to see its transactions.
 
 "Play the transactions" replays the books one transaction at a time: the
 graph, the balances and the statements as they stood after it, its arrows
@@ -117,7 +116,7 @@ ratio of scenario 10 is 8.80 at the year's end and 2.76 after the first
 purchase on credit. The chart's numbers say which accounts are fixed assets
 (2...), stock (3...), long-term debt (1... liabilities) or current.
 
-"Debit and credit" writes the books the way an accountant does. The
+"Debit and credit", at the top of the Transactions tab, writes the books the way an accountant does. The
 transactions list becomes a journal: each transaction has a line for every
 account it touches, the debits first and the credits, indented, after them
 (Furniture and equipment 5,000.00 and VAT receivable 1,050.00 in debit,
