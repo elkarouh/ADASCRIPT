@@ -19,7 +19,7 @@ from karax/karax nimport setRenderer, redraw
 from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
-from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
 const WIDTH: float = 980.0
@@ -32,7 +32,7 @@ def number_before(a: str, b: str) -> bool:
 
 const LIVE_STYLE: str = """
 g.node { cursor: grab; }
-g.from circle { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
+g.from circle, g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
 g.from { cursor: crosshair; }
 path.rubber { fill: none; stroke: #c62828; stroke-width: 2.5; stroke-dasharray: 6 4; marker-end: url(#arrow); pointer-events: none; }
 div.backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 10; }
@@ -41,7 +41,7 @@ div.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); z
 div.popup label { display: block; margin: 0.5em 0 0.15em; font-size: 0.9em; color: #444; }
 div.popup input, div.popup select { font-size: 1em; width: 100%; box-sizing: border-box; }
 div.popup button { font-size: 1em; margin: 1em 0.5em 0 0; }
-g.to circle { stroke: #2e7d32; stroke-width: 5; }
+g.to circle, g.to rect { stroke: #2e7d32; stroke-width: 5; }
 div.scenario { background: #eef4fb; border: 1px solid #c9dcf0; border-radius: 6px; padding: 0.2em 1em; margin-bottom: 1em; }
 div.scenario select, div.scenario button { font-size: 1em; margin: 0 0.4em; }
 p.about { margin: 0.4em 0; }
@@ -53,7 +53,7 @@ span.caption { margin-left: 0.6em; font-weight: bold; color: #e65100; }
 g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }   /* the head drawn as wide as the plain one */
 polygon.now { fill: #e65100; }
 g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
-g.now circle { stroke: #e65100; stroke-width: 6; }
+g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
 tr.now td { background: #ffe0b2; font-weight: bold; }
 tr.later td { color: #bbb; }
 p.refused { color: #b71c1c; }
@@ -79,15 +79,18 @@ const FIRST_ROW: float = 90.0          # the first row of accounts, below the to
 const TITLE_HALF: float = 120.0        # half the width of a quarter's title, roughly
 const COLUMN: float = 150.0            # the least width an account takes in a row
 
-# How many accounts fit side by side in a quarter WIDTH wide, at most N.
-def columns_for(n: int, width: float) -> int:
+# How many accounts fit side by side in a quarter WIDTH wide, at most N,
+# drawn as SHAPE: boxes are stacked one above the other.
+def columns_for(n: int, width: float, shape: Shape) -> int:
+    if shape.boxes:
+        return 1
     return max(1, min(n, int((width - 20.0) / COLUMN)))
 
 # How many rows N accounts take in a quarter WIDTH wide.
-def rows_for(n: int, width: float) -> int:
+def rows_for(n: int, width: float, shape: Shape) -> int:
     if n == 0:
         return 0
-    let cols: int = columns_for(n, width)
+    let cols: int = columns_for(n, width, shape)
     return (n + cols - 1) // cols
 
 # Where each account sits, starting where accounting_gui.ady puts it.
@@ -115,6 +118,7 @@ class Layout:
     var page_height: float = HEIGHT       # the drawing's height in the page, kept while the graph is alone
     var top_y: float = 0.0              # the top of the balance sheet (moved down with the graph alone)
     var has_pl: bool = False            # whether there are costs or revenue to put below it
+    var as_boxes: bool = False          # the accounts drawn as boxes, stacked, rather than circles
     var crossing: bool = False          # the lines' crossing is being dragged, to resize the quarters
 
     # The accounts laid out as a balance sheet: a vertical line, the assets
@@ -124,6 +128,20 @@ class Layout:
     # many to a row as its width takes; dragging the lines' crossing resizes
     # the quarters. Laid out again whenever the accounts change, so a new one lands in
     # its place; dragging moves one until then.
+    def shape(self) -> Shape:
+        return (boxes() if self.as_boxes else circles())
+
+    # Where a quarter's first row sits below the top of its title, how far
+    # apart its rows are, and how narrow a quarter may be.
+    def first_row(self) -> float:
+        return (55.0 if self.as_boxes else FIRST_ROW)
+
+    def row_step(self) -> float:
+        return (40.0 if self.as_boxes else ROW_STEP)
+
+    def narrowest(self) -> float:
+        return (2.0 * self.shape().half_w + 100.0 if self.as_boxes else COLUMN)    # boxes: room for the brackets beside them
+
     def sync(self, rows: []AccountRow):
         var same: bool = len(rows) == len(self.names)
         for r in rows:
@@ -134,7 +152,7 @@ class Layout:
         if not self.graph_only:
             self.height = 300.0                 # as tall as the accounts need
             for p in self.points:
-                self.height = max(self.height, p.y + NODE_RADIUS + 30.0)
+                self.height = max(self.height, p.y + self.shape().half_h + 30.0)
 
     # The lines where they start: the vertical one in the middle, the
     # horizontal one below the taller of the two balance-sheet quarters.
@@ -152,8 +170,9 @@ class Layout:
                     passiva += 1
                 when EXPENSE | REVENUE:
                     self.has_pl = True
-        let top_rows: int = max(rows_for(activa, self.split_x), rows_for(passiva, self.width - self.split_x))
-        self.pl_y = self.top_y + FIRST_ROW + float(max(top_rows, 1) - 1) * ROW_STEP + NODE_RADIUS + 54.0
+        let shape: Shape = self.shape()
+        let top_rows: int = max(rows_for(activa, self.split_x, shape), rows_for(passiva, self.width - self.split_x, shape))
+        self.pl_y = self.top_y + self.first_row() + float(max(top_rows, 1) - 1) * self.row_step() + shape.half_h + 54.0
         self.fill(rows)
 
     # The accounts placed in their quarters as the lines now divide them,
@@ -199,17 +218,18 @@ class Layout:
         let n: int = len(names)
         if n == 0:
             return
-        let first: float = y0 + FIRST_ROW - 30.0
-        let closest: float = 2.0 * NODE_RADIUS + 6.0        # rows no closer than this
-        var cols: int = columns_for(n, x1 - x0)
+        let half_h: float = self.shape().half_h
+        let first: float = y0 + self.first_row() - 30.0
+        let closest: float = 2.0 * half_h + 6.0             # rows no closer than this
+        var cols: int = columns_for(n, x1 - x0, self.shape())
         if y1 > 0.0:                                        # too many rows to fit: more, narrower columns
-            let fit: int = max(1, int((y1 - first - NODE_RADIUS - 10.0) / closest) + 1)
+            let fit: int = max(1, int((y1 - first - half_h - 10.0) / closest) + 1)
             cols = max(cols, min(n, (n + fit - 1) // fit))
         let width: float = (x1 - x0) / float(cols)
         let rows: int = (n + cols - 1) // cols
-        var step: float = ROW_STEP
+        var step: float = self.row_step()
         if y1 > 0.0 and rows > 1:
-            let room: float = y1 - first - NODE_RADIUS - 10.0
+            let room: float = y1 - first - half_h - 10.0
             step = min(step, max(room / float(rows - 1), closest))
         for i in range(n):
             self.names.append(names[i])
@@ -260,9 +280,7 @@ class Layout:
     # The account under (X, Y), or "".
     def node_at(self, x: float, y: float) -> str:
         for i in range(len(self.points)):
-            let dx: float = self.points[i].x - x
-            let dy: float = self.points[i].y - y
-            if dx * dx + dy * dy <= NODE_RADIUS * NODE_RADIUS:
+            if covers(self.points[i], Point(x, y), self.shape(), 0.0):
                 return self.names[i]
         return ""
 
@@ -347,25 +365,26 @@ class Layout:
     # the vertical line, a cost below the horizontal one, and so on.
     def move_to(self, x: float, y: float):
         if self.crossing:                       # the lines follow, leaving each quarter room for an account
-            self.split_x = min(max(x, COLUMN), self.width - COLUMN)
-            self.pl_y = max(y, self.top_y + FIRST_ROW + NODE_RADIUS + 20.0)
+            self.split_x = min(max(x, self.narrowest()), self.width - self.narrowest())
+            self.pl_y = max(y, self.top_y + self.first_row() + self.shape().half_h + 20.0)
             if self.graph_only:
-                self.pl_y = min(self.pl_y, self.height - FIRST_ROW - NODE_RADIUS)
+                self.pl_y = min(self.pl_y, self.height - self.first_row() - self.shape().half_h)
         elif self.held >= 0:
-            let gap: float = NODE_RADIUS + 6.0
-            var low_x: float = NODE_RADIUS
-            var high_x: float = self.width - NODE_RADIUS
-            var low_y: float = self.top_y + 30.0 + NODE_RADIUS      # below the titles
-            var high_y: float = self.height - NODE_RADIUS
+            let half_w: float = self.shape().half_w
+            let half_h: float = self.shape().half_h
+            var low_x: float = half_w
+            var high_x: float = self.width - half_w
+            var low_y: float = self.top_y + 30.0 + half_h          # below the titles
+            var high_y: float = self.height - half_h
             if self.lefts[self.held]:
-                high_x = self.split_x - gap
+                high_x = self.split_x - half_w - 6.0
             else:
-                low_x = self.split_x + gap
+                low_x = self.split_x + half_w + 6.0
             if self.has_pl:
                 if self.tops[self.held]:
-                    high_y = self.pl_y - gap
+                    high_y = self.pl_y - half_h - 6.0
                 else:
-                    low_y = self.pl_y + 30.0 + NODE_RADIUS             # below the costs' and revenue's titles
+                    low_y = self.pl_y + 30.0 + half_h                # below the costs' and revenue's titles
             self.points[self.held] = Point(min(max(x, low_x), high_x), min(max(y, low_y), high_y))
 
     # The arrow being drawn, from the rim of the frozen account to the mouse.
@@ -373,9 +392,9 @@ class Layout:
         let i: int = self.names.index(self.source)
         let a: Point = self.points[i]
         let b: Point = Point(self.mouse_x, self.mouse_y)
-        if abs(a.x - b.x) + abs(a.y - b.y) < NODE_RADIUS:
+        if covers(a, b, self.shape(), 0.0):
             return ""
-        let start: Point = toward(a, b, NODE_RADIUS)
+        let start: Point = rim(a, b, self.shape(), 0.0)
         return f"M {start.x:.1f} {start.y:.1f} L {b.x:.1f} {b.y:.1f}"
 
     # The graph alone fills the window, one drawing unit per pixel, the
@@ -653,7 +672,10 @@ def live_node_html(g: Graph, a: Account) -> Html:
                     ("node now" if step >= 0 and a.name in now_accounts else "node")))
     html:
         g class=css onmousedown=layout.press(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
-            + a.to_html(p, none)
+            if layout.as_boxes:
+                + box_html(a, p, layout.shape())
+            else:
+                + a.to_html(p, none)
 
 def live_arrow_html(g: Graph, f: Flow, route: Route) -> Html:
     let tip: str = tip_of(g, f)
@@ -663,20 +685,13 @@ def live_arrow_html(g: Graph, f: Flow, route: Route) -> Html:
         g class=css onmouseover=layout.show(tip) onmouseout=layout.hide():
             + f.to_html(route, none)
 
-# How far the account at P is from the straight line between A and B, or
-# a long way when it is beyond either end.
-def off_line(p: Point, a: Point, b: Point) -> float:
-    let dx: float = b.x - a.x
-    let dy: float = b.y - a.y
-    let length2: float = dx * dx + dy * dy
-    if length2 == 0.0:
-        return 1000.0
-    let t: float = ((p.x - a.x) * dx + (p.y - a.y) * dy) / length2
-    if t <= 0.0 or t >= 1.0:
-        return 1000.0
-    let qx: float = a.x + t * dx - p.x
-    let qy: float = a.y + t * dy - p.y
-    return sqrt(qx * qx + qy * qy)
+# Whether the straight line from A to B runs over (or close to) the account at P.
+def runs_over(p: Point, a: Point, b: Point) -> bool:
+    for k in range(1, 20):
+        let t: float = float(k) / 20.0
+        if covers(p, Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t), layout.shape(), 10.0):
+            return True
+    return False
 
 # What a layout costs: the length of its arrows, and a lot more for each
 # arrow that runs over another account and so has to bend around it.
@@ -687,7 +702,7 @@ def layout_cost(sources: []int, targets: []int) -> float:
         let b: Point = layout.points[targets[k]]
         cost += sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
         for i in range(len(layout.points)):
-            if i != sources[k] and i != targets[k] and off_line(layout.points[i], a, b) < NODE_RADIUS + 10.0:
+            if i != sources[k] and i != targets[k] and runs_over(layout.points[i], a, b):
                 cost += 400.0
     return cost
 
@@ -697,6 +712,19 @@ def layout_cost(sources: []int, targets: []int) -> float:
 def tidy():
     stop_replay()
     layout.fill(books.accounts)
+    improve()
+    layout.sync(books.accounts)
+
+# Circles or boxes: the accounts laid out afresh in the other shape.
+def toggle_shape():
+    stop_replay()
+    layout.as_boxes = not layout.as_boxes
+    layout.arrange(books.accounts)
+    improve()
+    layout.sync(books.accounts)
+
+# Within each quarter, two accounts swapped while that helps.
+def improve():
     var sources: []int = []
     var targets: []int = []
     for f in graph.flows:
@@ -721,13 +749,14 @@ def tidy():
                     else:
                         layout.points[j] = layout.points[i]
                         layout.points[i] = p
-    layout.sync(books.accounts)
 
 def live_button_html() -> Html:
     let label: str = ("Show everything" if layout.graph_only else "Graph only")
+    let shape_label: str = ("Circles" if layout.as_boxes else "Boxes")
     html:
         p:
             button id="graph-only" onclick=layout.toggle_graph_only(): label
+            button id="shape" onclick=toggle_shape(): shape_label
             button id="tidy" title="Lay the accounts out again, each in its quarter, placed to keep the arrows short and off other accounts" onclick=tidy(): "Tidy up"
 
 # ---------------------------------------------------------------------
@@ -972,7 +1001,7 @@ def sides_html() -> Html:
 
 def live_graph_html(g: Graph) -> Html:
     let rubber: str = (layout.rubber_d() if layout.drawing else "")
-    let routes: []Route = routes_of(g, layout.names, layout.points, Point(layout.width, layout.height), layout.title_spots(), layout.title_halves())
+    let routes: []Route = routes_of(g, layout.names, layout.points, Point(layout.width, layout.height), layout.title_spots(), layout.title_halves(), layout.shape())
     html:
         svg id="graph" viewBox=layout.view_box() class="graph":
             defs:
@@ -1027,7 +1056,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Boxes draws them as the lines of a balance sheet, with their balances; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
 
 def main():
     def render() -> Html:

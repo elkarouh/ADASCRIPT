@@ -51,6 +51,11 @@ run over as few other accounts as possible.
 The small circle where the two dashed lines cross resizes the quarters:
 drag it, and when you let go the accounts are tidied into their new
 quarters.
+Boxes draws the accounts instead as boxes holding their name and balance,
+stacked one column a quarter like the lines of a balance sheet; an arrow
+then leaves the side of one box and enters the side of the other, across
+the middle, or round the outside of a column between two boxes in it.
+Circles brings the circles back.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the
