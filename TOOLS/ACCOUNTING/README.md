@@ -36,6 +36,7 @@ company's books that show one idea, with a few lines saying which.
 | 9. The year end | prepaid and accrued expenses put each cost in the year it belongs to |
 | 10. A small company's year | the whole of one year, each kind of transaction once, down to the stock count, the depreciation and the income tax |
 | 11. A bakery-cafe's year | a made-up small business in about sixty entries: monthly takings, quarterly bills, VAT returns, the year-end depreciation and tax |
+| 12. An IT consultancy's year | a made-up business without stock, in about seventy entries: monthly invoices, an advance from a client, a freelancer, salaries, VAT returns and the year-end tax |
 | 11. Start from scratch | the whole chart of accounts, no transaction yet |
 
 Change a scenario as you like: Start over brings it back as it was, and

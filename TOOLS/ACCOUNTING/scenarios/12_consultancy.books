@@ -1,0 +1,258 @@
+# scenarios/12_consultancy.books: made by make_consultancy.py. Amounts are in cents.
+title	12. An IT consultancy's year: no stock, people are the cost
+about	A made-up consultancy of two consultants and a freelancer. There is no stock: the cost is people. Clients are invoiced every month with 21% VAT and pay a month later; one client pays 12,000 in advance for a September project, which is then set against the invoice.
+about	Rent, software on a company card, a freelance developer, travel, salaries with withholding tax and social contributions, and the VAT returns are booked quarterly. At the year end the laptops are depreciated and the income tax on the profit is owed.
+currency	USD
+account	100000	equity	Share capital
+account	240000	asset	Laptops and furniture
+account	400000	asset	Trade receivables
+account	411000	asset	VAT receivable
+account	440000	liability	Trade payables
+account	450000	liability	Income tax payable
+account	451000	liability	VAT payable
+account	453000	liability	Withholding tax payable
+account	460000	liability	Advances received
+account	489000	liability	Credit card
+account	550000	asset	Bank
+account	610000	expense	Rent
+account	611000	expense	Software subscriptions
+account	614000	expense	Travel
+account	617000	expense	Subcontractors
+account	620000	expense	Wages and salaries
+account	621000	expense	Social contributions
+account	630000	expense	Depreciation
+account	670000	expense	Income tax
+account	700000	revenue	Consulting fees
+entry	2024-01-02	The two founders put in 25,000
+posting	Bank	2500000
+posting	Share capital	-2500000
+entry	2024-01-08	Four laptops and desks, on credit
+posting	Laptops and furniture	900000
+posting	VAT receivable	189000
+posting	Trade payables	-1089000
+entry	2024-01-28	Invoices to clients for month 01
+posting	Trade receivables	1512500
+posting	Consulting fees	-1250000
+posting	VAT payable	-262500
+entry	2024-02-05	The laptops are paid
+posting	Trade payables	1089000
+posting	Bank	-1089000
+entry	2024-02-20	Clients pay the invoices of month 01
+posting	Bank	1512500
+posting	Trade receivables	-1512500
+entry	2024-02-28	Invoices to clients for month 02
+posting	Trade receivables	1694000
+posting	Consulting fees	-1400000
+posting	VAT payable	-294000
+entry	2024-03-01	Office rent, Q1
+posting	Rent	360000
+posting	VAT receivable	75600
+posting	Bank	-435600
+entry	2024-03-15	A freelance developer's invoices, Q1
+posting	Subcontractors	600000
+posting	VAT receivable	126000
+posting	Trade payables	-726000
+entry	2024-03-20	Clients pay the invoices of month 02
+posting	Bank	1694000
+posting	Trade receivables	-1694000
+entry	2024-03-20	Travel to clients, Q1: train tickets and mileage, paid (no VAT)
+posting	Travel	90000
+posting	Bank	-90000
+entry	2024-03-25	Salaries of the two consultants, Q1: 22,000 gross, 6,000 withheld
+posting	Wages and salaries	2200000
+posting	Bank	-1600000
+posting	Withholding tax payable	-600000
+entry	2024-03-26	Cloud and software subscriptions, Q1, on the company card
+posting	Software subscriptions	150000
+posting	VAT receivable	31500
+posting	Credit card	-181500
+entry	2024-03-26	Employer's social contributions, Q1
+posting	Social contributions	550000
+posting	Bank	-550000
+entry	2024-03-28	Invoices to clients for month 03
+posting	Trade receivables	1875500
+posting	Consulting fees	-1550000
+posting	VAT payable	-325500
+entry	2024-03-28	The card statement of Q1 is paid
+posting	Credit card	181500
+posting	Bank	-181500
+entry	2024-04-12	The freelancer of Q1 is paid
+posting	Trade payables	726000
+posting	Bank	-726000
+entry	2024-04-15	Withholding tax of Q1 paid to the tax office
+posting	Withholding tax payable	600000
+posting	Bank	-600000
+entry	2024-04-20	Clients pay the invoices of month 03
+posting	Bank	1875500
+posting	Trade receivables	-1875500
+entry	2024-04-20	VAT return Q1: 4,599 paid
+posting	VAT payable	882000
+posting	VAT receivable	-422100
+posting	Bank	-459900
+entry	2024-04-28	Invoices to clients for month 04
+posting	Trade receivables	1815000
+posting	Consulting fees	-1500000
+posting	VAT payable	-315000
+entry	2024-05-10	A client pays 12,000 in advance for the September project
+posting	Bank	1200000
+posting	Advances received	-1200000
+entry	2024-05-20	Clients pay the invoices of month 04
+posting	Bank	1815000
+posting	Trade receivables	-1815000
+entry	2024-05-28	Invoices to clients for month 05
+posting	Trade receivables	1996500
+posting	Consulting fees	-1650000
+posting	VAT payable	-346500
+entry	2024-06-01	Office rent, Q2
+posting	Rent	360000
+posting	VAT receivable	75600
+posting	Bank	-435600
+entry	2024-06-15	A freelance developer's invoices, Q2
+posting	Subcontractors	800000
+posting	VAT receivable	168000
+posting	Trade payables	-968000
+entry	2024-06-20	Clients pay the invoices of month 05
+posting	Bank	1996500
+posting	Trade receivables	-1996500
+entry	2024-06-20	Travel to clients, Q2: train tickets and mileage, paid (no VAT)
+posting	Travel	110000
+posting	Bank	-110000
+entry	2024-06-25	Salaries of the two consultants, Q2: 22,000 gross, 6,000 withheld
+posting	Wages and salaries	2200000
+posting	Bank	-1600000
+posting	Withholding tax payable	-600000
+entry	2024-06-26	Cloud and software subscriptions, Q2, on the company card
+posting	Software subscriptions	150000
+posting	VAT receivable	31500
+posting	Credit card	-181500
+entry	2024-06-26	Employer's social contributions, Q2
+posting	Social contributions	550000
+posting	Bank	-550000
+entry	2024-06-28	Invoices to clients for month 06
+posting	Trade receivables	1936000
+posting	Consulting fees	-1600000
+posting	VAT payable	-336000
+entry	2024-06-28	The card statement of Q2 is paid
+posting	Credit card	181500
+posting	Bank	-181500
+entry	2024-07-12	The freelancer of Q2 is paid
+posting	Trade payables	968000
+posting	Bank	-968000
+entry	2024-07-15	Withholding tax of Q2 paid to the tax office
+posting	Withholding tax payable	600000
+posting	Bank	-600000
+entry	2024-07-20	Clients pay the invoices of month 06
+posting	Bank	1936000
+posting	Trade receivables	-1936000
+entry	2024-07-20	VAT return Q2: 7,224 paid
+posting	VAT payable	997500
+posting	VAT receivable	-275100
+posting	Bank	-722400
+entry	2024-07-28	Invoices to clients for month 07
+posting	Trade receivables	1210000
+posting	Consulting fees	-1000000
+posting	VAT payable	-210000
+entry	2024-08-20	Clients pay the invoices of month 07
+posting	Bank	1210000
+posting	Trade receivables	-1210000
+entry	2024-08-28	Invoices to clients for month 08
+posting	Trade receivables	1149500
+posting	Consulting fees	-950000
+posting	VAT payable	-199500
+entry	2024-09-01	Office rent, Q3
+posting	Rent	360000
+posting	VAT receivable	75600
+posting	Bank	-435600
+entry	2024-09-15	A freelance developer's invoices, Q3
+posting	Subcontractors	300000
+posting	VAT receivable	63000
+posting	Trade payables	-363000
+entry	2024-09-20	Clients pay the invoices of month 08
+posting	Bank	1149500
+posting	Trade receivables	-1149500
+entry	2024-09-20	Travel to clients, Q3: train tickets and mileage, paid (no VAT)
+posting	Travel	60000
+posting	Bank	-60000
+entry	2024-09-25	Salaries of the two consultants, Q3: 22,000 gross, 6,000 withheld
+posting	Wages and salaries	2200000
+posting	Bank	-1600000
+posting	Withholding tax payable	-600000
+entry	2024-09-26	Cloud and software subscriptions, Q3, on the company card
+posting	Software subscriptions	180000
+posting	VAT receivable	37800
+posting	Credit card	-217800
+entry	2024-09-26	Employer's social contributions, Q3
+posting	Social contributions	550000
+posting	Bank	-550000
+entry	2024-09-28	Invoices to clients for month 09
+posting	Trade receivables	4235000
+posting	Consulting fees	-3500000
+posting	VAT payable	-735000
+entry	2024-09-28	The card statement of Q3 is paid
+posting	Credit card	217800
+posting	Bank	-217800
+entry	2024-09-30	The advance is set against the September invoice
+posting	Advances received	1200000
+posting	Trade receivables	-1200000
+entry	2024-10-12	The freelancer of Q3 is paid
+posting	Trade payables	363000
+posting	Bank	-363000
+entry	2024-10-15	Withholding tax of Q3 paid to the tax office
+posting	Withholding tax payable	600000
+posting	Bank	-600000
+entry	2024-10-20	Clients pay the invoices of month 09
+posting	Bank	3035000
+posting	Trade receivables	-3035000
+entry	2024-10-20	VAT return Q3: 9,681 paid
+posting	VAT payable	1144500
+posting	VAT receivable	-176400
+posting	Bank	-968100
+entry	2024-10-28	Invoices to clients for month 10
+posting	Trade receivables	2178000
+posting	Consulting fees	-1800000
+posting	VAT payable	-378000
+entry	2024-11-20	Clients pay the invoices of month 10
+posting	Bank	2178000
+posting	Trade receivables	-2178000
+entry	2024-11-28	Invoices to clients for month 11
+posting	Trade receivables	2117500
+posting	Consulting fees	-1750000
+posting	VAT payable	-367500
+entry	2024-12-01	Office rent, Q4
+posting	Rent	360000
+posting	VAT receivable	75600
+posting	Bank	-435600
+entry	2024-12-15	A freelance developer's invoices, Q4
+posting	Subcontractors	700000
+posting	VAT receivable	147000
+posting	Trade payables	-847000
+entry	2024-12-20	Clients pay the invoices of month 11
+posting	Bank	2117500
+posting	Trade receivables	-2117500
+entry	2024-12-20	Travel to clients, Q4: train tickets and mileage, paid (no VAT)
+posting	Travel	100000
+posting	Bank	-100000
+entry	2024-12-25	Salaries of the two consultants, Q4: 22,000 gross, 6,000 withheld
+posting	Wages and salaries	2200000
+posting	Bank	-1600000
+posting	Withholding tax payable	-600000
+entry	2024-12-26	Cloud and software subscriptions, Q4, on the company card
+posting	Software subscriptions	180000
+posting	VAT receivable	37800
+posting	Credit card	-217800
+entry	2024-12-26	Employer's social contributions, Q4
+posting	Social contributions	550000
+posting	Bank	-550000
+entry	2024-12-28	Invoices to clients for month 12
+posting	Trade receivables	1633500
+posting	Consulting fees	-1350000
+posting	VAT payable	-283500
+entry	2024-12-28	The card statement of Q4 is paid
+posting	Credit card	217800
+posting	Bank	-217800
+entry	2024-12-31	The laptops and desks lose a third of their value
+posting	Depreciation	300000
+posting	Laptops and furniture	-300000
+entry	2024-12-31	Income tax, 25% of the profit of 31,400, owed
+posting	Income tax	785000
+posting	Income tax payable	-785000
