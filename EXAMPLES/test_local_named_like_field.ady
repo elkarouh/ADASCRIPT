@@ -1,0 +1,31 @@
+# A local named like a field does not change the field's type: with
+# `let x: str` in scope, `p.x + 1.0` still adds two floats (it came out as
+# Nim's string `&`), and `p.s * 2` still repeats a string field.
+type Point is record:
+    x: float
+    y: float
+
+class Label:
+    var s: str = ""
+
+    def __init__(self, s: str):
+        self.s = s
+
+    def doubled(self) -> str:
+        let s: int = 2
+        return self.s * s
+
+def shifted(p: Point) -> str:
+    let x: str = "x"
+    let y: float = p.x + 1.0
+    return x + " " + str(y) + " " + str(p.y + p.x)
+
+def names(p: Point) -> float:
+    let x: str = "x"
+    var total: float = 0.0
+    total = p.x + p.y
+    return total + p.x
+
+print(shifted(Point(1.0, 2.0)))
+print(names(Point(1.0, 2.0)))
+print(Label("ab").doubled())

@@ -1705,17 +1705,13 @@ def binop_to_nim(self, prec=None, my_prec=None):
                                 or right.startswith(_STRING_RETURNING_CALLS)
                                 or '.join(' in right)
 
-                # field access on typed object (e.g. self.off where off: string)
+                # field access on typed object (e.g. self.off where off: string):
+                # the object's declared field type when its type is known, so
+                # a local `x: str` in scope no longer makes `p.x` a string
                 if not left_is_str and "." in result:
-                    _field = result.rsplit(".", 1)[-1]
-                    _fsym = ParserState.symbol_table.lookup(_field)
-                    if _fsym and (_fsym.get("type") or "") in ("string", "str"):
-                        left_is_str = True
+                    left_is_str = _field_type(result) in ("string", "str")
                 if not right_is_str and "." in right:
-                    _field = right.rsplit(".", 1)[-1]
-                    _fsym = ParserState.symbol_table.lookup(_field)
-                    if _fsym and (_fsym.get("type") or "") in ("string", "str"):
-                        right_is_str = True
+                    right_is_str = _field_type(right) in ("string", "str")
                 # A field holding a seq: `r.new_failing + r.crashed`. Its
                 # type is the object's declared field type when the object
                 # is known -- a parameter, a local -- else the field's own
@@ -1775,10 +1771,9 @@ def binop_to_nim(self, prec=None, my_prec=None):
                     def _repeatable(expr):
                         sym = ParserState.symbol_table.lookup(expr)
                         if not sym and "." in expr:
-                            # A field, looked up by its own name, the way the
-                            # `&` case above reads one: `self.fill * n`.
-                            sym = ParserState.symbol_table.lookup(
-                                expr.rsplit(".", 1)[-1])
+                            # A field, read the way the `&` case above
+                            # reads one: `self.fill * n`.
+                            return _field_type(expr) in ("string", "str", "char")
                         return sym and (sym.get("type") or "") in (
                             "string", "str", "char")
                     left_is_str  = _repeatable(result)
