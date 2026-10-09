@@ -8,6 +8,7 @@ one per scenario, and a command line to keep them.
     ledger [--config FILE] import-gnucash NAME FILE   a new scenario NAME, read from a GnuCash sqlite3 file
     ledger [--config FILE] import-beancount NAME FILE  the same, from a Beancount file
     ledger [--config FILE] import-journal NAME FILE    the same, from a Ledger or hledger journal
+    ledger [--config FILE] import-erp NAME JOURNAL.csv [CHART.json]  the same, from an ERP's journal lines
     ledger [--config FILE] SCENARIO COMMAND ...
 
     show                          the accounts and their balances, and the statements
@@ -39,10 +40,11 @@ from math nimport round
 from os nimport walkFiles, removeFile, fileExists, splitFile, getLastModificationTime
 from times nimport toUnix
 from algorithm nimport sort
-from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, example_entries, money_text
+from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, example_entries, money_text
 from gnucash import books_of_gnucash
 from beancount import books_of_beancount
 from journal import books_of_journal
+from erp_csv import books_of_erp
 from books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
 
 # ---------------------------------------------------------------------
@@ -156,15 +158,19 @@ class Ledger:
             self.graph().check(e)
         self.db.exec("BEGIN")
         try:
-            self.db.exec("INSERT INTO transactions (date, what) VALUES (?, ?)", [e.date, e.what])
-            let tx: str = self.db.value("SELECT last_insert_rowid()")
-            for p in e.postings:
-                self.db.exec("INSERT INTO postings (tx, account, amount) VALUES (?, ?, ?)",
-                             [tx, self.number_of(p.account), str(int(p.amount))])
+            self.insert(e)
             self.db.exec("COMMIT")
         except:                         # the database failed: nothing of the entry stays
             self.db.exec("ROLLBACK")
             raise
+
+    # Entry E written, as it is, into the open database transaction.
+    def insert(self, e: Entry):
+        self.db.exec("INSERT INTO transactions (date, what) VALUES (?, ?)", [e.date, e.what])
+        let tx: str = self.db.value("SELECT last_insert_rowid()")
+        for p in e.postings:
+            self.db.exec("INSERT INTO postings (tx, account, amount) VALUES (?, ?, ?)",
+                         [tx, self.number_of(p.account), str(int(p.amount))])
 
     # The transactions, by date, each with its postings in the order written.
     def entries(self) -> []Entry:
@@ -240,9 +246,21 @@ class Ledger:
             if self.name_of(a.number) == "":
                 do:
                     self.open_account(a.number, a.kind, a.name)
+        # the entries checked as they come against a graph grown with them (not against the
+        # database read afresh each time, which is slow for a year of transactions), and written
+        # in one database transaction
+        var g: Graph = Graph()
+        for a in b.accounts:
+            g.add_account(a.name, colour_of(a.kind))
+        self.db.exec("BEGIN")
         for e in b.entries:
-            do:
-                self.record(e)
+            let ok: None | !BookFailure_T = g.check(e)
+            if ok is BookFailure_T:
+                self.db.exec("ROLLBACK")
+                return ok
+            g.post(e)
+            self.insert(e)
+        self.db.exec("COMMIT")
 
     def graph(self) -> Graph:
         return graph_of(self.books(""))
@@ -397,6 +415,7 @@ const USAGE: str = """usage: ledger [--config FILE] list
        ledger [--config FILE] import-gnucash NAME FILE
        ledger [--config FILE] import-beancount NAME FILE
        ledger [--config FILE] import-journal NAME FILE
+       ledger [--config FILE] import-erp NAME JOURNAL.csv [CHART.json]
        ledger [--config FILE] SCENARIO COMMAND ...
 
     show                          the accounts and their balances, and the statements
@@ -602,6 +621,16 @@ def main():
                 if made is BookFailure_T:
                     die(made.detail)
                 print f"scenario {words[1]}: {len(journal_books.accounts)} accounts, {len(journal_books.entries)} transactions"
+        elif words[0] == "import-erp":
+            die("import-erp NAME JOURNAL.csv [CHART.json]") if len(words) != 3 and len(words) != 4
+            let erp_books: Books | !BookFailure_T = books_of_erp(words[2], (words[3] if len(words) == 4 else ""))
+            if erp_books is BookFailure_T:
+                die(erp_books.detail)
+            else:
+                let made: None | !BookFailure_T = scenarios.write_books(words[1], erp_books, f"scenarios/{words[1]}.books, read from {words[2]}.")
+                if made is BookFailure_T:
+                    die(made.detail)
+                print f"scenario {words[1]}: {len(erp_books.accounts)} accounts, {len(erp_books.entries)} transactions"
         elif len(words) < 2:
             die(f"{words[0]}: a scenario, then a command (see -h); `ledger list` lists the scenarios")
         else:

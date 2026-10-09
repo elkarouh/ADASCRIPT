@@ -88,12 +88,21 @@ class Collector:
     var entries: []Entry = []
     var skipped: int = 0
     var split_entries: int = 0
+    var declared_keys: []str = []       # accounts whose number, kind and name the reader knows
+    var declared: []AccountRow = []
 
     def __init__(self):
         self.accounts = []
         self.entries = []
         self.skipped = 0
         self.split_entries = 0
+        self.declared_keys = []
+        self.declared = []
+
+    # The account KEY (as the postings write it) is NUMBER of KIND, called NAME.
+    def declare(self, key: str, number: str, kind: Kind_T, name: str):
+        self.declared_keys.append(key)
+        self.declared.append(AccountRow(number, kind, name))
 
     def use(self, postings: []Posting):
         for p in postings:
@@ -194,6 +203,11 @@ class Collector:
         var rows: []AccountRow = []
         var next_number: []int = [0, 0, 0, 0, 0]
         for i in range(len(self.accounts)):
+            let known: int = index_of(self.accounts[i], self.declared_keys)
+            if known >= 0:
+                rows.append(self.declared[known])
+                names[i] = self.declared[known].name
+                continue
             let parts: []str = self.accounts[i].split(":")
             let kind: Kind_T | !BookFailure_T = kind_of_root(parts[0])
             if kind is BookFailure_T:
@@ -202,6 +216,14 @@ class Collector:
             let number: int = kind_first(k) + 10 * next_number[int(k)]
             next_number[int(k)] += 1
             rows.append(AccountRow(str(number), k, field(names[i])))
+        for i in range(len(rows)):             # two accounts of one name: the number tells them apart
+            var alike: int = 0
+            for other in rows:
+                if other.name == rows[i].name:
+                    alike += 1
+            if alike > 1:
+                rows[i].name = f"{rows[i].name} {rows[i].number}"
+                names[i] = rows[i].name
         var made: []Entry = []
         for e in self.entries:
             var postings: []Posting = []

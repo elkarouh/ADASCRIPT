@@ -1,0 +1,169 @@
+#!/usr/bin/env ady2nim
+"""erp_csv -- the books of an ERP's journal entries as a CSV file, read as Books.
+
+An ERP exports its general ledger as lines: a document (journal entry)
+number, a posting date, a text, a GL account, a debit and a credit amount.
+This reads that shape, as the synthetic datasets of the datasynth tool
+write it (https://github.com/meghahonna/erp_data_sample):
+
+    document_id,...,posting_date,...,currency,...,header_text,...,gl_account,debit_amount,credit_amount,...
+
+The lines of a document are together. Its lines make an entry, or two
+through a Clearing account when it has several debits against several
+credits (plain_books.ady). The accounts keep their GL numbers; their names
+and kinds come from the chart of accounts, a JSON file in datasynth's
+shape ("account_number", "short_description", "account_type"), when one is
+given, else from the first digit of the number (1 assets, 2 liabilities,
+3 equity, 4 revenue, 5 to 8 costs).
+"""
+from os nimport fileExists
+from math nimport round
+from accounting_model import BookFailure_T, Kind_T, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from books_text import Books, bad
+from plain_books import Collector, Leg, kind_of_root
+
+# The fields of a CSV line: a field in double quotes may hold commas and "" for a quote.
+def csv_fields(line: str) -> []str:
+    var found: []str = []
+    var current: str = ""
+    var quoted: bool = False
+    var i: int = 0
+    while i < len(line):
+        let c: char = line[i]
+        if quoted:
+            if c == '"':
+                if i + 1 < len(line) and line[i + 1] == '"':
+                    current += '"'
+                    i += 1
+                else:
+                    quoted = False
+            else:
+                current += c
+        elif c == '"':
+            quoted = True
+        elif c == ',':
+            found.append(current)
+            current = ""
+        else:
+            current += c
+        i += 1
+    found.append(current)
+    return found
+
+# The text of a JSON line such as   "short_description": "Bank Account",   after the key.
+def json_text(line: str) -> str:
+    let colon: int = line.find(":")
+    let rest: str = line[colon + 1:].strip()
+    if rest.startswith('"'):
+        let close: int = rest[1:].find('"')
+        return (rest[1:] if close < 0 else rest[1:close + 1])
+    return rest
+
+def kind_of_digit(number: str) -> Kind_T:
+    if number.startswith("2"):
+        return LIABILITY
+    if number.startswith("3"):
+        return EQUITY
+    if number.startswith("4"):
+        return REVENUE
+    if number.startswith("5") or number.startswith("6") or number.startswith("7") or number.startswith("8"):
+        return EXPENSE
+    return ASSET
+
+def kind_of_type(word: str, number: str) -> Kind_T:
+    let k: Kind_T | !BookFailure_T = kind_of_root(word)
+    if k is BookFailure_T:
+        return kind_of_digit(number)
+    else:
+        return k
+
+def column_of(header: []str, name: str) -> int:
+    for i in range(len(header)):
+        if header[i].strip() == name:
+            return i
+    return -1
+
+# The books of the journal-entry lines at JOURNAL; CHART is the chart of accounts, "" for none.
+def books_of_erp(journal: str, chart: str) -> Books | !BookFailure_T:
+    if not fileExists(journal):
+        return bad(f"there is no file {journal}")
+    var chart_numbers: []str = []
+    var chart_names: []str = []
+    var chart_types: []str = []
+    if chart != "":
+        let c: str | !PathFailure_T = Path(chart).read_text()
+        if c is PathFailure_T:
+            return bad(f"{c.op} {c.path}: {c.reason}")
+        for raw in c.split("\n"):
+            let line: str = raw.strip()
+            if line.startswith('"account_number"'):
+                chart_numbers.append(json_text(line))
+                chart_names.append("")
+                chart_types.append("")
+            elif line.startswith('"short_description"') and len(chart_numbers) > 0:
+                chart_names[len(chart_names) - 1] = json_text(line)
+            elif line.startswith('"account_type"') and len(chart_numbers) > 0:
+                chart_types[len(chart_types) - 1] = json_text(line)
+    let read: str | !PathFailure_T = Path(journal).read_text()
+    if read is PathFailure_T:
+        return bad(f"{read.op} {read.path}: {read.reason}")
+    let text: str = read
+    let lines: []str = text.split("\n")
+    if len(lines) < 2:
+        return bad(f"{journal} has no lines")
+    let header: []str = csv_fields(lines[0])
+    let c_doc: int = column_of(header, "document_id")
+    let c_date: int = column_of(header, "posting_date")
+    let c_text: int = column_of(header, "header_text")
+    let c_gl: int = column_of(header, "gl_account")
+    let c_dr: int = column_of(header, "debit_amount")
+    let c_cr: int = column_of(header, "credit_amount")
+    let c_cur: int = column_of(header, "currency")
+    if c_doc < 0 or c_date < 0 or c_gl < 0 or c_dr < 0 or c_cr < 0:
+        return bad(f"{journal}: the first line must name the columns document_id, posting_date, gl_account, debit_amount and credit_amount")
+    var collector: Collector = Collector()
+    var currency: str = ""
+    var doc: str = ""
+    var date: str = ""
+    var what: str = ""
+    var legs: []Leg = []
+    var declared: []str = []
+    for i in range(1, len(lines) + 1):
+        let f: []str = (csv_fields(lines[i].replace("\r", "")) if i < len(lines) else [])
+        if i < len(lines) and len(f) <= c_cr:
+            continue
+        if i == len(lines) or f[c_doc] != doc:
+            if doc != "":
+                collector.add(date, what, legs)
+            legs = []
+            if i == len(lines):
+                break
+            doc = f[c_doc]
+            date = f[c_date][:10]
+            what = (f[c_text] if c_text >= 0 and f[c_text] != "" else doc)
+        let account: str = f[c_gl].strip()
+        if index_of_key(account, declared) < 0:
+            declared.append(account)
+            var pos: int = index_of_key(account, chart_numbers)
+            let name: str = (chart_names[pos] if pos >= 0 and chart_names[pos] != "" else f"Account {account}")
+            let kind: Kind_T = (kind_of_type(chart_types[pos], account) if pos >= 0 else kind_of_digit(account))
+            collector.declare(account, account, kind, name)
+        if currency == "" and c_cur >= 0:
+            currency = f[c_cur]
+        let cents: int = cents_of(f[c_dr]) - cents_of(f[c_cr])
+        legs.append(Leg(account, cents, True, True))
+    return collector.books(journal, "ERP", (currency if currency != "" else "USD"))
+
+# 1234.5 as 123450 cents; 0 for an empty or unreadable field.
+def cents_of(word: str) -> int:
+    let r: float | !ParseFailure_T = parse_float(word.strip())
+    if r is ParseFailure_T:
+        return 0
+    else:
+        return int(round(r * 100.0))
+
+def index_of_key(key: str, keys: []str) -> int:
+    for i in range(len(keys)):
+        if keys[i] == key:
+            return i
+    return -1

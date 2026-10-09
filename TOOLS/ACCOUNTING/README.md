@@ -276,6 +276,34 @@ example, 1,111 transactions; at tag 1.40, in
 https://github.com/simonmichael/hledger) and Ledger's `test/input/demo.ledger`
 and `drewr3.dat` (https://github.com/ledger/ledger).
 
+### Reading an ERP's journal lines (CSV)
+
+```
+ledger import-erp NAME JOURNAL.csv [CHART.json]
+```
+
+An ERP exports its general ledger as one line per posting. This reads the
+columns `document_id`, `posting_date`, `header_text`, `gl_account`,
+`debit_amount` and `credit_amount` (and `currency`), as the synthetic
+datasets of https://github.com/meghahonna/erp_data_sample write them: the
+lines of a document are together and make one entry, or two through a
+`Clearing` account when it has several debits against several credits.
+The accounts keep their GL numbers. Names and kinds come from the chart of
+accounts (`chart_of_accounts.json` beside it: `account_number`,
+`short_description`, `account_type`); an account it does not know is
+"Account 1530", its kind from the first digit (1 assets, 2 liabilities,
+3 equity, 4 revenue, 5 to 8 costs). Two accounts of one name get their
+numbers added.
+
+That repository's `complete-output/journal_entries.csv` is a year-in-eight-months
+of a company: 1,068 documents (purchases, sales, payroll, depreciation)
+over 143 accounts, 1,324 entries here. Its chart of accounts is stored with
+Git LFS, so fetch it from
+https://media.githubusercontent.com/media/meghahonna/erp_data_sample/main/complete-output/chart_of_accounts.json
+
+A scenario's database is made from its `.books` file in a single pass, so
+even this one opens in well under a second.
+
 ### accounting.conf
 
 ```

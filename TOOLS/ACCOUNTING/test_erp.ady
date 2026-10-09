@@ -1,0 +1,105 @@
+#!/usr/bin/env ady2nim
+"""erp_csv.ady on a small ERP export: documents of two and three lines, one
+of several debits against several credits, a quoted text with a comma, an
+account the chart does not know, and the chart's names and kinds.
+
+    ady2nim c -r test_erp.ady
+"""
+from os nimport removeFile, fileExists
+from accounting_model import BookFailure_T, Graph
+from books_text import Books, graph_of, text_of_books
+from erp_csv import books_of_erp
+
+const CSV_FILE: str = "/tmp/test_erp_journal.csv"
+const CHART_FILE: str = "/tmp/test_erp_chart.json"
+
+const CSV: str = """document_id,company_code,posting_date,currency,header_text,line_number,gl_account,debit_amount,credit_amount
+d1,DEMO,2024-01-19,USD,Goods Receipt 1,1,1200,465.50,0
+d1,DEMO,2024-01-19,USD,Goods Receipt 1,2,2900,0,465.50
+d2,DEMO,2024-01-25,USD,"Invoice, from V-1",1,2900,465.50,0
+d2,DEMO,2024-01-25,USD,"Invoice, from V-1",2,2000,0,465.50
+d3,DEMO,2024-02-01,USD,Payroll,1,6000,300.00,0
+d3,DEMO,2024-02-01,USD,Payroll,2,6100,50.00,0
+d3,DEMO,2024-02-01,USD,Payroll,3,1000,0,320.00
+d3,DEMO,2024-02-01,USD,Payroll,4,2200,0,30.00
+d4,DEMO,2024-02-02,USD,Unknown account,1,1530,10.00,0
+d4,DEMO,2024-02-02,USD,Unknown account,2,1000,0,10.00
+"""
+
+const CHART: str = """{
+  "accounts": [
+    {
+      "account_number": "1000",
+      "short_description": "Operating Cash",
+      "account_type": "asset",
+      "industry_weights": { "retail": 1.0 }
+    },
+    {
+      "account_number": "1200",
+      "short_description": "Inventory",
+      "account_type": "asset"
+    },
+    {
+      "account_number": "2000",
+      "short_description": "Accounts Payable Control",
+      "account_type": "liability"
+    },
+    {
+      "account_number": "2200",
+      "short_description": "Wages Payable",
+      "account_type": "liability"
+    },
+    {
+      "account_number": "2900",
+      "short_description": "GR/IR Clearing",
+      "account_type": "liability"
+    },
+    {
+      "account_number": "6000",
+      "short_description": "Salaries",
+      "account_type": "expense"
+    },
+    {
+      "account_number": "6100",
+      "short_description": "Benefits",
+      "account_type": "expense"
+    }
+  ]
+}
+"""
+
+def main() -> None:
+    let w1: None | !PathFailure_T = Path(CSV_FILE).write_text(CSV)
+    let w2: None | !PathFailure_T = Path(CHART_FILE).write_text(CHART)
+    assert not (w1 is PathFailure_T) and not (w2 is PathFailure_T)
+    let read: Books | !BookFailure_T = books_of_erp(CSV_FILE, CHART_FILE)
+    case read:
+        when BookFailure_T:
+            raise ValueError(read.detail)
+        when Books:
+            let b: Books = read
+            assert b.currency == "USD"
+            # d1, d2, d4 one entry each, the payroll (2 debits, 2 credits) in two
+            assert len(b.entries) == 5
+            assert b.entries[1].what == "Invoice, from V-1", b.entries[1].what
+            assert b.entries[0].date == "2024-01-19"
+            let text: str = text_of_books(b)
+            assert text.contains("account\t1000\tasset\tOperating Cash"), text
+            assert text.contains("account\t2900\tliability\tGR/IR Clearing"), text
+            assert text.contains("account\t6000\texpense\tSalaries"), text
+            assert text.contains("account\t1530\tasset\tAccount 1530"), text      # not in the chart: the first digit says asset
+            assert text.contains("\tliability\tClearing"), text
+            let g: Graph = graph_of(b)
+            assert g.total() == 0
+            assert g.balance("Clearing") == 0
+            assert g.balance("GR/IR Clearing") == 0
+            assert g.balance("Salaries") == 30000
+            assert int(g.balance("Operating Cash")) == -33000
+    removeFile(CSV_FILE)
+    removeFile(CHART_FILE)
+    let missing: Books | !BookFailure_T = books_of_erp("/tmp/there_is_no_such_file.csv", "")
+    assert missing is BookFailure_T, "a missing file was read"
+    print "erp: all checks passed"
+
+if __name__ == "__main__":
+    main()
