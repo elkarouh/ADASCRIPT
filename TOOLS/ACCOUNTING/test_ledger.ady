@@ -58,7 +58,7 @@ assert record_example(books) is BookFailure_T      # the example goes in an empt
 # its colour, and the edges and flows drawn from them.
 let stored: Graph = books.graph()
 let built: Graph = kleppmann()
-assert len(stored.accounts) == len(built.accounts) + 14    # and the accounts the example does not use: Interest, Cost of sales and those of scenarios 6 to 10
+assert len(stored.accounts) == len(built.accounts) + 15    # and the accounts the example does not use: Interest expense, Cost of sales, Doubtful receivables and those of scenarios 6 to 10
 for a in built.accounts:
     assert stored.account(a.name).balance == a.balance
     assert stored.account(a.name).colour == a.colour
@@ -71,7 +71,7 @@ assert stored.total() == 0
 let entries: []Entry = books.entries()
 assert entries[1].what == example_entries()[1].what
 assert len(entries[1].postings) == 3
-assert entries[1].postings[2].account == "VAT to recover"
+assert entries[1].postings[2].account == "VAT receivable"
 assert entries[1].postings[2].amount == 10500
 
 # The books as the server sends them to the page, and read back there: the
@@ -96,13 +96,13 @@ def refused(e: Entry) -> bool:
     let r: None | !BookFailure_T = books.record(e)
     return r is BookFailure_T and books.count("postings") == before
 
-assert refused(Entry("2012-01-01", "does not add up", [Posting("Bank account", -1000), Posting("Food", 900)]))
-assert refused(Entry("2012-01-01", "no such account", [Posting("Bank", -1000), Posting("Food", 1000)]))
-assert refused(Entry("2012-01-01", "goes nowhere", [Posting("Bank account", 0), Posting("Food", 0)]))
-assert refused(Entry("2012-01-01", "many to many", [Posting("Bank account", -600), Posting("Credit card", -400),
-                                                     Posting("Food", 500), Posting("Payroll", 500)]))
-assert books.record(Entry("2012-01-02", "Printer paper", [Posting("Bank account", -1210), Posting("Food", 1000),
-                                                            Posting("VAT to recover", 210)])) is None
+assert refused(Entry("2012-01-01", "does not add up", [Posting("Bank", -1000), Posting("Food", 900)]))
+assert refused(Entry("2012-01-01", "no such account", [Posting("Petty cash", -1000), Posting("Food", 1000)]))
+assert refused(Entry("2012-01-01", "goes nowhere", [Posting("Bank", 0), Posting("Food", 0)]))
+assert refused(Entry("2012-01-01", "many to many", [Posting("Bank", -600), Posting("Credit card", -400),
+                                                     Posting("Food", 500), Posting("Wages and salaries", 500)]))
+assert books.record(Entry("2012-01-02", "Printer paper", [Posting("Bank", -1210), Posting("Food", 1000),
+                                                            Posting("VAT receivable", 210)])) is None
 assert books.graph().balance("Food") == 2300
 
 # Accounts: a number is unique, so is a name, and a kind is one of five.

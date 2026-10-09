@@ -1,38 +1,37 @@
 # scenarios/11_blank.books: loaded by ledger_server into 11_blank.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	11. Start from scratch
-about	The whole chart of accounts, and no transaction yet: the books of a company of your own. Record its first transaction by freezing Capital and dragging an arrow to Bank account.
+about	The whole chart of accounts, and no transaction yet: the books of a company of your own. Record its first transaction by freezing Share capital and dragging an arrow to Bank.
 currency	USD
-account	100000	equity	Capital
-account	173000	liability	Loans
+account	100000	equity	Share capital
+account	173000	liability	Bank loans
 account	211000	asset	Software
-account	240000	asset	Furniture
-account	340000	asset	Stock
-account	400001	asset	Customer 1
-account	400002	asset	Customer 2
-account	411000	asset	VAT to recover
-account	440000	liability	Suppliers
-account	450000	liability	Income tax due
-account	451000	liability	VAT to pay
-account	453000	liability	Withholding tax due
-account	454000	liability	Social security due
-account	455000	liability	Salaries due
-account	460000	liability	Customer deposits
+account	240000	asset	Furniture and equipment
+account	340000	asset	Goods for resale
+account	400000	asset	Trade receivables
+account	411000	asset	VAT receivable
+account	440000	liability	Trade payables
+account	450000	liability	Income tax payable
+account	451000	liability	VAT payable
+account	453000	liability	Withholding tax payable
+account	454000	liability	Social security payable
+account	455000	liability	Salaries payable
+account	460000	liability	Advances received
 account	489000	liability	Credit card
 account	490000	asset	Prepaid expenses
 account	492000	liability	Accrued expenses
-account	550000	asset	Bank account
+account	550000	asset	Bank
 account	600000	expense	Cost of sales
 account	604000	expense	Purchases
-account	609000	expense	Stock variation
+account	609000	expense	Change in stock
 account	610000	expense	Rent
 account	612000	expense	Energy
 account	613000	expense	Food
-account	620000	expense	Payroll
-account	621000	expense	Employer social security
+account	620000	expense	Wages and salaries
+account	621000	expense	Social contributions
 account	630000	expense	Depreciation
 account	634000	expense	Bad debts
-account	650000	expense	Interest
+account	650000	expense	Interest expense
 account	670000	expense	Income tax
 account	700000	revenue	Sales
 account	720000	revenue	Own work capitalised

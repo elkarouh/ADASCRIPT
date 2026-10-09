@@ -19,8 +19,8 @@ company's books that show one idea, with a few lines saying which.
 |---|---|
 | 1. The basics | money moving between accounts; revenue, costs and profit |
 | 2. VAT | VAT paid is recovered, VAT charged is owed, the VAT return settles both |
-| 3a. Stock, the Belgian way | purchases go to 604 Purchases (achats, aankopen); at the year end the goods still in stock go back to Stock through 609 Stock variation |
-| 3b. Stock, the international way | the same transactions: goods bought for resale are Stock, an asset, until sold, then Cost of sales |
+| 3a. Stock, the Belgian way | purchases go to 604 Purchases (achats, aankopen); at the year end the goods still in stock go back to Goods for resale through 609 Change in stock |
+| 3b. Stock, the international way | the same transactions: goods bought for resale are Goods for resale, an asset, until sold, then Cost of sales |
 | 4. Intellectual work | salaries for billed work are a cost; for lasting work (software) they are capitalised and depreciated |
 | 5. A loan | borrowing is no income and repaying no cost; interest is |
 | 6. Salaries | an employee costs the gross salary plus the employer's social security; what is withheld is owed to the ONSS and the tax office |
@@ -66,8 +66,8 @@ account the money reaches, holding the button down, and let go there: a
 popup asks for the date, what happened, the amount and the VAT. Enter
 records it, Escape or Cancel closes it; a click on the frozen account, or
 Escape, lets it go. With VAT, the amount is before VAT, and the VAT goes to
-the account numbered 411... (a purchase: VAT to recover) or, when the money
-leaves a revenue account, 451... (a sale: VAT to pay). The page checks what
+the account numbered 411... (a purchase: VAT receivable) or, when the money
+leaves a revenue account, 451... (a sale: VAT payable). The page checks what
 it sends as the ledger does, and the ledger refuses what does not fit the
 books, saying why.
 
@@ -86,9 +86,9 @@ number and date small above them, and each quarter's title carries its
 total as it stood then: Activa (20,000.00), Passiva (20,000.00).
 
 To follow one account's story, click it so that it freezes: the Play button
-becomes "Play Bank account's transactions", and Play, Previous and Next go
+becomes "Play Bank's transactions", and Play, Previous and Next go
 through only the transactions touching it, in order, the balances of every
-account as they stood after each ("Bank account: transaction 4 of 10
+account as they stood after each ("Bank: transaction 4 of 10
 (number 5 of 16)"). A student sees how the bank account fills and empties,
 where a customer's debt comes from and how it is settled, or what a VAT
 account collects before it is paid; Show all lets the account go.
@@ -124,7 +124,7 @@ make ledger
 ./ledger list                          # the scenarios, with their titles
 ./ledger 2_vat show                    # balances, profit and loss, balance sheet
 ./ledger 2_vat journal                 # every transaction, numbered, and what it did to each account
-./ledger 2_vat add 2011-05-02 "Printer paper" "Bank account=-12.10" Furniture=10.00 "VAT to recover=2.10"
+./ledger 2_vat add 2011-05-02 "Printer paper" "Bank=-12.10" "Furniture and equipment=10.00" "VAT receivable=2.10"
 ./ledger 2_vat delete 6                # transaction 6, as journal numbers it
 ./ledger 2_vat account 613100 expense Fuel
 ./ledger 2_vat delete-account Fuel     # an account no transaction touches
@@ -146,14 +146,16 @@ sides (the graph could not tell which pays which); nothing is written then.
 currency  USD
 
 # number  kind        name
-100000    equity      Capital
-550000    asset       Bank account
+100000    equity      Share capital
+550000    asset       Bank
 700000    revenue     Sales
 ```
 
 The numbers follow the Belgian chart of accounts (the first digit is the
 class: 1 equity and long-term debts, 2 fixed assets, 3 stock, 4 receivables
-and payables, 5 cash, 6 costs, 7 revenue); the kind is one of asset,
+and payables, 5 cash, 6 costs, 7 revenue), and the names are the usual
+English ones for them: Share capital, Trade receivables, Trade payables,
+VAT receivable and VAT payable, Wages and salaries, Change in stock; the kind is one of asset,
 liability, equity, revenue, expense, and decides the account's colour.
 `ledger new NAME` starts a scenario with these accounts. `--config FILE`
 chooses another config, and with it the scenarios/ beside it.

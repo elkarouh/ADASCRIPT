@@ -6,11 +6,11 @@ posting, the fields separated by tabs.
     title     A chair
     about     The company buys a chair, and pays VAT on it.
     currency  USD
-    account   550000  asset  Bank account
+    account   550000  asset  Bank
     entry     2011-01-04  A chair (21% VAT)  2
-    posting   Bank account  -60500
-    posting   Furniture  50000
-    posting   VAT to recover  10500
+    posting   Bank  -60500
+    posting   Furniture and equipment  50000
+    posting   VAT receivable  10500
 
 A title and an about line (there may be several) say what the books are
 for: a scenario (scenarios/*.books) says what it shows. Amounts are in cents. An entry from the ledger ends with its number there,

@@ -89,39 +89,37 @@ type Point is record:
 # another is at (-1, -1), and the page that shows it finds it one.
 def place(a: Account) -> Point:
     case a.name:
-        when "VAT to pay":
+        when "VAT payable":
             return Point(80.0, 50.0)
         when "Sales":
             return Point(80.0, 190.0)
-        when "Customer 1":
+        when "Trade receivables":
             return Point(270.0, 50.0)
-        when "Customer 2":
-            return Point(270.0, 190.0)
-        when "Capital":
+        when "Share capital":
             return Point(80.0, 330.0)
         when "Credit card":
             return Point(480.0, 50.0)
-        when "Bank account":
+        when "Bank":
             return Point(480.0, 190.0)
-        when "VAT to recover":
+        when "VAT receivable":
             return Point(270.0, 330.0)
-        when "Furniture":
+        when "Furniture and equipment":
             return Point(480.0, 330.0)
-        when "Payroll":
+        when "Wages and salaries":
             return Point(700.0, 190.0)
         when "Food":
             return Point(700.0, 50.0)
-        when "Suppliers":
+        when "Trade payables":
             return Point(270.0, 470.0)
-        when "Stock":
+        when "Goods for resale":
             return Point(480.0, 470.0)
-        when "Loans":
+        when "Bank loans":
             return Point(700.0, 470.0)
         when "Purchases":
             return Point(480.0, 610.0)
-        when "Stock variation":
+        when "Change in stock":
             return Point(270.0, 610.0)
-        when "Interest":
+        when "Interest expense":
             return Point(900.0, 50.0)
         when "Own work capitalised":
             return Point(900.0, 190.0)

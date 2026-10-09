@@ -260,7 +260,7 @@ class Graph:
         return lines
 
 # The article's company, every transaction in the order it tells them (the
-# article gives no dates; these are ours), and changes of ours: the chair is bought and customer 1's order sold with VAT,
+# article gives no dates; these are ours), and changes of ours: the chair is bought and customer A's order sold with VAT,
 # each one transaction that touches three accounts, and a credit note sends
 # money back along an edge, so the graph has a flow both ways between two
 # accounts.
@@ -272,7 +272,7 @@ def entry(date: str, what: str, source: str, target: str, amount: Cents_T) -> En
 
 # A purchase with VAT: one transaction, three accounts. SOURCE pays NET to
 # TARGET and the VAT on it to VAT, where it waits to be claimed back from the
-# tax office: VAT to recover, an asset.
+# tax office: VAT receivable, an asset.
 def purchase_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: VatRate_T) -> Entry:
     let tax: Cents_T = vat_on(net, rate)
     return Entry(date, f"{what} ({vat_text(rate)})",
@@ -280,58 +280,57 @@ def purchase_with_vat(date: str, what: str, source: str, target: str, vat: str, 
 
 # A sale with VAT, the other way round: TARGET, the customer, owes NET to
 # SOURCE, the revenue, and the VAT on it to VAT, which the company collects
-# for the tax office: VAT to pay, a liability.
+# for the tax office: VAT payable, a liability.
 def sale_with_vat(date: str, what: str, source: str, target: str, vat: str, net: Cents_T, rate: VatRate_T) -> Entry:
     let tax: Cents_T = vat_on(net, rate)
     return Entry(date, f"{what} ({vat_text(rate)})",
                  [Posting(source, -net), Posting(vat, -tax), Posting(target, net + tax)])
 
-# The article's company, the VAT on the chair and on customer 1's order, the
-# credit note to customer 2, material bought on credit (a cost, the Belgian way, part of it still in stock at the year end), software built by an employee and capitalised, and a bank loan.
+# The article's company, the VAT on the chair and on customer A's order, the
+# credit note to customer B, material bought on credit (a cost, the Belgian way, part of it still in stock at the year end), software built by an employee and capitalised, and a bank loan.
 def example_entries() -> []Entry:
     return [
         entry("2011-01-03", "A bagel on the company credit card", "Credit card", "Food", 500),
-        purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank account", "Furniture", "VAT to recover", 50000, STANDARD),
-        entry("2011-01-05", "The founder puts in savings", "Capital", "Bank account", 500000),
-        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000", "Suppliers", "Purchases", "VAT to recover", 300000, STANDARD),
-        entry("2011-01-31", "The credit card bill is paid from the bank", "Bank account", "Credit card", 500),
+        purchase_with_vat("2011-01-04", "A chair, paid by cheque from the bank account", "Bank", "Furniture and equipment", "VAT receivable", 50000, STANDARD),
+        entry("2011-01-05", "The founder puts in savings", "Share capital", "Bank", 500000),
+        purchase_with_vat("2011-01-20", "Material bought on credit for 3,000", "Trade payables", "Purchases", "VAT receivable", 300000, STANDARD),
+        entry("2011-01-31", "The credit card bill is paid from the bank", "Bank", "Credit card", 500),
         entry("2011-02-01", "A Super Burrito on the credit card", "Credit card", "Food", 800),
-        sale_with_vat("2011-02-07", "Sale to customer 1 of the material in stock, agreed at 5,000", "Sales", "Customer 1", "VAT to pay", 500000, STANDARD),
-        entry("2011-02-08", "Sale to customer 2, agreed at 5,000", "Sales", "Customer 2", 500000),
-        entry("2011-02-21", "Customer 1 pays in full, VAT included", "Customer 1", "Bank account", 605000),
-        entry("2011-02-22", "Customer 2 pays half up front", "Customer 2", "Bank account", 250000),
-        entry("2011-03-01", "Y Combinator invests", "Capital", "Bank account", 2000000),
-        purchase_with_vat("2011-03-10", "More material bought on credit from a supplier", "Suppliers", "Purchases", "VAT to recover", 100000, STANDARD),
-        entry("2011-03-31", "Salaries, paid from the bank", "Bank account", "Payroll", 800000),
-        entry("2011-04-04", "Customer 2 returns part of the order: a credit note of 500", "Customer 2", "Sales", 50000),
-        entry("2011-04-15", "Half of the supplier's invoice is paid from the bank", "Bank account", "Suppliers", 60500),
-        entry("2011-04-30", "An employee's salary for April, spent building the company's software", "Bank account", "Payroll", 200000),
+        sale_with_vat("2011-02-07", "Sale to customer A of the material in stock, agreed at 5,000", "Sales", "Trade receivables", "VAT payable", 500000, STANDARD),
+        entry("2011-02-08", "Sale to customer B, agreed at 5,000", "Sales", "Trade receivables", 500000),
+        entry("2011-02-21", "Customer A pays in full, VAT included", "Trade receivables", "Bank", 605000),
+        entry("2011-02-22", "Customer B pays half up front", "Trade receivables", "Bank", 250000),
+        entry("2011-03-01", "Y Combinator invests", "Share capital", "Bank", 2000000),
+        purchase_with_vat("2011-03-10", "More material bought on credit from a supplier", "Trade payables", "Purchases", "VAT receivable", 100000, STANDARD),
+        entry("2011-03-31", "Salaries, paid from the bank", "Bank", "Wages and salaries", 800000),
+        entry("2011-04-04", "Customer B returns part of the order: a credit note of 500", "Trade receivables", "Sales", 50000),
+        entry("2011-04-15", "Half of the supplier's invoice is paid from the bank", "Bank", "Trade payables", 60500),
+        entry("2011-04-30", "An employee's salary for April, spent building the company's software", "Bank", "Wages and salaries", 200000),
         entry("2011-04-30", "The software is capitalised: the work becomes an asset", "Own work capitalised", "Software", 200000),
-        entry("2011-05-02", "The bank lends 10,000", "Loans", "Bank account", 1000000),
-        entry("2011-06-30", "1,000 of the loan is repaid", "Bank account", "Loans", 100000),
-        entry("2011-12-31", "Inventory: 1,000 of material is still in stock", "Stock variation", "Stock", 100000),
-        entry("2011-12-31", "The chair loses a quarter of its value to depreciation", "Furniture", "Depreciation", 12500),
+        entry("2011-05-02", "The bank lends 10,000", "Bank loans", "Bank", 1000000),
+        entry("2011-06-30", "1,000 of the loan is repaid", "Bank", "Bank loans", 100000),
+        entry("2011-12-31", "Inventory: 1,000 of material is still in stock", "Change in stock", "Goods for resale", 100000),
+        entry("2011-12-31", "The chair loses a quarter of its value to depreciation", "Furniture and equipment", "Depreciation", 12500),
         entry("2011-12-31", "The software loses a quarter of its value to depreciation", "Software", "Depreciation", 50000)]
 
 def kleppmann() -> Graph:
     var g: Graph = Graph()
     g.add_account("Sales", BLUE)
-    g.add_account("Customer 1", GREEN)
-    g.add_account("Customer 2", GREEN)
-    g.add_account("Capital", PINK)
+    g.add_account("Trade receivables", GREEN)
+    g.add_account("Share capital", PINK)
     g.add_account("Credit card", GREEN)
-    g.add_account("Bank account", GREEN)
-    g.add_account("Furniture", GREEN)
-    g.add_account("Payroll", BLUE)
+    g.add_account("Bank", GREEN)
+    g.add_account("Furniture and equipment", GREEN)
+    g.add_account("Wages and salaries", BLUE)
     g.add_account("Food", BLUE)
     g.add_account("Depreciation", BLUE)
-    g.add_account("VAT to recover", GREEN)
-    g.add_account("VAT to pay", GREEN)
-    g.add_account("Suppliers", GREEN)
-    g.add_account("Stock", GREEN)
-    g.add_account("Loans", GREEN)
+    g.add_account("VAT receivable", GREEN)
+    g.add_account("VAT payable", GREEN)
+    g.add_account("Trade payables", GREEN)
+    g.add_account("Goods for resale", GREEN)
+    g.add_account("Bank loans", GREEN)
     g.add_account("Purchases", BLUE)
-    g.add_account("Stock variation", BLUE)
+    g.add_account("Change in stock", BLUE)
     g.add_account("Software", GREEN)
     g.add_account("Own work capitalised", BLUE)
 

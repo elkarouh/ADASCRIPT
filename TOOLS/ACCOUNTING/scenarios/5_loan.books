@@ -1,35 +1,35 @@
 # scenarios/5_loan.books: loaded by ledger_server into 5_loan.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	5. A loan: borrowing is not income, interest is a cost
-about	The bank's 10,000 is owed back (Loans, a liability), so it is no revenue, and repaying it is no cost: only the interest is. The van it buys is an asset, worth a fifth less each year.
+about	The bank's 10,000 is owed back (Bank loans, a liability), so it is no revenue, and repaying it is no cost: only the interest is. The van it buys is an asset, worth a fifth less each year.
 currency	USD
-account	100000	equity	Capital
-account	550000	asset	Bank account
-account	173000	liability	Loans
-account	240000	asset	Furniture
-account	650000	expense	Interest
+account	100000	equity	Share capital
+account	550000	asset	Bank
+account	173000	liability	Bank loans
+account	240000	asset	Furniture and equipment
+account	650000	expense	Interest expense
 account	630000	expense	Depreciation
 entry	2011-01-02	The founder puts in savings
-posting	Capital	-200000
-posting	Bank account	200000
+posting	Share capital	-200000
+posting	Bank	200000
 entry	2011-01-10	The bank lends 10,000
-posting	Loans	-1000000
-posting	Bank account	1000000
+posting	Bank loans	-1000000
+posting	Bank	1000000
 entry	2011-01-15	A delivery van for 8,000
-posting	Bank account	-800000
-posting	Furniture	800000
+posting	Bank	-800000
+posting	Furniture and equipment	800000
 entry	2011-06-30	1,000 of the loan is repaid
-posting	Bank account	-100000
-posting	Loans	100000
+posting	Bank	-100000
+posting	Bank loans	100000
 entry	2011-06-30	Interest on the loan for six months
-posting	Bank account	-30000
-posting	Interest	30000
+posting	Bank	-30000
+posting	Interest expense	30000
 entry	2011-12-31	1,000 of the loan is repaid
-posting	Bank account	-100000
-posting	Loans	100000
+posting	Bank	-100000
+posting	Bank loans	100000
 entry	2011-12-31	Interest on the loan for six months
-posting	Bank account	-27000
-posting	Interest	27000
+posting	Bank	-27000
+posting	Interest expense	27000
 entry	2011-12-31	The van loses a fifth of its value to depreciation
-posting	Furniture	-160000
+posting	Furniture and equipment	-160000
 posting	Depreciation	160000

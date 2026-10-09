@@ -4,80 +4,80 @@ title	10. A small company's year, from the founders' money to the income tax
 about	One year of a small trading company, each kind of transaction once: the founders' capital and a bank loan; equipment bought; goods bought on credit and sold with VAT; rent and salaries paid, with the social security and withholding tax passed on; the loan repaid with interest; the VAT return.
 about	Then the year end: the goods still in stock are counted (609), the equipment is depreciated, and the income tax on the profit is owed. The profit of 31,600 less 6,320 of tax leaves 25,280 for the owners.
 currency	USD
-account	100000	equity	Capital
-account	173000	liability	Loans
-account	240000	asset	Furniture
-account	340000	asset	Stock
-account	400001	asset	Customer 1
-account	411000	asset	VAT to recover
-account	440000	liability	Suppliers
-account	450000	liability	Income tax due
-account	451000	liability	VAT to pay
-account	453000	liability	Withholding tax due
-account	454000	liability	Social security due
-account	550000	asset	Bank account
+account	100000	equity	Share capital
+account	173000	liability	Bank loans
+account	240000	asset	Furniture and equipment
+account	340000	asset	Goods for resale
+account	400000	asset	Trade receivables
+account	411000	asset	VAT receivable
+account	440000	liability	Trade payables
+account	450000	liability	Income tax payable
+account	451000	liability	VAT payable
+account	453000	liability	Withholding tax payable
+account	454000	liability	Social security payable
+account	550000	asset	Bank
 account	604000	expense	Purchases
-account	609000	expense	Stock variation
+account	609000	expense	Change in stock
 account	610000	expense	Rent
-account	620000	expense	Payroll
-account	621000	expense	Employer social security
+account	620000	expense	Wages and salaries
+account	621000	expense	Social contributions
 account	630000	expense	Depreciation
-account	650000	expense	Interest
+account	650000	expense	Interest expense
 account	670000	expense	Income tax
 account	700000	revenue	Sales
 entry	2011-01-02	The founders put in 20,000
-posting	Capital	-2000000
-posting	Bank account	2000000
+posting	Share capital	-2000000
+posting	Bank	2000000
 entry	2011-01-03	The bank lends 10,000
-posting	Loans	-1000000
-posting	Bank account	1000000
+posting	Bank loans	-1000000
+posting	Bank	1000000
 entry	2011-01-05	Furniture and computers: 5,000 plus 21% VAT, paid
-posting	Bank account	-605000
-posting	VAT to recover	105000
-posting	Furniture	500000
+posting	Bank	-605000
+posting	VAT receivable	105000
+posting	Furniture and equipment	500000
 entry	2011-02-01	Goods for resale bought on credit: 8,000 plus 21% VAT
-posting	Suppliers	-968000
-posting	VAT to recover	168000
+posting	Trade payables	-968000
+posting	VAT receivable	168000
 posting	Purchases	800000
 entry	2011-03-01	The supplier is paid
-posting	Bank account	-968000
-posting	Suppliers	968000
+posting	Bank	-968000
+posting	Trade payables	968000
 entry	2011-06-30	Sales for the year: 60,000 plus 21% VAT
 posting	Sales	-6000000
-posting	VAT to pay	-1260000
-posting	Customer 1	7260000
+posting	VAT payable	-1260000
+posting	Trade receivables	7260000
 entry	2011-07-31	The customer pays
-posting	Customer 1	-7260000
-posting	Bank account	7260000
+posting	Trade receivables	-7260000
+posting	Bank	7260000
 entry	2011-12-01	A year's rent: 6,000
-posting	Bank account	-600000
+posting	Bank	-600000
 posting	Rent	600000
 entry	2011-12-20	A year's salaries, 12,000 gross: the net is paid, the rest is held back
-posting	Bank account	-773160
-posting	Social security due	-156840
-posting	Withholding tax due	-270000
-posting	Payroll	1200000
+posting	Bank	-773160
+posting	Social security payable	-156840
+posting	Withholding tax payable	-270000
+posting	Wages and salaries	1200000
 entry	2011-12-20	The employer's social security on them, 25%
-posting	Social security due	-300000
-posting	Employer social security	300000
+posting	Social security payable	-300000
+posting	Social contributions	300000
 entry	2011-12-31	The social security and the withholding tax are paid over
-posting	Bank account	-726840
-posting	Social security due	456840
-posting	Withholding tax due	270000
+posting	Bank	-726840
+posting	Social security payable	456840
+posting	Withholding tax payable	270000
 entry	2011-12-31	The loan: 2,000 repaid and 400 of interest
-posting	Bank account	-240000
-posting	Loans	200000
-posting	Interest	40000
+posting	Bank	-240000
+posting	Bank loans	200000
+posting	Interest expense	40000
 entry	2011-12-31	The VAT return: 12,600 charged less 2,730 paid
-posting	Bank account	-987000
-posting	VAT to pay	1260000
-posting	VAT to recover	-273000
+posting	Bank	-987000
+posting	VAT payable	1260000
+posting	VAT receivable	-273000
 entry	2011-12-31	Inventory: 2,000 of goods still in stock
-posting	Stock variation	-200000
-posting	Stock	200000
+posting	Change in stock	-200000
+posting	Goods for resale	200000
 entry	2011-12-31	The furniture and computers lose a fifth of their value
-posting	Furniture	-100000
+posting	Furniture and equipment	-100000
 posting	Depreciation	100000
 entry	2011-12-31	Income tax, 20% of the profit of 31,600, owed
-posting	Income tax due	-632000
+posting	Income tax payable	-632000
 posting	Income tax	632000

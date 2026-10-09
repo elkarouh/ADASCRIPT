@@ -657,8 +657,8 @@ def kind_of(name: str) -> ?Kind_T:
             return a.kind
     return None
 
-# The account whose number starts with PREFIX: 411 is VAT to recover, 451
-# VAT to pay, in the Belgian chart of accounts.
+# The account whose number starts with PREFIX: 411 is VAT receivable, 451
+# VAT payable, in the Belgian chart of accounts.
 def account_numbered(prefix: str) -> str:
     for a in books.accounts:
         if a.number.startswith(prefix):
@@ -689,7 +689,7 @@ def form_entry() -> Entry | !BookFailure_T:
     let is_sale: bool = source_kind is not None and source_kind == REVENUE
     let vat: str = account_numbered("451" if is_sale else "411")
     if vat == "":
-        return BookFailure_T(f"There is no {('VAT to pay (451...)' if is_sale else 'VAT to recover (411...)')} account to put the VAT in.")
+        return BookFailure_T(f"There is no {('VAT payable (451...)' if is_sale else 'VAT receivable (411...)')} account to put the VAT in.")
     if is_sale:
         return sale_with_vat(date, what, layout.source, layout.target, vat, net, rate)
     return purchase_with_vat(date, what, layout.source, layout.target, vat, net, rate)

@@ -1,35 +1,35 @@
 # scenarios/4_intellectual_work.books: loaded by ledger_server into 4_intellectual_work.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	4. Intellectual work: hours billed, hours capitalised
-about	Hours never enter the books, only the salaries paid for them (Payroll). Work billed to a client is a cost this year, against the sale it brings.
+about	Hours never enter the books, only the salaries paid for them (Wages and salaries). Work billed to a client is a cost this year, against the sale it brings.
 about	Work that builds something lasting, here the company's software, is capitalised: Own work capitalised takes its cost out of the year's costs and Software holds it as an asset, which then loses value to depreciation over its life.
 currency	USD
-account	100000	equity	Capital
-account	550000	asset	Bank account
-account	620000	expense	Payroll
-account	400001	asset	Customer 1
+account	100000	equity	Share capital
+account	550000	asset	Bank
+account	620000	expense	Wages and salaries
+account	400000	asset	Trade receivables
 account	700000	revenue	Sales
 account	720000	revenue	Own work capitalised
 account	211000	asset	Software
 account	630000	expense	Depreciation
 entry	2011-01-02	The founder puts in savings
-posting	Capital	-1000000
-posting	Bank account	1000000
+posting	Share capital	-1000000
+posting	Bank	1000000
 entry	2011-04-30	An employee's salary for April, spent building the company's software
-posting	Bank account	-200000
-posting	Payroll	200000
+posting	Bank	-200000
+posting	Wages and salaries	200000
 entry	2011-04-30	The software is capitalised: the work becomes an asset
 posting	Own work capitalised	-200000
 posting	Software	200000
 entry	2011-05-31	Salary for May, spent on a client's project
-posting	Bank account	-300000
-posting	Payroll	300000
-entry	2011-05-31	The client's project is invoiced to customer 1 for 4,000
+posting	Bank	-300000
+posting	Wages and salaries	300000
+entry	2011-05-31	The client's project is invoiced to a customer for 4,000
 posting	Sales	-400000
-posting	Customer 1	400000
-entry	2011-06-30	Customer 1 pays
-posting	Customer 1	-400000
-posting	Bank account	400000
+posting	Trade receivables	400000
+entry	2011-06-30	The customer pays
+posting	Trade receivables	-400000
+posting	Bank	400000
 entry	2011-12-31	The software loses a quarter of its value to depreciation
 posting	Software	-50000
 posting	Depreciation	50000

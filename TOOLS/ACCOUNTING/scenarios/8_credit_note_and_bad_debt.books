@@ -1,30 +1,33 @@
 # scenarios/8_credit_note_and_bad_debt.books: loaded by ledger_server into 8_credit_note_and_bad_debt.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	8. A credit note and a bad debt: revenue that does not come in
-about	A credit note takes back part of a sale: customer 1 returns damaged goods, so 500 of the sale is cancelled, the arrow going from Customer 1 back to Sales.
-about	A bad debt is a sale that stays revenue but is never paid: customer 2 goes bankrupt, and the 2,000 it owed is written off to Bad debts, a cost. (With VAT, the VAT on it could be claimed back too.)
+about	A credit note takes back part of a sale: customer A returns damaged goods, so 500 of the sale is cancelled, the arrow going from Trade receivables back to Sales.
+about	A bad debt is a sale that stays revenue but is never paid: customer B goes bankrupt, so the 2,000 it owes moves from Trade receivables to Doubtful receivables, and when nothing comes of the bankruptcy it is written off to Bad debts, a cost. (With VAT, the VAT on it could be claimed back too.)
 currency	USD
-account	100000	equity	Capital
-account	550000	asset	Bank account
-account	400001	asset	Customer 1
-account	400002	asset	Customer 2
+account	100000	equity	Share capital
+account	550000	asset	Bank
+account	400000	asset	Trade receivables
+account	407000	asset	Doubtful receivables
 account	700000	revenue	Sales
 account	634000	expense	Bad debts
 entry	2011-01-02	The founder puts in savings
-posting	Capital	-500000
-posting	Bank account	500000
-entry	2011-02-01	Sale to customer 1: 4,000
+posting	Share capital	-500000
+posting	Bank	500000
+entry	2011-02-01	Sale to customer A: 4,000
 posting	Sales	-400000
-posting	Customer 1	400000
-entry	2011-02-10	Customer 1 returns damaged goods: a credit note of 500
-posting	Customer 1	-50000
+posting	Trade receivables	400000
+entry	2011-02-10	Customer A returns damaged goods: a credit note of 500
+posting	Trade receivables	-50000
 posting	Sales	50000
-entry	2011-03-01	Customer 1 pays the 3,500 it owes
-posting	Customer 1	-350000
-posting	Bank account	350000
-entry	2011-04-01	Sale to customer 2: 2,000
+entry	2011-03-01	Customer A pays the 3,500 it owes
+posting	Trade receivables	-350000
+posting	Bank	350000
+entry	2011-04-01	Sale to customer B: 2,000
 posting	Sales	-200000
-posting	Customer 2	200000
-entry	2011-10-01	Customer 2 goes bankrupt: its 2,000 is written off
-posting	Customer 2	-200000
+posting	Trade receivables	200000
+entry	2011-10-01	Customer B goes bankrupt: its 2,000 becomes doubtful
+posting	Trade receivables	-200000
+posting	Doubtful receivables	200000
+entry	2011-12-15	The bankruptcy is closed and nothing is paid: the 2,000 is written off
+posting	Doubtful receivables	-200000
 posting	Bad debts	200000

@@ -27,7 +27,7 @@ nothing is written.
 
     ledger list
     ledger 2_vat show
-    ledger 2_vat add 2011-05-02 "Printer paper" "Bank account=-12.10" Furniture=10.00 "VAT to recover=2.10"
+    ledger 2_vat add 2011-05-02 "Printer paper" "Bank=-12.10" "Furniture and equipment=10.00" "VAT receivable=2.10"
     ledger 2_vat start-over
 """
 from db import DB

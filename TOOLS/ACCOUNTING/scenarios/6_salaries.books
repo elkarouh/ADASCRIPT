@@ -2,40 +2,40 @@
 # and again by Start over. Amounts are in cents.
 title	6. Salaries: what an employee costs, and who gets it
 about	A salary costs the company more than the employee receives. On a gross salary of 4,000 the company adds its own social security (here 25%, 1,000), so the employee costs 5,000. The employee's own social security (13.07%, 522.80) and the withholding tax (900) are kept back from the gross: 2,577.20 is paid out.
-about	What is kept back is not the company's: like VAT, it is collected for others and owed (Social security due, Withholding tax due) until paid to the social security office (ONSS/RSZ) and the tax office. Only Payroll and Employer social security are costs.
+about	What is kept back is not the company's: like VAT, it is collected for others and owed (Social security payable, Withholding tax payable) until paid to the social security office (ONSS/RSZ) and the tax office. Only Wages and salaries and Social contributions are costs.
 currency	USD
-account	100000	equity	Capital
-account	550000	asset	Bank account
-account	400001	asset	Customer 1
-account	453000	liability	Withholding tax due
-account	454000	liability	Social security due
-account	455000	liability	Salaries due
+account	100000	equity	Share capital
+account	550000	asset	Bank
+account	400000	asset	Trade receivables
+account	453000	liability	Withholding tax payable
+account	454000	liability	Social security payable
+account	455000	liability	Salaries payable
 account	700000	revenue	Sales
-account	620000	expense	Payroll
-account	621000	expense	Employer social security
+account	620000	expense	Wages and salaries
+account	621000	expense	Social contributions
 entry	2011-01-02	The founder puts in savings
-posting	Capital	-1000000
-posting	Bank account	1000000
-entry	2011-01-31	January's work billed to customer 1
+posting	Share capital	-1000000
+posting	Bank	1000000
+entry	2011-01-31	January's work billed to a customer
 posting	Sales	-800000
-posting	Customer 1	800000
+posting	Trade receivables	800000
 entry	2011-01-31	January's salary: 4,000 gross, less the employee's social security and the withholding tax
-posting	Salaries due	-257720
-posting	Social security due	-52280
-posting	Withholding tax due	-90000
-posting	Payroll	400000
+posting	Salaries payable	-257720
+posting	Social security payable	-52280
+posting	Withholding tax payable	-90000
+posting	Wages and salaries	400000
 entry	2011-01-31	The employer's social security on it, 25% of the gross
-posting	Social security due	-100000
-posting	Employer social security	100000
+posting	Social security payable	-100000
+posting	Social contributions	100000
 entry	2011-02-01	The net salary is paid to the employee
-posting	Bank account	-257720
-posting	Salaries due	257720
+posting	Bank	-257720
+posting	Salaries payable	257720
 entry	2011-02-05	The withholding tax is paid to the tax office
-posting	Bank account	-90000
-posting	Withholding tax due	90000
+posting	Bank	-90000
+posting	Withholding tax payable	90000
 entry	2011-02-05	Both social securities are paid to the ONSS
-posting	Bank account	-152280
-posting	Social security due	152280
-entry	2011-02-28	Customer 1 pays
-posting	Customer 1	-800000
-posting	Bank account	800000
+posting	Bank	-152280
+posting	Social security payable	152280
+entry	2011-02-28	The customer pays
+posting	Trade receivables	-800000
+posting	Bank	800000
