@@ -80,7 +80,18 @@ window, with the transactions table under it.
 "Play the transactions" replays the books one transaction at a time: the
 graph, the balances and the statements as they stood after it, its arrows
 and accounts in orange and its row in the table highlighted. Pause, Previous
-and Next step through by hand; Show all ends the replay.
+and Next step through by hand; Show all ends the replay. The transaction's
+own words ("The founders put in 20,000") stand large above the graph, its
+number and date small above them, and each quarter's title carries its
+total as it stood then: Activa (20,000.00), Passiva (20,000.00).
+
+To follow one account's story, click it so that it freezes: the Play button
+becomes "Play Bank account's transactions", and Play, Previous and Next go
+through only the transactions touching it, in order, the balances of every
+account as they stood after each ("Bank account: transaction 4 of 10
+(number 5 of 16)"). A student sees how the bank account fills and empties,
+where a customer's debt comes from and how it is settled, or what a VAT
+account collects before it is paid; Show all lets the account go.
 
 ### Scenarios
 

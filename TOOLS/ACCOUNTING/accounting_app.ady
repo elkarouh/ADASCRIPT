@@ -547,6 +547,7 @@ var replaced: bool = False              # another scenario, or this one started 
 # The replay (below): the transactions one at a time
 var step: int = -1                      # the transaction shown last; -1: not replaying, all shown
 var playing: bool = False
+var only: str = ""                      # the account whose transactions alone are replayed, or "": all
 var tick_pending: bool = False          # a tick is on its way: no second one
 var replayed: Graph = Graph()           # the books up to and with transaction STEP
 var now_arrows: []str = []              # its arrows, "source\ttarget"
@@ -897,12 +898,48 @@ def replay_to(i: int):
     for p in books.entries[i].postings:
         now_accounts.append(p.account)
 
+# The transactions replayed, by number: those touching ONLY, or all.
+def replayable() -> []int:
+    var found: []int = []
+    for i in range(len(books.entries)):
+        var touches: bool = only == ""
+        for p in books.entries[i].postings:
+            if p.account == only:
+                touches = True
+        if touches:
+            found.append(i)
+    return found
+
+# The replayable transaction D places after (D < 0: before) STEP; from
+# the first one if not replaying going forward, the last going back; -1 if
+# there is none.
+def replayable_by(d: int) -> int:
+    let found: []int = replayable()
+    if len(found) == 0:
+        return -1
+    if step < 0:
+        return (found[0] if d > 0 else found[len(found) - 1])
+    var at: int = -1                    # where STEP is among them, or just before it
+    for k in range(len(found)):
+        if found[k] <= step:
+            at = k
+    if at >= 0 and found[at] != step and d < 0:
+        at += 1                         # STEP is not one of them: back from the next one
+    return found[max(0, min(len(found) - 1, at + d))]
+
+# A frozen account's transactions are the ones replayed, and it lets go.
+def replay_frozen():
+    if layout.source != "":
+        only = layout.source
+        layout.unfreeze()
+
 def tick():
     tick_pending = False
     if not playing:
         return
-    if step + 1 < len(books.entries):
-        replay_to(step + 1)
+    let next: int = replayable_by(1)
+    if next > step:
+        replay_to(next)
         schedule_tick()
     else:
         playing = False                 # the last one stays shown
@@ -914,11 +951,12 @@ def schedule_tick():
         discard_timeout(setTimeout(tick, STEP_MS))
 
 def play():
-    if len(books.entries) == 0:
+    replay_frozen()
+    let found: []int = replayable()
+    if len(found) == 0:
         return
-    layout.unfreeze()
-    if step < 0 or step + 1 >= len(books.entries):
-        replay_to(0)                    # from the first
+    if step < 0 or step >= found[len(found) - 1] or (only != "" and step not in found):
+        replay_to(found[0])             # from the first
     playing = True
     schedule_tick()
 
@@ -927,19 +965,26 @@ def pause():
 
 def step_by(d: int):
     playing = False
-    if len(books.entries) == 0:
-        return
-    let start: int = (len(books.entries) if step < 0 and d < 0 else step)
-    replay_to(max(0, min(len(books.entries) - 1, start + d)))
+    replay_frozen()
+    let i: int = replayable_by(d)
+    if i >= 0:
+        replay_to(i)
 
 def stop_replay():
     playing = False
     step = -1
+    only = ""
 
 # The replay buttons and, while replaying, the transaction shown, its own words large.
 def replay_html() -> Html:
     let n: int = len(books.entries)
-    let which: str = (f"Transaction {step + 1} of {n}, {books.entries[step].date}" if step >= 0 else "")
+    let found: []int = replayable()
+    let which: str = ("" if step < 0 else
+                      f"Transaction {step + 1} of {n}, {books.entries[step].date}" if only == "" else
+                      f"{only}: transaction {found.index(step) + 1} of {len(found)} (number {step + 1} of {n}), {books.entries[step].date}" if step in found else
+                      f"Transaction {step + 1} of {n}, {books.entries[step].date}")
+    let play_label: str = (f"Play {layout.source}'s transactions" if layout.source != "" else
+                           f"Play {only}'s transactions" if only != "" else "Play the transactions")
     let what: str = (books.entries[step].what if step >= 0 else "")
     html:
         div class="replaying":
@@ -947,7 +992,7 @@ def replay_html() -> Html:
                 if playing:
                     button id="pause" onclick=pause(): "Pause"
                 else:
-                    button id="play" onclick=play(): "Play the transactions"
+                    button id="play" onclick=play(): play_label
                 button id="back" onclick=step_by(-1): "Previous"
                 button id="next" onclick=step_by(1): "Next"
                 if step >= 0:
@@ -985,7 +1030,7 @@ def record_html() -> Html:
     let message_class: str = ("message refused" if refused else "message")
     let hint: str = ("To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
                      if layout.source == "" else
-                     f"{layout.source} is frozen: drag an arrow from it to the account the money reaches. Click {layout.source} again, or press Escape, to let it go.")
+                     f"{layout.source} is frozen: drag an arrow from it to the account the money reaches. Click {layout.source} again, or press Escape, to let it go. Play, Previous and Next replay its transactions alone.")
     html:
         div class="record":
             + replay_html()
@@ -1208,7 +1253,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; with an account frozen, only that account's transactions."
 
 def main():
     def render() -> Html:
