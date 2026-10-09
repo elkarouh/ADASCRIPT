@@ -34,7 +34,8 @@ const LIVE_STYLE: str = """
 div.tabs { margin: 1.2em 0 0; border-bottom: 2px solid #c9dcf0; }
 div.tabs button { font-size: 1em; padding: 0.4em 1.1em; margin: 0 0.2em -2px 0; border: 2px solid #c9dcf0; border-bottom: none; border-radius: 6px 6px 0 0; background: #eef4fb; cursor: pointer; }
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom: 2px solid #fff; }
-button.about { font-size: 0.9em; border: none; background: none; color: #1565c0; cursor: pointer; text-decoration: underline; }
+p:empty { display: none; }
+button.help { font-size: 0.9em; border: none; background: none; color: #1565c0; cursor: pointer; text-decoration: underline; }
 g.node { cursor: grab; }
 g.from circle, g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
 g.from { cursor: crosshair; }
@@ -573,7 +574,7 @@ var replaced: bool = False              # another scenario, or this one started 
 var step: int = -1                      # the transaction shown last; -1: not replaying, all shown
 var playing: bool = False
 var tab: str = "Transactions"          # which of TABS is showing under the graph
-var about_open: bool = False            # the introduction, folded away until asked for
+var help_open: bool = False             # the explanations, hidden until Help is pressed
 var debit_credit: bool = False          # the journal and accounts as debits and credits, and the T-accounts, not as plus and minus
 var exercising: bool = False            # the exercise: the transactions to be drawn, one at a time
 var ex_index: int = 0                   # the transaction asked for; the ones before it are solved
@@ -932,8 +933,12 @@ def toggle_debit_credit():
 def choose_tab(name: str):
     tab = name
 
-def toggle_about():
-    about_open = not about_open
+def toggle_help():
+    help_open = not help_open
+
+# A explanation, shown only when Help is open.
+def help_text(t: str) -> str:
+    return (t if help_open else "")
 
 # Circles or boxes: the accounts laid out afresh in the other shape.
 def toggle_shape():
@@ -1273,7 +1278,7 @@ def record_html() -> Html:
     html:
         div class="record":
             + replay_html()
-            p: hint
+            p: help_text(hint) if (layout.source == "" and not exercising) else hint
             if closable() and step < 0 and not exercising:
                 p:
                     button id="close-year" title="Move the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero" onclick=close_year(): "Close the year"
@@ -1652,26 +1657,26 @@ def tab_body() -> []Html:
     if tab == "Transactions":
         return [journal_html()]
     if tab == "T-accounts":
-        return [section_html("T-accounts", T_TEXT, [t_accounts_html()])]
+        return [section_html("T-accounts", help_text(T_TEXT), [t_accounts_html()])]
     if tab == "Accounts":
-        return [section_html("Accounts", ACCOUNTS_TEXT, [accounts_html()])]
-    let after: []Html = sections_after_graph(shown())
+        return [section_html("Accounts", help_text(ACCOUNTS_TEXT), [accounts_html()])]
+    let after: []Html = sections_after_graph(shown(), help_open)
     var out: []Html = []
     for i in range(1, len(after)):              # its first, the balances, is the Accounts table
         out.append(after[i])
-    out.append(section_html("Ratios", RATIOS_TEXT, [ratios_html()]))
+    out.append(section_html("Ratios", help_text(RATIOS_TEXT), [ratios_html()]))
     return out
 
 def main():
     def render() -> Html:
         var sections: []Html = [
             section_html("Accounts are nodes, transactions are edges",
-                GRAPH_TEXT + " Drag an account to move it.",
+                help_text(GRAPH_TEXT + " Drag an account to move it."),
                 [record_html(), live_graph_html(shown())])]
         sections.append(tabs_html())
         for part in tab_body():
             sections.append(part)
-        let about_label: str = ("Hide the introduction" if about_open else "About this page")
+        let help_label: str = ("Hide help" if help_open else "Help")
         let wide: str = ("wide" if layout.graph_only else "")
         html:
             div class=wide:
@@ -1685,8 +1690,8 @@ def main():
                     + journal_html()
                 else:
                     h1: APP_TITLE
-                    button class="about" onclick=toggle_about(): about_label
-                    if about_open:
+                    button id="help" class="help" onclick=toggle_help(): help_label
+                    if help_open:
                         p: APP_INTRO
                     + scenario_html()
                     for s in sections:
