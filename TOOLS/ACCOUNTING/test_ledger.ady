@@ -6,7 +6,7 @@ and what does not fit the books is refused without a trace.
     ady2nim c -r test_ledger.ady
 """
 from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
-from books_text import Books, kind_named, parse_books, text_of_books, graph_of
+from books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books, graph_of
 from ledger import Config, Ledger, cents_of, open_chart, read_config, record_example
 from os nimport walkFiles
 
@@ -161,6 +161,20 @@ for file in walkFiles("scenarios/*.books"):
                     assert back.title == read.title and back.about == read.about and back.currency == read.currency, file
                     assert len(back.accounts) == len(read.accounts) and len(back.entries) == len(read.entries), file
                     scenario.close()
+                    # Closing the year empties the profit and loss accounts into
+                    # retained earnings, and leaves what the company owns as it was.
+                    var closed: Books = read
+                    closed.accounts.append(AccountRow("140000", EQUITY, "Retained earnings"))
+                    let closing: []Entry = closing_entries(read, "2011-12-31", "Retained earnings")
+                    assert len(closing) <= 2, file
+                    for e in closing:
+                        closed.entries.append(e)
+                    let after: Graph = graph_of(closed)
+                    for row in closed.accounts:
+                        if row.kind == EXPENSE or row.kind == REVENUE:
+                            assert after.balance(row.name) == 0, file
+                    assert after.net_assets() == g.net_assets(), file
+                    assert after.balance("Retained earnings") == -g.profit(), file
                     scenarios += 1
 assert scenarios == 12
 print "ledger: all checks passed"

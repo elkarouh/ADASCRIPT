@@ -116,6 +116,36 @@ def parse_books(text: str) -> Books | !BookFailure_T:
     return b
 
 # The books as a graph: the accounts in their order, every entry posted.
+# The entries that close the year of books B on DATE: each cost's debit
+# balance and each revenue's credit balance is moved to the equity account
+# EQUITY (retained earnings), so that the profit and loss accounts end at
+# zero and the profit sits in equity. Two entries at most, because one side
+# of an entry is a single account: the costs go in one, the revenue in the
+# other. [] when there is nothing to close.
+def closing_entries(b: Books, date: str, equity: str) -> []Entry:
+    let g: Graph = graph_of(b)
+    var costs: []Posting = []
+    var revenue: []Posting = []
+    var spent: Cents_T = 0
+    var earned: Cents_T = 0
+    for a in b.accounts:
+        if a.kind == EXPENSE or a.kind == REVENUE:
+            let bal: Cents_T = g.balance(a.name)
+            if bal > 0:
+                costs.append(Posting(a.name, -bal))
+                spent += bal
+            elif bal < 0:
+                revenue.append(Posting(a.name, -bal))
+                earned += -bal
+    var made: []Entry = []
+    if spent > 0:
+        costs.append(Posting(equity, spent))
+        made.append(Entry(date, "Closing the year: the costs go to retained earnings", costs))
+    if earned > 0:
+        revenue.append(Posting(equity, -earned))
+        made.append(Entry(date, "Closing the year: the revenue goes to retained earnings", revenue))
+    return made
+
 def graph_of(b: Books) -> Graph:
     var g: Graph = Graph()
     for a in b.accounts:

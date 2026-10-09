@@ -20,7 +20,7 @@ from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
-from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
+from books_text import AccountRow, Books, account_line, closing_entries, entry_lines, graph_of, kind_named, kind_text, parse_books
 
 const WIDTH: float = 980.0
 const HEIGHT: float = 670.0
@@ -707,6 +707,62 @@ def record_entry():
             close_popup()
             ajaxPost("/entry", NO_HEADERS, entry_lines(made), on_answer)
 
+# ---------------------------------------------------------------------
+# Closing the year: costs and revenue into retained earnings
+# ---------------------------------------------------------------------
+
+const RETAINED: str = "Retained earnings"
+var closing_urls: []str = []            # what is left to send, in order: the account, then the entries
+var closing_bodies: []str = []
+
+# The equity account the profit goes to: the one numbered 14..., or Retained earnings, to be opened.
+def retained_account() -> str:
+    let found: str = account_numbered("14")
+    return (found if found != "" else RETAINED)
+
+# The day the year ends: 31 December of the last transaction's year.
+def year_end() -> str:
+    return books.entries[len(books.entries) - 1].date[:4] + "-12-31"
+
+# Whether any cost or revenue account has a balance to close.
+def closable() -> bool:
+    return len(books.entries) > 0 and len(closing_entries(books, year_end(), RETAINED)) > 0
+
+def closing_answer(status: int, response: cstring):
+    if str(response) == "ok" and len(closing_urls) > 0:
+        send_closing()
+    else:
+        closing_urls = []
+        closing_bodies = []
+        on_answer(status, response)
+
+def send_closing():
+    let url: str = closing_urls[0]
+    let body: str = closing_bodies[0]
+    closing_urls = closing_urls[1:]
+    closing_bodies = closing_bodies[1:]
+    ajaxPost(url, NO_HEADERS, body, closing_answer)
+
+def close_year():
+    if len(books.entries) == 0:
+        return
+    let date: str = year_end()
+    let name: str = retained_account()
+    let made: []Entry = closing_entries(books, date, name)
+    if len(made) == 0:
+        say("Nothing to close: every cost and revenue account is already at zero.", False)
+    elif window.confirm(f"Close the year on {date}? The costs and the revenue go to {name}, and the cost and revenue accounts start again from zero."):
+        closing_urls = []
+        closing_bodies = []
+        if account_numbered("14") == "":
+            closing_urls.append("/account")
+            closing_bodies.append(account_line(AccountRow("140000", EQUITY, RETAINED)))
+        for e in made:
+            closing_urls.append("/entry")
+            closing_bodies.append(entry_lines(e))
+        say(f"Closed the year on {date}: the profit is in {name}", False)
+        send_closing()
+
 def close_popup():
     popup_message = ""
     layout.unfreeze()
@@ -1043,6 +1099,9 @@ def record_html() -> Html:
         div class="record":
             + replay_html()
             p: hint
+            if closable() and step < 0:
+                p:
+                    button id="close-year" title="Move the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero" onclick=close_year(): "Close the year"
             if message != "":
                 p class=message_class: message
 
@@ -1261,7 +1320,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; with an account frozen, only that account's transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
 
 def main():
     def render() -> Html:

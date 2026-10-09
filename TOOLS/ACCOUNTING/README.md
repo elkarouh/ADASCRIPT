@@ -94,6 +94,15 @@ account as they stood after each ("Bank: transaction 4 of 10
 where a customer's debt comes from and how it is settled, or what a VAT
 account collects before it is paid; Show all lets the account go.
 
+"Close the year" (shown while there is a cost or revenue balance to close)
+does what an accountant does on 31 December: it posts two entries dated the
+end of the last transaction's year, one moving each cost into retained
+earnings (opened as 140000 if the books have no such account) and one
+moving each revenue, so the costs and the revenue end at zero and the
+profit sits in equity. Activa and Passiva, which differed by the profit
+until then, are now equal. The two entries are ordinary transactions: they
+are replayed with the others, and Delete takes them back.
+
 ### Scenarios
 
 A scenario is `scenarios/NAME.books`, the books as text (`books_text.ady`:
