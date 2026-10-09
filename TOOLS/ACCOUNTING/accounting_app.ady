@@ -31,6 +31,13 @@ def number_before(a: str, b: str) -> bool:
     return len(a) < len(b) or (len(a) == len(b) and a < b)
 
 const LIVE_STYLE: str = """
+body { max-width: 80em; margin-top: 0.8em; }
+h1 { font-size: 1.15em; margin: 0 0 0.5em; }
+div.scenario select { max-width: 36em; }
+div.scenario p { margin: 0.4em 0; }
+div.record p { margin: 0.3em 0; }
+div.replaying { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.5em; }
+div.replaying div.caption { flex-basis: 100%; }
 div.tabs { margin: 1.2em 0 0; border-bottom: 2px solid #c9dcf0; }
 div.tabs button { font-size: 1em; padding: 0.4em 1.1em; margin: 0 0.2em -2px 0; border: 2px solid #c9dcf0; border-bottom: none; border-radius: 6px 6px 0 0; background: #eef4fb; cursor: pointer; }
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom: 2px solid #fff; }
@@ -64,7 +71,7 @@ g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
 tr.now td { background: #ffe0b2; font-weight: bold; }
 tr.later td { color: #bbb; }
 p.slider { margin: 0.4em 0; }
-p.slider input { width: 60%; vertical-align: middle; margin-left: 0.6em; }
+p.slider input { width: 16em; vertical-align: middle; margin-left: 0.6em; }
 tbody.now td { background: #ffe0b2; font-weight: bold; }
 tbody.later td { color: #bbb; }
 tbody.entry td { border-top: 2px solid #999; }
