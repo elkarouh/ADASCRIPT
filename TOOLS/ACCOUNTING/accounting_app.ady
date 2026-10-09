@@ -19,7 +19,7 @@ from karax/karax nimport setRenderer, redraw
 from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, VatRate_T, entry, purchase_with_vat, sale_with_vat, vat_text
-from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, toward, bend_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, account_line, entry_lines, graph_of, kind_named, kind_text, parse_books
 
 const WIDTH: float = 980.0
@@ -76,6 +76,7 @@ text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
 """
 
 const FIRST_ROW: float = 90.0          # the first row of accounts, below the top of its quarter's title
+const TITLE_HALF: float = 120.0        # half the width of a quarter's title, roughly
 const COLUMN: float = 150.0            # the least width an account takes in a row
 
 # How many accounts fit side by side in a quarter WIDTH wide, at most N.
@@ -398,6 +399,30 @@ class Layout:
             self.move_to(self.points[i].x + dx, self.points[i].y)
         self.held = -1
 
+    # Where the quarters' titles are written (their middles, and half their
+    # widths), so that no amount covers them: right of the vertical line or
+    # ending left of it, above the first row and below the horizontal line;
+    # and the lines' crossing, which is dragged.
+    def title_spots(self) -> []Point:
+        var spots: []Point = []
+        let ty: float = self.top_y + 24.0
+        spots.append(Point(self.split_x - 16.0 - TITLE_HALF, ty))
+        spots.append(Point(self.split_x + 16.0 + TITLE_HALF, ty))
+        if self.has_pl:
+            let by: float = self.pl_y + 26.0
+            spots.append(Point(self.split_x - 16.0 - TITLE_HALF, by))
+            spots.append(Point(self.split_x + 16.0 + TITLE_HALF, by))
+            spots.append(Point(self.split_x, self.pl_y))           # and the lines' crossing
+        return spots
+
+    def title_halves(self) -> []float:
+        var halves: []float = []
+        for s in self.title_spots():
+            halves.append(TITLE_HALF)
+        if self.has_pl:
+            halves[len(halves) - 1] = 12.0                      # the crossing is small
+        return halves
+
     def view_box(self) -> str:
         return f"0 0 {self.width:.0f} {self.height:.0f}"
 
@@ -630,18 +655,13 @@ def live_node_html(g: Graph, a: Account) -> Html:
         g class=css onmousedown=layout.press(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
             + a.to_html(p, none)
 
-def live_arrow_html(g: Graph, f: Flow) -> Html:
-    let a: Point = layout.at(f.source)
-    let b: Point = layout.at(f.target)
+def live_arrow_html(g: Graph, f: Flow, route: Route) -> Html:
     let tip: str = tip_of(g, f)
-    var others: []Point = []
-    for i in range(len(layout.names)):
-        if layout.names[i] != f.source.name and layout.names[i] != f.target.name:
-            others.append(layout.points[i])
     let css: str = ("now" if step >= 0 and (f.source.name + "\t" + f.target.name) in now_arrows else "")
+    let none: str = ""                  # the page's own tooltip shows it, not a <title>
     html:
         g class=css onmouseover=layout.show(tip) onmouseout=layout.hide():
-            + f.to_html(a, b, bend_of(g, f, a, b, others, Point(layout.width, layout.height)), "")
+            + f.to_html(route, none)
 
 # How far the account at P is from the straight line between A and B, or
 # a long way when it is beyond either end.
@@ -952,6 +972,7 @@ def sides_html() -> Html:
 
 def live_graph_html(g: Graph) -> Html:
     let rubber: str = (layout.rubber_d() if layout.drawing else "")
+    let routes: []Route = routes_of(g, layout.names, layout.points, Point(layout.width, layout.height), layout.title_spots(), layout.title_halves())
     html:
         svg id="graph" viewBox=layout.view_box() class="graph":
             defs:
@@ -960,8 +981,8 @@ def live_graph_html(g: Graph) -> Html:
                 marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
                     polygon class="now" points="0 0, 4.3 1.5, 0 3"
             + sides_html()
-            for f in g.flows:
-                + live_arrow_html(g, f)
+            for i in range(len(g.flows)):
+                + live_arrow_html(g, g.flows[i], routes[i])
             for a in g.accounts:
                 + live_node_html(g, a)
             if layout.drawing and rubber != "":

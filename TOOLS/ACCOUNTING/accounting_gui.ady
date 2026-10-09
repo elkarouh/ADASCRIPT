@@ -177,29 +177,67 @@ def toward(p: Point, q: Point, d: float) -> Point:
     let length: float = sqrt(dx * dx + dy * dy)
     return Point(p.x + dx / length * d, p.y + dy / length * d)
 
-# Every arrow is a curve, a cubic spline from one account to the other,
-# bowed a little to one side so that arrows between accounts on one line
-# do not lie on top of each other.
+# Every arrow is a spline: a smooth curve from one account, through two
+# waypoints, to the other. The waypoints sit a third and two thirds of the
+# way along, each pushed to one side or the other, so that a long arrow can
+# weave between the accounts in its way instead of bowing wide around them
+# all; even the least push bows it a little, so that arrows between
+# accounts on one line do not lie on top of each other.
 const CURVE: float = 18.0
 
-# The point at T (0 to 1) along the curve from A to B bowed BEND to its right.
-def curve_at(a: Point, b: Point, bend: float, t: float) -> Point:
+# An arrow's route, and where its amount is written.
+type Route is record:
+    points: []Point     # its start on one rim, the two waypoints, its stop short of the other rim
+    label: Point
+
+# The route from A to B with its waypoints pushed S1 and S2 to its right (as
+# seen going from A to B; to the left when negative).
+def route_points(a: Point, b: Point, s1: float, s2: float) -> []Point:
     let dx: float = b.x - a.x
     let dy: float = b.y - a.y
     let length: float = sqrt(dx * dx + dy * dy)
-    let ox: float = -dy / length * bend * 4.0 / 3.0     # the control points' offset: the
-    let oy: float = dx / length * bend * 4.0 / 3.0      # curve's middle is BEND from the line
-    let c1: Point = Point(a.x + dx / 3.0 + ox, a.y + dy / 3.0 + oy)
-    let c2: Point = Point(a.x + dx * 2.0 / 3.0 + ox, a.y + dy * 2.0 / 3.0 + oy)
+    let nx: float = -dy / length
+    let ny: float = dx / length
+    let w1: Point = Point(a.x + dx / 3.0 + nx * s1, a.y + dy / 3.0 + ny * s1)
+    let w2: Point = Point(a.x + dx * 2.0 / 3.0 + nx * s2, a.y + dy * 2.0 / 3.0 + ny * s2)
+    return [toward(a, w1, NODE_RADIUS), w1, w2, toward(b, w2, NODE_RADIUS + 2.0)]   # the head stops short
+
+# The spline through the route's four points (Catmull-Rom) is three cubic
+# curves; these are the control points of curve I (0 to 2).
+def first_control(pts: []Point, i: int) -> Point:
+    let before: Point = pts[max(i - 1, 0)]
+    return Point(pts[i].x + (pts[i + 1].x - before.x) / 6.0, pts[i].y + (pts[i + 1].y - before.y) / 6.0)
+
+def second_control(pts: []Point, i: int) -> Point:
+    let after: Point = pts[min(i + 2, 3)]
+    return Point(pts[i + 1].x - (after.x - pts[i].x) / 6.0, pts[i + 1].y - (after.y - pts[i].y) / 6.0)
+
+# The point at S (0 to 3) along the spline through PTS.
+def spline_at(pts: []Point, s: float) -> Point:
+    let i: int = min(max(int(s), 0), 2)
+    let t: float = min(max(s - float(i), 0.0), 1.0)
+    let c1: Point = first_control(pts, i)
+    let c2: Point = second_control(pts, i)
+    let a: Point = pts[i]
+    let b: Point = pts[i + 1]
     let u: float = 1.0 - t
     return Point(u * u * u * a.x + 3.0 * u * u * t * c1.x + 3.0 * u * t * t * c2.x + t * t * t * b.x,
                  u * u * u * a.y + 3.0 * u * u * t * c1.y + 3.0 * u * t * t * c2.y + t * t * t * b.y)
 
-# Whether the curve from A to B bowed BEND keeps clear of the accounts at
-# OTHERS, and inside the drawing, SIZE wide and high, with room for its amount.
-def clear_of(a: Point, b: Point, bend: float, others: []Point, size: Point) -> bool:
-    for k in range(1, 20):
-        let p: Point = curve_at(a, b, bend, float(k) / 20.0)
+# The spline as an SVG path.
+def spline_d(pts: []Point) -> str:
+    var d: str = f"M {px(pts[0].x)} {px(pts[0].y)}"
+    for i in range(3):
+        let c1: Point = first_control(pts, i)
+        let c2: Point = second_control(pts, i)
+        d += f" C {px(c1.x)} {px(c1.y)} {px(c2.x)} {px(c2.y)} {px(pts[i + 1].x)} {px(pts[i + 1].y)}"
+    return d
+
+# Whether the spline through PTS keeps clear of the accounts at OTHERS, and
+# inside the drawing, SIZE wide and high, with room for its amount.
+def clear_of(pts: []Point, others: []Point, size: Point) -> bool:
+    for k in range(1, 30):
+        let p: Point = spline_at(pts, float(k) / 10.0)
         if p.x < 40.0 or p.x > size.x - 40.0 or p.y < 20.0 or p.y > size.y - 20.0:
             return False
         for o in others:
@@ -207,19 +245,81 @@ def clear_of(a: Point, b: Point, bend: float, others: []Point, size: Point) -> b
                 return False
     return True
 
-# How far F's arrow, from A to B, bows out: the least of a few bends, to
-# either side, that takes it around the accounts at OTHERS and stays in the
-# drawing, SIZE wide and high; if none does, the first. Money flowing both ways between two accounts makes two arrows,
-# each bowed to its own right, so that both, and their amounts, show.
-def bend_of(g: Graph, f: Flow, a: Point, b: Point, others: []Point, size: Point) -> float:
-    var tries: []float = [CURVE, -CURVE, 50.0, -50.0, 90.0, -90.0, 140.0, -140.0]
+# The route of F's arrow, from A to B: of the waypoints' pushes, the least
+# (and the least crooked) that keeps it clear of the accounts at OTHERS and
+# inside the drawing; if none does, the least. Money flowing both ways
+# between two accounts makes two arrows, each pushed to its own right, so
+# that both, and their amounts, show.
+def route_of(g: Graph, f: Flow, a: Point, b: Point, others: []Point, size: Point) -> []Point:
+    var shifts: []float = [CURVE, -CURVE, 40.0, -40.0, 70.0, -70.0, 100.0, -100.0, 140.0, -140.0]
     for other in g.flows:
         if other.source == f.target and other.target == f.source:
-            tries = [30.0, 60.0, 100.0, 150.0]
-    for bend in tries:
-        if clear_of(a, b, bend, others, size):
-            return bend
-    return tries[0]
+            shifts = [30.0, 60.0, 100.0, 150.0]
+    var best: []Point = route_points(a, b, shifts[0], shifts[0])
+    var best_cost: float = 1000000.0
+    for s1 in shifts:
+        for s2 in shifts:
+            let cost: float = abs(s1) + abs(s2) + abs(s1 - s2)
+            if cost < best_cost:
+                let pts: []Point = route_points(a, b, s1, s2)
+                if clear_of(pts, others, size):
+                    best = pts
+                    best_cost = cost
+    return best
+
+# Where an amount TEXT goes along the spline through PTS: beside it, at the
+# first of a few spots, from the middle outwards, where it covers neither an
+# account at CENTRES nor an amount already written, whose middles are at
+# TAKEN and half-widths in HALVES.
+def label_spot(pts: []Point, text: str, centres: []Point, taken: []Point, halves: []float) -> Point:
+    let half: float = 3.3 * float(len(text)) + 3.0
+    var first: Point = Point(0.0, 0.0)
+    var tried: bool = False
+    for s in [1.5, 1.25, 1.75, 1.0, 2.0, 0.75, 2.25, 0.5, 2.5]:
+        let p: Point = spline_at(pts, s)
+        let q: Point = spline_at(pts, s + 0.05)
+        let o: Point = spline_at(pts, s - 0.05)
+        let dx: float = q.x - o.x
+        let dy: float = q.y - o.y
+        let length: float = max(sqrt(dx * dx + dy * dy), 0.001)
+        for side in [10.0, -10.0]:
+            let spot: Point = Point(p.x - dy / length * side, p.y + dx / length * side)    # the amount's middle
+            if not tried:
+                first = spot
+                tried = True
+            var free: bool = True
+            for c in centres:
+                if abs(spot.x - c.x) < NODE_RADIUS + half and abs(spot.y - c.y) < NODE_RADIUS + 7.0:
+                    free = False
+            for i in range(len(taken)):
+                if abs(spot.x - taken[i].x) < half + halves[i] + 2.0 and abs(spot.y - taken[i].y) < 13.0:
+                    free = False
+            if free:
+                return Point(spot.x, spot.y + 4.0)      # the text's baseline
+    return Point(first.x, first.y + 4.0)
+
+# The arrows of G, as the accounts NAMES sit at POINTS in a drawing SIZE
+# wide and high: each one's route, then each one's amount, placed clear of
+# those already placed and of other text, whose middles are at TAKEN and
+# half-widths in HALVES.
+def routes_of(g: Graph, names: []str, points: []Point, size: Point, words: []Point, widths: []float) -> []Route:
+    var routes: []Route = []
+    var taken: []Point = words
+    var halves: []float = widths
+    for f in g.flows:
+        let i: int = names.index(f.source.name)
+        let j: int = names.index(f.target.name)
+        var others: []Point = []
+        for k in range(len(points)):
+            if k != i and k != j:
+                others.append(points[k])
+        let pts: []Point = route_of(g, f, points[i], points[j], others, size)
+        let text: str = money(f.amount)
+        let label: Point = label_spot(pts, text, points, taken, halves)
+        taken.append(Point(label.x, label.y - 4.0))
+        halves.append(3.3 * float(len(text)) + 3.0)
+        routes.append(Route(pts, label))
+    return routes
 
 # What hovering over F's arrow shows: each of its transactions, one a line,
 # with its date and amount.
@@ -229,29 +329,14 @@ def tip_of(g: Graph, f: Flow) -> str:
         tip += f"\n{t.date}   {money(t.amount)}   {t.what}"
     return tip
 
-# A flow as an arrow, a cubic spline, from the rim of the circle at A to the
-# rim of the one at B, with the amount at its middle. It bows BEND to the
-# right of the straight line, as seen going from A to B (to the left when
-# BEND is negative), so the arrow back bows the other way. TIP shows when the mouse is over it, as the browser's tooltip (the live
-# page, which cannot, passes "" and shows its own): a wider invisible path
-# under the arrow makes it easy to point at.
-def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
-    let dx: float = b.x - a.x
-    let dy: float = b.y - a.y
-    let length: float = sqrt(dx * dx + dy * dy)
-    let top: Point = curve_at(a, b, bend, 0.5)          # the curve's middle
-    let ox: float = -dy / length * bend * 4.0 / 3.0
-    let oy: float = dx / length * bend * 4.0 / 3.0
-    let c1: Point = Point(a.x + dx / 3.0 + ox, a.y + dy / 3.0 + oy)
-    let c2: Point = Point(a.x + dx * 2.0 / 3.0 + ox, a.y + dy * 2.0 / 3.0 + oy)
-    let start: Point = toward(a, c1, NODE_RADIUS)
-    let stop: Point = toward(b, c2, NODE_RADIUS + 2.0)   # the head stops short of the circle
-    let d: str = f"M {px(start.x)} {px(start.y)} C {px(c1.x)} {px(c1.y)} {px(c2.x)} {px(c2.y)} {px(stop.x)} {px(stop.y)}"
-    # the amount just outside the bow
-    let side: float = (14.0 if bend >= 0.0 else -14.0)
-    let label: Point = Point(top.x - dy / length * side, top.y + dx / length * side + 4.0)
-    let lx: str = px(label.x)
-    let ly: str = px(label.y)
+# A flow as an arrow along ROUTE, with its amount where the route says. TIP
+# shows when the mouse is over it, as the browser's tooltip (the live page,
+# which cannot, passes "" and shows its own): a wider invisible path under
+# the arrow makes it easy to point at.
+def to_html(f: Flow, route: Route, tip: str) -> Html:
+    let d: str = spline_d(route.points)
+    let lx: str = px(route.label.x)
+    let ly: str = px(route.label.y)
     html:
         g class="arrow":
             if tip != "":
@@ -260,22 +345,20 @@ def to_html(f: Flow, a: Point, b: Point, bend: float, tip: str) -> Html:
             path class="edge" d=d
             stext class="amount" x=lx y=ly: money(f.amount)
 
-# Where the accounts other than F's two sit, in the article's drawing.
-def others_of(g: Graph, f: Flow) -> []Point:
-    var others: []Point = []
-    for a in g.accounts:
-        if a != f.source and a != f.target:
-            others.append(place(a))
-    return others
-
 def to_html(g: Graph) -> Html:
+    var names: []str = []
+    var points: []Point = []
+    for a in g.accounts:
+        names.append(a.name)
+        points.append(place(a))
+    let routes: []Route = routes_of(g, names, points, Point(980.0, 670.0), [], [])
     html:
         svg viewBox="0 0 980 670" class="graph":
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
-            for f in g.flows:
-                + f.to_html(place(f.source), place(f.target), bend_of(g, f, place(f.source), place(f.target), others_of(g, f), Point(980.0, 670.0)), tip_of(g, f))
+            for i in range(len(g.flows)):
+                + to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
             for a in g.accounts:
                 + a.to_html(place(a), account_tip(g, a))
 

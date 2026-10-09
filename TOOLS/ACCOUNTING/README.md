@@ -41,9 +41,10 @@ puts the assets (activa) on the left and the liabilities and equity
 (passiva) on the right; below a dashed line across, the costs sit on the
 left and the revenue on the right, as in a profit and loss account. An
 account can be dragged anywhere inside its own quarter, not out of it.
-Each arrow is a cubic spline, bowed just enough to pass around the other
-accounts and stay inside the drawing; it finds its way again whenever an
-account moves.
+Each arrow is a spline through two waypoints, pushed aside just enough to
+weave around the other accounts and stay inside the drawing, and each
+amount is written beside its arrow where it covers no account, title or
+other amount; both are worked out again whenever an account moves.
 If the accounts have been dragged into a mess, Tidy up lays them out again:
 each in its quarter, and within it placed so that the arrows are short and
 run over as few other accounts as possible.
