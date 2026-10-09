@@ -94,6 +94,14 @@ account as they stood after each ("Bank: transaction 4 of 10
 where a customer's debt comes from and how it is settled, or what a VAT
 account collects before it is paid; Show all lets the account go.
 
+Under the replay buttons, the date slider goes from one day the
+transactions are dated to the next: the graph, the quarter totals, the
+accounts, the profit and loss account and the balance sheet are those of the
+books as they stood at the end of that day ("Books as at 2011-07-31"),
+whatever the replay was doing before. It is the quickest way to ask what
+the balance sheet looked like at the end of March. Activa and Passiva differ
+by the costs less the revenue so far, until the year is closed.
+
 "Debit and credit" writes the books the way an accountant does. The
 transactions list becomes a journal: each transaction has a line for every
 account it touches, the debits first and the credits, indented, after them

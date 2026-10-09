@@ -58,6 +58,8 @@ g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
 g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
 tr.now td { background: #ffe0b2; font-weight: bold; }
 tr.later td { color: #bbb; }
+p.slider { margin: 0.4em 0; }
+p.slider input { width: 60%; vertical-align: middle; margin-left: 0.6em; }
 tbody.now td { background: #ffe0b2; font-weight: bold; }
 tbody.later td { color: #bbb; }
 tbody.entry td { border-top: 2px solid #999; }
@@ -1030,6 +1032,35 @@ def replay_frozen():
         only = layout.source
         layout.unfreeze()
 
+# The days the transactions are dated, once each, in order.
+def dates_of() -> []str:
+    var days: []str = []
+    for e in books.entries:
+        if len(days) == 0 or days[len(days) - 1] != e.date:
+            days.append(e.date)
+    return days
+
+# Where the slider stands: the position, among the days, of the books shown.
+def slider_position() -> int:
+    let days: []str = dates_of()
+    if step < 0 or step >= len(books.entries):
+        return len(days) - 1
+    return max(0, days.index(books.entries[step].date))
+
+# The slider moved to a day: the books as they stood at the end of it.
+def slider_moved():
+    playing = False
+    let days: []str = dates_of()
+    let at: int = int(field_text("date-slider"))
+    if at < 0 or at >= len(days):
+        return
+    var last: int = 0
+    for i in range(len(books.entries)):
+        if books.entries[i].date <= days[at]:
+            last = i
+    replay_to(last)
+    redraw()
+
 def tick():
     tick_pending = False
     if not playing:
@@ -1156,6 +1187,10 @@ def replay_html() -> Html:
     let play_label: str = (f"Play {layout.source}'s transactions" if layout.source != "" else
                            f"Play {only}'s transactions" if only != "" else "Play the transactions")
     let what: str = (books.entries[step].what if step >= 0 else "")
+    let days: []str = dates_of()
+    let position: int = (slider_position() if len(days) > 0 else 0)
+    let last_day: str = str(max(len(days) - 1, 0))
+    let at_day: str = str(position)
     let asked: bool = exercising and ex_index < n
     let ex_which: str = (f"Exercise: transaction {ex_index + 1} of {n}, {books.entries[ex_index].date}, {ex_score} right so far" if asked else f"Exercise finished: {ex_score} right at the first try, out of {n}")
     let ex_what: str = (books.entries[ex_index].what if asked else "")
@@ -1182,6 +1217,11 @@ def replay_html() -> Html:
                         button id="all" onclick=stop_replay(): "Show all"
                     if len(books.entries) > 0:
                         button id="exercise" title="Draw the arrows of the transactions yourself, one at a time" onclick=start_exercise(): "Exercise"
+                if len(days) > 1:
+                    p class="slider":
+                        span: "Books as at "
+                        strong: days[position]
+                        input id="date-slider" type="range" min="0" max=last_day value=at_day oninput=slider_moved()
                 if step >= 0:
                     div class="caption":
                         span class="which": which
@@ -1557,7 +1597,7 @@ def on_key(e: Event):
         redraw()
 
 const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Debit and credit writes the transactions as a journal does and shows each account as a T; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
+const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; Circles draws them as in Kleppmann's article, Boxes as the lines of a balance sheet again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Slide the date to see the books as they stood on each day; Debit and credit writes the transactions as a journal does and shows each account as a T; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
 
 def main():
     def render() -> Html:
