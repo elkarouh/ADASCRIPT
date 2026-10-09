@@ -39,7 +39,8 @@ the graph, then the accounts, the profit and loss and the balance sheet.
 The drawing is laid out like a balance sheet: a dashed line down the middle
 puts the assets (activa) on the left and the liabilities and equity
 (passiva) on the right; below a dashed line across, the costs sit on the
-left and the revenue on the right, as in a profit and loss account.
+left and the revenue on the right, as in a profit and loss account. An
+account can be dragged anywhere inside its own quarter, not out of it.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the

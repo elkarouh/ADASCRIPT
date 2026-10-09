@@ -79,6 +79,8 @@ text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
 class Layout:
     var names: []str
     var points: []Point
+    var lefts: []bool                   # each account's quadrant: left of the vertical line (activa, costs)
+    var tops: []bool                    # and above the horizontal one (activa, passiva)
     var held: int = -1                  # the account being dragged, or -1
     var tip: str = ""                   # what the arrow under the mouse lists, or ""
     var mouse_x: float = 0.0            # where the mouse is, in the drawing's units
@@ -144,19 +146,23 @@ class Layout:
         self.top_y = 0.0
         self.names = []
         self.points = []
+        self.lefts = []
+        self.tops = []
         let top_rows: int = max((len(activa) + 1) // 2, (len(passiva) + 1) // 2)
-        self.place_side(activa, mid - 370.0, TOP_Y)
-        self.place_side(passiva, mid + 150.0, TOP_Y)
+        self.place_side(activa, mid - 370.0, TOP_Y, True, True)
+        self.place_side(passiva, mid + 150.0, TOP_Y, False, True)
         self.has_pl = len(costs) + len(revenue) > 0
         self.pl_y = TOP_Y + float(max(top_rows, 1)) * ROW_STEP - 30.0
         let pl_top: float = self.pl_y + 30.0 + LABEL_ROOM
-        self.place_side(costs, mid - 370.0, pl_top)
-        self.place_side(revenue, mid + 150.0, pl_top)
+        self.place_side(costs, mid - 370.0, pl_top, True, False)
+        self.place_side(revenue, mid + 150.0, pl_top, False, False)
 
-    # NAMES two to a row, from (X, Y): X and X + 220.
-    def place_side(self, names: []str, x: float, y: float):
+    # NAMES two to a row, from (X, Y): X and X + 220, in the quadrant LEFT and TOP say.
+    def place_side(self, names: []str, x: float, y: float, left: bool, top: bool):
         for i in range(len(names)):
             self.names.append(names[i])
+            self.lefts.append(left)
+            self.tops.append(top)
             self.points.append(Point(x + 220.0 * float(i % 2), y + ROW_STEP * float(i // 2)))
 
     # A transaction is drawn: a click on an account freezes it (it no longer
@@ -167,6 +173,8 @@ class Layout:
     def reset(self):
         self.names = []
         self.points = []
+        self.lefts = []
+        self.tops = []
         self.held = -1
         self.tip = ""
         self.height = (self.height if self.graph_only else HEIGHT)
@@ -274,11 +282,26 @@ class Layout:
                         stext class="tipline" x=px(left) y=px(top+float(i)*15.0): lines[i]
 
     # The held account to (X, Y), kept whole inside the drawing.
+    # The held account follows the mouse, but stays inside the drawing and
+    # inside its quadrant, clear of the quadrant's title: an asset left of
+    # the vertical line, a cost below the horizontal one, and so on.
     def move_to(self, x: float, y: float):
         if self.held >= 0:
-            self.points[self.held] = Point(
-                min(max(x, NODE_RADIUS), self.width - NODE_RADIUS),
-                min(max(y, NODE_RADIUS), self.height - NODE_RADIUS))
+            let gap: float = NODE_RADIUS + 6.0
+            var low_x: float = NODE_RADIUS
+            var high_x: float = self.width - NODE_RADIUS
+            var low_y: float = self.top_y + 30.0 + NODE_RADIUS      # below the titles
+            var high_y: float = self.height - NODE_RADIUS
+            if self.lefts[self.held]:
+                high_x = self.split_x - gap
+            else:
+                low_x = self.split_x + gap
+            if self.has_pl:
+                if self.tops[self.held]:
+                    high_y = self.pl_y - gap
+                else:
+                    low_y = self.pl_y + 30.0 + NODE_RADIUS             # below the costs' and revenue's titles
+            self.points[self.held] = Point(min(max(x, low_x), high_x), min(max(y, low_y), high_y))
 
     # The arrow being drawn, from the rim of the frozen account to the mouse.
     def rubber_d(self) -> str:
