@@ -188,7 +188,7 @@ def to_html(a: Account, p: Point, tip: str) -> Html:
 # the side of the drawing, say whether it is owned or owed).
 # NAME cut to fit ROOM pixels of the box's 12px text, ending in "..." when it is cut.
 def fit_name(name: str, room: float) -> str:
-    let chars: int = int(room / 6.6)
+    let chars: int = int(room / 7.3)
     if len(name) <= chars or chars < 4:
         return name
     return name[:chars - 1] + "\u2026"
