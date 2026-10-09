@@ -63,9 +63,7 @@ one column a quarter like the lines of a balance sheet; an arrow leaves
 the side of one box and enters the side of the other, across the middle,
 or round the outside of a column between two boxes in it. A box is as
 high as its arrows need: the more of those coming in or going out it has,
-the taller it is, and its column restacks as it grows. Circles draws
-them as circles instead, as in Kleppmann's article, and Boxes brings the
-boxes back.
+the taller it is, and its column restacks as it grows.
 
 To record a transaction, click the account the money leaves: it freezes
 (a dashed red ring) and no longer moves. Drag an arrow from it to the
