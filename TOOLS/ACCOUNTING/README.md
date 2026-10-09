@@ -54,7 +54,9 @@ quarters.
 The accounts are drawn as boxes holding their name and balance, stacked
 one column a quarter like the lines of a balance sheet; an arrow leaves
 the side of one box and enters the side of the other, across the middle,
-or round the outside of a column between two boxes in it. Circles draws
+or round the outside of a column between two boxes in it. A box is as
+high as its arrows need: the more of those coming in or going out it has,
+the taller it is, and its column restacks as it grows. Circles draws
 them as circles instead, as in Kleppmann's article, and Boxes brings the
 boxes back.
 

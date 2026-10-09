@@ -342,9 +342,9 @@ def route_of(g: Graph, f: Flow, a: Point, b: Point, others: []Point, size: Point
 
 # Where an amount TEXT goes along an arrow, at SAMPLES: beside it, at the
 # first of a few spots, from the middle outwards, where it covers neither an
-# account at CENTRES nor an amount already written, whose middles are at
+# account at CENTRES (half as high as TALL says) nor an amount already written, whose middles are at
 # TAKEN and half-widths in HALVES.
-def label_spot(samples: []Point, text: str, centres: []Point, taken: []Point, halves: []float, shape: Shape, size: Point) -> Point:
+def label_spot(samples: []Point, text: str, centres: []Point, tall: []float, taken: []Point, halves: []float, shape: Shape, size: Point) -> Point:
     let half: float = 3.3 * float(len(text)) + 3.0
     var first: Point = Point(0.0, 0.0)
     var tried: bool = False
@@ -363,8 +363,8 @@ def label_spot(samples: []Point, text: str, centres: []Point, taken: []Point, ha
                 first = spot
                 tried = True
             var free: bool = spot.x - half > 2.0 and spot.x + half < size.x - 2.0     # inside the drawing
-            for c in centres:
-                if abs(spot.x - c.x) < shape.half_w + half and abs(spot.y - c.y) < shape.half_h + 7.0:
+            for k in range(len(centres)):
+                if abs(spot.x - centres[k].x) < shape.half_w + half and abs(spot.y - centres[k].y) < tall[k] + 7.0:
                     free = False
             for i in range(len(taken)):
                 if abs(spot.x - taken[i].x) < half + halves[i] + 2.0 and abs(spot.y - taken[i].y) < 13.0:
@@ -412,7 +412,7 @@ def bezier_at(c: []Point, t: float) -> Point:
 # arrows on one side of a box spread along it, in the order of the boxes at
 # their other ends, top to bottom, so that they do not cross there. Two
 # numbers a flow, its start's and its end's.
-def ports_of(g: Graph, names: []str, points: []Point, size: Point, shape: Shape) -> []float:
+def ports_of(g: Graph, names: []str, points: []Point, size: Point, shape: Shape, tall: []float) -> []float:
     var ports: []float = []
     var ends: []int = []                # for each end of each flow: its box,
     var sides: []float = []             # the side it is on,
@@ -438,18 +438,19 @@ def ports_of(g: Graph, names: []str, points: []Point, size: Point, shape: Shape)
                 count += 1
                 if heights[o] < heights[e] or (heights[o] == heights[e] and o < e):
                     rank += 1
-        ports[e] = (float(rank + 1) / float(count + 1) * 2.0 - 1.0) * (shape.half_h - 3.0)
+        ports[e] = (float(rank + 1) / float(count + 1) * 2.0 - 1.0) * (tall[ends[e]] - 3.0)
     return ports
 
-# The arrows of G, as the accounts NAMES sit at POINTS, drawn as SHAPE, in
+# The arrows of G, as the accounts NAMES sit at POINTS, drawn as SHAPE (each
+# box half as high as TALL says), in
 # a drawing SIZE wide and high: each one's route, then each one's amount, placed clear of
 # those already placed and of other text, whose middles are at TAKEN and
 # half-widths in HALVES.
-def routes_of(g: Graph, names: []str, points: []Point, size: Point, words: []Point, widths: []float, shape: Shape) -> []Route:
+def routes_of(g: Graph, names: []str, points: []Point, tall: []float, size: Point, words: []Point, widths: []float, shape: Shape) -> []Route:
     var routes: []Route = []
     var taken: []Point = words
     var halves: []float = widths
-    let ports: []float = (ports_of(g, names, points, size, shape) if shape.boxes else [])
+    let ports: []float = (ports_of(g, names, points, size, shape, tall) if shape.boxes else [])
     for n in range(len(g.flows)):
         let f: Flow = g.flows[n]
         let i: int = names.index(f.source.name)
@@ -471,7 +472,7 @@ def routes_of(g: Graph, names: []str, points: []Point, size: Point, words: []Poi
             for k in range(31):
                 samples.append(spline_at(pts, float(k) / 10.0))
         let text: str = money(f.amount)
-        let label: Point = label_spot(samples, text, points, taken, halves, shape, size)
+        let label: Point = label_spot(samples, text, points, tall, taken, halves, shape, size)
         taken.append(Point(label.x, label.y - 4.0))
         halves.append(3.3 * float(len(text)) + 3.0)
         routes.append(Route(d, samples, label))
@@ -504,10 +505,12 @@ def to_html(f: Flow, route: Route, tip: str) -> Html:
 def to_html(g: Graph) -> Html:
     var names: []str = []
     var points: []Point = []
+    var tall: []float = []
     for a in g.accounts:
         names.append(a.name)
         points.append(place(a))
-    let routes: []Route = routes_of(g, names, points, Point(980.0, 670.0), [], [], circles())
+        tall.append(NODE_RADIUS)
+    let routes: []Route = routes_of(g, names, points, tall, Point(980.0, 670.0), [], [], circles())
     html:
         svg viewBox="0 0 980 670" class="graph":
             defs:

@@ -77,6 +77,7 @@ text.tiphead { font-size: 11px; font-weight: bold; white-space: pre; }
 
 const FIRST_ROW: float = 90.0          # the first row of accounts, below the top of its quarter's title
 const TITLE_HALF: float = 120.0        # half the width of a quarter's title, roughly
+const BOX_GAP: float = 8.0            # between boxes stacked in a column
 const COLUMN: float = 150.0            # the least width an account takes in a row
 
 # How many accounts fit side by side in a quarter WIDTH wide, at most N,
@@ -100,6 +101,8 @@ class Layout:
     var points: []Point
     var lefts: []bool                   # each account's quadrant: left of the vertical line (activa, costs)
     var tops: []bool                    # and above the horizontal one (activa, passiva)
+    var tall: []float                   # each account's half height: a box grows with its arrows
+    var order: []str                    # the accounts in the order Tidy up found best, or [] (by number)
     var held: int = -1                  # the account being dragged, or -1
     var tip: str = ""                   # what the arrow under the mouse lists, or ""
     var mouse_x: float = 0.0            # where the mouse is, in the drawing's units
@@ -131,6 +134,11 @@ class Layout:
     def shape(self) -> Shape:
         return (boxes() if self.as_boxes else circles())
 
+    # The shape of account I: a box as high as its arrows need.
+    def shape_of(self, i: int) -> Shape:
+        let shape: Shape = self.shape()
+        return Shape(shape.boxes, shape.half_w, self.tall[i])
+
     # Where a quarter's first row sits below the top of its title, how far
     # apart its rows are, and how narrow a quarter may be.
     def first_row(self) -> float:
@@ -149,10 +157,36 @@ class Layout:
                 same = False
         if not same:
             self.arrange(rows)
+        elif self.as_boxes:                     # a box grown or shrunk: its column stacked again, in its order
+            var changed: bool = False
+            for i in range(len(self.names)):
+                if tall_of(self.names[i]) != self.tall[i]:
+                    changed = True
+            if changed:
+                self.order = self.names_by_height()
+                self.fill(rows)
         if not self.graph_only:
             self.height = 300.0                 # as tall as the accounts need
-            for p in self.points:
-                self.height = max(self.height, p.y + self.shape().half_h + 30.0)
+            for i in range(len(self.points)):
+                self.height = max(self.height, self.points[i].y + self.tall[i] + 30.0)
+
+    # The accounts from the top of the drawing down, as they now sit.
+    def names_by_height(self) -> []str:
+        var ys: []float = []
+        var found: []str = []
+        for i in range(len(self.names)):
+            var j: int = len(found)
+            found.append(self.names[i])
+            ys.append(self.points[i].y)
+            while j > 0 and ys[j] < ys[j - 1]:
+                let y: float = ys[j]
+                ys[j] = ys[j - 1]
+                ys[j - 1] = y
+                let n: str = found[j]
+                found[j] = found[j - 1]
+                found[j - 1] = n
+                j -= 1
+        return found
 
     # The lines where they start: the vertical one in the middle, the
     # horizontal one below the taller of the two balance-sheet quarters.
@@ -161,18 +195,25 @@ class Layout:
         self.top_y = 0.0
         var activa: int = 0
         var passiva: int = 0
+        var activa_h: float = 0.0               # how high the boxes stack
+        var passiva_h: float = 0.0
         self.has_pl = False
         for r in rows:
             case r.kind:
                 when ASSET:
                     activa += 1
+                    activa_h += 2.0 * tall_of(r.name) + BOX_GAP
                 when LIABILITY | EQUITY:
                     passiva += 1
+                    passiva_h += 2.0 * tall_of(r.name) + BOX_GAP
                 when EXPENSE | REVENUE:
                     self.has_pl = True
         let shape: Shape = self.shape()
-        let top_rows: int = max(rows_for(activa, self.split_x, shape), rows_for(passiva, self.width - self.split_x, shape))
-        self.pl_y = self.top_y + self.first_row() + float(max(top_rows, 1) - 1) * self.row_step() + shape.half_h + 54.0
+        if self.as_boxes:
+            self.pl_y = self.top_y + 40.0 + max(max(activa_h, passiva_h), 40.0) + 24.0
+        else:
+            let top_rows: int = max(rows_for(activa, self.split_x, shape), rows_for(passiva, self.width - self.split_x, shape))
+            self.pl_y = self.top_y + self.first_row() + float(max(top_rows, 1) - 1) * self.row_step() + shape.half_h + 54.0
         self.fill(rows)
 
     # The accounts placed in their quarters as the lines now divide them,
@@ -186,6 +227,16 @@ class Layout:
                 sorted[j] = sorted[j - 1]
                 sorted[j - 1] = t
                 j -= 1
+        if len(self.order) > 0:                 # Tidy up's order first, any other account after
+            var ordered: []AccountRow = []
+            for name in self.order:
+                for r in sorted:
+                    if r.name == name:
+                        ordered.append(r)
+            for r in sorted:
+                if r.name not in self.order:
+                    ordered.append(r)
+            sorted = ordered
         var activa: []str = []
         var passiva: []str = []
         var costs: []str = []
@@ -204,6 +255,7 @@ class Layout:
         self.points = []
         self.lefts = []
         self.tops = []
+        self.tall = []
         let x: float = self.split_x
         let bottom: float = (self.height if self.graph_only else -1.0)     # in the page, the drawing grows
         self.place_in(activa, 0.0, x, self.top_y + 30.0, self.pl_y, True, True)
@@ -217,6 +269,9 @@ class Layout:
     def place_in(self, names: []str, x0: float, x1: float, y0: float, y1: float, left: bool, top: bool):
         let n: int = len(names)
         if n == 0:
+            return
+        if self.as_boxes:
+            self.stack_in(names, x0, x1, y0, y1, left, top)
             return
         let half_h: float = self.shape().half_h
         let first: float = y0 + self.first_row() - 30.0
@@ -236,6 +291,31 @@ class Layout:
             self.lefts.append(left)
             self.tops.append(top)
             self.points.append(Point(x0 + width * (float(i % cols) + 0.5), first + step * float(i // cols)))
+            self.tall.append(half_h)
+
+    # Boxes stacked down the quarter from X0 to X1, from Y0 (below its
+    # title), each as high as its arrows need; in more columns if one would
+    # pass Y1 (-1: no limit).
+    def stack_in(self, names: []str, x0: float, x1: float, y0: float, y1: float, left: bool, top: bool):
+        let n: int = len(names)
+        var talls: []float = []
+        for name in names:
+            talls.append(tall_of(name))
+        var cols: int = 1
+        while y1 > 0.0 and cols < n and stack_height(talls, cols) > y1 - y0 - 20.0:
+            cols += 1
+        let width: float = (x1 - x0) / float(cols)
+        var tops_at: []float = []
+        for c in range(cols):
+            tops_at.append(y0 + 10.0)
+        for i in range(n):
+            let c: int = i % cols
+            self.names.append(names[i])
+            self.lefts.append(left)
+            self.tops.append(top)
+            self.points.append(Point(x0 + width * (float(c) + 0.5), tops_at[c] + talls[i]))
+            self.tall.append(talls[i])
+            tops_at[c] += 2.0 * talls[i] + BOX_GAP
 
     # A transaction is drawn: a click on an account freezes it (it no longer
     # moves), an arrow is dragged from it to another account, and letting go
@@ -247,6 +327,8 @@ class Layout:
         self.points = []
         self.lefts = []
         self.tops = []
+        self.tall = []
+        self.order = []
         self.held = -1
         self.tip = ""
         self.height = (self.height if self.graph_only else HEIGHT)
@@ -280,7 +362,7 @@ class Layout:
     # The account under (X, Y), or "".
     def node_at(self, x: float, y: float) -> str:
         for i in range(len(self.points)):
-            if covers(self.points[i], Point(x, y), self.shape(), 0.0):
+            if covers(self.points[i], Point(x, y), self.shape_of(i), 0.0):
                 return self.names[i]
         return ""
 
@@ -371,7 +453,7 @@ class Layout:
                 self.pl_y = min(self.pl_y, self.height - self.first_row() - self.shape().half_h)
         elif self.held >= 0:
             let half_w: float = self.shape().half_w
-            let half_h: float = self.shape().half_h
+            let half_h: float = self.tall[self.held]
             var low_x: float = half_w
             var high_x: float = self.width - half_w
             var low_y: float = self.top_y + 30.0 + half_h          # below the titles
@@ -392,9 +474,9 @@ class Layout:
         let i: int = self.names.index(self.source)
         let a: Point = self.points[i]
         let b: Point = Point(self.mouse_x, self.mouse_y)
-        if covers(a, b, self.shape(), 0.0):
+        if covers(a, b, self.shape_of(i), 0.0):
             return ""
-        let start: Point = rim(a, b, self.shape(), 0.0)
+        let start: Point = rim(a, b, self.shape_of(i), 0.0)
         return f"M {start.x:.1f} {start.y:.1f} L {b.x:.1f} {b.y:.1f}"
 
     # The graph alone fills the window, one drawing unit per pixel, the
@@ -673,7 +755,7 @@ def live_node_html(g: Graph, a: Account) -> Html:
     html:
         g class=css onmousedown=layout.press(a) onmouseover=layout.show(tip) onmouseout=layout.hide():
             if layout.as_boxes:
-                + box_html(a, p, layout.shape())
+                + box_html(a, p, layout.shape_of(layout.index(a)))
             else:
                 + a.to_html(p, none)
 
@@ -685,24 +767,53 @@ def live_arrow_html(g: Graph, f: Flow, route: Route) -> Html:
         g class=css onmouseover=layout.show(tip) onmouseout=layout.hide():
             + f.to_html(route, none)
 
-# Whether the straight line from A to B runs over (or close to) the account at P.
-def runs_over(p: Point, a: Point, b: Point) -> bool:
-    for k in range(1, 20):
-        let t: float = float(k) / 20.0
-        if covers(p, Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t), layout.shape(), 10.0):
+# How high half a box for account NAME is: room on its side for each of
+# its arrows, as many as the more of those coming in and going out (a
+# circle is NODE_RADIUS round whatever its arrows).
+def tall_of(name: str) -> float:
+    if not layout.as_boxes:
+        return NODE_RADIUS
+    var ins: int = 0
+    var outs: int = 0
+    for f in graph.flows:
+        if f.target.name == name:
+            ins += 1
+        if f.source.name == name:
+            outs += 1
+    return max(15.0, 4.5 * float(max(ins, outs)) + 8.0)
+
+# How high NAMES' boxes, half as high as TALLS, stack in COLS columns.
+def stack_height(talls: []float, cols: int) -> float:
+    var heights: []float = []
+    for c in range(cols):
+        heights.append(0.0)
+    for i in range(len(talls)):
+        heights[i % cols] += 2.0 * talls[i] + BOX_GAP
+    var most: float = 0.0
+    for h in heights:
+        most = max(most, h)
+    return most
+
+# Whether the straight line from A to B runs over (or close to) account I.
+def runs_over(i: int, a: Point, b: Point) -> bool:
+    for k in range(1, 10):
+        let t: float = float(k) / 10.0
+        if covers(layout.points[i], Point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t), layout.shape_of(i), 10.0):
             return True
     return False
 
 # What a layout costs: the length of its arrows, and a lot more for each
 # arrow that runs over another account and so has to bend around it.
-def layout_cost(sources: []int, targets: []int) -> float:
+def layout_cost() -> float:
     var cost: float = 0.0
-    for k in range(len(sources)):
-        let a: Point = layout.points[sources[k]]
-        let b: Point = layout.points[targets[k]]
+    for f in graph.flows:
+        let source: int = layout.names.index(f.source.name)
+        let target: int = layout.names.index(f.target.name)
+        let a: Point = layout.points[source]
+        let b: Point = layout.points[target]
         cost += sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
         for i in range(len(layout.points)):
-            if i != sources[k] and i != targets[k] and runs_over(layout.points[i], a, b):
+            if i != source and i != target and runs_over(i, a, b):
                 cost += 400.0
     return cost
 
@@ -711,6 +822,7 @@ def layout_cost(sources: []int, targets: []int) -> float:
 # shorter or takes one off an account, until no swap helps.
 def tidy():
     stop_replay()
+    layout.order = []
     layout.fill(books.accounts)
     improve()
     layout.sync(books.accounts)
@@ -723,32 +835,31 @@ def toggle_shape():
     improve()
     layout.sync(books.accounts)
 
-# Within each quarter, two accounts swapped while that helps.
+# Within each quarter, two accounts swapped while that helps, and the
+# quarters filled again in that order (boxes of other heights restack).
 def improve():
-    var sources: []int = []
-    var targets: []int = []
-    for f in graph.flows:
-        sources.append(layout.names.index(f.source.name))
-        targets.append(layout.names.index(f.target.name))
-    var best: float = layout_cost(sources, targets)
+    layout.order = layout.names
+    var best: float = layout_cost()
     var better: bool = True
     var passes: int = 0
     while better and passes < 8:
         better = False
         passes += 1
-        for i in range(len(layout.points)):
-            for j in range(i + 1, len(layout.points)):
+        for i in range(len(layout.order)):
+            for j in range(i + 1, len(layout.order)):
                 if layout.lefts[i] == layout.lefts[j] and layout.tops[i] == layout.tops[j]:
-                    let p: Point = layout.points[i]
-                    layout.points[i] = layout.points[j]
-                    layout.points[j] = p
-                    let cost: float = layout_cost(sources, targets)
+                    let name: str = layout.order[i]
+                    layout.order[i] = layout.order[j]
+                    layout.order[j] = name
+                    layout.fill(books.accounts)
+                    let cost: float = layout_cost()
                     if cost < best - 0.5:
                         best = cost
                         better = True
                     else:
-                        layout.points[j] = layout.points[i]
-                        layout.points[i] = p
+                        layout.order[j] = layout.order[i]
+                        layout.order[i] = name
+    layout.fill(books.accounts)
 
 def live_button_html() -> Html:
     let label: str = ("Show everything" if layout.graph_only else "Graph only")
@@ -1001,7 +1112,7 @@ def sides_html() -> Html:
 
 def live_graph_html(g: Graph) -> Html:
     let rubber: str = (layout.rubber_d() if layout.drawing else "")
-    let routes: []Route = routes_of(g, layout.names, layout.points, Point(layout.width, layout.height), layout.title_spots(), layout.title_halves(), layout.shape())
+    let routes: []Route = routes_of(g, layout.names, layout.points, layout.tall, Point(layout.width, layout.height), layout.title_spots(), layout.title_halves(), layout.shape())
     html:
         svg id="graph" viewBox=layout.view_box() class="graph":
             defs:
