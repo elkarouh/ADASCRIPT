@@ -250,6 +250,32 @@ A realistic file to try is Beancount's own example, 1,226 transactions of
 three years of a household's life (pay slips, taxes, rent, cards, shares):
 https://raw.githubusercontent.com/beancount/beancount/v2/examples/example.beancount
 
+### Reading a Ledger or hledger journal
+
+```
+ledger import-journal NAME FILE.journal
+```
+
+Ledger and hledger keep books as plain text, a date, a description and
+indented postings (`Expenses:Rent  $2,400.00`, the last amount left out).
+Dates may be 2013/01/06, 2013-01-06 or 2013.01.06, or 1/6 after a `Y 2013`
+line. Amounts count in the first currency the file uses; another commodity
+counts at its cost (`{$50}`) or price (`@ $5`, `@@ $50`), and one with
+neither is left out. Accounts must start with Assets, Liabilities, Equity,
+Income or Expenses (any case; Revenue and Capital too), as plain-text
+accountants write them. Virtual postings in parentheses, automated and
+periodic transactions, prices, declarations, comments and balance
+assertions are ignored.
+
+Beancount and journal files make entries the same way (`plain_books.ady`):
+a transaction with several debits against several credits becomes two
+entries through a `Clearing` account.
+
+Real files to try: hledger's `examples/bcexample.hledger` (Beancount's
+example, 1,111 transactions; at tag 1.40, in
+https://github.com/simonmichael/hledger) and Ledger's `test/input/demo.ledger`
+and `drewr3.dat` (https://github.com/ledger/ledger).
+
 ### accounting.conf
 
 ```

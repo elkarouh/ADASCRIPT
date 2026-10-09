@@ -1,0 +1,89 @@
+#!/usr/bin/env ady2nim
+"""journal.ady on a small Ledger/hledger journal: the three ways of writing a
+date, a year given apart, a status and a code, a description with a comment,
+virtual postings, a balance assertion, a commodity bought at a price, hours
+that cannot be counted, comments, an automated transaction, and a pay slip
+with several debits against several credits.
+
+    ady2nim c -r test_journal.ady
+"""
+from os nimport removeFile, fileExists
+from accounting_model import BookFailure_T, Graph
+from books_text import Books, graph_of, text_of_books
+from journal import books_of_journal
+
+const FIXTURE: str = "/tmp/test_journal_file.journal"
+
+const FILE: str = """; a comment, and a directive that is ignored
+account Assets:Bank:Checking
+commodity $1,000.00
+Y 2013
+
+= /^Income/
+  (Liabilities:Tithe)               0.12
+
+2013/01/01 * Opening balance
+    Assets:Bank:Checking            $1,000.00
+    Equity:Opening Balances
+
+1/4 (101) Landlord | Paying the rent   ; a note
+    Expenses:Rent                     $400.00
+    Assets:Bank:Checking                       ; the rest
+    (Assets:Virtual)                   $5.00
+
+2013-01-05 ! Buy shares
+    Assets:Broker:ITOT                    8 ITOT @ $101.25
+    Assets:Bank:Checking             $-810.00 = $190.00
+
+2013.01.20=2013.01.22 Pay slip
+    Assets:Bank:Checking              $700.00
+    Expenses:Taxes                    $250.00
+    Assets:Vacation                        5 VACHR
+    Income:Vacation                       -5 VACHR
+    Income:Salary                    $-900.00
+    Income:Bonus                      $-50.00
+
+comment
+2013/02/01 * Not a transaction
+    Expenses:Rent                     $1.00
+    Assets:Bank:Checking
+end comment
+"""
+
+def main() -> None:
+    if fileExists(FIXTURE):
+        removeFile(FIXTURE)
+    let wrote: None | !PathFailure_T = Path(FIXTURE).write_text(FILE)
+    assert not (wrote is PathFailure_T)
+    let read: Books | !BookFailure_T = books_of_journal(FIXTURE)
+    case read:
+        when BookFailure_T:
+            raise ValueError(read.detail)
+        when Books:
+            let b: Books = read
+            assert b.currency == "$"
+            # opening, rent, shares, and the pay slip in two through Clearing
+            assert len(b.entries) == 5
+            assert b.entries[0].date == "2013-01-01"
+            assert b.entries[1].date == "2013-01-04"
+            assert b.entries[1].what == "Landlord | Paying the rent", b.entries[1].what
+            let text: str = text_of_books(b)
+            assert text.contains("\texpense\tRent"), text
+            assert text.contains("\tliability\tClearing"), text
+            assert text.contains("\tequity\tOpening Balances"), text
+            assert not text.contains("VACHR"), text
+            assert not text.contains("Virtual"), text
+            assert not text.contains("Tithe"), text
+            let g: Graph = graph_of(b)
+            assert g.total() == 0
+            assert g.balance("Rent") == 40000
+            assert g.balance("ITOT") == 81000
+            assert g.balance("Clearing") == 0
+            assert int(g.balance("Checking")) == 49000
+    removeFile(FIXTURE)
+    let missing: Books | !BookFailure_T = books_of_journal("/tmp/there_is_no_such_file.journal")
+    assert missing is BookFailure_T, "a missing file was read"
+    print "journal: all checks passed"
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,220 @@
+#!/usr/bin/env ady2nim
+"""plain_books -- what the readers of plain-text ledgers share (beancount.ady,
+journal.ady): transactions collected one by one, and made into Books.
+
+A reader gives each transaction's date, description and posting Lines, the
+amounts already in the operating currency, in cents. The Collector
+
+  - works out the one amount a transaction leaves blank,
+  - puts postings of one account together and drops those at nothing,
+  - makes an entry of it; or two through a Clearing account when several
+    debits stand against several credits, because one side of an entry is a
+    single account,
+  - leaves out what does not add up (within a cent or two of rounding), and
+    counts that.
+
+Then books() names, numbers and kinds the accounts: Assets, Liabilities,
+Equity, Income (Revenue) and Expenses (any case) give the kinds; an account
+is named by as many last parts of its path as tell it from the others.
+"""
+from os nimport splitFile
+from accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from books_text import AccountRow, Books, bad, field
+
+type Leg is record:
+    account: str
+    cents:   int
+    has:     bool                     # False: the amount is left to be worked out
+    kept:    bool                     # False: in a currency that cannot be counted
+
+const CLEARING: str = "Liabilities:Clearing"
+
+def digits_only(word: str) -> bool:
+    for c in word:
+        if not (c >= '0' and c <= '9'):
+            return False
+    return len(word) > 0
+
+# The kind of an account whose path starts with ROOT, or a failure.
+def kind_of_root(root: str) -> Kind_T | !BookFailure_T:
+    let r: str = root.lower()
+    if r == "assets" or r == "asset":
+        return ASSET
+    if r == "liabilities" or r == "liability":
+        return LIABILITY
+    if r == "equity" or r == "capital":
+        return EQUITY
+    if r == "income" or r == "revenue" or r == "revenues" or r == "incomes":
+        return REVENUE
+    if r == "expenses" or r == "expense":
+        return EXPENSE
+    return bad(f"cannot tell the kind of an account starting with {root}: start it with Assets, Liabilities, Equity, Income or Expenses")
+
+def is_account(word: str) -> bool:
+    let parts: []str = word.split(":")
+    if len(parts) < 2:
+        return False
+    return not (kind_of_root(parts[0]) is BookFailure_T)
+
+def kind_first(k: Kind_T) -> int:
+    if k == EQUITY:
+        return 100000
+    if k == LIABILITY:
+        return 480000
+    if k == REVENUE:
+        return 700000
+    if k == EXPENSE:
+        return 600000
+    return 550000
+
+# The last N parts of PATH, joined; the whole path when it has no more.
+def last_parts(path: str, n: int) -> str:
+    let parts: []str = path.split(":")
+    if len(parts) <= n:
+        return path
+    var out: str = parts[len(parts) - n]
+    for i in range(len(parts) - n + 1, len(parts)):
+        out += ":" + parts[i]
+    return out
+
+def index_of(account: str, names: []str) -> int:
+    for i in range(len(names)):
+        if names[i] == account:
+            return i
+    return -1
+
+class Collector:
+    var accounts: []str = []            # every account the entries use, by path
+    var entries: []Entry = []
+    var skipped: int = 0
+    var split_entries: int = 0
+
+    def __init__(self):
+        self.accounts = []
+        self.entries = []
+        self.skipped = 0
+        self.split_entries = 0
+
+    def use(self, postings: []Posting):
+        for p in postings:
+            if index_of(p.account, self.accounts) < 0:
+                self.accounts.append(p.account)
+
+    # One transaction, made an entry (or two), or counted as left out.
+    def add(self, date: str, what: str, lines: []Leg):
+        var kept: []Leg = []
+        var sum: int = 0
+        var blanks: int = 0
+        for l in lines:
+            if l.kept:
+                kept.append(l)
+                if l.has:
+                    sum += l.cents
+                else:
+                    blanks += 1
+        if blanks == 1:
+            for k in range(len(kept)):
+                if not kept[k].has:
+                    kept[k].cents = -sum
+                    kept[k].has = True
+            sum = 0
+        var postings: []Posting = []
+        for l in kept:
+            if not l.has:
+                continue
+            var at: int = -1
+            for k in range(len(postings)):
+                if postings[k].account == l.account:
+                    at = k
+            if at >= 0:
+                postings[at].amount = Cents_T(int(postings[at].amount) + l.cents)
+            else:
+                postings.append(Posting(l.account, Cents_T(l.cents)))
+        var total: int = 0
+        var debits: int = 0
+        var credits: int = 0
+        var final: []Posting = []
+        for p in postings:
+            total += int(p.amount)
+            if int(p.amount) != 0:
+                final.append(p)
+                if int(p.amount) > 0:
+                    debits += 1
+                else:
+                    credits += 1
+        if len(final) == 0:
+            return
+        if (total > 2 or total < -2) or blanks > 1 or debits == 0 or credits == 0:
+            self.skipped += 1
+            return
+        if total != 0:                      # a cent or two of rounding: on the biggest posting
+            var big: int = 0
+            for k in range(len(final)):
+                if abs(int(final[k].amount)) > abs(int(final[big].amount)):
+                    big = k
+            final[big].amount = Cents_T(int(final[big].amount) - total)
+        if debits > 1 and credits > 1:
+            var money_in: []Posting = []
+            var money_out: []Posting = []
+            var owed: int = 0
+            for p in final:
+                if int(p.amount) < 0:
+                    money_in.append(p)
+                    owed -= int(p.amount)
+                else:
+                    money_out.append(p)
+            money_in.append(Posting(CLEARING, Cents_T(owed)))
+            money_out.append(Posting(CLEARING, Cents_T(-owed)))
+            self.entries.append(Entry(date, what, money_in))
+            self.entries.append(Entry(date, what, money_out))
+            self.split_entries += 1
+            self.use(money_in)
+            self.use(money_out)
+        else:
+            self.use(final)
+            self.entries.append(Entry(date, what, final))
+
+    # The books collected, from the file at PATH of the SOURCE kind ("Beancount").
+    def books(self, path: str, source: str, opcur: str) -> Books | !BookFailure_T:
+        var names: []str = []
+        for a in self.accounts:             # the fewest last parts of its path that tell it from the others
+            let depth: int = len(a.split(":"))
+            var n: int = 1
+            var chosen: str = a
+            while n <= depth:
+                var alike: int = 0
+                for b in self.accounts:
+                    if last_parts(b, n) == last_parts(a, n):
+                        alike += 1
+                if alike == 1:
+                    chosen = last_parts(a, n)
+                    break
+                n += 1
+            names.append(chosen)
+        var rows: []AccountRow = []
+        var next_number: []int = [0, 0, 0, 0, 0]
+        for i in range(len(self.accounts)):
+            let parts: []str = self.accounts[i].split(":")
+            let kind: Kind_T | !BookFailure_T = kind_of_root(parts[0])
+            if kind is BookFailure_T:
+                return kind
+            let k: Kind_T = kind
+            let number: int = kind_first(k) + 10 * next_number[int(k)]
+            next_number[int(k)] += 1
+            rows.append(AccountRow(str(number), k, field(names[i])))
+        var made: []Entry = []
+        for e in self.entries:
+            var postings: []Posting = []
+            for p in e.postings:
+                postings.append(Posting(field(names[index_of(p.account, self.accounts)]), p.amount))
+            made.append(Entry(e.date, field(e.what), postings))
+        var ids: []int = []
+        for e in made:
+            ids.append(0)                   # numbers are the ledger's, the entries have none yet
+        let stem: str = splitFile(path)[1]
+        var about: str = f"Read from the {source} file {stem}: {len(rows)} accounts, {len(made)} entries, in {opcur}."
+        if self.split_entries > 0:
+            about += f" {self.split_entries} transaction(s) with several debits and several credits go through a Clearing account, in two entries."
+        if self.skipped > 0:
+            about += f" {self.skipped} transaction(s) left out: not adding up in {opcur}."
+        return Books(opcur, rows, made, ids, f"{source}: {stem}", about)

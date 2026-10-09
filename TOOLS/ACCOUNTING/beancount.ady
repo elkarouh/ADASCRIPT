@@ -16,21 +16,16 @@ that balances it. An account is named by its last part, or by as many last parts
 of its path as tell it from the others. Prices,
 balance assertions, events and the like are ignored.
 
-One side of an entry is a single account, so a transaction with several
-debits against several credits (a pay slip) becomes two entries through a
-Clearing account. One that does not add up in the operating currency is
-left out; both are counted in the books' description.
+Transactions are made into entries by plain_books.ady: a pay slip, with
+several debits against several credits, becomes two entries through a
+Clearing account, and one that does not add up in the operating currency
+is left out; both are counted in the books' description.
 """
-from os nimport splitFile, fileExists
+from os nimport fileExists
 from math nimport round
-from accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
-from books_text import AccountRow, Books, bad, field
-
-type Line is record:
-    account: str
-    cents:   int
-    has:     bool                     # False: the amount is left to be worked out
-    kept:    bool                     # False: in a currency that cannot be counted
+from accounting_model import BookFailure_T
+from books_text import Books, bad
+from plain_books import Collector, Leg, digits_only, is_account
 
 # The words of S, apart at spaces and tabs, a quoted string being one.
 def words_of(s: str) -> []str:
@@ -66,31 +61,6 @@ def quoted_in(s: str) -> []str:
             current += c
     return found
 
-def kind_of_root(root: str) -> Kind_T | !BookFailure_T:
-    if root == "Assets":
-        return ASSET
-    if root == "Liabilities":
-        return LIABILITY
-    if root == "Equity":
-        return EQUITY
-    if root == "Income":
-        return REVENUE
-    if root == "Expenses":
-        return EXPENSE
-    return bad(f"{root} is not one of Assets, Liabilities, Equity, Income, Expenses")
-
-def is_account(word: str) -> bool:
-    for root in ["Assets:", "Liabilities:", "Equity:", "Income:", "Expenses:"]:
-        if word.startswith(root):
-            return True
-    return False
-
-def digits_only(word: str) -> bool:
-    for c in word:
-        if not (c >= '0' and c <= '9'):
-            return False
-    return len(word) > 0
-
 def is_date(word: str) -> bool:
     return len(word) >= 10 and word[4] == '-' and word[7] == '-' and digits_only(word[:4]) and digits_only(word[5:7]) and digits_only(word[8:10])
 
@@ -106,44 +76,18 @@ def num(word: str) -> float:
     else:
         return r
 
-def kind_first(k: Kind_T) -> int:
-    if k == EQUITY:
-        return 100000
-    if k == LIABILITY:
-        return 480000
-    if k == REVENUE:
-        return 700000
-    if k == EXPENSE:
-        return 600000
-    return 550000
-
-def last_parts(path: str, n: int) -> str:
-    let parts: []str = path.split(":")
-    if len(parts) <= n:
-        return path
-    var out: str = parts[len(parts) - n]
-    for i in range(len(parts) - n + 1, len(parts)):
-        out += ":" + parts[i]
-    return out
-
-def index_of(account: str, names: []str) -> int:
-    for i in range(len(names)):
-        if names[i] == account:
-            return i
-    return -1
-
 # The posting line WORDS (an account, then perhaps AMOUNT COMMODITY, a {cost} and a @ price)
-# as a Line in the operating currency OPCUR.
-def line_of(w: []str, opcur: str) -> Line:
+# as a Leg in the operating currency OPCUR.
+def line_of(w: []str, opcur: str) -> Leg:
     let account: str = w[0]
     if len(w) == 1:
-        return Line(account, 0, False, True)
+        return Leg(account, 0, False, True)
     if not is_num(w[1]) or len(w) < 3:
-        return Line(account, 0, True, False)
+        return Leg(account, 0, True, False)
     let units: float = num(w[1])
     let currency: str = w[2]
     if currency == opcur:
-        return Line(account, int(round(units * 100.0)), True, True)
+        return Leg(account, int(round(units * 100.0)), True, True)
     # the rest, between the braces for a cost, after @ for a price
     var cost: float = 0.0
     var price: float = 0.0
@@ -172,13 +116,13 @@ def line_of(w: []str, opcur: str) -> Line:
                 cost = num(word)                # {53.60 USD}: what the units cost
                 found_cost = True
     if found_cost:                              # a lot is counted at its cost; the gain is another posting
-        return Line(account, int(round(units * cost * 100.0)), True, True)
+        return Leg(account, int(round(units * cost * 100.0)), True, True)
     if found_total:
         let sign: float = (1.0 if units >= 0.0 else -1.0)
-        return Line(account, int(round(sign * total * 100.0)), True, True)
+        return Leg(account, int(round(sign * total * 100.0)), True, True)
     if found_price:
-        return Line(account, int(round(units * price * 100.0)), True, True)
-    return Line(account, 0, True, False)
+        return Leg(account, int(round(units * price * 100.0)), True, True)
+    return Leg(account, 0, True, False)
 
 # The books of the Beancount file at PATH.
 def books_of_beancount(path: str) -> Books | !BookFailure_T:
@@ -189,13 +133,10 @@ def books_of_beancount(path: str) -> Books | !BookFailure_T:
         return bad(f"{read.op} {read.path}: {read.reason}")
     let text: str = read
     var opcur: str = ""
-    var accounts: []str = []                # every account the entries use
-    var entries: []Entry = []
-    var skipped: int = 0
-    var split_entries: int = 0
+    var collector: Collector = Collector()
     var date: str = ""
     var what: str = ""
-    var lines: []Line = []
+    var lines: []Leg = []
     var open_entry: bool = False
     var all_lines: []str = text.split("\n")
     all_lines.append("")                    # a last, unindented line ends the last transaction
@@ -208,87 +149,8 @@ def books_of_beancount(path: str) -> Books | !BookFailure_T:
                 lines.append(line_of(w, opcur))
             continue
         if open_entry:
-            # the transaction is complete: the amounts worked out, the entry made
             open_entry = False
-            var kept: []Line = []
-            var sum: int = 0
-            var blanks: int = 0
-            for l in lines:
-                if l.kept:
-                    kept.append(l)
-                    if l.has:
-                        sum += l.cents
-                    else:
-                        blanks += 1
-            if blanks == 1:
-                for k in range(len(kept)):
-                    if not kept[k].has:
-                        kept[k].cents = -sum
-                        kept[k].has = True
-                sum = 0
-            # postings of one account together; those at nothing dropped
-            var postings: []Posting = []
-            for l in kept:
-                if not l.has:
-                    continue
-                var at: int = -1
-                for k in range(len(postings)):
-                    if postings[k].account == l.account:
-                        at = k
-                if at >= 0:
-                    postings[at].amount = Cents_T(int(postings[at].amount) + l.cents)
-                else:
-                    postings.append(Posting(l.account, Cents_T(l.cents)))
-            var total: int = 0
-            var debits: int = 0
-            var credits: int = 0
-            var final: []Posting = []
-            for p in postings:
-                total += int(p.amount)
-                if int(p.amount) != 0:
-                    final.append(p)
-                    if int(p.amount) > 0:
-                        debits += 1
-                    else:
-                        credits += 1
-            if len(final) == 0:
-                pass
-            elif (total > 2 or total < -2) or blanks > 1 or debits == 0 or credits == 0:
-                skipped += 1
-            else:
-                if total != 0:             # a cent or two of rounding: on the biggest posting
-                    var big: int = 0
-                    for k in range(len(final)):
-                        if abs(int(final[k].amount)) > abs(int(final[big].amount)):
-                            big = k
-                    final[big].amount = Cents_T(int(final[big].amount) - total)
-                if debits > 1 and credits > 1:
-                    # several against several: through a Clearing account, in two entries, one side of each a single account
-                    var money_in: []Posting = []
-                    var money_out: []Posting = []
-                    var owed: int = 0
-                    for p in final:
-                        if int(p.amount) < 0:
-                            money_in.append(p)
-                            owed -= int(p.amount)
-                        else:
-                            money_out.append(p)
-                    money_in.append(Posting("Liabilities:Clearing", Cents_T(owed)))
-                    money_out.append(Posting("Liabilities:Clearing", Cents_T(-owed)))
-                    entries.append(Entry(date, what, money_in))
-                    entries.append(Entry(date, what, money_out))
-                    split_entries += 1
-                    for p in money_in:
-                        if index_of(p.account, accounts) < 0:
-                            accounts.append(p.account)
-                    for p in money_out:
-                        if index_of(p.account, accounts) < 0:
-                            accounts.append(p.account)
-                else:
-                    for p in final:
-                        if index_of(p.account, accounts) < 0:
-                            accounts.append(p.account)
-                    entries.append(Entry(date, what, final))
+            collector.add(date, what, lines)
         if line.startswith("option") and "operating_currency" in line:
             let q: []str = quoted_in(line)
             if len(q) >= 2 and opcur == "":
@@ -307,43 +169,4 @@ def books_of_beancount(path: str) -> Books | !BookFailure_T:
             open_entry = True
     if opcur == "":
         opcur = "USD"
-    # kinds, numbers and names of the accounts used
-    var rows: []AccountRow = []
-    var names: []str = []
-    for a in accounts:                      # the fewest last parts of its path that tell it from the others
-        let depth: int = len(a.split(":"))
-        var n: int = 1
-        var chosen: str = a
-        while n <= depth:
-            var alike: int = 0
-            for b in accounts:
-                if last_parts(b, n) == last_parts(a, n):
-                    alike += 1
-            if alike == 1:
-                chosen = last_parts(a, n)
-                break
-            n += 1
-        names.append(chosen)
-    var next_number: []int = [0, 0, 0, 0, 0]
-    for i in range(len(accounts)):
-        let parts: []str = accounts[i].split(":")
-        let kind: Kind_T | !BookFailure_T = kind_of_root(parts[0])
-        if kind is BookFailure_T:
-            return kind
-        let k: Kind_T = kind
-        var number: int = kind_first(k) + 10 * next_number[int(k)]
-        next_number[int(k)] += 1
-        rows.append(AccountRow(str(number), k, field(names[i])))
-    for j in range(len(entries)):
-        for k in range(len(entries[j].postings)):
-            entries[j].postings[k].account = field(names[index_of(entries[j].postings[k].account, accounts)])
-    var ids: []int = []
-    for e in entries:
-        ids.append(0)
-    let stem: str = splitFile(path)[1]
-    var about: str = f"Read from the Beancount file {stem}: {len(rows)} accounts, {len(entries)} transactions, in {opcur}."
-    if split_entries > 0:
-        about += f" {split_entries} transaction(s) with several debits and several credits go through a Clearing account, in two entries."
-    if skipped > 0:
-        about += f" {skipped} transaction(s) left out: not adding up in {opcur}."
-    return Books(opcur, rows, entries, ids, f"Beancount: {stem}", about)
+    return collector.books(path, "Beancount", opcur)

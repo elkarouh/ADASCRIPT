@@ -1,0 +1,249 @@
+#!/usr/bin/env ady2nim
+"""journal -- the books of a Ledger or hledger journal file, read as Books.
+
+Ledger (https://ledger-cli.org) and hledger (https://hledger.org) keep
+books as plain text:
+
+    2013/01/06 * Landlord | Paying the rent
+        Expenses:Rent               $2,400.00
+        Assets:Bank:Checking
+
+A transaction is a date (2013/01/06, 2013-01-06 or 2013.01.06), a status
+mark, a code, a description, and indented postings: an account, two
+spaces or a tab, an amount. One posting may leave its amount out; it is the
+rest. Amounts are counted in the first currency the file uses ($, EUR);
+another commodity counts at its cost ({$50}) or price (@ $5, @@ $50), and
+one with neither is left out with the posting that balances it. Accounts
+start with Assets, Liabilities, Equity, Income or Expenses (any case); the
+virtual postings in parentheses, the automated and periodic transactions,
+prices, commodity and account declarations and comments are ignored.
+
+Transactions are made into entries by plain_books.ady: a pay slip, with
+several debits against several credits, becomes two entries through a
+Clearing account, and one that does not add up is left out; both are
+counted in the books' description.
+"""
+from os nimport fileExists
+from math nimport round
+from accounting_model import BookFailure_T
+from books_text import Books, bad
+from plain_books import Collector, Leg, digits_only
+
+# 2013/1/6 or 2013-01-06 or 2013.01.06 (a secondary =date after it ignored) as
+# 2013-01-06, or "" when WORD starts no transaction; 1/6 is read in YEAR, if there is one.
+def date_of(word: str, year: str) -> str:
+    let first: str = (year + "/" + word.split("=")[0] if year != "" and len(word.split("=")[0].split("/")) + len(word.split("=")[0].split("-")) + len(word.split("=")[0].split(".")) == 4 else word.split("=")[0])
+    var parts: []str = []
+    var current: str = ""
+    for c in first:
+        if c == '-' or c == '/' or c == '.':
+            parts.append(current)
+            current = ""
+        else:
+            current += c
+    parts.append(current)
+    if len(parts) != 3:
+        return ""
+    for p in parts:
+        if not digits_only(p):
+            return ""
+    if len(parts[0]) != 4 or len(parts[1]) > 2 or len(parts[2]) > 2:
+        return ""
+    return parts[0] + "-" + ("0" + parts[1] if len(parts[1]) == 1 else parts[1]) + "-" + ("0" + parts[2] if len(parts[2]) == 1 else parts[2])
+
+# A line without its ; comment.
+def uncommented(line: str) -> str:
+    let at: int = line.find(";")
+    return (line if at < 0 else line[:at])
+
+# An amount read from TEXT: whether there is one, its number, its commodity ("" for none).
+type Amount is record:
+    found:     bool
+    number:    float
+    commodity: str
+
+def amount_of(text: str) -> Amount:
+    var digits: str = ""
+    var commodity: str = ""
+    var negative: bool = False
+    var seen_digit: bool = False
+    for c in text:
+        if (c >= '0' and c <= '9') or c == '.':
+            digits += c
+            seen_digit = True
+        elif c == ',':
+            digits += ""                    # a thousands comma
+        elif c == '-':
+            negative = True
+        elif c == '+' or c == ' ' or c == '\t' or c == '"':
+            pass
+        else:
+            commodity += c
+    if not seen_digit:
+        return Amount(False, 0.0, "")
+    let r: float | !ParseFailure_T = parse_float(digits)
+    if r is ParseFailure_T:
+        return Amount(False, 0.0, "")
+    let value: float = r
+    return Amount(True, (-value if negative else value), commodity)
+
+# The text between the first { and the next } of S, or "".
+def between_braces(s: str) -> str:
+    let lb: int = s.find("{")
+    if lb < 0:
+        return ""
+    let rb: int = s.find("}")
+    return (s[lb + 1:] if rb < lb else s[lb + 1:rb])
+
+def without_braces(s: str) -> str:
+    let lb: int = s.find("{")
+    if lb < 0:
+        return s
+    let rb: int = s.find("}")
+    return (s[:lb] if rb < lb else s[:lb] + s[rb + 1:])
+
+# The posting TEXT (stripped, its comment gone) as a Leg in the currency OPCUR,
+# which is set from the first amount seen when it is still "?". Virtual postings
+# in parentheses are not part of the books: they come back as a Leg that is not kept.
+def leg_of(text: str, opcur: str) -> Leg:
+    var t: str = text
+    if t.startswith("* ") or t.startswith("! "):
+        t = t[2:].strip()
+    var account: str = t
+    var rest: str = ""
+    let tab: int = t.find("\t")
+    let two: int = t.find("  ")
+    var cut: int = -1
+    if tab >= 0 and (two < 0 or tab < two):
+        cut = tab
+    else:
+        cut = two
+    if cut >= 0:
+        account = t[:cut]
+        rest = t[cut:].strip()
+    if account.startswith("("):
+        return Leg(account, 0, True, False)
+    if account.startswith("["):
+        account = account[1:].replace("]", "")
+    if rest == "":
+        return Leg(account, 0, False, True)
+    let eq: int = rest.find("=")                # a balance assertion, = $100
+    if eq >= 0:
+        rest = rest[:eq].strip()
+        if rest == "":
+            return Leg(account, 0, False, True)
+    # the cost {..}, then the price after @ or @@
+    let cost_text: str = between_braces(rest)
+    rest = without_braces(rest)
+    var price_text: str = ""
+    var total_price: bool = False
+    let at: int = rest.find("@")
+    if at >= 0:
+        total_price = rest[at:].startswith("@@")
+        price_text = rest[at:].replace("@", "")
+        rest = rest[:at]
+    let units: Amount = amount_of(rest)
+    if not units.found:
+        return Leg(account, 0, True, False)
+    if units.commodity == opcur or units.commodity == "":
+        return Leg(account, int(round(units.number * 100.0)), True, True)
+    let cost: Amount = amount_of(cost_text)
+    if cost.found and (cost.commodity == opcur or cost.commodity == ""):
+        return Leg(account, int(round(units.number * cost.number * 100.0)), True, True)
+    let price: Amount = amount_of(price_text)
+    if price.found and (price.commodity == opcur or price.commodity == ""):
+        if total_price:
+            let sign: float = (1.0 if units.number >= 0.0 else -1.0)
+            return Leg(account, int(round(sign * price.number * 100.0)), True, True)
+        return Leg(account, int(round(units.number * price.number * 100.0)), True, True)
+    return Leg(account, 0, True, False)
+
+# The commodity of the first amount in the file's postings, "" when it has none.
+def first_commodity(lines: []str) -> str:
+    var in_comment_block: bool = False
+    for raw in lines:
+        let line: str = raw.replace("\r", "")
+        if line.startswith("comment"):
+            in_comment_block = True
+            continue
+        if line.startswith("end comment"):
+            in_comment_block = False
+            continue
+        if in_comment_block or not (line.startswith(" ") or line.startswith("\t")):
+            continue
+        var t: str = uncommented(line).strip()
+        if t.startswith("* ") or t.startswith("! "):
+            t = t[2:].strip()
+        let tab: int = t.find("\t")
+        let two: int = t.find("  ")
+        var cut: int = (two if tab < 0 else (tab if two < 0 or tab < two else two))
+        if cut < 0 or t.startswith("(") or t.startswith("="):
+            continue
+        var rest: str = t[cut:].strip()
+        let eq: int = rest.find("=")
+        if eq >= 0:
+            rest = rest[:eq]
+        let a: Amount = amount_of(rest.split("@")[0] if "@" in rest else rest)
+        if a.found:
+            return a.commodity
+    return ""
+
+# The books of the journal at PATH.
+def books_of_journal(path: str) -> Books | !BookFailure_T:
+    if not fileExists(path):
+        return bad(f"there is no file {path}")
+    let read: str | !PathFailure_T = Path(path).read_text()
+    if read is PathFailure_T:
+        return bad(f"{read.op} {read.path}: {read.reason}")
+    var all_lines: []str = read.split("\n")
+    all_lines.append("")                    # a last, unindented line ends the last transaction
+    let opcur: str = first_commodity(all_lines)
+    var collector: Collector = Collector()
+    var date: str = ""
+    var what: str = ""
+    var legs: []Leg = []
+    var open_entry: bool = False
+    var in_comment_block: bool = False
+    var year: str = ""                      # from a Y 2013 line, for dates written 1/6
+    for raw in all_lines:
+        let line: str = raw.replace("\r", "")
+        if line.startswith("comment"):
+            in_comment_block = True
+            continue
+        if line.startswith("end comment"):
+            in_comment_block = False
+            continue
+        if in_comment_block:
+            continue
+        let indented: bool = line.startswith(" ") or line.startswith("\t")
+        if open_entry and indented:
+            let t: str = uncommented(line).strip()
+            if t != "":
+                let leg: Leg = leg_of(t, opcur)
+                legs.append(leg)
+            continue
+        if open_entry:
+            open_entry = False
+            collector.add(date, what, legs)
+        if indented or line.strip() == "":
+            continue
+        let first: str = line.split(" ")[0].split("\t")[0]
+        if line.startswith("Y ") or line.startswith("year ") or line.startswith("apply year "):
+            let w: []str = line.strip().split(" ")
+            if digits_only(w[len(w) - 1]) and len(w[len(w) - 1]) == 4:
+                year = w[len(w) - 1]
+            continue
+        let d: str = date_of(first, year)
+        if d != "":
+            var rest: str = uncommented(line[len(first):]).strip()
+            if rest.startswith("*") or rest.startswith("!"):
+                rest = rest[1:].strip()
+            if rest.startswith("("):               # a code, (1234)
+                let rp: int = rest.find(")")
+                if rp > 0:
+                    rest = rest[rp + 1:].strip()
+            date = d
+            what = (rest if rest != "" else "(no description)")
+            legs = []
+            open_entry = True
+    return collector.books(path, "Journal", (opcur if opcur != "" else "USD"))
