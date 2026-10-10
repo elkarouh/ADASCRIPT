@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""htmx_page -- the page as HTML the server draws, for htmx to swap in.
+"""accounting_page -- the page as HTML the server draws, for htmx to swap in.
 
     GET /h        the shell: a script tag and a div that loads /h/all
     GET /h/all    the whole page, drawn from the books and the settings in the query
@@ -12,7 +12,7 @@ group, or on a tab, adds one more field, `go` or `toggle`, to the request.
 The same books_text.ady, accounting_gui.ady, routes.ady and accounting_model.ady the
 JavaScript page uses draw it, here native: the amounts are 64-bit, and the
 grouping is not limited to what a browser's int can count. An account is
-dragged by drag.ady, the page's one script of our own. Everything the
+dragged by accounting_js_events.ady, the page's one script of our own. Everything the
 JavaScript page does, this one does: it records a transaction by an arrow
 drawn from one account to another, replays, runs the exercise, closes the
 year, opens and deletes accounts and transactions, starts a scenario over,
@@ -582,7 +582,7 @@ def first_books(b: Books, gr: Grouped, n: int) -> Books:
 
 # ---------------------------------------------------------------------
 # Recording a transaction: click an account to freeze it, drag an arrow from it to another
-# (drag.ady), and say when, what and how much
+# (accounting_js_events.ady), and say when, what and how much
 # ---------------------------------------------------------------------
 
 def kind_of(b: Books, name: str) -> int:
@@ -1336,7 +1336,7 @@ def shell() -> Html:
                 title: "Accounting, as graph theory"
                 style: STYLE + EXTRA
                 script src="/htmx.min.js"
-                script src="/drag.js"
+                script src="/accounting_js_events.js"
             body:
                 h1: "Accounting, as graph theory"
                 div id="all" data_hx_get="/h/all" data_hx_trigger="load": "Loading..."

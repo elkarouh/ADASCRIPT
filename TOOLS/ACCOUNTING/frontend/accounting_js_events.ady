@@ -1,7 +1,8 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""drag -- the one script of our own in the htmx page (htmx_page.ady): an
-account is dragged with the mouse. The server draws everything else.
+"""accounting_js_events -- the events that stay in the browser: an account dragged with
+the mouse, and an arrow drawn from one. Every other event is declared in the HTML (hx-*
+attributes, accounting_page.ady) and handled on the server (accounting_events.ady).
 
 A node is a <g class="node" data_id=".." data_x=".." data_y=".."> (its id and
 its centre in the drawing's units). Pressing on it and moving the mouse

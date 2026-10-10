@@ -1,11 +1,11 @@
 #!/usr/bin/env ady2nim
-"""htmx_page.ady: the settings read from a query, the groups, and the page drawn.
+"""accounting_page.ady: the settings read from a query, the groups, and the page drawn.
 
     ady2nim c -r test_htmx.ady
 """
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from backend/books_text import AccountRow, Books
-from backend/htmx_page import Grouped, Params, all_text, auto_detail, dates_of, entry_of, fresh_params, grouped, params_of, replayable, replayable_by, shell_text, slider_position, upto
+from backend/accounting_page import Grouped, Params, all_text, auto_detail, dates_of, entry_of, fresh_params, grouped, params_of, replayable, replayable_by, shell_text, slider_position, upto
 
 def row(number: str, kind: Kind_T, name: str) -> AccountRow:
     return AccountRow(number, kind, name)
@@ -59,7 +59,7 @@ assert params_of("tidy=1").tidy and not params_of("").tidy
 let moved: str = all_text(b, ["x"], ["X"], "x", params_of("pos=100000%2F0%40600.0%2C300.0"))
 assert "data_x=\"600.0\" data_y=\"300.0\"" in moved
 assert "data_x=\"600.0\"" not in all_text(b, ["x"], ["X"], "x", params_of("pos=100000%2F0%40600.0%2C300.0&tidy=1"))
-assert "<script src=\"/drag.js\"" in shell_text()
+assert "<script src=\"/accounting_js_events.js\"" in shell_text()
 # the popup's transaction
 let vat_books: Books = Books("USD", [row("550000", ASSET, "Bank"), row("700000", REVENUE, "Sales"), row("610000", EXPENSE, "Rent"),
                                     row("411000", ASSET, "VAT receivable"), row("451000", LIABILITY, "VAT payable")], [], [], "T", "")

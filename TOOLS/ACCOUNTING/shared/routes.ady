@@ -2,7 +2,7 @@
 """routes -- where the accounts are drawn and how the arrows run between them.
 
 Compiled both ways: natively by the server, which draws the page with it, and to JavaScript
-by frontend/drag.ady, which routes the arrows again, in the browser, while an account is
+by frontend/accounting_js_events.ady, which routes the arrows again, in the browser, while an account is
 dragged. The two must give the same curves, so they are the same code. No HTML in here.
 """
 from math nimport sqrt

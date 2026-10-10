@@ -4,7 +4,7 @@
 # (nimble install db_connector).
 #
 #   make app        the tool: the books drawn in the browser, kept by clicking
-#                   (ledger_server draws the page, backend/htmx_page.ady; each scenario,
+#                   (ledger_server draws the page, backend/accounting_page.ady; each scenario,
 #                   scenarios/NAME.books, gets a database NAME.db there)
 #   make ledger     build the ledger's command line (backend/ledger -h, backend/ledger list)
 #   make gui        the example as a static web page      (backend/accounting_gui.ady)
@@ -14,8 +14,8 @@
 # $(OPEN) is xdg-open, or open on a Mac; `make gui OPEN=firefox` picks one.
 
 # backend/   compiled to C: the ledger, the server, the page it draws
-# frontend/  compiled to JavaScript: drag.ady, and the vendored htmx.min.js
-# shared/    compiled both ways: the model, and the routing of the arrows, which drag.ady redoes in the browser
+# frontend/  compiled to JavaScript: accounting_js_events.ady, and the vendored htmx.min.js
+# shared/    compiled both ways: the model, and the routing of the arrows, which accounting_js_events.ady redoes in the browser
 # tests/     the tests (native)
 
 # This checkout's own transpiler, so that its STDLIB (the db module the ledger
@@ -27,7 +27,7 @@ PORT    ?= 8802
 
 .PHONY: all app ledger ledger_server gui test clean
 
-all: ledger ledger_server build/accounting_gui.html build/drag.js build/htmx.min.js
+all: ledger ledger_server build/accounting_gui.html build/accounting_js_events.js build/htmx.min.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
 ledger:
@@ -46,11 +46,11 @@ build/accounting_gui.html: backend/accounting_gui.ady shared/routes.ady backend/
 	@$(ADY2NIM) c -r $< > $@ 2> build/accounting_gui.log \
 	    || { cat build/accounting_gui.log; rm -f $@; exit 1; }
 
-build/drag.js: frontend/drag.ady shared/routes.ady
+build/accounting_js_events.js: frontend/accounting_js_events.ady shared/routes.ady
 	@mkdir -p build
 	@echo "building $@"
 	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }
-	@cp -L frontend/drag.js $@ && rm -f frontend/drag.js
+	@cp -L frontend/accounting_js_events.js $@ && rm -f frontend/accounting_js_events.js
 
 # frontend/htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
 frontend/htmx.min.js:
@@ -63,7 +63,7 @@ build/htmx.min.js: frontend/htmx.min.js
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 
-app: ledger_server build/drag.js build/htmx.min.js
+app: ledger_server build/accounting_js_events.js build/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
 	./backend/ledger_server --port $(PORT)
 
@@ -78,4 +78,4 @@ test:
 
 clean:
 	rm -rf build scenarios/*.db $(foreach d,backend shared frontend tests,$(basename $(wildcard $(d)/*.ady)))
-	rm -f frontend/drag.js              # frontend/htmx.min.js is not built here, and stays
+	rm -f frontend/accounting_js_events.js              # frontend/htmx.min.js is not built here, and stays

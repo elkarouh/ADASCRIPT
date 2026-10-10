@@ -1,6 +1,9 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""drag -- the one script of our own: a node is dragged with the mouse.
+"""dijkstra_js_events -- the events that stay in the browser: a node dragged with the mouse.
+
+Every other event is declared in the HTML (hx-* attributes, dijkstra_gui.ady) and handled
+on the server (dijkstra_events.ady); only what must follow the mouse every frame is here.
 
 A node is a <g class="node" data_name=".." data_x=".." data_y=".."> (its centre, in the
 drawing's units) and an edge a <g data_from=".." data_to=".."> holding a path and its

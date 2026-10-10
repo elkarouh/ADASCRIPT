@@ -123,7 +123,7 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
     let clear_vals: str = "{\"act\": \"clear\"}"
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     let said_css: str = ("said found" if len(way) > 0 else "said")
-    # form#move: drag.ady fills in its fields and clicks its button
+    # form#move: dijkstra_js_events.ady fills in its fields and clicks its button
     html:
         div id="all":
             form id="state":
@@ -233,7 +233,7 @@ def shell() -> Html:
                 title: "Shortest way"
                 style: STYLE
                 script src="/htmx.min.js"
-                script src="/drag.js"
+                script src="/dijkstra_js_events.js"
             body:
                 header:
                     h1: "Shortest way"

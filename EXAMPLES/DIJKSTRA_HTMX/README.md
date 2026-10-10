@@ -5,10 +5,10 @@ native, the browser only shows what the server draws, and htmx carries the
 clicks.
 
 ```
-make app                      # builds drag.js and the server, starts it and opens the page
+make app                      # builds dijkstra_js_events.js and the server, starts it and opens the page
 make test                     # the model, the page and the requests, no server
 # or by hand:
-ady2nim js frontend/drag.ady   # the one script of our own, frontend/drag.js
+ady2nim js frontend/dijkstra_js_events.ady   # the one script of our own, frontend/dijkstra_js_events.js
 ady2nim c -r backend/server.ady # then open http://127.0.0.1:8810/ (run from this directory)
 ady2nim c -r test_dijkstra.ady # the model, the page and the requests, no server
 ```
@@ -24,13 +24,13 @@ every change; Reset puts the sample back.
 |---|---|
 | `backend/dijkstra_model.ady` | the model, a placeholder: a `Network` of `Node_T`s and `Edge`s; what may be done to it (`add_node`, `move_node`, `remove_node`, `add_edge`, `set_cost`, `remove_edge`, each returning what was wrong, or `""`); keeping it in a text file (`load`, `save`); and `build_graph`, which makes of it the graph the library's `shortest_route` wants (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
 | `backend/dijkstra_gui.ady` | how to draw it: the SVG, the tables and forms, the text. A function from the network and what is picked to HTML; `to_html` for a node or an edge in the drawing, `row_html` for one in a table. |
-| `backend/requests.ady` | what each request does: `answer(method, path, fields)` calls the model, saves, and returns the page. Holds the network. No HTTP, so the tests call it. |
+| `backend/dijkstra_events.ady` | what each request does: `answer(method, path, fields)` calls the model, saves, and returns the page. Holds the network. No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to `answer`, and serves the two scripts. |
-| `frontend/drag.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes); the server keeps it and draws the page again. About 100 lines. |
+| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes); the server keeps it and draws the page again. About 100 lines. |
 | `test_dijkstra.ady` | tests of the model, and of the page through `answer`, as the browser would ask; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
-`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `drag.ady` and the vendored htmx). Nothing is compiled both ways here, so there is no `shared/`; the accounting tool has one, for the arrow routing that the server and `drag.ady` must agree on.
+`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). Nothing is compiled both ways here, so there is no `shared/`; the accounting tool has one, for the arrow routing that the server and `dijkstra_js_events.ady` must agree on.
 
 ## How it works
 
@@ -68,8 +68,8 @@ algorithms, forms, tables, dashboards, a graph that is re-drawn. Everything
 stays in one language, and what the browser runs is almost nothing.
 
 It does not fit what must follow the mouse every frame. That is what
-`drag.ady` is for: the same language, compiled to JavaScript, doing only the
+`dijkstra_js_events.ady` is for: the same language, compiled to JavaScript, doing only the
 moving; the page and the answer are still the server's. A drag is the one place
 where the drawing exists twice (here the straight line of an edge, in
-`../../TOOLS/ACCOUNTING/frontend/drag.ady` the same `routes_of` the server
+`../../TOOLS/ACCOUNTING/frontend/accounting_js_events.ady` the same `routes_of` the server
 uses), so keep that part small.

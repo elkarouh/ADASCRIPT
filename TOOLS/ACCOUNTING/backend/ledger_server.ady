@@ -1,15 +1,17 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args c -d:release
-"""ledger_server -- the ledger's books, served to the page that draws them.
+"""ledger_server -- the ledger's books, served to the page that draws them; HTTP only.
+
+What each request does to the books is accounting_events.ady; the page is accounting_page.ady.
 
     ledger_server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
 
-Serves the page (drawn by htmx_page.ady, with build/htmx.min.js and
-build/drag.js beside the config file) and, as text (books_text.ady), the books of one scenario and
+Serves the page (drawn by accounting_page.ady, with build/htmx.min.js and
+build/accounting_js_events.js beside the config file) and, as text (books_text.ady), the books of one scenario and
 what the page does to them:
 
     GET  /books            the accounts and every transaction
-    GET  /, /h             the page, drawn by the server for htmx (htmx_page.ady)
+    GET  /, /h             the page, drawn by the server for htmx (accounting_page.ady)
     GET  /h/all            the page again, from the settings in the query
     POST /h/record, /h/do  what the page changes in the books
     GET  /scenarios        "current", a tab and the scenario shown, then
@@ -31,174 +33,15 @@ made from NAME.books the first time NAME is shown and again by Start over.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from backend/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
-from backend/books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books
-from backend/htmx_page import Params, account_numbered, all_text, entry_of, fresh_params, has_account, int_of, params_of, shell_text, year_end, retained_account
-from backend/ledger import Config, Ledger, Scenarios, read_config
+from backend/accounting_page import shell_text
+from backend/accounting_events import books_text, current_scenario, page_all, page_do, page_record, post_text, scenarios_dir, scenarios_text, start
 
-var config: Config = Config("USD", [])
-var books: Ledger = Ledger(":memory:")
 var www: Path = Path("build")            # where the page is: build/, beside the config file
-var scenarios: Scenarios = Scenarios(Path("scenarios"))   # beside the config file
-var current: str = ""                    # the scenario shown
 
-const PAGES: []str = ["htmx.min.js", "drag.js"]
+const PAGES: []str = ["htmx.min.js", "accounting_js_events.js"]
 
 def content_type(file: str) -> str:
     return ("text/javascript" if file.endswith(".js") else "text/html; charset=utf-8")
-
-def answer(r: None | !BookFailure_T) -> str:
-    if r is BookFailure_T:
-        return "error\t" + r.detail
-    return "ok"
-
-# ---------------------------------------------------------------------
-# Scenarios (ledger.ady's Scenarios): the one shown, and the others
-# ---------------------------------------------------------------------
-
-def scenarios_text() -> str:
-    var text: str = f"current\t{current}\n"
-    for name in scenarios.names():
-        text += f"scenario\t{name}\t{scenarios.title_of(name)}\n"
-    return text
-
-# Scenario NAME shown, its database made from its .books file first if it
-# has none, or if FRESH (Start over).
-def show(name: str, fresh: bool) -> None | !BookFailure_T:
-    if not scenarios.exists(name):
-        return BookFailure_T(f"there is no scenario {name}")
-    if current != "":
-        books.close()
-    let opened: Ledger | !BookFailure_T = scenarios.open(name, fresh)
-    if opened is BookFailure_T:
-        if current != "":
-            books = Ledger(str(scenarios.db_file(current)))
-        return opened
-    else:
-        books = opened
-    current = name
-    return None
-
-# The books shown, saved as scenario NAME, and shown.
-def save_as(name: str) -> None | !BookFailure_T:
-    do:
-        scenarios.save_as(books, current, name, config.currency)
-    return show(name, True)
-
-# The scenario shown deleted, and the first one left shown; refused when it is the only one.
-def delete_scenario() -> None | !BookFailure_T:
-    if len(scenarios.names()) < 2:
-        return BookFailure_T("this is the only scenario; make another first")
-    let gone: str = current
-    books.close()
-    current = ""
-    let done: None | !BookFailure_T = scenarios.delete(gone)
-    if done is BookFailure_T:
-        return done
-    for name in scenarios.names():
-        return show(name, False)
-    return None
-
-# The htmx page for the settings P.
-def page_text(p: Params) -> str:
-    let b: Books = books.books(config.currency)
-    let names: []str = scenarios.names()
-    var titles: []str = []
-    for n in names:
-        titles.append(scenarios.title_of(n))
-    return all_text(b, names, titles, current, p)
-
-# The year closed: the costs and the revenue moved into retained earnings.
-def close_year(b: Books) -> None | !BookFailure_T:
-    if len(b.entries) == 0:
-        return BookFailure_T("There is nothing to close.")
-    let date: str = year_end(b)
-    let name: str = retained_account(b)
-    let made: []Entry = closing_entries(b, date, name)
-    if len(made) == 0:
-        return BookFailure_T("Nothing to close: every cost and revenue account is already at zero.")
-    if account_numbered(b, "14") == "":
-        do:
-            books.open_account("140000", EQUITY, name)
-    for e in made:
-        do:
-            books.record(e)
-    return None
-
-# What the htmx page asked P.op of the books B, done: what to tell, or why not.
-def do_op(p: Params, b: Books) -> str | !BookFailure_T:
-    if p.op == "startover":
-        do:
-            show(current, True)
-        return "Started over."
-    if p.op == "saveas":
-        let name: str = p.newname.strip()
-        if name == "":
-            return BookFailure_T("Name the new scenario.")
-        do:
-            save_as(name)
-        return f"Saved as {name}."
-    if p.op == "delete":
-        do:
-            delete_scenario()
-        return "Scenario deleted."
-    if p.op == "delentry":
-        let id: int = int_of(p.arg, 0)
-        var what: str = ""
-        for i in range(len(b.ids)):
-            if b.ids[i] == id:
-                what = b.entries[i].what
-        do:
-            books.delete_entry(id)
-        return f"Deleted: {what}"
-    if p.op == "delaccount":
-        do:
-            books.delete_account(p.arg)
-        return f"Deleted the account {p.arg}."
-    if p.op == "openaccount":
-        let kind: Kind_T | !BookFailure_T = kind_named(p.akind)
-        if kind is BookFailure_T:
-            return kind
-        if p.number.strip() == "" or p.acctname.strip() == "":
-            return BookFailure_T("An account needs a number and a name.")
-        do:
-            books.open_account(p.number.strip(), kind, p.acctname.strip())
-        return f"Opened: {p.number.strip()} {p.acctname.strip()}"
-    if p.op == "closeyear":
-        do:
-            close_year(b)
-        return f"Closed the year on {year_end(b)}: the profit is in {retained_account(b)}"
-    return BookFailure_T("The page asked for what the ledger does not do.")
-
-# What the page posts to PATH, done; the answer to send back.
-def post(path: str, body: str) -> str:
-    if path == "/scenario":
-        return answer(show(body.strip(), False))
-    if path == "/start-over":
-        return answer(show(current, True))
-    if path == "/delete-scenario":
-        return answer(delete_scenario())
-    if path == "/save-as":
-        return answer(save_as(body.strip()))
-    if path == "/delete-entry":
-        let id: int | !ParseFailure_T = parse_int(body.strip())
-        if id is ParseFailure_T:
-            return "error\t" + body + " is not a transaction's number"
-        else:
-            return answer(books.delete_entry(id))
-    if path == "/delete-account":
-        return answer(books.delete_account(body.strip()))
-    let read: Books | !BookFailure_T = parse_books(body)
-    if read is BookFailure_T:
-        return "error\t" + read.detail
-    else:
-        let b: Books = read
-        if path == "/account" and len(b.accounts) == 1 and len(b.entries) == 0:
-            let a: AccountRow = b.accounts[0]
-            return answer(books.open_account(a.number, a.kind, a.name))
-        elif path == "/entry" and len(b.entries) == 1 and len(b.accounts) == 0:
-            return answer(books.record(b.entries[0]))
-        return "error\tthe page sent what " + path + " does not take"
 
 async def handler(req: Request):
     let path: str = req.url.path
@@ -207,59 +50,19 @@ async def handler(req: Request):
     if req.reqMethod'Image == "GET" and (path == "/h" or path == "/"):
         await req.respond(Http200, shell_text(), html_type)
     elif req.reqMethod'Image == "GET" and path == "/h/all":
-        var p: Params = params_of(req.url.query)
-        if p.scenario != "" and p.scenario != current:
-            let shown: None | !BookFailure_T = show(p.scenario, False)
-            p = fresh_params(p.tab)           # another scenario: its own grouping
-        await req.respond(Http200, page_text(p), html_type)
+        await req.respond(Http200, page_all(req.url.query), html_type)
     elif req.reqMethod'Image == "POST" and path == "/h/record":
-        var p: Params = params_of(req.body)
-        let b: Books = books.books(config.currency)
-        let made: Entry | !BookFailure_T = entry_of(b, p)
-        if made is BookFailure_T:
-            p.note = made.detail
-            p.bad = True
-        else:
-            var recorded: None | !BookFailure_T = None
-            try:
-                recorded = books.record(made)
-            except:
-                recorded = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
-            if recorded is BookFailure_T:
-                p.note = recorded.detail
-                p.bad = True
-            else:
-                p.note = f"Recorded: {made.what}"
-                p.source = ""
-                p.target = ""
-                p.what = ""
-                p.howmuch = ""
-        await req.respond(Http200, page_text(p), html_type)
+        await req.respond(Http200, page_record(req.body), html_type)
     elif req.reqMethod'Image == "POST" and path == "/h/do":
-        var p: Params = params_of(req.body)
-        var done: str | !BookFailure_T = ""
-        try:
-            done = do_op(p, books.books(config.currency))
-        except:
-            done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
-        if done is BookFailure_T:
-            p.note = done.detail
-            p.bad = True
-        else:
-            let told: str = done
-            if p.op in ["startover", "saveas", "delete"]:     # another scenario, or the same one again: its own settings
-                p = fresh_params(p.tab)
-            p.note = told
-            p.bad = False
-        await req.respond(Http200, page_text(p), html_type)
+        await req.respond(Http200, page_do(req.body), html_type)
     elif req.reqMethod'Image == "GET" and path == "/books":
-        await req.respond(Http200, text_of_books(books.books(config.currency)), text)
+        await req.respond(Http200, books_text(), text)
     elif req.reqMethod'Image == "GET" and path == "/scenarios":
         await req.respond(Http200, scenarios_text(), text)
     elif req.reqMethod'Image == "POST":
         var answer: str = ""
         try:
-            answer = post(path, req.body)
+            answer = post_text(path, req.body)
         except:                         # the database, not the books: say so, and keep serving
             answer = "error\tthe database failed: " + getCurrentExceptionMsg()
         await req.respond(Http200, answer, text)
@@ -296,24 +99,15 @@ def main():
                 die(f"unknown option {args[i]}")
         i += 2
     die(f"unknown option {args[i]}") if i < len(args)
-    let read: Config | !BookFailure_T = read_config(conf_path)
-    if read is BookFailure_T:
-        die(read.detail)
-    else:
-        config = read
     www = conf_path.parent / "build"
-    scenarios = Scenarios(conf_path.parent / "scenarios")
-    let names: []str = scenarios.names()
-    if len(names) == 0:
-        die(f"no scenario in {scenarios.dir}: no *.books file")
-    let shown: None | !BookFailure_T = show((first if first != "" else names[0]), False)
-    if shown is BookFailure_T:
-        die(shown.detail)
+    let failed: str = start(conf_path, first)
+    if failed != "":
+        die(failed)
     for file in PAGES:
         let found: str | !PathFailure_T = (www / file).read_text()
         if found is PathFailure_T:
             print f"warning: {www / file} is missing: run make app, which builds it"
-    print f"scenario {current} of {scenarios.dir}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    print f"scenario {current_scenario()} of {scenarios_dir()}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))
 

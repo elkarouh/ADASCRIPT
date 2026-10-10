@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
-"""server -- the one place that knows about HTTP; what a request does is requests.ady.
+"""server -- the one place that knows about HTTP; what a request does is dijkstra_events.ady.
 
-    make app [PORT=n]  (or: ady2nim js frontend/drag.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
+    make app [PORT=n]  (or: ady2nim js frontend/dijkstra_js_events.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
 
     GET    /            the page: a script tag and a div that loads /all
     GET    /all         the page again                      (start, goal, pick, act)
@@ -13,7 +13,7 @@
     DELETE /edges       delete an edge                      (a, b)
     POST   /reset       put the sample network back
     GET    /htmx.min.js htmx itself
-    GET    /drag.js     drag.ady, compiled to JavaScript
+    GET    /dijkstra_js_events.js     dijkstra_js_events.ady, compiled to JavaScript
 
 Every answer but the scripts is the whole page, which htmx swaps in. The network is kept
 in graph.txt, in the directory the server runs in; it is written after every change.
@@ -21,17 +21,17 @@ in graph.txt, in the directory the server runs in; it is written after every cha
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from backend/dijkstra_gui import shell_text
-from backend/requests import answer, keep_in
+from backend/dijkstra_events import answer, keep_in
 
 async def handler(req: Request):
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
     let path: str = req.url.path
     if path == "/":
         await req.respond(Http200, shell_text(), html_type)
-    elif path in ["/htmx.min.js", "/drag.js"]:
+    elif path in ["/htmx.min.js", "/dijkstra_js_events.js"]:
         let script: str | !PathFailure_T = (Path("frontend") / path[1:]).read_text()
         if script is PathFailure_T:
-            await req.respond(Http404, f"frontend{path} is not here: run from the demo's directory, after make drag.js")
+            await req.respond(Http404, f"frontend{path} is not here: run from the demo's directory, after make dijkstra_js_events.js")
         else:
             await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
     else:

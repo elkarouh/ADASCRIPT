@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""requests -- what each request does, and the network it does it to; no HTTP.
+"""dijkstra_events -- what each event the page sends does, and the network it does it to; no HTTP.
 
 server.ady hands every request here as a method, a path and its fields, and sends back
 the page that comes out. The tests call answer() the same way, with no server running.
