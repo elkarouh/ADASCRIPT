@@ -5,7 +5,7 @@ account is dragged with the mouse. The server draws everything else.
 
 A node is a <g class="node" data_id=".." data_x=".." data_y=".."> (its id and
 its centre in the drawing's units). Pressing on it and moving the mouse
-moves it, as a translation. While it moves, the arrows to and from it follow as straight lines. Letting go writes the new centre into the form's
+moves it, as a translation. While it moves, the arrows are routed again, in the browser, as the server will. Letting go writes the new centre into the form's
 hidden field `pos`, and clicks the hidden Redraw button, which asks the
 server for the page again, with the arrows drawn to the new place.
 A press that does not move is a click, and goes on to htmx; with the shift key
@@ -16,6 +16,8 @@ arrow, a red line to the mouse. Let go over another account, and its name goes
 into the hidden field `target` before the same Redraw: the server answers with
 the popup that asks when, what and how much.
 """
+from accounting_model import Account, Cents_T, Flow, Graph, GREEN
+from accounting_gui import Point, Route, boxes, routes_of
 from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
 const WIDTH: float = 980.0
@@ -34,12 +36,15 @@ var arrowing: bool = False             # the node pressed is the frozen one: an 
 var moved: bool = False
 var dragged: bool = False               # a drag has just ended: the click that follows is not a click
 
-def number_of(node: Node, attr: str) -> float:
-    let r: float | !ParseFailure_T = parse_float(str(node.getAttribute(cstring(attr))))
+def float_of(text: str) -> float:
+    let r: float | !ParseFailure_T = parse_float(text)
     if r is ParseFailure_T:
         return 0.0
     else:
         return r
+
+def number_of(node: Node, attr: str) -> float:
+    return float_of(str(node.getAttribute(cstring(attr))))
 
 # How many drawing units a pixel is.
 def scale() -> float:
@@ -66,50 +71,37 @@ def on_down(e: Event):
     moved = False
     e.preventDefault()                  # no text selected while dragging
 
-type Spot is record:
-    x: float
-    y: float
-
-# Where the straight line from the middle of a box (half as wide as HW, as high as HH) towards (OX, OY) leaves it.
-def leaves(cx: float, cy: float, hw: float, hh: float, ox: float, oy: float) -> Spot:
-    let dx: float = ox - cx
-    let dy: float = oy - cy
-    var t: float = 1.0
-    if abs(dx) > 0.001 or abs(dy) > 0.001:
-        let tx: float = (hw / abs(dx) if abs(dx) > 0.001 else 1000000.0)
-        let ty: float = (hh / abs(dy) if abs(dy) > 0.001 else 1000000.0)
-        t = min(tx, ty)
-    return Spot(cx + dx * t, cy + dy * t)
-
-def find_node(name: str) -> Node:
-    for n in document.querySelectorAll("g.node"):
-        if str(n.getAttribute(cstring("data_name"))) == name:
-            return n
-    return nil
-
-# While NAME is dragged to (X, Y), the arrows to and from it follow as straight lines; the
-# server draws them properly (round the other boxes) when it is let go.
+# While NAME is dragged to (X, Y), every arrow is routed again, here, by the same routes_of the
+# server uses (accounting_gui.ady, compiled to JavaScript too), from what the page holds: the
+# nodes (data_name, data_x, data_y, data_h) and the arrows (data_from, data_to, data_amount).
+# Letting go asks the server, which draws the page again; it comes out the same.
 def follow(name: str, x: float, y: float):
+    var names: []str = []
+    var points: []Point = []
+    var tall: []float = []
+    var g: Graph = Graph()
+    var made: []Account = []
+    for n in document.querySelectorAll("g.node"):
+        let who: str = str(n.getAttribute(cstring("data_name")))
+        names.append(who)
+        points.append(Point(x, y) if who == name else Point(number_of(n, "data_x"), number_of(n, "data_y")))
+        tall.append(number_of(n, "data_h"))
+        made.append(g.add_account(who, GREEN))
+    var arrows: []Node = []
     for a in document.querySelectorAll("g[data_from]"):
-        let from_name: str = str(a.getAttribute(cstring("data_from")))
-        let to_name: str = str(a.getAttribute(cstring("data_to")))
-        if from_name == name or to_name == name:
-            let n1: Node = find_node(from_name)
-            let n2: Node = find_node(to_name)
-            if n1 != nil and n2 != nil:
-                let x1: float = (x if from_name == name else number_of(n1, "data_x"))
-                let y1: float = (y if from_name == name else number_of(n1, "data_y"))
-                let x2: float = (x if to_name == name else number_of(n2, "data_x"))
-                let y2: float = (y if to_name == name else number_of(n2, "data_y"))
-                let s: Spot = leaves(x1, y1, 110.0, number_of(n1, "data_h"), x2, y2)
-                let t: Spot = leaves(x2, y2, 110.0, number_of(n2, "data_h"), x1, y1)
-                let d: str = f"M {s.x:.1f} {s.y:.1f} L {t.x:.1f} {t.y:.1f}"
-                for p in a.querySelectorAll("path"):
-                    p.setAttribute(cstring("d"), cstring(d))
-                let label: Node = a.querySelector("text.amount")
-                if label != nil:
-                    label.setAttribute(cstring("x"), cstring(f"{(s.x + t.x) / 2.0:.1f}"))
-                    label.setAttribute(cstring("y"), cstring(f"{(s.y + t.y) / 2.0 - 4.0:.1f}"))
+        let i: int = names.index(str(a.getAttribute(cstring("data_from"))))
+        let j: int = names.index(str(a.getAttribute(cstring("data_to"))))
+        g.flows.append(Flow(made[i], made[j], Cents_T(int(number_of(a, "data_amount")))))
+        arrows.append(a)
+    let height: float = float_of(str(document.querySelector("svg.graph").getAttribute(cstring("viewBox"))).split(" ")[3])
+    let routes: []Route = routes_of(g, names, points, tall, Point(WIDTH, height), [], [], boxes())
+    for k in range(len(arrows)):
+        for p in arrows[k].querySelectorAll("path"):
+            p.setAttribute(cstring("d"), cstring(routes[k].d))
+        let label: Node = arrows[k].querySelector("text.amount")
+        if label != nil:
+            label.setAttribute(cstring("x"), cstring(f"{routes[k].label.x:.1f}"))
+            label.setAttribute(cstring("y"), cstring(f"{routes[k].label.y:.1f}"))
 
 def on_move(e: Event):
     if held == nil:

@@ -457,8 +457,9 @@ def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str, fr
 def arrow_html(g: Graph, f: Flow, route: Route, now: bool) -> Html:
     let css: str = ("now" if now else "")
     let tip: str = tip_of(g, f)
+    let cents: str = str(min(int(f.amount), 2000000000))      # the page's numbers are 32-bit; only the length of the text matters
     html:
-        g class=css data_from=f.source.name data_to=f.target.name:
+        g class=css data_from=f.source.name data_to=f.target.name data_amount=cents:
             + to_html(f, route, tip)
 
 def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str, picked: []str) -> Html:
