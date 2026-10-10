@@ -1,0 +1,23 @@
+#!/usr/bin/env ady2nim
+"""dijkstra.ady and page.ady, with no server: ady2nim c -r test_dijkstra.ady"""
+from dijkstra import Edge, Way, shortest_way, uses
+from page import NAMES, START_COSTS, edges_of, all_text
+
+let edges: []Edge = edges_of(START_COSTS)
+let w: Way = shortest_way(NAMES, edges, "A", "E")
+assert w.nodes == ["A", "C", "F", "E"] and w.cost == 20
+assert shortest_way(NAMES, edges, "A", "A").cost == 0
+assert shortest_way(NAMES, edges, "A", "Z").cost == -1
+assert shortest_way(NAMES, [Edge("A", "B", 1)], "A", "C").cost == -1          # nothing joins them
+assert uses(w, Edge("C", "F", 2)) and not uses(w, Edge("A", "B", 7))
+
+# the page: nothing is kept, so the query says it all
+assert "Click the node to start from." in all_text("")
+assert "click the node to go to." in all_text("pick=A")
+assert "Shortest way from A to E: A → C → F → E, cost 20." in all_text("start=A&goal=E")
+assert "cost 11" not in all_text("start=A&goal=E")
+assert "A → F → E, cost 23" in all_text("start=A&goal=E&c6=40")                    # C-F made dear: the direct A-F wins
+assert "name=\"c6\" value=\"2\"" in all_text("")
+assert "start=\"B\"" not in all_text("start=A&goal=B&pick=C") and "name=\"start\" value=\"C\"" in all_text("start=A&goal=B&pick=C")   # a third click starts again
+assert "data-hx-get=\"/all\"" in all_text("")
+print "dijkstra page: all checks passed"

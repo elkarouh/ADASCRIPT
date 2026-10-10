@@ -1,0 +1,178 @@
+#!/usr/bin/env ady2nim
+"""page -- the page as HTML the server draws, for htmx to swap in.
+
+The server keeps nothing between requests. What the page is showing -- the
+costs, the two nodes picked -- lives in the form `#state` inside the page. A
+click, or a change to a cost, asks GET /all for the whole page again, with the
+form's fields in the query, and the answer replaces the page. One-shot fields
+(`pick`, `act`) come with the click and are not in the form.
+"""
+from uri nimport decodeUrl
+from dijkstra import Edge, Way, shortest_way, uses
+
+const NAMES: []str = ["A", "B", "C", "D", "E", "F"]
+const XS: []float = [60.0, 200.0, 200.0, 380.0, 520.0, 330.0]
+const YS: []float = [190.0, 60.0, 190.0, 60.0, 190.0, 320.0]
+const ENDS: []str = ["A B", "A C", "A F", "B C", "B D", "C D", "C F", "D E", "E F"]
+const START_COSTS: []int = [7, 9, 14, 10, 15, 11, 2, 6, 9]
+
+type Params is record:
+    start: str
+    goal:  str
+    costs: []int
+    pick:  str                      # the node clicked
+    act:   str                      # clear
+
+def fresh() -> Params:
+    return Params("", "", START_COSTS, "", "")
+
+def params_of(query: str) -> Params:
+    var p: Params = fresh()
+    for pair in query.split("&"):
+        let at: int = pair.find("=")
+        if at < 0:
+            continue
+        let key: str = pair[:at]
+        let value: str = decodeUrl(pair[at + 1:])
+        if key == "start":
+            p.start = value
+        elif key == "goal":
+            p.goal = value
+        elif key == "pick":
+            p.pick = value
+        elif key == "act":
+            p.act = value
+        elif key.startswith("c"):
+            let i: int | !ParseFailure_T = parse_int(key[1:])
+            let n: int | !ParseFailure_T = parse_int(value)
+            if i is ParseFailure_T:
+                pass
+            else:
+                if n is ParseFailure_T:
+                    pass
+                else:
+                    if i >= 0 and i < len(p.costs) and n >= 1:
+                        p.costs[i] = n
+    return p
+
+def edges_of(costs: []int) -> []Edge:
+    var edges: []Edge = []
+    for i in range(len(ENDS)):
+        let ab: []str = ENDS[i].split(" ")
+        edges.append(Edge(ab[0], ab[1], costs[i]))
+    return edges
+
+def at(name: str) -> int:
+    return NAMES.index(name)
+
+def edge_html(e: Edge, on_way: bool) -> Html:
+    let i: int = at(e.a)
+    let j: int = at(e.b)
+    let d: str = f"M {XS[i]:.0f} {YS[i]:.0f} L {XS[j]:.0f} {YS[j]:.0f}"
+    let css: str = ("edge way" if on_way else "edge")
+    let lx: str = f"{(XS[i] + XS[j]) / 2.0:.0f}"
+    let ly: str = f"{(YS[i] + YS[j]) / 2.0 - 6.0:.0f}"
+    let label: str = str(e.cost)
+    html:
+        g:
+            path class=css d=d
+            stext class="cost" x=lx y=ly: label
+
+def node_html(name: str, role: str) -> Html:
+    let i: int = at(name)
+    let cx: str = f"{XS[i]:.0f}"
+    let cy: str = f"{YS[i]:.0f}"
+    let ty: str = f"{YS[i] + 5.0:.0f}"
+    let css: str = "node " + role
+    let vals: str = "{\"pick\": \"" + name + "\"}"
+    html:
+        g class=css data_hx_get="/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+            circle cx=cx cy=cy r="24"
+            stext class="name" x=cx y=ty: name
+
+def cost_row_html(i: int, cost: int) -> Html:
+    let field: str = f"c{i}"
+    let value: str = str(cost)
+    let label: str = ENDS[i].replace(" ", " - ")
+    html:
+        tr:
+            td: label
+            td:
+                input type="number" name=field value=value min="1" max="99"
+
+def all_html(p0: Params) -> Html:
+    var p: Params = p0
+    if p.act == "clear":
+        p.start = ""
+        p.goal = ""
+    if p.pick != "" and p.pick in NAMES:
+        if p.start == "" or p.goal != "":
+            p.start = p.pick
+            p.goal = ""
+        elif p.pick != p.start:
+            p.goal = p.pick
+    let edges: []Edge = edges_of(p.costs)
+    let way: Way = shortest_way(NAMES, edges, p.start, p.goal)
+    let said: str = ("Click the node to start from." if p.start == "" else
+                     f"From {p.start}: click the node to go to." if p.goal == "" else
+                     f"No way from {p.start} to {p.goal}." if way.cost < 0 else
+                     f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way.nodes) + f", cost {way.cost}.")
+    let clear_vals: str = "{\"act\": \"clear\"}"
+    html:
+        div id="all":
+            form id="state" data_hx_get="/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
+                input type="hidden" name="start" value=p.start
+                input type="hidden" name="goal" value=p.goal
+                table:
+                    tr:
+                        th: "Edge"
+                        th: "Cost"
+                    for i in range(len(ENDS)):
+                        + cost_row_html(i, p.costs[i])
+                button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear"
+            p class="said": said
+            svg viewBox="0 0 580 380" class="graph":
+                for i in range(len(edges)):
+                    + edge_html(edges[i], uses(way, edges[i]))
+                for name in NAMES:
+                    + node_html(name, ("start" if name == p.start else ("goal" if name == p.goal else ("way" if name in way.nodes else ""))))
+
+const STYLE: str = """
+body { font-family: sans-serif; max-width: 46em; margin: 2em auto; padding: 0 1em; }
+form#state { float: right; margin-left: 1em; }
+td, th { padding: 0.1em 0.6em; text-align: left; }
+input[type=number] { width: 4em; }
+svg.graph { width: 100%; height: auto; }
+path.edge { stroke: #999; stroke-width: 2; fill: none; }
+path.edge.way { stroke: #e65100; stroke-width: 5; }
+text.cost { font-size: 13px; fill: #444; text-anchor: middle; }
+g.node { cursor: pointer; }
+g.node circle { fill: #fff; stroke: #555; stroke-width: 2; }
+g.node.way circle { stroke: #e65100; stroke-width: 4; }
+g.node.start circle { fill: #c8e6c9; stroke: #2e7d32; stroke-width: 4; }
+g.node.goal circle { fill: #bbdefb; stroke: #1565c0; stroke-width: 4; }
+text.name { font-size: 16px; font-weight: bold; text-anchor: middle; pointer-events: none; }
+p.said { font-weight: bold; min-height: 1.5em; }
+"""
+
+def shell() -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: "Shortest way"
+                style: STYLE
+                script src="/htmx.min.js"
+            body:
+                h1: "Dijkstra, drawn by the server"
+                div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
+
+# An html: block writes an attribute with underscores (data_hx_get); htmx wants hyphens.
+def hyphens(text: str) -> str:
+    return text.replace("data_hx_", "data-hx-")
+
+def shell_text() -> str:
+    return "<!doctype html>" + hyphens(str(shell()))
+
+def all_text(query: str) -> str:
+    return hyphens(str(all_html(params_of(query))))

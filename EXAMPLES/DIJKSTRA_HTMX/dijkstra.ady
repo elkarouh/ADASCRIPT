@@ -1,0 +1,64 @@
+#!/usr/bin/env ady2nim
+"""dijkstra -- the algorithm, and nothing else: no HTML, no HTTP.
+
+This is the part that knows the problem. page.ady draws it, server.ady serves
+it; neither is needed to test it (test_dijkstra.ady).
+"""
+
+type Edge is record:
+    a:    str
+    b:    str
+    cost: int
+
+# The way from START to GOAL: the nodes on it, and what it costs; cost -1 and no nodes when
+# there is no way.
+type Way is record:
+    nodes: []str
+    cost:  int
+
+def other_end(e: Edge, name: str) -> str:
+    return (e.b if e.a == name else (e.a if e.b == name else ""))
+
+def shortest_way(names: []str, edges: []Edge, start: str, goal: str) -> Way:
+    if start not in names or goal not in names:
+        return Way([], -1)
+    var dist: []int = []                # -1: not reached yet
+    var before: []int = []              # the node before this one on its best way
+    var done: []bool = []
+    for n in names:
+        dist.append(-1)
+        before.append(-1)
+        done.append(False)
+    dist[names.index(start)] = 0
+    while True:
+        var u: int = -1                 # the nearest node not settled yet
+        for i in range(len(names)):
+            if not done[i] and dist[i] >= 0 and (u < 0 or dist[i] < dist[u]):
+                u = i
+        if u < 0:
+            break
+        done[u] = True
+        for e in edges:
+            let far: str = other_end(e, names[u])
+            if far != "":
+                let v: int = names.index(far)
+                let through: int = dist[u] + e.cost
+                if not done[v] and (dist[v] < 0 or through < dist[v]):
+                    dist[v] = through
+                    before[v] = u
+    let g: int = names.index(goal)
+    if dist[g] < 0:
+        return Way([], -1)
+    var nodes: []str = []
+    var at: int = g
+    while at >= 0:
+        nodes.insert(names[at], 0)
+        at = before[at]
+    return Way(nodes, dist[g])
+
+# Whether the way uses the edge E, in either direction.
+def uses(w: Way, e: Edge) -> bool:
+    for i in range(len(w.nodes) - 1):
+        if (w.nodes[i] == e.a and w.nodes[i + 1] == e.b) or (w.nodes[i] == e.b and w.nodes[i + 1] == e.a):
+            return True
+    return False

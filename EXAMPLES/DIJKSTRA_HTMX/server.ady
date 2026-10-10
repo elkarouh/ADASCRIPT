@@ -1,0 +1,44 @@
+#!/usr/bin/env ady2nim
+"""server -- the one place that knows about HTTP.
+
+    ady2nim c -r server.ady [PORT]        then open http://127.0.0.1:8810/
+
+    GET /            the page: a script tag and a div that loads /all
+    GET /all?...     the page again, from the settings in the query
+    GET /htmx.min.js htmx itself
+"""
+from asyncdispatch nimport complete, newFuture, Port, waitFor
+from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from page import all_text, shell_text
+
+async def handler(req: Request):
+    let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
+    let path: str = req.url.path
+    if path == "/":
+        await req.respond(Http200, shell_text(), html_type)
+    elif path == "/all":
+        await req.respond(Http200, all_text(req.url.query), html_type)
+    elif path == "/htmx.min.js":
+        let script: str | !PathFailure_T = Path("htmx.min.js").read_text()
+        if script is PathFailure_T:
+            await req.respond(Http404, "htmx.min.js is not here: run from this directory")
+        else:
+            await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
+    else:
+        await req.respond(Http404, "not found")
+
+def main():
+    var port: int = 8810
+    let args: []str = $@
+    if len(args) > 0:
+        let n: int | !ParseFailure_T = parse_int(args[0])
+        if n is ParseFailure_T:
+            pass
+        else:
+            port = n
+    print f"http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    var server: AsyncHttpServer = newAsyncHttpServer()
+    waitFor(server.serve(Port(port), handler))
+
+if __name__ == "__main__":
+    main()
