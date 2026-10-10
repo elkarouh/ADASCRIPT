@@ -19,7 +19,7 @@ its edges follow; where you let go is kept in the page and drawn by the server.
 
 | File | What it knows |
 |---|---|
-| `backend/dijkstra.ady` | the problem: edges, `shortest_way`. No HTML, no HTTP. |
+| `backend/dijkstra.ady` | the model, a placeholder: edges and `shortest_way`, which hands the graph to the library's `shortest_path` (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
 | `backend/page.ady` | how to draw it: the SVG, the form, the text. A function from the settings to HTML. |
 | `backend/server.ady` | HTTP: four routes (`/`, `/all`, `/htmx.min.js`, `/drag.js`). |
 | `frontend/drag.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then writes the place into the form and asks the server for the page, which draws the same. About 100 lines. |

@@ -1,9 +1,12 @@
 #!/usr/bin/env ady2nim
-"""dijkstra -- the algorithm, and nothing else: no HTML, no HTTP.
+"""dijkstra -- the model: a placeholder around the library's shortest_path.
 
-This is the part that knows the problem. page.ady draws it, server.ady serves
-it; neither is needed to test it (test_dijkstra.ady).
+The algorithm is TO_NIM/STDLIB/graphs.ady; all that is here is the problem as the page
+states it (undirected edges with a cost, nodes named by strings) turned into the graph
+the library wants. Replace this file with your own model; page.ady only needs Edge, Way,
+shortest_way and uses. No HTML, no HTTP.
 """
+from graphs import shortest_path
 
 type Edge is record:
     a:    str
@@ -16,45 +19,23 @@ type Way is record:
     nodes: []str
     cost:  int
 
-def other_end(e: Edge, name: str) -> str:
-    return (e.b if e.a == name else (e.a if e.b == name else ""))
-
 def shortest_way(names: []str, edges: []Edge, start: str, goal: str) -> Way:
-    if start not in names or goal not in names:
-        return Way([], -1)
-    var dist: []int = []                # -1: not reached yet
-    var before: []int = []              # the node before this one on its best way
-    var done: []bool = []
+    var graph: {str}[](float, str)
+    let none: [](float, str) = []
     for n in names:
-        dist.append(-1)
-        before.append(-1)
-        done.append(False)
-    dist[names.index(start)] = 0
-    while True:
-        var u: int = -1                 # the nearest node not settled yet
-        for i in range(len(names)):
-            if not done[i] and dist[i] >= 0 and (u < 0 or dist[i] < dist[u]):
-                u = i
-        if u < 0:
-            break
-        done[u] = True
-        for e in edges:
-            let far: str = other_end(e, names[u])
-            if far != "":
-                let v: int = names.index(far)
-                let through: int = dist[u] + e.cost
-                if not done[v] and (dist[v] < 0 or through < dist[v]):
-                    dist[v] = through
-                    before[v] = u
-    let g: int = names.index(goal)
-    if dist[g] < 0:
+        graph[n] = none
+    for e in edges:                     # undirected: one edge each way
+        graph[e.a].append((float(e.cost), e.b))
+        graph[e.b].append((float(e.cost), e.a))
+    if start not in graph or goal not in graph:
         return Way([], -1)
-    var nodes: []str = []
-    var at: int = g
-    while at >= 0:
-        nodes.insert(names[at], 0)
-        at = before[at]
-    return Way(nodes, dist[g])
+    let nodes: []str = shortest_path[str](graph, start, goal)
+    var cost: int = 0
+    for i in range(len(nodes) - 1):
+        for e in edges:
+            if (e.a == nodes[i] and e.b == nodes[i + 1]) or (e.b == nodes[i] and e.a == nodes[i + 1]):
+                cost += e.cost
+    return Way(nodes, cost if len(nodes) > 0 else -1)
 
 # Whether the way uses the edge E, in either direction.
 def uses(w: Way, e: Edge) -> bool:
