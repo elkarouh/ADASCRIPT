@@ -5,7 +5,7 @@ account is dragged with the mouse. The server draws everything else.
 
 A node is a <g class="node" data_id=".." data_x=".." data_y=".."> (its id and
 its centre in the drawing's units). Pressing on it and moving the mouse
-moves it, as a translation. Letting go writes the new centre into the form's
+moves it, as a translation. While it moves, the arrows to and from it follow as straight lines. Letting go writes the new centre into the form's
 hidden field `pos`, and clicks the hidden Redraw button, which asks the
 server for the page again, with the arrows drawn to the new place.
 A press that does not move is a click, and goes on to htmx; with the shift key
@@ -23,6 +23,7 @@ const MOVED: float = 4.0                # pixels before a press is a drag
 
 var held: Node = nil                    # the node pressed, or nil
 var held_id: str = ""
+var held_name: str = ""
 var down_x: float = 0.0                 # where the mouse went down, in pixels
 var down_y: float = 0.0
 var centre_x: float = 0.0               # the node's centre when pressed, in the drawing's units
@@ -55,6 +56,7 @@ def on_down(e: Event):
     held = node
     arrowing = " from" in (" " + str(node.getAttribute(cstring("class"))) + " ")
     held_id = str(node.getAttribute(cstring("data_id")))
+    held_name = str(node.getAttribute(cstring("data_name")))
     down_x = float(m.clientX)
     down_y = float(m.clientY)
     centre_x = number_of(node, "data_x")
@@ -63,6 +65,51 @@ def on_down(e: Event):
     now_y = centre_y
     moved = False
     e.preventDefault()                  # no text selected while dragging
+
+type Spot is record:
+    x: float
+    y: float
+
+# Where the straight line from the middle of a box (half as wide as HW, as high as HH) towards (OX, OY) leaves it.
+def leaves(cx: float, cy: float, hw: float, hh: float, ox: float, oy: float) -> Spot:
+    let dx: float = ox - cx
+    let dy: float = oy - cy
+    var t: float = 1.0
+    if abs(dx) > 0.001 or abs(dy) > 0.001:
+        let tx: float = (hw / abs(dx) if abs(dx) > 0.001 else 1000000.0)
+        let ty: float = (hh / abs(dy) if abs(dy) > 0.001 else 1000000.0)
+        t = min(tx, ty)
+    return Spot(cx + dx * t, cy + dy * t)
+
+def find_node(name: str) -> Node:
+    for n in document.querySelectorAll("g.node"):
+        if str(n.getAttribute(cstring("data_name"))) == name:
+            return n
+    return nil
+
+# While NAME is dragged to (X, Y), the arrows to and from it follow as straight lines; the
+# server draws them properly (round the other boxes) when it is let go.
+def follow(name: str, x: float, y: float):
+    for a in document.querySelectorAll("g[data_from]"):
+        let from_name: str = str(a.getAttribute(cstring("data_from")))
+        let to_name: str = str(a.getAttribute(cstring("data_to")))
+        if from_name == name or to_name == name:
+            let n1: Node = find_node(from_name)
+            let n2: Node = find_node(to_name)
+            if n1 != nil and n2 != nil:
+                let x1: float = (x if from_name == name else number_of(n1, "data_x"))
+                let y1: float = (y if from_name == name else number_of(n1, "data_y"))
+                let x2: float = (x if to_name == name else number_of(n2, "data_x"))
+                let y2: float = (y if to_name == name else number_of(n2, "data_y"))
+                let s: Spot = leaves(x1, y1, 110.0, number_of(n1, "data_h"), x2, y2)
+                let t: Spot = leaves(x2, y2, 110.0, number_of(n2, "data_h"), x1, y1)
+                let d: str = f"M {s.x:.1f} {s.y:.1f} L {t.x:.1f} {t.y:.1f}"
+                for p in a.querySelectorAll("path"):
+                    p.setAttribute(cstring("d"), cstring(d))
+                let label: Node = a.querySelector("text.amount")
+                if label != nil:
+                    label.setAttribute(cstring("x"), cstring(f"{(s.x + t.x) / 2.0:.1f}"))
+                    label.setAttribute(cstring("y"), cstring(f"{(s.y + t.y) / 2.0 - 4.0:.1f}"))
 
 def on_move(e: Event):
     if held == nil:
@@ -82,6 +129,7 @@ def on_move(e: Event):
     now_x = max(110.0, min(WIDTH - 110.0, centre_x + dx * k))
     now_y = max(20.0, centre_y + dy * k)
     held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
+    follow(held_name, now_x, now_y)
 
 # The field pos holds "id@x,y|id@x,y": ID's entry replaced, or added.
 def with_position(pos: str, id: str, x: float, y: float) -> str:

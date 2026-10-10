@@ -458,7 +458,7 @@ def arrow_html(g: Graph, f: Flow, route: Route, now: bool) -> Html:
     let css: str = ("now" if now else "")
     let tip: str = tip_of(g, f)
     html:
-        g class=css:
+        g class=css data_from=f.source.name data_to=f.target.name:
             + to_html(f, route, tip)
 
 def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str, picked: []str) -> Html:

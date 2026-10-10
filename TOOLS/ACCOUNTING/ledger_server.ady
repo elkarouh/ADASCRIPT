@@ -1,4 +1,5 @@
 #!/usr/bin/env ady2nim
+#ady2nim-args c -d:release
 """ledger_server -- the ledger's books, served to the page that draws them.
 
     ledger_server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
