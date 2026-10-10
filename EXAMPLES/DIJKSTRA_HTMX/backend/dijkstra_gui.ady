@@ -9,7 +9,7 @@ form's fields in the query, and the answer replaces the page. One-shot fields
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
-from backend/dijkstra_model import Edge, NAMES, ENDS, START_COSTS, build_graph, edges_of, uses
+from backend/dijkstra_model import Edge, Node_T, NODES, ENDS, names_of, START_COSTS, build_graph, edges_of, uses
 
 const XS: []float = [60.0, 200.0, 200.0, 380.0, 520.0, 330.0]       # where the nodes start
 const YS: []float = [190.0, 60.0, 190.0, 60.0, 190.0, 320.0]
@@ -57,7 +57,7 @@ def params_of(query: str) -> Params:
     return p
 
 def at(name: str) -> int:
-    return NAMES.index(name)
+    return names_of(NODES).index(name)
 
 # Where node NAME is: where it was dragged to, else where it starts.
 def spot(name: str, pos: str) -> []float:
@@ -89,7 +89,8 @@ def to_html(e: Edge, on_way: bool, pos: str) -> Html:
             path class=css d=d
             stext class="cost" x=lx y=ly: label
 
-def node_html(name: str, role: str, pos: str) -> Html:
+def to_html(n: Node_T, role: str, pos: str) -> Html:
+    let name: str = n.name
     let p1: []float = spot(name, pos)
     let cx: str = f"{p1[0]:.0f}"
     let cy: str = f"{p1[1]:.0f}"
@@ -117,14 +118,14 @@ def all_html(p0: Params) -> Html:
         p.start = ""
         p.goal = ""
         p.pos = ""
-    if p.pick != "" and p.pick in NAMES:
+    if p.pick != "" and p.pick in names_of(NODES):
         if p.start == "" or p.goal != "":
             p.start = p.pick
             p.goal = ""
         elif p.pick != p.start:
             p.goal = p.pick
     let edges: []Edge = edges_of(p.costs)
-    let found: (float, []str) = shortest_route[str](build_graph(NAMES, edges), p.start, p.goal)
+    let found: (float, []str) = shortest_route[str](build_graph(NODES, edges), p.start, p.goal)
     let way: []str = found[1]
     let said: str = ("Click the node to start from." if p.start == "" else
                      f"From {p.start}: click the node to go to." if p.goal == "" else
@@ -149,8 +150,8 @@ def all_html(p0: Params) -> Html:
             svg viewBox="0 0 580 380" class="graph":
                 for i in range(len(edges)):
                     + to_html(edges[i], uses(way, edges[i]), p.pos)
-                for name in NAMES:
-                    + node_html(name, ("start" if name == p.start else ("goal" if name == p.goal else ("way" if name in way else ""))), p.pos)
+                for n in NODES:
+                    + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))), p.pos)
 
 const STYLE: str = """
 body { font-family: sans-serif; max-width: 46em; margin: 2em auto; padding: 0 1em; }

@@ -1,15 +1,15 @@
 #!/usr/bin/env ady2nim
 """dijkstra_model.ady and dijkstra_gui.ady, with no server: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
-from backend/dijkstra_model import Edge, NAMES, START_COSTS, build_graph, edges_of, uses
+from backend/dijkstra_model import Edge, NODES, START_COSTS, build_graph, edges_of, uses
 from backend/dijkstra_gui import all_text
 
-let g: {str}[](float, str) = build_graph(NAMES, edges_of(START_COSTS))
+let g: {str}[](float, str) = build_graph(NODES, edges_of(START_COSTS))
 let w: (float, []str) = shortest_route[str](g, "A", "E")
 assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
 assert shortest_route[str](g, "E", "A")[1] == ["E", "F", "C", "A"]               # the edges go both ways
 assert len(shortest_route[str](g, "A", "Z")[1]) == 0
-assert len(shortest_route[str](build_graph(NAMES, [Edge("A", "B", 1)]), "A", "C")[1]) == 0   # nothing joins them
+assert len(shortest_route[str](build_graph(NODES, [Edge("A", "B", 1)]), "A", "C")[1]) == 0   # nothing joins them
 assert uses(w[1], Edge("C", "F", 2)) and not uses(w[1], Edge("A", "B", 7))
 
 # the page: nothing is kept, so the query says it all

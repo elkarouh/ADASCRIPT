@@ -9,9 +9,19 @@ No HTML, no HTTP.
 """
 
 # The problem: six nodes, nine edges between them, and what each costs to start with.
-const NAMES: []str = ["A", "B", "C", "D", "E", "F"]
 const ENDS: []str = ["A B", "A C", "A F", "B C", "B D", "C D", "C F", "D E", "E F"]
 const START_COSTS: []int = [7, 9, 14, 10, 15, 11, 2, 6, 9]
+
+type Node_T is record:
+    name: str
+
+let NODES: []Node_T = [Node_T("A"), Node_T("B"), Node_T("C"), Node_T("D"), Node_T("E"), Node_T("F")]
+
+def names_of(nodes: []Node_T) -> []str:
+    var names: []str = []
+    for n in nodes:
+        names.append(n.name)
+    return names
 
 type Edge is record:
     a:    str
@@ -28,11 +38,11 @@ def edges_of(costs: []int) -> []Edge:
 
 # The graph the library wants: each node to its (cost, neighbour) pairs. The edges are
 # undirected, so each one is entered both ways.
-def build_graph(names: []str, edges: []Edge) -> {str}[](float, str):
+def build_graph(nodes: []Node_T, edges: []Edge) -> {str}[](float, str):
     var graph: {str}[](float, str)
     let none: [](float, str) = []
-    for n in names:
-        graph[n] = none
+    for n in nodes:
+        graph[n.name] = none
     for e in edges:
         graph[e.a].append((float(e.cost), e.b))
         graph[e.b].append((float(e.cost), e.a))
