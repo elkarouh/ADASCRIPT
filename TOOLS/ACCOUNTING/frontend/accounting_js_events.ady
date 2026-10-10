@@ -17,73 +17,169 @@ arrow, a red line to the mouse. Let go over another account, and its name goes
 into the hidden field `target` before the same Redraw: the server answers with
 the popup that asks when, what and how much.
 """
+
+# ---- A few browser words, for a reader who does not write front ends ----
+#
+# The DOM ("document object model") is the page as the browser holds it: a tree of elements,
+# one per HTML tag. `document` is its root. Each element is a `Node` here, and the same
+# calls work on all of them:
+#   querySelector("css")     the first element below that matches a CSS selector, or nil
+#                            ("g.node" = a <g> of class node, "#rubber" = the element with
+#                            id="rubber", "input[name=pos]" = the <input> named pos,
+#                            "g[data_from]" = a <g> that has a data_from attribute)
+#   querySelectorAll("css")  all of them
+#   closest("css")           this element or the nearest one above it that matches
+#   getAttribute / setAttribute   read or write one attribute, as text
+# The drawing is SVG, which is HTML for pictures: a <g> groups shapes, a <path d="M x1 y1
+# L x2 y2"> is a line from (x1, y1) to (x2, y2), and transform="translate(dx,dy)" shifts a
+# group without changing what is in it.
+#
+# The browser calls a function of ours, a "listener", for each event it is given (the last
+# four lines of this file). An event is a value describing what happened: for the mouse, which
+# button, whether shift was held, and where (clientX, clientY, in pixels from the window's top
+# left). A click is three events in this order: mousedown, mouseup, click. Every event goes
+# down the tree to the element it is for and then back up; htmx listens at the top, on the
+# way back up. cstring is the browser's own string type: Nim strings are converted at each call.
+
 from shared/routes import Point, Route, boxes, routes_of
 from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
-const WIDTH: float = 980.0
-const MOVED: float = 4.0                # pixels before a press is a drag
+# ---- Two units: the mouse's and the drawing's ----
+#
+# The mouse reports pixels; the server keeps an account's place in the drawing's own units,
+# 980 wide, whatever size the drawing has on the screen. `distinct` makes them two types, so
+# adding a pixel to a drawing unit does not compile. The only way across is the scale.
+# shared/routes.ady, which the server uses too, works in plain floats (its Point): point_of
+# hands it a Spot.
 
-var held: Node = nil                    # the node pressed, or nil
-var held_id: str = ""
-var held_name: str = ""
-var down_x: float = 0.0                 # where the mouse went down, in pixels
-var down_y: float = 0.0
-var centre_x: float = 0.0               # the node's centre when pressed, in the drawing's units
-var centre_y: float = 0.0
-var now_x: float = 0.0                  # and where it has been dragged to
-var now_y: float = 0.0
-var arrowing: bool = False             # the node pressed is the frozen one: an arrow is drawn from it
-var moved: bool = False
-var dragged: bool = False               # a drag has just ended: the click that follows is not a click
+type Pixel_T is distinct float          # on the screen, as the mouse reports it
+type Unit_T is distinct float           # in the drawing, as the server keeps an account's place
+type Scale_T is Unit_T / Pixel_T        # drawing units a pixel: pixels * scale = units
 
-def float_of(text: str) -> float:
-    let r: float | !ParseFailure_T = parse_float(text)
+type Screen is tuple:                   # a place on the screen
+    x: Pixel_T
+    y: Pixel_T
+
+type Spot is tuple:                     # a place in the drawing
+    x: Unit_T
+    y: Unit_T
+
+const WIDTH: Unit_T = 980.0             # the drawing's width (the svg's viewBox); its height varies
+const HALF_W: Unit_T = 110.0            # half an account's box, as boxes() in shared/routes.ady
+const TOP: Unit_T = 20.0                # how near the top an account may go
+const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
+
+# ---- The drag, as a small state machine ----
+#
+#                                         mousemove more than 4 px
+#                                    +---------------------------------> DRAGGING (an account moves)
+#            mousedown on a node     |                                       |
+#   IDLE  ------------------------> PRESSED                                  | mouseup: tell the
+#    ^  ^                            |  |   (the frozen account)             | server, then
+#    |  +--- mouseup (a click) ------+  +---------------------------> ARROWING (a red line follows)
+#    |                                                                       | mouseup
+#    +-------------- click (the browser's, swallowed) ----- DROPPED  <-------+
+#
+# IDLE: nothing pressed. PRESSED: an account is held but has not moved, so letting go is a
+# click, which goes on to htmx. DRAGGING: an account is being moved. ARROWING: the press was
+# on the frozen account (class "from"), which does not move: an arrow is drawn from it to the
+# mouse instead. DROPPED: a drag or an arrow has just ended, and the click the browser sends
+# after it is not a click.
+type Phase_T is enum IDLE, PRESSED, DRAGGING, ARROWING, DROPPED
+
+# Everything the drag knows, in one value. It is a variant record: which fields exist depends
+# on the phase. While PRESSED, DRAGGING or ARROWING it holds an account; while IDLE or DROPPED
+# it has no fields at all, so reading `grip.node` then is an error (Nim raises), not a stale value.
+#
+# A value is built by naming its phase like a function: `PRESSED(node, id, ...)` fills the
+# fields in the order declared below, and `IDLE()` is a grip in phase IDLE, with nothing in it.
+# The parentheses matter: bare `IDLE` is the enum member (a Phase_T), `IDLE()` the record (a
+# Grip_T), and `grip` is a Grip_T. So `grip = IDLE()` sets the drag back to nothing, and
+# `grip.phase == IDLE` asks which phase it is in.
+type Grip_T (phase: Phase_T) is record:
+    case phase is
+        when PRESSED | DRAGGING | ARROWING:
+            node:   Node                # the <g class="node"> held
+            id:     str                 # its data_id: the key of its place in the field pos
+            name:   str                 # its data_name: the account's name
+            frozen: bool                # it is the frozen account: moving draws an arrow
+            down:   Screen              # where the mouse went down
+            centre: Spot                # the account's centre then
+            now:    Spot                # and where the mouse has taken it (or the arrow's tip)
+        when others:
+            pass
+
+var grip: Grip_T = IDLE()               # the one drag there is; nothing held at first
+
+# ---- Reading the page ----
+
+# The number in attribute ATTR of NODE ("data_x", "data_y", "data_h"), as drawing units; 0 if
+# it is not a number. The server writes these attributes when it draws the page
+# (accounting_page.ady).
+def unit_of(node: Node, attr: str) -> Unit_T:
+    let r: float | !ParseFailure_T = parse_float(str(node.getAttribute(cstring(attr))))
     if r is ParseFailure_T:
         return 0.0
-    else:
-        return r
+    return Unit_T(r)
 
-def number_of(node: Node, attr: str) -> float:
-    return float_of(str(node.getAttribute(cstring(attr))))
+# Where an account's centre is, as the server last drew it.
+def spot_of(node: Node) -> Spot:
+    return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
 
-# How many drawing units a pixel is.
-def scale() -> float:
+# The same place as shared/routes.ady wants it: plain floats.
+def point_of(s: Spot) -> Point:
+    return Point(float(s.x), float(s.y))
+
+# Where the mouse was when event M happened.
+def screen_of(m: MouseEvent) -> Screen:
+    return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
+
+# Whether NODE has the CSS class WORD ("from", "group"): class="node from" holds several.
+def has_class(node: Node, word: str) -> bool:
+    return f" {word} " in " " + str(node.getAttribute(cstring("class"))) + " "
+
+# How many drawing units a pixel is: the drawing is scaled to fit the page, so this is asked
+# each time (the window may have been resized). getBoundingClientRect is the element's size
+# and place on the screen, in pixels.
+def scale() -> Scale_T:
     let box: BoundingRect = document.querySelector("svg.graph").getBoundingClientRect()
-    return WIDTH / box.width
+    return WIDTH / Pixel_T(box.width)   # units / pixels: a Scale_T
 
-def on_down(e: Event):
-    let m: MouseEvent = MouseEvent(e)
-    if m.button != 0:
-        return
-    let node: Node = e.target.closest("g.node")
-    if node == nil:
-        return
-    held = node
-    arrowing = " from" in (" " + str(node.getAttribute(cstring("class"))) + " ")
-    held_id = str(node.getAttribute(cstring("data_id")))
-    held_name = str(node.getAttribute(cstring("data_name")))
-    down_x = float(m.clientX)
-    down_y = float(m.clientY)
-    centre_x = number_of(node, "data_x")
-    centre_y = number_of(node, "data_y")
-    now_x = centre_x
-    now_y = centre_y
-    moved = False
-    e.preventDefault()                  # no text selected while dragging
+# The drawing's height: the last of the four numbers of its viewBox, "0 0 980 670".
+def height() -> Unit_T:
+    let r: float | !ParseFailure_T = parse_float(str(document.querySelector("svg.graph").getAttribute(cstring("viewBox"))).split(" ")[3])
+    if r is ParseFailure_T:
+        return 0.0
+    return Unit_T(r)
 
-# While NAME is dragged to (X, Y), every arrow is routed again, here, by the same routes_of the
+# The name of the account (not a group) the point AT is over, other than FROM_NAME, or "".
+def account_at(at: Spot, from_name: str) -> str:
+    for n in document.querySelectorAll("g.node"):
+        let name: str = str(n.getAttribute(cstring("data_name")))
+        if name != from_name and not has_class(n, "group"):
+            let c: Spot = spot_of(n)
+            if abs(at.x - c.x) <= HALF_W and abs(at.y - c.y) <= unit_of(n, "data_h"):
+                return name
+    return ""
+
+# ---- Changing the page ----
+
+# While NAME is dragged to AT, every arrow is routed again, here, by the same routes_of the
 # server uses (shared/routes.ady, compiled to JavaScript too), from what the page holds: the
-# nodes (data_name, data_x, data_y, data_h) and the arrows (data_from, data_to, and the text of the amount).
-# Letting go asks the server, which draws the page again; it comes out the same.
-def follow(name: str, x: float, y: float):
+# accounts (data_name, data_x, data_y, data_h) and the arrows (<g data_from=".." data_to="..">,
+# each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
+# letting go asks the server, which draws the page again, and it comes out the same.
+def follow(name: str, at: Spot):
+    # the accounts: their names, centres (NAME's at AT) and half heights, in page order
     var names: []str = []
     var points: []Point = []
     var tall: []float = []
     for n in document.querySelectorAll("g.node"):
         let who: str = str(n.getAttribute(cstring("data_name")))
         names.append(who)
-        points.append(Point(x, y) if who == name else Point(number_of(n, "data_x"), number_of(n, "data_y")))
-        tall.append(number_of(n, "data_h"))
+        points.append(point_of(at if who == name else spot_of(n)))
+        tall.append(float(unit_of(n, "data_h")))
+    # the arrows: which accounts each joins, and the amount written on it
     var arrows: []Node = []
     var sources: []str = []
     var targets: []str = []
@@ -94,8 +190,9 @@ def follow(name: str, x: float, y: float):
         let words: Node = a.querySelector("text.amount")
         texts.append(str(words.textContent) if words != nil else "")
         arrows.append(a)
-    let height: float = float_of(str(document.querySelector("svg.graph").getAttribute(cstring("viewBox"))).split(" ")[3])
-    let routes: []Route = routes_of(sources, targets, texts, names, points, tall, Point(WIDTH, height), [], [], boxes())
+    let size: Spot = Spot(x=WIDTH, y=height())
+    let routes: []Route = routes_of(sources, targets, texts, names, points, tall, point_of(size), [], [], boxes())
+    # routes[k] is the way for arrows[k]: its curve and where its amount goes
     for k in range(len(arrows)):
         for p in arrows[k].querySelectorAll("path"):
             p.setAttribute(cstring("d"), cstring(routes[k].d))
@@ -104,88 +201,113 @@ def follow(name: str, x: float, y: float):
             label.setAttribute(cstring("x"), cstring(f"{routes[k].label.x:.1f}"))
             label.setAttribute(cstring("y"), cstring(f"{routes[k].label.y:.1f}"))
 
-def on_move(e: Event):
-    if held == nil:
-        return
-    let m: MouseEvent = MouseEvent(e)
-    let dx: float = float(m.clientX) - down_x
-    let dy: float = float(m.clientY) - down_y
-    if not moved and abs(dx) < MOVED and abs(dy) < MOVED:
-        return
-    moved = True
-    let k: float = scale()
-    if arrowing:
-        now_x = centre_x + dx * k
-        now_y = centre_y + dy * k
-        document.querySelector("#rubber").setAttribute(cstring("d"), cstring(f"M {centre_x:.1f} {centre_y:.1f} L {now_x:.1f} {now_y:.1f}"))
-        return
-    now_x = max(110.0, min(WIDTH - 110.0, centre_x + dx * k))
-    now_y = max(20.0, centre_y + dy * k)
-    held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
-    follow(held_name, now_x, now_y)
-
-# The field pos holds "id@x,y|id@x,y": ID's entry replaced, or added.
-def with_position(pos: str, id: str, x: float, y: float) -> str:
+# The field pos holds every account the user has moved, "id@x,y|id@x,y": ID's entry replaced,
+# or added. The server lays the accounts out, then puts these where they were dropped.
+def with_position(pos: str, id: str, at: Spot) -> str:
     var kept: []str = []
     for entry in pos.split("|"):
         if entry != "" and not entry.startswith(id + "@"):
             kept.append(entry)
-    kept.append(f"{id}@{x:.1f},{y:.1f}")
+    kept.append(f"{id}@{at.x:.1f},{at.y:.1f}")
     return "|".join(kept)
 
-# The name of the account (not a group) the point (X, Y) is over, other than the one named FROM, or "".
-def account_at(x: float, y: float, from_name: str) -> str:
-    for n in document.querySelectorAll("g.node"):
-        let name: str = str(n.getAttribute(cstring("data_name")))
-        let cls: str = " " + str(n.getAttribute(cstring("class"))) + " "
-        if name != from_name and not (" group " in cls):
-            let half_h: float = number_of(n, "data_h")
-            if abs(x - number_of(n, "data_x")) <= 110.0 and abs(y - number_of(n, "data_y")) <= half_h:
-                return name
-    return ""
+# The hidden <input name=NAME> of the page's form. Its button #redraw sends the form to the
+# server (hx-get="/h/all", see accounting_page.ady), which answers with the page drawn again.
+def field_named(name: str) -> InputElement:
+    return InputElement(document.querySelector(cstring(f"input[name={name}]")))
 
-def on_up(e: Event):
-    if held == nil:
-        return
-    let was_moved: bool = moved
-    let drawn: bool = arrowing
-    let from_name: str = str(held.getAttribute(cstring("data_name")))
-    held = nil
-    arrowing = False
-    if was_moved and drawn:
-        dragged = True                  # no click after the arrow
-        document.querySelector("#rubber").setAttribute(cstring("d"), cstring(""))
-        let over: str = account_at(now_x, now_y, from_name)
-        if over != "":
-            let field: InputElement = InputElement(document.querySelector("input[name=target]"))
-            field.value = cstring(over)
-            dragged = False
-            document.querySelector("#redraw").click()
-            dragged = True
-        return
-    if was_moved:
-        let field: InputElement = InputElement(document.querySelector("input[name=pos]"))
-        field.value = cstring(with_position(str(field.value), held_id, now_x, now_y))
-        document.querySelector("#redraw").click()
-        dragged = True                  # after the click above, which must go through
+# The red dashed line of an arrow being drawn, from the frozen account to the mouse ("" hides it).
+def rubber(d: str):
+    document.querySelector("#rubber").setAttribute(cstring("d"), cstring(d))
 
-# The click after a drag is swallowed before htmx sees it: a group is not opened by being moved.
-def on_click(e: Event):
-    if dragged:
-        dragged = False
-        e.stopPropagation()
-        return
+# ---- The listeners: what each mouse event does, by phase ----
+
+# A button went down. If it is the left one (button 0) and on an account, hold that account.
+def on_down(e: Event):
     let m: MouseEvent = MouseEvent(e)
-    if m.shiftKey:                      # a shift-click picks an account to merge with others, or lets it go
-        let node: Node = e.target.closest("g.node")
-        if node != nil and not (" group " in (" " + str(node.getAttribute(cstring("class"))) + " ")):
-            e.stopPropagation()
-            let field: InputElement = InputElement(document.querySelector("input[name=pick]"))
-            field.value = node.getAttribute(cstring("data_name"))
-            dragged = False
-            document.querySelector("#redraw").click()
-            field.value = cstring("")
+    if m.button != 0:
+        return
+    let node: Node = e.target.closest("g.node")   # the press may be on the box or the text inside
+    if node == nil:
+        return                          # not on an account: leave the event to htmx
+    let centre: Spot = spot_of(node)
+    grip = PRESSED(node, str(node.getAttribute(cstring("data_id"))), str(node.getAttribute(cstring("data_name"))),
+                   has_class(node, "from"), screen_of(m), centre, centre)
+    e.preventDefault()                  # stop the browser's own drag, which selects text
 
+# The mouse moved. The browser sends this many times a second, whether a button is down or not.
+def on_move(e: Event):
+    case grip.phase:
+        when PRESSED | DRAGGING | ARROWING:
+            let at: Screen = screen_of(MouseEvent(e))
+            let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
+            let dy: Pixel_T = at.y - grip.down.y
+            if grip.phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
+                return                  # not yet a drag: a hand shakes, and it may still be a click
+            let k: Scale_T = scale()    # pixels * scale = drawing units
+            if grip.frozen:
+                # the frozen account stays; a line runs from it to the mouse
+                let tip: Spot = Spot(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
+                grip = ARROWING(grip.node, grip.id, grip.name, grip.frozen, grip.down, grip.centre, tip)
+                rubber(f"M {grip.centre.x:.1f} {grip.centre.y:.1f} L {tip.x:.1f} {tip.y:.1f}")
+            else:
+                # the account's new centre, kept clear of the sides and the top
+                let now: Spot = Spot(x=max(HALF_W, min(WIDTH - HALF_W, grip.centre.x + dx * k)), y=max(TOP, grip.centre.y + dy * k))
+                grip = DRAGGING(grip.node, grip.id, grip.name, grip.frozen, grip.down, grip.centre, now)
+                # shift the account's picture by how far it has come; its data_x/data_y stay the
+                # old centre until the server draws the page again
+                grip.node.setAttribute(cstring("transform"), cstring(f"translate({now.x - grip.centre.x:.1f},{now.y - grip.centre.y:.1f})"))
+                follow(grip.name, now)
+        when others:
+            pass                        # nothing held: an ordinary mouse move
+
+# The button came up.
+def on_up(e: Event):
+    case grip.phase:
+        when PRESSED:
+            grip = IDLE()               # it never moved: a click, which the browser sends next and htmx handles
+        when DRAGGING:
+            # tell the server the account's new place, the way a form is sent: fill in the
+            # hidden field and click the form's button
+            let pos: InputElement = field_named("pos")
+            pos.value = cstring(with_position(str(pos.value), grip.id, grip.now))
+            document.querySelector("#redraw").click()
+            grip = DROPPED()            # after the click above, which on_click must let through
+        when ARROWING:
+            rubber("")
+            let over: str = account_at(grip.now, grip.name)
+            if over != "":
+                # let go over another account: the server answers with the popup that asks
+                # when, what and how much
+                field_named("target").value = cstring(over)
+                grip = IDLE()           # so that on_click lets the click below through
+                document.querySelector("#redraw").click()
+            grip = DROPPED()            # let go over nothing: the arrow is just dropped
+        when others:
+            pass
+
+# A click. The browser sends one after every mouseup, a drag's too; htmx would take that one
+# as a click on the account (which opens a group, or freezes the account). So after a drag
+# (DROPPED) the click is stopped here, before htmx sees it.
+# A click with shift held picks an account to merge with others, or lets it go: its name goes
+# into the hidden field pick, and the page is asked for again.
+def on_click(e: Event):
+    if grip.phase == DROPPED:
+        grip = IDLE()
+        e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
+        return
+    if MouseEvent(e).shiftKey:
+        let node: Node = e.target.closest("g.node")
+        if node != nil and not has_class(node, "group"):
+            e.stopPropagation()         # not an ordinary click: htmx must not see it either
+            let pick: InputElement = field_named("pick")
+            pick.value = node.getAttribute(cstring("data_name"))
+            document.querySelector("#redraw").click()
+            pick.value = cstring("")    # htmx has read the form by now: the next redraw picks nothing
+
+# Ask the browser to call our functions. They listen on the whole document, so a drag goes on
+# when the mouse leaves the account. The click listener gets True ("capture"): it is called on
+# the way down the tree, before htmx, which listens on the way up.
 document.addEventListener("mousedown", on_down)
 document.addEventListener("mousemove", on_move)
 document.addEventListener("mouseup", on_up)
