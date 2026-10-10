@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """server -- the one place that knows about HTTP.
 
-    ady2nim js drag.ady; ady2nim c -r server.ady [PORT]        then open http://127.0.0.1:8810/
+    make app [PORT=n]  (or: ady2nim js frontend/drag.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
 
     GET /            the page: a script tag and a div that loads /all
     GET /all?...     the page again, from the settings in the query
@@ -10,7 +10,7 @@
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from page import all_text, shell_text
+from backend/page import all_text, shell_text
 
 async def handler(req: Request):
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
@@ -20,9 +20,9 @@ async def handler(req: Request):
     elif path == "/all":
         await req.respond(Http200, all_text(req.url.query), html_type)
     elif path in ["/htmx.min.js", "/drag.js"]:
-        let script: str | !PathFailure_T = Path(path[1:]).read_text()
+        let script: str | !PathFailure_T = (Path("frontend") / path[1:]).read_text()
         if script is PathFailure_T:
-            await req.respond(Http404, f"{path[1:]} is not here: run from this directory, after ady2nim js drag.ady")
+            await req.respond(Http404, f"frontend{path} is not here: run from the demo's directory, after make drag.js")
         else:
             await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
     else:

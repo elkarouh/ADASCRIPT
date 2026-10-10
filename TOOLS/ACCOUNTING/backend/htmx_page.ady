@@ -9,7 +9,7 @@ fields of a form inside the page; a change to one asks /h/all for the page
 again with all of them, and the answer replaces the page. A click on a
 group, or on a tab, adds one more field, `go` or `toggle`, to the request.
 
-The same books_text.ady, accounting_gui.ady and accounting_model.ady the
+The same books_text.ady, accounting_gui.ady, routes.ady and accounting_model.ady the
 JavaScript page uses draw it, here native: the amounts are 64-bit, and the
 grouping is not limited to what a browser's int can count. An account is
 dragged by drag.ady, the page's one script of our own. Everything the
@@ -21,7 +21,8 @@ saves it and deletes it. What changes the books is POSTed to /h/do and
 """
 from uri nimport decodeUrl
 from shared/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
-from shared/accounting_gui import STYLE, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, Point, signed, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
+from shared/routes import Point, Shape, boxes, money, px, routes_of, Route
+from backend/accounting_gui import STYLE, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
 
 # The settings, as the query gives them.

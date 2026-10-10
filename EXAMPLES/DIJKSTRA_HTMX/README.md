@@ -8,8 +8,8 @@ clicks.
 make app                      # builds drag.js and the server, starts it and opens the page
 make test                     # the algorithm and the page, no server
 # or by hand:
-ady2nim js drag.ady            # the one script of our own, drag.js
-ady2nim c -r server.ady        # then open http://127.0.0.1:8810/ (run from this directory)
+ady2nim js frontend/drag.ady   # the one script of our own, frontend/drag.js
+ady2nim c -r backend/server.ady # then open http://127.0.0.1:8810/ (run from this directory)
 ady2nim c -r test_dijkstra.ady # the algorithm and the page, no server
 ```
 
@@ -19,12 +19,14 @@ its edges follow; where you let go is kept in the page and drawn by the server.
 
 | File | What it knows |
 |---|---|
-| `dijkstra.ady` | the problem: edges, `shortest_way`. No HTML, no HTTP. |
-| `page.ady` | how to draw it: the SVG, the form, the text. A function from the settings to HTML. |
-| `server.ady` | HTTP: four routes (`/`, `/all`, `/htmx.min.js`, `/drag.js`). |
-| `drag.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then writes the place into the form and asks the server for the page, which draws the same. About 100 lines. |
+| `backend/dijkstra.ady` | the problem: edges, `shortest_way`. No HTML, no HTTP. |
+| `backend/page.ady` | how to draw it: the SVG, the form, the text. A function from the settings to HTML. |
+| `backend/server.ady` | HTTP: four routes (`/`, `/all`, `/htmx.min.js`, `/drag.js`). |
+| `frontend/drag.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then writes the place into the form and asks the server for the page, which draws the same. About 100 lines. |
 | `test_dijkstra.ady` | tests of the first two, by calling them; nothing is started. |
-| `htmx.min.js` | htmx, vendored (14 KB gzipped). |
+| `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
+
+`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `drag.ady` and the vendored htmx). Nothing is compiled both ways here, so there is no `shared/`; the accounting tool has one, for the arrow routing that the server and `drag.ady` must agree on.
 
 ## How it works
 
@@ -33,7 +35,7 @@ its edges follow; where you let go is kept in the page and drawn by the server.
 * A click or a change asks `GET /all` with the form's fields, plus a one-shot
   field for what was just clicked (`pick`, `act`); the answer is the whole
   page, and htmx swaps it in. (`hx-get`, `hx-include="#state"`, `hx-vals`,
-  `hx-target="#all"`, `hx-swap="outerHTML"`: five attributes, all in `page.ady`.)
+  `hx-target="#all"`, `hx-swap="outerHTML"`: five attributes, all in `backend/page.ady`.)
 * So the page is a pure function, `all_text(query)`, and testing the GUI is
   testing a function: see the last lines of `test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command

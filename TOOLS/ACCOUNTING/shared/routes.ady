@@ -1,0 +1,309 @@
+#!/usr/bin/env ady2nim
+"""routes -- where the accounts are drawn and how the arrows run between them.
+
+Compiled both ways: natively by the server, which draws the page with it, and to JavaScript
+by frontend/drag.ady, which routes the arrows again, in the browser, while an account is
+dragged. The two must give the same curves, so they are the same code. No HTML in here.
+"""
+from math nimport sqrt
+from shared/accounting_model import Account, Cents_T, Dollars_T, Flow, Graph
+
+const NODE_RADIUS: float = 42.0
+
+# How accounts are drawn: as circles, NODE_RADIUS round, or as boxes with
+# the name and the balance, stacked like the lines of a balance sheet.
+type Shape is record:
+    boxes: bool
+    half_w: float       # half the width, or the radius
+    half_h: float       # half the height, or the radius
+
+def circles() -> Shape:
+    return Shape(False, NODE_RADIUS, NODE_RADIUS)
+
+def boxes() -> Shape:
+    return Shape(True, 110.0, 15.0)
+
+# 1234567 cents -> "12,345.67": Dollars_T converts, the format groups.
+def money(c: Cents_T) -> str:
+    return f"{Dollars_T(c):,.2f}"
+
+def px(v: float) -> str:
+    return f"{v:.1f}"
+
+type Point is record:
+    x: float
+    y: float
+
+# The point D along the way from P to Q.
+def toward(p: Point, q: Point, d: float) -> Point:
+    let dx: float = q.x - p.x
+    let dy: float = q.y - p.y
+    let length: float = sqrt(dx * dx + dy * dy)
+    return Point(p.x + dx / length * d, p.y + dy / length * d)
+
+# Where the line from an account at C toward Q leaves its SHAPE, EXTRA
+# further out.
+def rim(c: Point, q: Point, shape: Shape, extra: float) -> Point:
+    if not shape.boxes:
+        return toward(c, q, shape.half_w + extra)
+    let dx: float = q.x - c.x
+    let dy: float = q.y - c.y
+    var scale: float = 1000000.0
+    if dx != 0.0:
+        scale = min(scale, (shape.half_w + extra) / abs(dx))
+    if dy != 0.0:
+        scale = min(scale, (shape.half_h + extra) / abs(dy))
+    return Point(c.x + dx * scale, c.y + dy * scale)
+
+# Whether P is within MARGIN of the account at C, drawn as SHAPE.
+def covers(c: Point, p: Point, shape: Shape, margin: float) -> bool:
+    if shape.boxes:
+        return abs(p.x - c.x) < shape.half_w + margin and abs(p.y - c.y) < shape.half_h + margin
+    return (p.x - c.x) * (p.x - c.x) + (p.y - c.y) * (p.y - c.y) < (shape.half_w + margin) * (shape.half_w + margin)
+
+# Every arrow is a spline: a smooth curve from one account, through two
+# waypoints, to the other. The waypoints sit a third and two thirds of the
+# way along, each pushed to one side or the other, so that a long arrow can
+# weave between the accounts in its way instead of bowing wide around them
+# all; even the least push bows it a little, so that arrows between
+# accounts on one line do not lie on top of each other.
+const CURVE: float = 18.0
+
+# An arrow's route, and where its amount is written.
+type Route is record:
+    d: str              # the SVG path
+    samples: []Point    # points along it, from start to end
+    label: Point
+
+# The route from A to B with its waypoints pushed S1 and S2 to its right (as
+# seen going from A to B; to the left when negative).
+def route_points(a: Point, b: Point, s1: float, s2: float, shape: Shape) -> []Point:
+    let dx: float = b.x - a.x
+    let dy: float = b.y - a.y
+    let length: float = sqrt(dx * dx + dy * dy)
+    let nx: float = -dy / length
+    let ny: float = dx / length
+    let w1: Point = Point(a.x + dx / 3.0 + nx * s1, a.y + dy / 3.0 + ny * s1)
+    let w2: Point = Point(a.x + dx * 2.0 / 3.0 + nx * s2, a.y + dy * 2.0 / 3.0 + ny * s2)
+    return [rim(a, w1, shape, 0.0), w1, w2, rim(b, w2, shape, 2.0)]   # the head stops short
+
+# The spline through the route's points (Catmull-Rom) is one cubic curve
+# from each point to the next; these are the control points of curve I.
+def first_control(pts: []Point, i: int) -> Point:
+    let before: Point = pts[max(i - 1, 0)]
+    return Point(pts[i].x + (pts[i + 1].x - before.x) / 6.0, pts[i].y + (pts[i + 1].y - before.y) / 6.0)
+
+def second_control(pts: []Point, i: int) -> Point:
+    let after: Point = pts[min(i + 2, len(pts) - 1)]
+    return Point(pts[i + 1].x - (after.x - pts[i].x) / 6.0, pts[i + 1].y - (after.y - pts[i].y) / 6.0)
+
+# The point at S (0 to the number of curves) along the spline through PTS.
+def spline_at(pts: []Point, s: float) -> Point:
+    let i: int = min(max(int(s), 0), len(pts) - 2)
+    let t: float = min(max(s - float(i), 0.0), 1.0)
+    let c1: Point = first_control(pts, i)
+    let c2: Point = second_control(pts, i)
+    let a: Point = pts[i]
+    let b: Point = pts[i + 1]
+    let u: float = 1.0 - t
+    return Point(u * u * u * a.x + 3.0 * u * u * t * c1.x + 3.0 * u * t * t * c2.x + t * t * t * b.x,
+                 u * u * u * a.y + 3.0 * u * u * t * c1.y + 3.0 * u * t * t * c2.y + t * t * t * b.y)
+
+# The spline as an SVG path.
+def spline_d(pts: []Point) -> str:
+    var d: str = f"M {px(pts[0].x)} {px(pts[0].y)}"
+    for i in range(len(pts) - 1):
+        let c1: Point = first_control(pts, i)
+        let c2: Point = second_control(pts, i)
+        d += f" C {px(c1.x)} {px(c1.y)} {px(c2.x)} {px(c2.y)} {px(pts[i + 1].x)} {px(pts[i + 1].y)}"
+    return d
+
+# Whether the spline through PTS keeps clear of the accounts at OTHERS, and
+# inside the drawing, SIZE wide and high, with room for its amount.
+def clear_of(pts: []Point, others: []Point, size: Point, shape: Shape) -> bool:
+    return hits(pts, others, size, shape) == 0
+
+# How many points along the spline through PTS fall on an account at OTHERS
+# or outside the drawing.
+def hits(pts: []Point, others: []Point, size: Point, shape: Shape) -> int:
+    var count: int = 0
+    for k in range(1, 10 * (len(pts) - 1)):
+        let p: Point = spline_at(pts, float(k) / 10.0)
+        if p.x < 40.0 or p.x > size.x - 40.0 or p.y < 20.0 or p.y > size.y - 20.0:
+            count += 1
+        for o in others:
+            if covers(o, p, shape, 8.0):
+                count += 1
+    return count
+
+# The route of F's arrow, from A to B: of the waypoints' pushes, the least
+# (and the least crooked) that keeps it clear of the accounts at OTHERS and
+# inside the drawing; if none does, the least. Money flowing both ways
+# between two accounts makes two arrows, each pushed to its own right, so
+# that both, and their amounts, show.
+def route_of(g: Graph, f: Flow, a: Point, b: Point, others: []Point, size: Point, shape: Shape) -> []Point:
+    var shifts: []float = [CURVE, -CURVE, 40.0, -40.0, 70.0, -70.0, 100.0, -100.0, 140.0, -140.0, 180.0, -180.0]
+    for other in g.flows:
+        if other.source == f.target and other.target == f.source:
+            shifts = [30.0, 60.0, 100.0, 150.0, 190.0]
+    var best: []Point = route_points(a, b, shifts[0], shifts[0], shape)
+    var best_cost: float = 1000000.0
+    for s1 in shifts:
+        for s2 in shifts:
+            let cost: float = abs(s1) + abs(s2) + abs(s1 - s2)
+            if cost < best_cost:
+                let pts: []Point = route_points(a, b, s1, s2, shape)
+                if clear_of(pts, others, size, shape):
+                    best = pts
+                    best_cost = cost
+    if best_cost < 1000000.0:
+        return best
+    var fewest: int = 1000000                   # none is clear: the one over the fewest accounts
+    for s1 in shifts:
+        for s2 in shifts:
+            let pts: []Point = route_points(a, b, s1, s2, shape)
+            let count: int = hits(pts, others, size, shape)
+            let cost: float = abs(s1) + abs(s2) + abs(s1 - s2)
+            if count < fewest or (count == fewest and cost < best_cost):
+                best = pts
+                fewest = count
+                best_cost = cost
+    return best
+
+# Where an amount TEXT goes along an arrow, at SAMPLES: beside it, at the
+# first of a few spots, from the middle outwards, where it covers neither an
+# account at CENTRES (half as high as TALL says) nor an amount already written, whose middles are at
+# TAKEN and half-widths in HALVES.
+def label_spot(samples: []Point, text: str, centres: []Point, tall: []float, taken: []Point, halves: []float, shape: Shape, size: Point) -> Point:
+    let half: float = 3.3 * float(len(text)) + 3.0
+    var first: Point = Point(0.0, 0.0)
+    var tried: bool = False
+    let last: int = len(samples) - 1
+    for along in [0.5, 0.42, 0.58, 0.33, 0.67, 0.25, 0.75, 0.17, 0.83]:
+        let k: int = min(max(int(along * float(last) + 0.5), 1), last - 1)
+        let p: Point = samples[k]
+        let q: Point = samples[k + 1]
+        let o: Point = samples[k - 1]
+        let dx: float = q.x - o.x
+        let dy: float = q.y - o.y
+        let length: float = max(sqrt(dx * dx + dy * dy), 0.001)
+        for side in [10.0, -10.0]:
+            let spot: Point = Point(p.x - dy / length * side, p.y + dx / length * side)    # the amount's middle
+            if not tried:
+                first = spot
+                tried = True
+            var free: bool = spot.x - half > 2.0 and spot.x + half < size.x - 2.0     # inside the drawing
+            for k in range(len(centres)):
+                if abs(spot.x - centres[k].x) < shape.half_w + half and abs(spot.y - centres[k].y) < tall[k] + 7.0:
+                    free = False
+            for i in range(len(taken)):
+                if abs(spot.x - taken[i].x) < half + halves[i] + 2.0 and abs(spot.y - taken[i].y) < 13.0:
+                    free = False
+            if free:
+                return Point(spot.x, spot.y + 4.0)      # the text's baseline
+    return Point(first.x, first.y + 4.0)
+
+# Between boxes, an arrow is one cubic curve that leaves the side of a box
+# and enters the side of the other square to it, as flows are drawn in a
+# Sankey diagram: across the middle from one column to the other, or, from
+# a box to another in its own column, out of their outer sides and back, a
+# bracket like a T-account's.
+
+# Which side of the box at A an arrow to B leaves (-1 left, 1 right).
+def side_of(a: Point, b: Point, size: Point, shape: Shape) -> float:
+    if abs(a.x - b.x) > 2.0 * shape.half_w:
+        return (1.0 if b.x > a.x else -1.0)
+    return (-1.0 if a.x < size.x / 2.0 else 1.0)     # the same column: its outer side
+
+# The curve's ends and control points, from the box at A to the one at B,
+# leaving and entering PORT_A and PORT_B below their middles.
+def box_curve(a: Point, b: Point, port_a: float, port_b: float, size: Point, shape: Shape) -> []Point:
+    let out: float = side_of(a, b, size, shape)
+    let start: Point = Point(a.x + out * shape.half_w, a.y + port_a)
+    if abs(a.x - b.x) > 2.0 * shape.half_w:
+        let stop: Point = Point(b.x - out * (shape.half_w + 2.0), b.y + port_b)
+        let k: float = abs(stop.x - start.x) / 2.0
+        return [start, Point(start.x + out * k, start.y), Point(stop.x - out * k, stop.y), stop]
+    let stop: Point = Point(b.x + out * (shape.half_w + 2.0), b.y + port_b)
+    var k: float = 30.0 + 0.25 * abs(b.y - a.y)
+    if out < 0.0:
+        k = min(k, start.x - 12.0)                   # not out of the drawing
+    else:
+        k = min(k, size.x - 12.0 - start.x)
+    return [start, Point(start.x + out * k, start.y), Point(stop.x + out * k, stop.y), stop]
+
+# The point at T (0 to 1) along the cubic curve C.
+def bezier_at(c: []Point, t: float) -> Point:
+    let u: float = 1.0 - t
+    return Point(u * u * u * c[0].x + 3.0 * u * u * t * c[1].x + 3.0 * u * t * t * c[2].x + t * t * t * c[3].x,
+                 u * u * u * c[0].y + 3.0 * u * u * t * c[1].y + 3.0 * u * t * t * c[2].y + t * t * t * c[3].y)
+
+# Where each arrow leaves and enters its boxes, below their middles: the
+# arrows on one side of a box spread along it, in the order of the boxes at
+# their other ends, top to bottom, so that they do not cross there. Two
+# numbers a flow, its start's and its end's.
+def ports_of(g: Graph, names: []str, points: []Point, size: Point, shape: Shape, tall: []float) -> []float:
+    var ports: []float = []
+    var ends: []int = []                # for each end of each flow: its box,
+    var sides: []float = []             # the side it is on,
+    var heights: []float = []           # and how high the box at the other end is
+    for f in g.flows:
+        let i: int = names.index(f.source.name)
+        let j: int = names.index(f.target.name)
+        let out: float = side_of(points[i], points[j], size, shape)
+        let into: float = (-out if abs(points[i].x - points[j].x) > 2.0 * shape.half_w else out)
+        ends.append(i)
+        sides.append(out)
+        heights.append(points[j].y)
+        ends.append(j)
+        sides.append(into)
+        heights.append(points[i].y)
+        ports.append(0.0)
+        ports.append(0.0)
+    for e in range(len(ends)):
+        var count: int = 0
+        var rank: int = 0
+        for o in range(len(ends)):
+            if ends[o] == ends[e] and sides[o] == sides[e]:
+                count += 1
+                if heights[o] < heights[e] or (heights[o] == heights[e] and o < e):
+                    rank += 1
+        ports[e] = (float(rank + 1) / float(count + 1) * 2.0 - 1.0) * (tall[ends[e]] - 3.0)
+    return ports
+
+# The arrows of G, as the accounts NAMES sit at POINTS, drawn as SHAPE (each
+# box half as high as TALL says), in
+# a drawing SIZE wide and high: each one's route, then each one's amount, placed clear of
+# those already placed and of other text, whose middles are at TAKEN and
+# half-widths in HALVES.
+def routes_of(g: Graph, names: []str, points: []Point, tall: []float, size: Point, words: []Point, widths: []float, shape: Shape) -> []Route:
+    var routes: []Route = []
+    var taken: []Point = words
+    var halves: []float = widths
+    let ports: []float = (ports_of(g, names, points, size, shape, tall) if shape.boxes else [])
+    for n in range(len(g.flows)):
+        let f: Flow = g.flows[n]
+        let i: int = names.index(f.source.name)
+        let j: int = names.index(f.target.name)
+        var d: str = ""
+        var samples: []Point = []
+        if shape.boxes:
+            let c: []Point = box_curve(points[i], points[j], ports[2 * n], ports[2 * n + 1], size, shape)
+            d = f"M {px(c[0].x)} {px(c[0].y)} C {px(c[1].x)} {px(c[1].y)} {px(c[2].x)} {px(c[2].y)} {px(c[3].x)} {px(c[3].y)}"
+            for k in range(31):
+                samples.append(bezier_at(c, float(k) / 30.0))
+        else:
+            var others: []Point = []
+            for k in range(len(points)):
+                if k != i and k != j:
+                    others.append(points[k])
+            let pts: []Point = route_of(g, f, points[i], points[j], others, size, shape)
+            d = spline_d(pts)
+            for k in range(31):
+                samples.append(spline_at(pts, float(k) / 10.0))
+        let text: str = money(f.amount)
+        let label: Point = label_spot(samples, text, points, tall, taken, halves, shape, size)
+        taken.append(Point(label.x, label.y - 4.0))
+        halves.append(3.3 * float(len(text)) + 3.0)
+        routes.append(Route(d, samples, label))
+    return routes

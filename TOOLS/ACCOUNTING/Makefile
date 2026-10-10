@@ -7,7 +7,7 @@
 #                   (ledger_server draws the page, backend/htmx_page.ady; each scenario,
 #                   scenarios/NAME.books, gets a database NAME.db there)
 #   make ledger     build the ledger's command line (backend/ledger -h, backend/ledger list)
-#   make gui        the example as a static web page      (shared/accounting_gui.ady)
+#   make gui        the example as a static web page      (backend/accounting_gui.ady)
 #   make test       the model and the ledger, no GUI (Nim only)
 #   make all        build the programs and the pages, open none
 #
@@ -15,7 +15,7 @@
 
 # backend/   compiled to C: the ledger, the server, the page it draws
 # frontend/  compiled to JavaScript: drag.ady, and the vendored htmx.min.js
-# shared/    compiled both ways: the model, and the drawing code drag.ady reuses
+# shared/    compiled both ways: the model, and the routing of the arrows, which drag.ady redoes in the browser
 # tests/     the tests (native)
 
 # This checkout's own transpiler, so that its STDLIB (the db module the ledger
@@ -40,13 +40,13 @@ ledger_server:
 	@$(ADY2NIM) c backend/ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-build/accounting_gui.html: shared/accounting_gui.ady shared/accounting_model.ady
+build/accounting_gui.html: backend/accounting_gui.ady shared/routes.ady shared/accounting_model.ady
 	@mkdir -p build
 	@echo "building $@"
 	@$(ADY2NIM) c -r $< > $@ 2> build/accounting_gui.log \
 	    || { cat build/accounting_gui.log; rm -f $@; exit 1; }
 
-build/drag.js: frontend/drag.ady shared/accounting_gui.ady shared/accounting_model.ady
+build/drag.js: frontend/drag.ady shared/routes.ady shared/accounting_model.ady
 	@mkdir -p build
 	@echo "building $@"
 	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }

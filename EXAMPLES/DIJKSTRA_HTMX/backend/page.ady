@@ -8,7 +8,7 @@ form's fields in the query, and the answer replaces the page. One-shot fields
 (`pick`, `act`) come with the click and are not in the form.
 """
 from uri nimport decodeUrl
-from dijkstra import Edge, Way, shortest_way, uses
+from backend/dijkstra import Edge, Way, shortest_way, uses
 
 const NAMES: []str = ["A", "B", "C", "D", "E", "F"]
 const XS: []float = [60.0, 200.0, 200.0, 380.0, 520.0, 330.0]       # where the nodes start

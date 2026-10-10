@@ -16,30 +16,31 @@ PORT    ?= 8810
 
 .PHONY: all app test clean
 
-all: server drag.js
+all: server frontend/drag.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
-server: dijkstra.ady page.ady server.ady
-	@echo "building server"
-	@$(ADY2NIM) c server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+server: backend/dijkstra.ady backend/page.ady backend/server.ady
+	@echo "building backend/server"
+	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 # The one script of our own, Adascript compiled to JavaScript; the server sends it as /drag.js.
-drag.js: drag.ady
-	@echo "building drag.js"
-	@$(ADY2NIM) js drag.ady > build.log 2>&1 || { cat build.log; exit 1; }
+# backend/ is native (C), frontend/ is what the browser runs; there is nothing to share.
+frontend/drag.js: frontend/drag.ady
+	@echo "building frontend/drag.js"
+	@$(ADY2NIM) js frontend/drag.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-# htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
-htmx.min.js:
-	git checkout -- htmx.min.js
+# frontend/htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
+frontend/htmx.min.js:
+	git checkout -- frontend/htmx.min.js
 
-app: all htmx.min.js
+app: all frontend/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
-	./server $(PORT)
+	./backend/server $(PORT)
 
 test:
 	$(ADY2NIM) c -r test_dijkstra.ady 2>/dev/null
 
 clean:
-	rm -f server test_dijkstra drag.js build.log
+	rm -f backend/server test_dijkstra frontend/drag.js build.log

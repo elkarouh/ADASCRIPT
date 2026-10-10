@@ -17,7 +17,7 @@ into the hidden field `target` before the same Redraw: the server answers with
 the popup that asks when, what and how much.
 """
 from shared/accounting_model import Account, Cents_T, Flow, Graph, GREEN
-from shared/accounting_gui import Point, Route, boxes, routes_of
+from shared/routes import Point, Route, boxes, routes_of
 from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
 const WIDTH: float = 980.0
@@ -72,7 +72,7 @@ def on_down(e: Event):
     e.preventDefault()                  # no text selected while dragging
 
 # While NAME is dragged to (X, Y), every arrow is routed again, here, by the same routes_of the
-# server uses (accounting_gui.ady, compiled to JavaScript too), from what the page holds: the
+# server uses (shared/routes.ady, compiled to JavaScript too), from what the page holds: the
 # nodes (data_name, data_x, data_y, data_h) and the arrows (data_from, data_to, data_amount).
 # Letting go asks the server, which draws the page again; it comes out the same.
 def follow(name: str, x: float, y: float):
