@@ -64,4 +64,5 @@ test:
 	$(ADY2NIM) c -r test_htmx.ady 2>/dev/null
 
 clean:
-	rm -rf build *.js scenarios/*.db $(basename $(wildcard *.ady))
+	rm -rf build scenarios/*.db $(basename $(wildcard *.ady))
+	find . -maxdepth 1 -name '*.js' ! -name htmx.min.js -delete      # htmx.min.js is kept: it is not built here
