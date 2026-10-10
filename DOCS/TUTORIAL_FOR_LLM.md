@@ -361,6 +361,8 @@ type Shape (Kind : Shape_Kind) is record:
             Height : float
 ```
 
+Several kinds can share one branch, `when Pressed | Dragging:`, and so its fields; `when others:` covers the kinds not named before it (Nim `of Pressed, Dragging:` / `else:`).
+
 **Nim output:** native variant object with `case Kind: Shape_Kind`
 **Python output:** flattened `@dataclass` with `None` defaults for unused fields
 

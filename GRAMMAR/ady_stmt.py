@@ -1075,22 +1075,46 @@ def refuse_overlapping_labels(branches):
 # rewritten: a bare `VNil` stays the enum member it is.
 
 _VARIANT_HEAD = _re_dup.compile(
-    r"^type[ \t]+(\w+)[ \t]*\([ \t]*(\w+)[ \t]*:[ \t]*\w+[ \t]*\)[ \t]+is[ \t]+record[ \t]*:",
+    r"^type[ \t]+(\w+)[ \t]*\([ \t]*(\w+)[ \t]*:[ \t]*(\w+)[ \t]*\)[ \t]+is[ \t]+record[ \t]*:",
     _re_dup.MULTILINE)
+
+
+def _enum_members(code, name):
+    """The members of the enum NAME as CODE declares it (`type N is enum A, B`
+    or the block form, one member a line), or [] when CODE does not."""
+    m = _re_dup.search(r"^[ \t]*type[ \t]+" + name + r"[ \t]+(?:is|=)[ \t]+enum\b[ \t]*(.*)$",
+                       code, _re_dup.MULTILINE)
+    if not m:
+        return []
+    rest = m.group(1).split("#", 1)[0].strip()
+    if rest and rest != ":":
+        return [w.split("=")[0].strip() for w in rest.split(",") if w.strip()]
+    members = []
+    lines = code[m.end():].split("\n")[1:]
+    for ln in lines:
+        body = ln.split("#", 1)[0]
+        if not body.strip():
+            continue
+        if not body[:1].isspace():
+            break
+        members += [w.split("=")[0].strip() for w in body.split(",") if w.strip()]
+    return members
 
 
 def scan_variant_kinds(code):
     """The kinds of every variant record CODE declares, as {kind: (record,
-    discriminant, [its fields, in order])}. A kind that two records share, or
-    that CODE also defines as a routine, class or type, is left out: a call of
-    it is then not a literal."""
+    discriminant, [its fields, in order])}. `when A | B:` gives both kinds the
+    branch's fields; `when others:` gives them to every member of the enum not
+    named before it, when CODE declares that enum. A kind that two records
+    share, or that CODE also defines as a routine, class or type, is left out:
+    a call of it is then not a literal."""
     lines = code.split("\n")
     seen, out = {}, {}
     for m in _VARIANT_HEAD.finditer(code):
-        rec, disc = m.group(1), m.group(2)
+        rec, disc, disc_type = m.group(1), m.group(2), m.group(3)
         n = code.count("\n", 0, m.start())
         head_indent = len(lines[n]) - len(lines[n].lstrip())
-        kind = None
+        kinds, named = [], []
         for ln in lines[n + 1:]:
             body = ln.split("#", 1)[0].rstrip()
             if not body.strip():
@@ -1098,18 +1122,20 @@ def scan_variant_kinds(code):
             ind = len(body) - len(body.lstrip())
             if ind <= head_indent:
                 break
-            w = _re_dup.match(r"\s*when[ \t]+(\w+)[ \t]*:\s*$", body)
+            w = _re_dup.match(r"\s*when[ \t]+(\w+(?:[ \t]*\|[ \t]*\w+)*)[ \t]*:\s*$", body)
             if w:
-                kind = w.group(1)
-                if kind != "others":
+                kinds = [k.strip() for k in w.group(1).split("|")]
+                if kinds == ["others"]:
+                    kinds = [k for k in _enum_members(code, disc_type) if k not in named]
+                named += kinds
+                for kind in kinds:
                     seen[kind] = seen.get(kind, 0) + 1
                     out[kind] = (rec, disc, [])
-                else:
-                    kind = None
                 continue
             f = _re_dup.match(r"\s*(\w+)[ \t]*:", body)
-            if f and kind and f.group(1) not in ("case", "when"):
-                out[kind][2].append(f.group(1))
+            if f and f.group(1) not in ("case", "when"):
+                for kind in kinds:
+                    out[kind][2].append(f.group(1))
     taken = set(_re_dup.findall(
         r"^[ \t]*(?:def|class|type)[ \t]+(\w+)", code, _re_dup.MULTILINE))
     return {k: v for k, v in out.items() if seen[k] == 1 and k not in taken}

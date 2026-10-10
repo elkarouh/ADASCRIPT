@@ -14,8 +14,8 @@ its button, which sends PUT /nodes: the server keeps the new place and draws the
 A press that does not move is a click, and goes on to htmx (it picks the node).
 
 The mouse speaks in pixels and the drawing in its own units: two units, which the compiler
-keeps apart, and a scale between them. A drag goes through four phases, and each
-event says, by phase, what it does.
+keeps apart, and a scale between them. A drag is one value, the grip, whose phase says
+which fields it has: nothing is held when IDLE, so nothing held can be read then.
 """
 from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
@@ -41,15 +41,18 @@ const MOVED: Pixel_T = 4.0              # how far a press goes before it is a dr
 # sends after it is not a click.
 type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
 
-type Hold is record:                    # what is held, while PRESSED or DRAGGING
-    node:   Node                        # the <g class="node">
-    name:   str
-    down:   Screen                      # where the mouse went down
-    centre: Spot                        # the node's centre then
-    now:    Spot                        # and where it has been dragged to
+type Grip_T (phase: Phase_T) is record:
+    case phase is
+        when PRESSED | DRAGGING:
+            node:   Node                # the <g class="node"> held
+            name:   str
+            down:   Screen              # where the mouse went down
+            centre: Spot                # the node's centre then
+            now:    Spot                # and where it has been dragged to
+        when others:
+            pass
 
-var phase: Phase_T = IDLE
-var hold: Hold
+var grip: Grip_T = IDLE()
 
 def unit_of(node: Node, attr: str) -> Unit_T:
     let r: float | !ParseFailure_T = parse_float(str(node.getAttribute(cstring(attr))))
@@ -98,44 +101,42 @@ def on_down(e: Event):
     if node == nil:
         return
     let centre: Spot = spot_of(node)
-    hold = Hold(node, str(node.getAttribute(cstring("data_name"))), screen_of(m), centre, centre)
-    phase = PRESSED
+    grip = PRESSED(node, str(node.getAttribute(cstring("data_name"))), screen_of(m), centre, centre)
     e.preventDefault()                  # no text selected while dragging
 
 def on_move(e: Event):
-    case phase:
+    case grip.phase:
         when PRESSED | DRAGGING:
             let at: Screen = screen_of(MouseEvent(e))
-            let dx: Pixel_T = at.x - hold.down.x
-            let dy: Pixel_T = at.y - hold.down.y
-            if phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
+            let dx: Pixel_T = at.x - grip.down.x
+            let dy: Pixel_T = at.y - grip.down.y
+            if grip.phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
                 return                  # not yet a drag: it may still be a click
             let k: Scale_T = scale()
-            let now: Spot = Spot(x=inside(hold.centre.x + dx * k, WIDTH), y=inside(hold.centre.y + dy * k, HEIGHT))
-            hold.now = now
-            phase = DRAGGING
-            hold.node.setAttribute(cstring("transform"), cstring(f"translate({now.x - hold.centre.x:.1f},{now.y - hold.centre.y:.1f})"))
-            follow(hold.name, now)
+            let now: Spot = Spot(x=inside(grip.centre.x + dx * k, WIDTH), y=inside(grip.centre.y + dy * k, HEIGHT))
+            grip = DRAGGING(grip.node, grip.name, grip.down, grip.centre, now)
+            grip.node.setAttribute(cstring("transform"), cstring(f"translate({now.x - grip.centre.x:.1f},{now.y - grip.centre.y:.1f})"))
+            follow(grip.name, now)
         when others:
             pass
 
 def on_up(e: Event):
-    case phase:
+    case grip.phase:
         when PRESSED:
-            phase = IDLE               # a click: htmx has it
+            grip = IDLE()               # a click: htmx has it
         when DRAGGING:
-            set_field("name", hold.name)
-            set_field("x", f"{hold.now.x:.0f}")
-            set_field("y", f"{hold.now.y:.0f}")
+            set_field("name", grip.name)
+            set_field("x", f"{grip.now.x:.0f}")
+            set_field("y", f"{grip.now.y:.0f}")
             document.querySelector("#redraw").click()
-            phase = DROPPED            # after the click above, which must go through
+            grip = DROPPED()            # after the click above, which must go through
         when others:
             pass
 
 # The click after a drag is swallowed before htmx sees it: a node is not picked by being moved.
 def on_click(e: Event):
-    if phase == DROPPED:
-        phase = IDLE
+    if grip.phase == DROPPED:
+        grip = IDLE()
         e.stopPropagation()
 
 document.addEventListener("mousedown", on_down)

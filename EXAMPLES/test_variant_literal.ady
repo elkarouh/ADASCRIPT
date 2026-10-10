@@ -4,7 +4,9 @@
 A variant record's kind says which fields a value has, so `VNum(3.0)` is
 enough where `Val_T(kind=VNum, num=3.0)` was needed -- in an expression and
 in a pattern alike. Arguments fill the fields of that kind in the order they
-are declared, or name them; a kind that carries nothing is `B()`. A bare
+are declared, or name them; a kind that carries nothing is `B()`. A branch
+for several kinds (`when P | Q:`) and the `when others:` branch build their
+kinds the same way. A bare
 `B`, with no parentheses, is still the enum member. The output is compared
 between the backends.
 """
@@ -19,6 +21,29 @@ type V_T (kind: K_T) is record:
         when C:
             xs: []int
             s:  str
+
+# One branch for several kinds (`when P | Q:`) gives each of them its fields;
+# `when others:` gives them to the kinds not named before it.
+type Phase_T is enum P, Q, R, S
+
+type Grip_T (phase: Phase_T) is record:
+    case phase is
+        when P | Q:
+            at: int
+            who: str
+        when R:
+            left: int
+        when others:
+            pass
+
+def grip_text(g: Grip_T) -> str:
+    case g.phase:
+        when P | Q:
+            return f"{g.phase} {g.who} at {g.at}"
+        when R:
+            return f"R {g.left}"
+        when others:
+            return "S"
 
 def describe(v: V_T) -> str:
     case v.kind:
@@ -46,4 +71,10 @@ print shape([A(7), B()])
 print shape([B(), A(2)])
 print shape([])
 print "kinds ok" if A(1).kind == A and B().kind == B else "kinds wrong"
+var g: Grip_T = P(1, "a")
+print grip_text(g)
+g = Q(g.at + 1, who=g.who)
+print grip_text(g)
+print grip_text(R(3))
+print grip_text(S())
 print "test OK"

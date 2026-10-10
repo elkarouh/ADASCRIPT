@@ -3740,6 +3740,21 @@ def _extract_fields_from_block_inner(block_node, indent, export_fields=False):
     return lines, defaults
 
 
+def _variant_when_kinds(node):
+    """The kinds a variant record's `when` names: [A] for `when A:`, [A, B] for
+    `when A | B:`, ["others"] for `when others:`."""
+    cn = type(node).__name__
+    if cn == "IDENTIFIER":
+        return [node.to_nim()]
+    if cn == "pattern_others":
+        return ["others"]
+    kinds = []
+    for c in getattr(node, "nodes", []) or []:
+        if hasattr(c, "to_nim") or hasattr(c, "nodes"):
+            kinds += _variant_when_kinds(c)
+    return kinds
+
+
 def _extract_variant_fields_nim(stmt_nodes, indent):
     """Extract field declarations from variant_when stmt_line nodes."""
     import hek_nim_stmt as _hns
@@ -3887,8 +3902,11 @@ def to_nim(self, indent=0):
                 fields_node = None
                 for child in when_node.nodes:
                     cn = type(child).__name__
-                    if cn == "IDENTIFIER" and pat is None:
-                        pat = child.to_nim()
+                    if pat is None and cn in ("IDENTIFIER", "pattern_or", "pattern_others"):
+                        # `when A:`, `when A | B:` (one branch for both kinds), `when others:`
+                        kinds = _variant_when_kinds(child)
+                        if kinds and pat is None:
+                            pat = ", ".join(kinds)
                     elif cn == "Several_Times":
                         fields_node = child
                 if pat and fields_node:
