@@ -1400,7 +1400,7 @@ test: compile
 	      && { echo OK; rm -rf $$tmp; } \
 	      || { echo FAIL; rm -rf $$tmp; exit 1; }
 
-	@# The one js-backend module. It is a library, not a program, so the
+	@# The js-backend modules. Each is a library, not a program, so the
 	@# check is that `nim js` accepts it -- nothing else in this target
 	@# exercises the js path, and a dict literal is emitted differently
 	@# there (js{...} rather than {...}.toTable), so a native-only run
@@ -1408,6 +1408,9 @@ test: compile
 	@echo "=== JS backend (compile only) ==="
 	@printf '  %-42s' "STDLIB/jointjs.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/jointjs.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "STDLIB/svg_drag.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/svg_drag.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
 	@# html: blocks: the native build prints the page, which must hold one

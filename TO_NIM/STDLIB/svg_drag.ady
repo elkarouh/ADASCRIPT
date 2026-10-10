@@ -1,0 +1,241 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""svg_drag -- drag the shapes of an SVG drawing with the mouse, in the browser (ady2nim js).
+
+For a page drawn on the server and kept up to date by htmx: everything else is declared in
+the HTML, and only what must follow the mouse every frame runs in the browser. This module
+holds what every such drag has in common; the app says what a drag means:
+
+    from svg_drag import Spot, draggable, ...
+    def moved(node: Node, centre: Spot, wanted: Spot) -> Spot: ...   # during the drag
+    def dropped(node: Node, at: Spot): ...                           # when it is let go
+    draggable("g.node", "svg.graph", 580.0, moved, dropped, no_click)
+
+A shape that can be dragged is an element (`g.node` above) carrying its centre, in the
+drawing's units, in the attributes data_x and data_y, as the server drew it. While it is
+dragged, `moved` is told where the mouse has taken that centre, and answers where the shape
+is (it may keep it inside the drawing, or not move it at all). When it is let go, `dropped`
+is told where it ended; it usually fills in a hidden form and clicks its button, so that
+htmx sends the new place to the server, which draws the page again.
+
+A press that does not move is a click, and goes on to htmx. The click the browser sends
+after a drag is swallowed, so a shape is not clicked by being moved. Other clicks go to
+`on_click` first (a shift-click, say), which may stop them.
+
+Used by EXAMPLES/DIJKSTRA_HTMX and TOOLS/ACCOUNTING.
+
+---- A few browser words, for a reader who does not write front ends ----
+
+The DOM ("document object model") is the page as the browser holds it: a tree of elements,
+one per HTML tag. `document` is its root. Each element is a `Node` here, and the same calls
+work on all of them:
+  querySelector("css")     the first element below that matches a CSS selector, or nil
+                           ("g.node" = a <g> of class node, "#move" = the element with
+                           id="move", "input[name=pos]" = the <input> named pos,
+                           "g[data_from]" = a <g> that has a data_from attribute)
+  querySelectorAll("css")  all of them
+  closest("css")           this element or the nearest one above it that matches
+  getAttribute / setAttribute   read or write one attribute, as text
+The drawing is SVG, which is HTML for pictures: a <g> groups shapes, a <path d="M x1 y1
+L x2 y2"> is a line from (x1, y1) to (x2, y2), and transform="translate(dx,dy)" shifts a
+group without changing what is in it.
+
+The browser calls a function of ours, a "listener", for each event it is given (see
+draggable). An event is a value describing what happened: for the mouse, which button,
+whether shift was held, and where (clientX, clientY, in pixels from the window's top left).
+A click is three events in this order: mousedown, mouseup, click. Every event goes down the
+tree to the element it is for and then back up; htmx listens at the top, on the way back up.
+cstring is the browser's own string type: Nim strings are converted at each call.
+"""
+from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
+
+# ---- Two units: the mouse's and the drawing's ----
+#
+# The mouse reports pixels; the server keeps a shape's place in the drawing's own units (its
+# viewBox), whatever size the drawing has on the screen. `distinct` makes them two types, so
+# adding a pixel to a drawing unit does not compile. The only way across is the scale.
+
+type Pixel_T is distinct float          # on the screen, as the mouse reports it
+type Unit_T is distinct float           # in the drawing, as the server keeps a shape's place
+type Scale_T is Unit_T / Pixel_T        # drawing units a pixel: pixels * scale = units
+
+type Screen is tuple:                   # a place on the screen
+    x: Pixel_T
+    y: Pixel_T
+
+type Spot is tuple:                     # a place in the drawing
+    x: Unit_T
+    y: Unit_T
+
+const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
+
+# What the app says a drag means (see the docstring).
+type Moved_T is (Node, Spot, Spot) -> Spot   # the shape, its centre when pressed, where the mouse has taken it -> where it is
+type Dropped_T is (Node, Spot) -> None       # the shape, where it was let go
+type Clicked_T is (Event) -> None            # any click that is not the end of a drag
+
+# ---- The drag, as a small state machine ----
+#
+#            mousedown on a shape           mousemove more than 4 px
+#   IDLE  ------------------------>  PRESSED  ---------------------->  DRAGGING
+#    ^  ^                               |                                 |
+#    |  +------- mouseup (a click) -----+                                 | mouseup: dropped(..)
+#    |                                                                    |
+#    +------------- click (the browser's, swallowed) ---- DROPPED  <-----+
+#
+# IDLE: nothing pressed. PRESSED: a shape is held but has not moved, so letting go is a
+# click. DRAGGING: it has moved. DROPPED: a drag has just ended, and the click the browser
+# sends after it is not a click.
+type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
+
+# Everything the drag knows, in one value. It is a variant record: which fields exist depends
+# on the phase. While PRESSED or DRAGGING it holds a shape; while IDLE or DROPPED it has no
+# fields at all, so reading `grip.node` then is an error (Nim raises), not a stale value.
+#
+# A value is built by naming its phase like a function: `PRESSED(node, ...)` fills the fields
+# in the order declared below, and `IDLE()` is a grip in phase IDLE, with nothing in it. The
+# parentheses matter: bare `IDLE` is the enum member (a Phase_T), `IDLE()` the record (a
+# Grip_T), and `grip` is a Grip_T. So `grip = IDLE()` sets the drag back to nothing, and
+# `grip.phase == IDLE` asks which phase it is in.
+type Grip_T (phase: Phase_T) is record:
+    case phase is
+        when PRESSED | DRAGGING:
+            node:   Node                # the shape held
+            down:   Screen              # where the mouse went down
+            centre: Spot                # the shape's centre then
+            now:    Spot                # and where it is now, as `moved` answered
+        when others:
+            pass
+
+var grip: Grip_T = IDLE()               # the one drag there is; nothing held at first
+
+# What draggable was given.
+var shapes: str = ""                    # the CSS selector of the shapes that can be dragged
+var drawing: str = ""                   # the CSS selector of the <svg>
+var drawing_width: Unit_T = 0.0               # its width, in its own units
+var moved_hook: Moved_T
+var dropped_hook: Dropped_T
+var clicked_hook: Clicked_T
+
+# ---- Reading the page ----
+
+# The text of attribute ATTR of NODE.
+def attr(node: Node, name: str) -> str:
+    return str(node.getAttribute(cstring(name)))
+
+# The number in attribute ATTR of NODE ("data_x", "data_y"), as drawing units; 0 if it is not
+# a number.
+def unit_of(node: Node, name: str) -> Unit_T:
+    let r: float | !ParseFailure_T = parse_float(attr(node, name))
+    if r is ParseFailure_T:
+        return 0.0
+    return Unit_T(r)
+
+# Where a shape's centre is, as the server last drew it.
+def spot_of(node: Node) -> Spot:
+    return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
+
+# Where the mouse was when event M happened.
+def screen_of(m: MouseEvent) -> Screen:
+    return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
+
+# Whether NODE has the CSS class WORD: class="node from" holds several.
+def has_class(node: Node, word: str) -> bool:
+    return f" {word} " in " " + attr(node, "class") + " "
+
+# The <input name=NAME> of the page (a hidden field of a form, usually).
+def field_named(name: str) -> InputElement:
+    return InputElement(document.querySelector(cstring(f"input[name={name}]")))
+
+# How many drawing units a pixel is: the drawing is scaled to fit the page, so this is asked
+# each time (the window may have been resized). getBoundingClientRect is the element's size
+# and place on the screen, in pixels.
+def scale() -> Scale_T:
+    let box: BoundingRect = document.querySelector(cstring(drawing)).getBoundingClientRect()
+    return drawing_width / Pixel_T(box.width)   # units / pixels: a Scale_T
+
+# ---- Changing the page ----
+
+# Draw NODE, whose centre the server put at CENTRE, at NOW instead: its picture is shifted by
+# the difference. Its data_x/data_y stay CENTRE until the server draws the page again.
+def shift(node: Node, centre: Spot, now: Spot):
+    node.setAttribute(cstring("transform"), cstring(f"translate({now.x - centre.x:.1f},{now.y - centre.y:.1f})"))
+
+# V kept between LO and HI.
+def between(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
+    return max(lo, min(hi, v))
+
+# For an app with nothing to do on a click.
+def no_click(e: Event):
+    pass
+
+# ---- The listeners: what each mouse event does, by phase ----
+
+# A button went down. If it is the left one (button 0) and on a shape, hold that shape.
+def on_down(e: Event):
+    let m: MouseEvent = MouseEvent(e)
+    if m.button != 0:
+        return
+    let node: Node = e.target.closest(cstring(shapes))   # the press may be on a part of the shape
+    if node == nil:
+        return                          # not on a shape: leave the event to htmx
+    let centre: Spot = spot_of(node)
+    grip = PRESSED(node, screen_of(m), centre, centre)
+    e.preventDefault()                  # stop the browser's own drag, which selects text
+
+# The mouse moved. The browser sends this many times a second, whether a button is down or not.
+def on_move(e: Event):
+    case grip.phase:
+        when PRESSED | DRAGGING:
+            let at: Screen = screen_of(MouseEvent(e))
+            let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
+            let dy: Pixel_T = at.y - grip.down.y
+            if grip.phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
+                return                  # not yet a drag: a hand shakes, and it may still be a click
+            let k: Scale_T = scale()    # pixels * scale = drawing units
+            let wanted: Spot = Spot(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
+            let now: Spot = moved_hook(grip.node, grip.centre, wanted)
+            grip = DRAGGING(grip.node, grip.down, grip.centre, now)
+        when others:
+            pass                        # nothing held: an ordinary mouse move
+
+# The button came up.
+def on_up(e: Event):
+    case grip.phase:
+        when PRESSED:
+            grip = IDLE()               # it never moved: a click, which the browser sends next and htmx handles
+        when DRAGGING:
+            # still DRAGGING while the app answers, so a click it makes (on a form's button)
+            # goes through on_click
+            dropped_hook(grip.node, grip.now)
+            grip = DROPPED()
+        when others:
+            pass
+
+# A click. The browser sends one after every mouseup, a drag's too; htmx would take that one
+# as a click on the shape. So after a drag (DROPPED) the click is stopped here, before htmx
+# sees it. Any other click is the app's first.
+def on_click(e: Event):
+    if grip.phase == DROPPED:
+        grip = IDLE()
+        e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
+        return
+    clicked_hook(e)
+
+# Make the shapes SHAPES (a CSS selector) of the drawing DRAWING (the <svg>, WIDE units wide)
+# draggable: MOVED, DROPPED and CLICKED say what a drag means (see the docstring).
+#
+# The listeners are on the whole document, so a drag goes on when the mouse leaves the
+# shape. The click listener gets True ("capture"): it is called on the way down the tree,
+# before htmx, which listens on the way up.
+def draggable(shape_css: str, drawing_css: str, wide: Unit_T, moved: Moved_T, dropped: Dropped_T, clicked: Clicked_T):
+    shapes = shape_css
+    drawing = drawing_css
+    drawing_width = wide
+    moved_hook = moved
+    dropped_hook = dropped
+    clicked_hook = clicked
+    document.addEventListener("mousedown", on_down)
+    document.addEventListener("mousemove", on_move)
+    document.addEventListener("mouseup", on_up)
+    document.addEventListener("click", on_click, True)

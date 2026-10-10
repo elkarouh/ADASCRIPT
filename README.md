@@ -1887,9 +1887,10 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import iters`    | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
 | `import strscan`  | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
 | `import ansi`     | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `fg_bright_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`); `bold + fg_red` is one style with both codes |
-| `import graphs`   | `dijkstra` and `shortest_path` over a weighted digraph, generic in the node type |
+| `import graphs`   | `dijkstra`, `shortest_path` and `shortest_route` (with its cost) over a weighted digraph, generic in the node type |
 | `import db`       | thin SQLite wrapper                                        |
 | `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
+| `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
 
@@ -3487,7 +3488,7 @@ ADASCRIPT/
 │       ├── graphs.ady         Shortest paths, generic in the node type
 │       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       ├── illwill.nim        Curses-like terminal library, pure Nim (one file)
-│       └── db.ady, jointjs.ady, expect.nim
+│       └── db.ady, jointjs.ady, svg_drag.ady, expect.nim
 │
 ├── EXAMPLES/                  End-to-end example programs (`*.ady`)
 │                              Transpiled output is not kept here — it goes to

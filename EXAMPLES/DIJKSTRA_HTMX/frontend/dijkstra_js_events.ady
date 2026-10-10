@@ -13,135 +13,28 @@ its button, which sends PUT /nodes: the server keeps the new place and draws the
 
 A press that does not move is a click, and goes on to htmx (it picks the node).
 
-The mouse speaks in pixels and the drawing in its own units: two units, which the compiler
-keeps apart, and a scale between them. A drag is one value, the grip, whose phase says
-which fields it has: nothing is held when IDLE, so nothing held can be read then.
+
+The drag itself (the mouse events, when a press becomes a drag, the click after it) is the
+standard library's svg_drag (TO_NIM/STDLIB/svg_drag.ady, which also explains the browser
+words used here). This file says only what a drag means in this app: `moved` and `dropped`.
 """
+from svg_drag import Unit_T, Spot, attr, spot_of, between, shift, no_click, draggable
+from dom nimport Node, InputElement, document, setAttribute, querySelector, querySelectorAll, click, value
 
-# ---- A few browser words, for a reader who does not write front ends ----
-#
-# The DOM ("document object model") is the page as the browser holds it: a tree of elements,
-# one per HTML tag. `document` is its root. Each element is a `Node` here, and the same
-# calls work on all of them:
-#   querySelector("css")     the first element below that matches a CSS selector, or nil
-#                            ("g.node" = a <g> of class node, "#move" = the element with
-#                            id="move", "g[data_from]" = a <g> that has a data_from attribute)
-#   querySelectorAll("css")  all of them
-#   closest("css")           this element or the nearest one above it that matches
-#   getAttribute / setAttribute   read or write one attribute, as text
-# The drawing is SVG, which is HTML for pictures: a <g> groups shapes, a <path d="M x1 y1
-# L x2 y2"> is a line from (x1, y1) to (x2, y2), and transform="translate(dx,dy)" shifts a
-# group without changing what is in it.
-#
-# The browser calls a function of ours, a "listener", for each event it is given (the last
-# four lines of this file). An event is a value describing what happened: for the mouse, which
-# button and where (clientX, clientY, in pixels from the window's top left). A click is three
-# events in this order: mousedown, mouseup, click. Every event goes down the tree to the
-# element it is for and then back up; htmx listens at the top, on the way back up.
-# cstring is the browser's own string type: Nim strings are converted at each call.
-
-from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
-
-# ---- Two units: the mouse's and the drawing's ----
-#
-# The mouse reports pixels; the server keeps a node's place in the drawing's own units, 580
-# by 380, whatever size the drawing has on the screen. `distinct` makes them two types, so
-# adding a pixel to a drawing unit does not compile. The only way across is the scale.
-
-type Pixel_T is distinct float          # on the screen, as the mouse reports it
-type Unit_T is distinct float           # in the drawing, as the server keeps a node's place
-type Scale_T is Unit_T / Pixel_T        # drawing units a pixel: pixels * scale = units
-
-type Screen is tuple:                   # a place on the screen
-    x: Pixel_T
-    y: Pixel_T
-
-type Spot is tuple:                     # a place in the drawing
-    x: Unit_T
-    y: Unit_T
-
-const WIDTH: Unit_T = 580.0             # the drawing's size (the svg's viewBox)
-const HEIGHT: Unit_T = 380.0
-const MARGIN: Unit_T = 30.0             # how near its edge a node may go
-const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
-
-# ---- The drag, as a small state machine ----
-#
-#            mousedown on a node            mousemove more than 4 px
-#   IDLE  ------------------------>  PRESSED  ---------------------->  DRAGGING
-#    ^  ^                               |                                 |
-#    |  +------- mouseup (a click) -----+                                 | mouseup: tell the
-#    |                                                                    | server, then
-#    +------------- click (the browser's, swallowed) ---- DROPPED  <-----+
-#
-# IDLE: nothing pressed. PRESSED: a node is held but has not moved, so letting go is a
-# click, which picks the node. DRAGGING: it has moved. DROPPED: a drag has just ended, and
-# the click the browser sends after it is not a click.
-type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
-
-# Everything the drag knows, in one value. It is a variant record: which fields exist depends
-# on the phase. While PRESSED or DRAGGING it holds a node; while IDLE or DROPPED it has no
-# fields at all, so reading `grip.node` then is an error (Nim raises), not a stale value.
-#
-# A value is built by naming its phase like a function: `PRESSED(node, name, ...)` fills the
-# fields in the order declared below, and `IDLE()` is a grip in phase IDLE, with nothing in it.
-# The parentheses matter: bare `IDLE` is the enum member (a Phase_T), `IDLE()` the record (a
-# Grip_T), and `grip` is a Grip_T. So `grip = IDLE()` sets the drag back to nothing, and
-# `grip.phase == IDLE` asks which phase it is in.
-type Grip_T (phase: Phase_T) is record:
-    case phase is
-        when PRESSED | DRAGGING:
-            node:   Node                # the <g class="node"> held
-            name:   str                 # its data_name
-            down:   Screen              # where the mouse went down
-            centre: Spot                # the node's centre then
-            now:    Spot                # and where it has been dragged to
-        when others:
-            pass
-
-var grip: Grip_T = IDLE()               # the one drag there is; nothing held at first
-
-# ---- Reading the page ----
-
-# The number in attribute ATTR of NODE ("data_x" or "data_y"), as drawing units; 0 if it is not
-# a number. The server writes these attributes when it draws the page (dijkstra_gui.ady).
-def unit_of(node: Node, attr: str) -> Unit_T:
-    let r: float | !ParseFailure_T = parse_float(str(node.getAttribute(cstring(attr))))
-    if r is ParseFailure_T:
-        return 0.0
-    return Unit_T(r)
-
-# Where a node's centre is, as the server last drew it.
-def spot_of(node: Node) -> Spot:
-    return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
+const WIDTH: Unit_T = Unit_T(580.0)             # the drawing's size (the svg's viewBox)
+const HEIGHT: Unit_T = Unit_T(380.0)
+const MARGIN: Unit_T = Unit_T(30.0)             # how near its edge a node may go
 
 # The node with that name: the <g class="node"> whose data_name is NAME.
 def node_named(name: str) -> Node:
     return document.querySelector(cstring(f"g.node[data_name=\"{name}\"]"))
-
-# Where the mouse was when event M happened.
-def screen_of(m: MouseEvent) -> Screen:
-    return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
-
-# How many drawing units a pixel is: the drawing is scaled to fit the page, so this is asked
-# each time (the window may have been resized). getBoundingClientRect is the element's size
-# and place on the screen, in pixels.
-def scale() -> Scale_T:
-    let box: BoundingRect = document.querySelector("svg.graph").getBoundingClientRect()
-    return WIDTH / Pixel_T(box.width)   # units / pixels: a Scale_T
-
-# V kept between MARGIN and SIZE - MARGIN: a node is not dragged off the drawing.
-def inside(v: Unit_T, size: Unit_T) -> Unit_T:
-    return max(MARGIN, min(size - MARGIN, v))
-
-# ---- Changing the page ----
 
 # The edges of node NAME drawn again as if it were at AT, and their costs moved to their
 # middles. Only the browser's copy changes: the server is told once, when the mouse is let go.
 # An edge is <g data_from="A" data_to="B"> holding a <path> (the line) and a <text class="cost">.
 def follow(name: str, at: Spot):
     for e in document.querySelectorAll("g[data_from]"):
-        let ends: (str, str) = (str(e.getAttribute(cstring("data_from"))), str(e.getAttribute(cstring("data_to"))))
+        let ends: (str, str) = (attr(e, "data_from"), attr(e, "data_to"))
         if name in [ends[0], ends[1]]:
             # the end that is NAME is at AT; the other end stays where it is
             let a: Spot = (at if ends[0] == name else spot_of(node_named(ends[0])))
@@ -151,75 +44,26 @@ def follow(name: str, at: Spot):
             cost.setAttribute(cstring("x"), cstring(f"{(a.x + b.x) / 2.0:.0f}"))
             cost.setAttribute(cstring("y"), cstring(f"{(a.y + b.y) / 2.0 - 6.0:.0f}"))   # just above the line
 
-# Put VALUE in the hidden input NAME of the form #move. The form is in the page but not shown;
-# its button #redraw sends it to the server (hx-put="/nodes", see dijkstra_gui.ady).
+# While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
+# edges follow.
+def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
+    let now: Spot = Spot(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
+    shift(node, centre, now)
+    follow(attr(node, "data_name"), now)
+    return now
+
+# Put VALUE in the hidden input NAME of the form #move.
 def set_field(name: str, value: str):
     let field: InputElement = InputElement(document.querySelector(cstring(f"#move input[name={name}]")))
     field.value = cstring(value)
 
-# ---- The listeners: what each mouse event does, by phase ----
+# NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
+# node's name and new centre, and its button #redraw sends it (hx-put="/nodes", see
+# dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
+def dropped(node: Node, at: Spot):
+    set_field("name", attr(node, "data_name"))
+    set_field("x", f"{at.x:.0f}")
+    set_field("y", f"{at.y:.0f}")
+    document.querySelector("#redraw").click()
 
-# A button went down. If it is the left one (button 0) and on a node, hold that node.
-def on_down(e: Event):
-    let m: MouseEvent = MouseEvent(e)
-    if m.button != 0:
-        return
-    let node: Node = e.target.closest("g.node")   # the press may be on the circle or the label inside
-    if node == nil:
-        return                          # not on a node: leave the event to htmx
-    let centre: Spot = spot_of(node)
-    grip = PRESSED(node, str(node.getAttribute(cstring("data_name"))), screen_of(m), centre, centre)
-    e.preventDefault()                  # stop the browser's own drag, which selects text
-
-# The mouse moved. The browser sends this many times a second, whether a button is down or not.
-def on_move(e: Event):
-    case grip.phase:
-        when PRESSED | DRAGGING:
-            let at: Screen = screen_of(MouseEvent(e))
-            let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
-            let dy: Pixel_T = at.y - grip.down.y
-            if grip.phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
-                return                  # not yet a drag: a hand shakes, and it may still be a click
-            let k: Scale_T = scale()
-            # pixels * scale = drawing units: the new centre, kept inside the drawing
-            let now: Spot = Spot(x=inside(grip.centre.x + dx * k, WIDTH), y=inside(grip.centre.y + dy * k, HEIGHT))
-            grip = DRAGGING(grip.node, grip.name, grip.down, grip.centre, now)
-            # shift the node's picture by how far it has come; its data_x/data_y stay the old
-            # centre until the server draws the page again
-            grip.node.setAttribute(cstring("transform"), cstring(f"translate({now.x - grip.centre.x:.1f},{now.y - grip.centre.y:.1f})"))
-            follow(grip.name, now)
-        when others:
-            pass                        # nothing held: an ordinary mouse move
-
-# The button came up.
-def on_up(e: Event):
-    case grip.phase:
-        when PRESSED:
-            grip = IDLE()               # it never moved: a click, which the browser sends next and htmx handles
-        when DRAGGING:
-            # tell the server the node's new place, the same way a form is sent: fill in the
-            # hidden form and click its button. htmx sends PUT /nodes and puts the page it
-            # gets back in place of this one.
-            set_field("name", grip.name)
-            set_field("x", f"{grip.now.x:.0f}")
-            set_field("y", f"{grip.now.y:.0f}")
-            document.querySelector("#redraw").click()
-            grip = DROPPED()            # after the click above, which on_click must let through
-        when others:
-            pass
-
-# A click. The browser sends one after every mouseup, a drag's too; htmx would take that one
-# as a click on the node and pick it. So after a drag (DROPPED) the click is stopped here,
-# before htmx sees it.
-def on_click(e: Event):
-    if grip.phase == DROPPED:
-        grip = IDLE()
-        e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
-
-# Ask the browser to call our functions. They listen on the whole document, so a drag goes on
-# when the mouse leaves the node. The click listener gets True ("capture"): it is called on the
-# way down the tree, before htmx, which listens on the way up.
-document.addEventListener("mousedown", on_down)
-document.addEventListener("mousemove", on_move)
-document.addEventListener("mouseup", on_up)
-document.addEventListener("click", on_click, True)
+draggable("g.node", "svg.graph", WIDTH, moved, dropped, no_click)
