@@ -196,6 +196,13 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`) |
 | `accounting.conf`, `scenarios/*.books` | the currency and chart a new scenario starts with, and the scenarios the page offers |
 
+**Why `shared/` exists.** Everything in `backend/` runs on the server, everything in `frontend/` in the browser,
+and `shared/` is the one thing both need: the arrow routing. The server uses it to draw the page; `drag.js` uses
+it to route the arrows again, live, while you drag an account (a round trip to the server per mouse move would be
+too slow). Two implementations would make the arrows jump when you drop the account and every routing fix would
+have to be made twice, so it is one source (`routes.ady`), compiled natively and to JavaScript. It works on plain
+names, points and texts so that nothing else, the accounting model above all, has to come along into the browser.
+
 ## The ledger
 
 The page's scenarios, on the command line: the same files, the same books.
