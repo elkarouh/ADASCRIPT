@@ -172,6 +172,7 @@ STANDALONE := \
     test_union_wide.ady \
     test_subrange_array.ady \
     test_variant_literal.ady \
+    test_foreign_field_unit.ady \
     test_set_operators.ady \
     test_case_guard_or.ady \
     test_method_param_names.ady \

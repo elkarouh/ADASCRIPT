@@ -1,0 +1,28 @@
+#!/usr/bin/env ady2nim
+"""Test: the field of a value whose type this file did not declare.
+
+`info.size` reads a field of a FileInfo, a Nim type. The transpiler does not
+know that type's fields, and once guessed the field's unit from its name: a
+module variable called `size`, a Count_T, made `Bytes_T(info.size)` "a Count_T
+that does not convert to a Bytes_T". The value's type is known, so its field is
+no other `size`. (It came up as `Pixel_T(box.width)` beside a `width`, box a
+dom BoundingRect.) Nim only: nimport.
+"""
+from os nimport FileInfo, getFileInfo
+
+type Bytes_T is distinct int
+type Count_T is distinct int
+
+var size: Count_T = 3                   # a module variable with the field's name
+
+def bytes_of(path: str) -> Bytes_T:
+    let info: FileInfo = getFileInfo(path)
+    return Bytes_T(info.size)
+
+let p: Path = Path("/tmp/test_foreign_field_unit.txt")
+let written: None | !PathFailure_T = p.write_text("12345")
+if written is PathFailure_T:
+    print "could not write"
+else:
+    print f"{int(bytes_of(str(p)))} bytes, {int(size)} counted"
+    print "test OK"
