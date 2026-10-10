@@ -12,62 +12,83 @@ Letting go writes the node's name and new centre into the hidden form `#move` an
 its button, which sends PUT /nodes: the server keeps the new place and draws the page again.
 
 A press that does not move is a click, and goes on to htmx (it picks the node).
+
+The mouse speaks in pixels and the drawing in its own units: two units, which the compiler
+keeps apart, and a scale between them. A drag goes through four phases, and each
+event says, by phase, what it does.
 """
 from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
-const WIDTH: float = 580.0              # the drawing's width, in its own units
-const HEIGHT: float = 380.0
-const MOVED: float = 4.0                # pixels before a press is a drag
-const MARGIN: float = 30.0
+type Pixel_T is distinct float          # on the screen, as the mouse reports it
+type Unit_T is distinct float           # in the drawing, as the server keeps a node's place
+type Scale_T is Unit_T / Pixel_T        # drawing units a pixel
 
-var held: Node = nil                    # the node pressed, or nil
-var held_name: str = ""
-var down_x: float = 0.0                 # where the mouse went down, in pixels
-var down_y: float = 0.0
-var centre_x: float = 0.0               # the node's centre when pressed
-var centre_y: float = 0.0
-var now_x: float = 0.0                  # and where it has been dragged to
-var now_y: float = 0.0
-var moved: bool = False
-var dragged: bool = False               # a drag has just ended: the click that follows is not a click
+type Screen is tuple:                   # a place on the screen
+    x: Pixel_T
+    y: Pixel_T
 
-def float_of(text: str) -> float:
-    let r: float | !ParseFailure_T = parse_float(text)
+type Spot is tuple:                     # a place in the drawing
+    x: Unit_T
+    y: Unit_T
+
+const WIDTH: Unit_T = 580.0             # the drawing's size
+const HEIGHT: Unit_T = 380.0
+const MARGIN: Unit_T = 30.0             # how near its edge a node may go
+const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
+
+# IDLE: nothing pressed. PRESSED: a node is held but has not moved, so letting go is a
+# click. DRAGGING: it has moved. DROPPED: a drag has just ended, and the click the browser
+# sends after it is not a click.
+type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
+
+type Hold is record:                    # what is held, while PRESSED or DRAGGING
+    node:   Node                        # the <g class="node">
+    name:   str
+    down:   Screen                      # where the mouse went down
+    centre: Spot                        # the node's centre then
+    now:    Spot                        # and where it has been dragged to
+
+var phase: Phase_T = IDLE
+var hold: Hold
+
+def unit_of(node: Node, attr: str) -> Unit_T:
+    let r: float | !ParseFailure_T = parse_float(str(node.getAttribute(cstring(attr))))
     if r is ParseFailure_T:
         return 0.0
-    else:
-        return r
+    return Unit_T(r)
 
-def number_of(node: Node, attr: str) -> float:
-    return float_of(str(node.getAttribute(cstring(attr))))
-
-# How many drawing units a pixel is.
-def scale() -> float:
-    let box: BoundingRect = document.querySelector("svg.graph").getBoundingClientRect()
-    return WIDTH / box.width
+def spot_of(node: Node) -> Spot:
+    return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
 
 def node_named(name: str) -> Node:
-    for n in document.querySelectorAll("g.node"):
-        if str(n.getAttribute(cstring("data_name"))) == name:
-            return n
-    return nil
+    return document.querySelector(cstring(f"g.node[data_name=\"{name}\"]"))
 
-# NAME at (X, Y): its edges drawn again from it, and their costs moved to their middles.
-def follow(name: str, x: float, y: float):
+def screen_of(m: MouseEvent) -> Screen:
+    return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
+
+# How many drawing units a pixel is: the drawing is scaled to fit the page.
+def scale() -> Scale_T:
+    let box: BoundingRect = document.querySelector("svg.graph").getBoundingClientRect()
+    return WIDTH / Pixel_T(box.width)
+
+def inside(v: Unit_T, size: Unit_T) -> Unit_T:
+    return max(MARGIN, min(size - MARGIN, v))
+
+# The node's edges drawn again from AT, and their costs moved to their middles.
+def follow(name: str, at: Spot):
     for e in document.querySelectorAll("g[data_from]"):
-        let from_name: str = str(e.getAttribute(cstring("data_from")))
-        let to_name: str = str(e.getAttribute(cstring("data_to")))
-        if from_name == name or to_name == name:
-            let a: Node = node_named(from_name)
-            let b: Node = node_named(to_name)
-            let x1: float = (x if from_name == name else number_of(a, "data_x"))
-            let y1: float = (y if from_name == name else number_of(a, "data_y"))
-            let x2: float = (x if to_name == name else number_of(b, "data_x"))
-            let y2: float = (y if to_name == name else number_of(b, "data_y"))
-            e.querySelector("path").setAttribute(cstring("d"), cstring(f"M {x1:.0f} {y1:.0f} L {x2:.0f} {y2:.0f}"))
+        let ends: (str, str) = (str(e.getAttribute(cstring("data_from"))), str(e.getAttribute(cstring("data_to"))))
+        if name in [ends[0], ends[1]]:
+            let a: Spot = (at if ends[0] == name else spot_of(node_named(ends[0])))
+            let b: Spot = (at if ends[1] == name else spot_of(node_named(ends[1])))
+            e.querySelector("path").setAttribute(cstring("d"), cstring(f"M {a.x:.0f} {a.y:.0f} L {b.x:.0f} {b.y:.0f}"))
             let cost: Node = e.querySelector("text.cost")
-            cost.setAttribute(cstring("x"), cstring(f"{(x1 + x2) / 2.0:.0f}"))
-            cost.setAttribute(cstring("y"), cstring(f"{(y1 + y2) / 2.0 - 6.0:.0f}"))
+            cost.setAttribute(cstring("x"), cstring(f"{(a.x + b.x) / 2.0:.0f}"))
+            cost.setAttribute(cstring("y"), cstring(f"{(a.y + b.y) / 2.0 - 6.0:.0f}"))
+
+def set_field(name: str, value: str):
+    let field: InputElement = InputElement(document.querySelector(cstring(f"#move input[name={name}]")))
+    field.value = cstring(value)
 
 def on_down(e: Event):
     let m: MouseEvent = MouseEvent(e)
@@ -76,53 +97,45 @@ def on_down(e: Event):
     let node: Node = e.target.closest("g.node")
     if node == nil:
         return
-    held = node
-    held_name = str(node.getAttribute(cstring("data_name")))
-    down_x = float(m.clientX)
-    down_y = float(m.clientY)
-    centre_x = number_of(node, "data_x")
-    centre_y = number_of(node, "data_y")
-    now_x = centre_x
-    now_y = centre_y
-    moved = False
+    let centre: Spot = spot_of(node)
+    hold = Hold(node, str(node.getAttribute(cstring("data_name"))), screen_of(m), centre, centre)
+    phase = PRESSED
     e.preventDefault()                  # no text selected while dragging
 
 def on_move(e: Event):
-    if held == nil:
-        return
-    let m: MouseEvent = MouseEvent(e)
-    let dx: float = float(m.clientX) - down_x
-    let dy: float = float(m.clientY) - down_y
-    if not moved and abs(dx) < MOVED and abs(dy) < MOVED:
-        return
-    moved = True
-    let k: float = scale()
-    now_x = max(MARGIN, min(WIDTH - MARGIN, centre_x + dx * k))
-    now_y = max(MARGIN, min(HEIGHT - MARGIN, centre_y + dy * k))
-    held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
-    follow(held_name, now_x, now_y)
-
-def set_field(name: str, value: str):
-    let field: InputElement = InputElement(document.querySelector(cstring("#move input[name=" + name + "]")))
-    field.value = cstring(value)
+    case phase:
+        when PRESSED | DRAGGING:
+            let at: Screen = screen_of(MouseEvent(e))
+            let dx: Pixel_T = at.x - hold.down.x
+            let dy: Pixel_T = at.y - hold.down.y
+            if phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
+                return                  # not yet a drag: it may still be a click
+            let k: Scale_T = scale()
+            let now: Spot = Spot(x=inside(hold.centre.x + dx * k, WIDTH), y=inside(hold.centre.y + dy * k, HEIGHT))
+            hold.now = now
+            phase = DRAGGING
+            hold.node.setAttribute(cstring("transform"), cstring(f"translate({now.x - hold.centre.x:.1f},{now.y - hold.centre.y:.1f})"))
+            follow(hold.name, now)
+        when others:
+            pass
 
 def on_up(e: Event):
-    if held == nil:
-        return
-    let was_moved: bool = moved
-    let name: str = held_name
-    held = nil
-    if was_moved:
-        set_field("name", name)
-        set_field("x", f"{now_x:.0f}")
-        set_field("y", f"{now_y:.0f}")
-        document.querySelector("#redraw").click()
-        dragged = True                  # after the click above, which must go through
+    case phase:
+        when PRESSED:
+            phase = IDLE               # a click: htmx has it
+        when DRAGGING:
+            set_field("name", hold.name)
+            set_field("x", f"{hold.now.x:.0f}")
+            set_field("y", f"{hold.now.y:.0f}")
+            document.querySelector("#redraw").click()
+            phase = DROPPED            # after the click above, which must go through
+        when others:
+            pass
 
 # The click after a drag is swallowed before htmx sees it: a node is not picked by being moved.
 def on_click(e: Event):
-    if dragged:
-        dragged = False
+    if phase == DROPPED:
+        phase = IDLE
         e.stopPropagation()
 
 document.addEventListener("mousedown", on_down)
