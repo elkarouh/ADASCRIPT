@@ -174,24 +174,26 @@ database the page changes. ledger_server makes NAME.db from NAME.books the
 first time NAME is shown, again on Start over, and again when NAME.books
 is newer than NAME.db (a new version of the scenario came in, with git pull); Save as writes the books
 shown to a new NAME.books. A new scenario is a new .books file: write it by
-hand, record it in the page and Save as, or start one with `./ledger new
+hand, record it in the page and Save as, or start one with `./backend/ledger new
 NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 
 | File | What it is |
 |---|---|
-| `accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
-| `ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
-| `ledger_server.ady` | serves the page, and the books to it; records what the page sends |
-| `books_text.ady` | the books as text, as the server and the page pass them |
-| `htmx_page.ady` | the page, drawn by the server for htmx: the books, recorded by clicking |
-| `drag.ady` | the page's one script of our own: dragging accounts and drawing arrows |
-| `accounting.conf` | the currency and the chart of accounts a new scenario starts with |
-| `scenarios/*.books` | the scenarios the page offers |
-| `accounting_gui.ady` | the example as a static web page (`make gui`) |
-| `importers/` | reading other programs' files: `gnucash.ady`, `beancount.ady`, `journal.ady`, `erp_csv.ady`, and `plain_books.ady` which they share |
+| `backend/` (native, compiled to C) | |
+| `backend/ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
+| `backend/ledger_server.ady` | serves the page, and the books to it; records what the page sends |
+| `backend/htmx_page.ady` | the page, drawn by the server for htmx: the books, recorded by clicking |
+| `backend/books_text.ady` | the books as text, as the server and the page pass them |
+| `backend/gnucash.ady`, `beancount.ady`, `journal.ady`, `erp_csv.ady`, `plain_books.ady` | reading other programs' files; `plain_books` is what the text formats share |
+| `frontend/` (compiled to JavaScript) | |
+| `frontend/drag.ady` | the page's one script of our own: dragging accounts and drawing arrows |
+| `frontend/htmx.min.js` | htmx, vendored, copied to `build/` |
+| `shared/` (compiled both ways) | |
+| `shared/accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
+| `shared/accounting_gui.ady` | the drawing code: boxes, arrows and their routes (`routes_of`), which the server draws the page with and `drag.js` re-routes the arrows with; also the static example (`make gui`) |
 | `tests/` | the tests, one `test_*.ady` for each part (`make test`) |
 | `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`) |
-| `static/` | `htmx.min.js`, vendored, copied to `build/` |
+| `accounting.conf`, `scenarios/*.books` | the currency and chart a new scenario starts with, and the scenarios the page offers |
 
 ## The ledger
 
@@ -199,18 +201,18 @@ The page's scenarios, on the command line: the same files, the same books.
 
 ```
 make ledger
-./ledger list                          # the scenarios, with their titles
-./ledger 2_vat show                    # balances, profit and loss, balance sheet
-./ledger 2_vat journal                 # every transaction, numbered, and what it did to each account
-./ledger 2_vat add 2011-05-02 "Printer paper" "Bank=-12.10" "Furniture and equipment=10.00" "VAT receivable=2.10"
-./ledger 2_vat delete 6                # transaction 6, as journal numbers it
-./ledger 2_vat account 613100 expense Fuel
-./ledger 2_vat delete-account Fuel     # an account no transaction touches
-./ledger 2_vat start-over              # back as 2_vat.books has it
-./ledger delete-scenario NAME           # a scenario's .books file and database gone
-./ledger 2_vat save-as vat_mine        # a new scenario, from these books
-./ledger 2_vat export                  # the books as a .books file holds them
-./ledger new mine                      # a new scenario: the config's chart, no transaction
+./backend/ledger list                          # the scenarios, with their titles
+./backend/ledger 2_vat show                    # balances, profit and loss, balance sheet
+./backend/ledger 2_vat journal                 # every transaction, numbered, and what it did to each account
+./backend/ledger 2_vat add 2011-05-02 "Printer paper" "Bank=-12.10" "Furniture and equipment=10.00" "VAT receivable=2.10"
+./backend/ledger 2_vat delete 6                # transaction 6, as journal numbers it
+./backend/ledger 2_vat account 613100 expense Fuel
+./backend/ledger 2_vat delete-account Fuel     # an account no transaction touches
+./backend/ledger 2_vat start-over              # back as 2_vat.books has it
+./backend/ledger delete-scenario NAME           # a scenario's .books file and database gone
+./backend/ledger 2_vat save-as vat_mine        # a new scenario, from these books
+./backend/ledger 2_vat export                  # the books as a .books file holds them
+./backend/ledger new mine                      # a new scenario: the config's chart, no transaction
 ```
 
 A transaction is a date, a description, and postings `ACCOUNT=AMOUNT`: the
@@ -286,7 +288,7 @@ accountants write them. Virtual postings in parentheses, automated and
 periodic transactions, prices, declarations, comments and balance
 assertions are ignored.
 
-Beancount and journal files make entries the same way (`importers/plain_books.ady`):
+Beancount and journal files make entries the same way (`backend/plain_books.ady`):
 a transaction with several debits against several credits becomes two
 entries through a `Clearing` account.
 
@@ -360,12 +362,12 @@ that check what the learner records, and the year-end closing.
 ## How the page is made (HTMX)
 
 `ledger_server` draws the page itself: http://127.0.0.1:8802/. It is
-htmx (`static/htmx.min.js`, 14 KB gzipped, copied to `build/`) swapping in the HTML
-that `htmx_page.ady` makes, with the same `accounting_gui.ady`, `books_text.ady` and
-`accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
+htmx (`frontend/htmx.min.js`, 14 KB gzipped, copied to `build/`) swapping in the HTML
+that `backend/htmx_page.ady` makes, with the same `shared/accounting_gui.ady`, `backend/books_text.ady` and
+`shared/accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
 state: the scenario, the grouping, the folding, the opened groups and the tab are the fields
 of a form in the page, and a change to one, or a click on a group or a tab, asks `/h/all`
 for the whole page again. Amounts are 64-bit here, so no grouping is refused for being
 too big for the browser. The page has: the scenario picker, Group by, fold, click a group to open
 it, the graph (laid out by the server; drag an account and it is drawn again where you let go, Tidy up forgets that), and the Transactions, Accounts and
-Statements tabs. Dragging is the page's one script of our own, `drag.ady` (Nim to JavaScript, about 100 lines): it moves the account (every arrow is routed again in the browser by the same `routes_of` the server uses, so they keep their curves) and tells the server where it was dropped. To record a transaction, click an account (it freezes, a red dashed outline), drag an arrow from it to another and answer the popup (when, what, how much, VAT), the server checks and records it. The replay works too: Previous, Next, Play (the server ticks every 1.8 seconds), Pause, a date slider and Show all; with an account frozen, Play steps through that account's transactions alone. The T-accounts tab (debits left, credits right, up to the replay step) and the ratios (under Statements) are there too. Also: Help, Debit and credit, the Exercise (draw each transaction's arrow, with Show the answer), shift-click to pick accounts and Merge the picked into a group of one's own (Close groups takes them apart), Close the year, opening and deleting accounts and transactions, Start over, Save as and Delete scenario. What changes the books is POSTed to `/h/do` (or `/h/record`); the page asks first (`hx-confirm`) before deleting or starting over. This page replaced an earlier one written in Adascript for the browser (`accounting_app.ady`, 2,100 lines, with its own copy of the model); it is in git history.
+Statements tabs. Dragging is the page's one script of our own, `frontend/drag.ady` (Nim to JavaScript): it moves the account (every arrow is routed again in the browser by the same `routes_of` the server uses, so they keep their curves) and tells the server where it was dropped. To record a transaction, click an account (it freezes, a red dashed outline), drag an arrow from it to another and answer the popup (when, what, how much, VAT), the server checks and records it. The replay works too: Previous, Next, Play (the server ticks every 1.8 seconds), Pause, a date slider and Show all; with an account frozen, Play steps through that account's transactions alone. The T-accounts tab (debits left, credits right, up to the replay step) and the ratios (under Statements) are there too. Also: Help, Debit and credit, the Exercise (draw each transaction's arrow, with Show the answer), shift-click to pick accounts and Merge the picked into a group of one's own (Close groups takes them apart), Close the year, opening and deleting accounts and transactions, Start over, Save as and Delete scenario. What changes the books is POSTed to `/h/do` (or `/h/record`); the page asks first (`hx-confirm`) before deleting or starting over. This page replaced an earlier one written in Adascript for the browser (`accounting_app.ady`, 2,100 lines, with its own copy of the model); it is in git history.

@@ -18,8 +18,8 @@ Equity, Income (Revenue) and Expenses (any case) give the kinds; an account
 is named by as many last parts of its path as tell it from the others.
 """
 from os nimport splitFile
-from accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
-from books_text import AccountRow, Books, bad, field
+from shared/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from backend/books_text import AccountRow, Books, bad, field
 
 type Leg is record:
     account: str

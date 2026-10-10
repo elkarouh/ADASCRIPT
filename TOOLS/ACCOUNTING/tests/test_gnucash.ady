@@ -8,9 +8,9 @@ the two ways GnuCash writes them.
 """
 from db import DB
 from os nimport removeFile, fileExists
-from accounting_model import BookFailure_T, Graph
-from books_text import Books, graph_of, text_of_books
-from importers/gnucash import books_of_gnucash
+from shared/accounting_model import BookFailure_T, Graph
+from backend/books_text import Books, graph_of, text_of_books
+from backend/gnucash import books_of_gnucash
 
 const PATH: str = "/tmp/test_gnucash_file.gnucash"
 

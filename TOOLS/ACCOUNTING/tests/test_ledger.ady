@@ -5,9 +5,9 @@ and what does not fit the books is refused without a trace.
 
     ady2nim c -r test_ledger.ady
 """
-from accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
-from books_text import AccountRow, Books, Ratio, closing_entries, ratios_of, kind_named, parse_books, text_of_books, graph_of
-from ledger import Config, Ledger, Scenarios, cents_of, open_chart, read_config, record_example
+from shared/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
+from backend/books_text import AccountRow, Books, Ratio, closing_entries, ratios_of, kind_named, parse_books, text_of_books, graph_of
+from backend/ledger import Config, Ledger, Scenarios, cents_of, open_chart, read_config, record_example
 from os nimport walkFiles, createDir, fileExists, removeDir
 
 # The value of a step that must not fail here.

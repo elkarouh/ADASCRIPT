@@ -20,9 +20,9 @@ saves it and deletes it. What changes the books is POSTed to /h/do and
 /h/record; the rest is GET /h/all.
 """
 from uri nimport decodeUrl
-from accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
-from accounting_gui import STYLE, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, Point, signed, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
-from books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
+from shared/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
+from shared/accounting_gui import STYLE, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, Point, signed, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
+from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
 
 # The settings, as the query gives them.
 type Params is record:

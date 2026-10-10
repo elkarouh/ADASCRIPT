@@ -4,14 +4,19 @@
 # (nimble install db_connector).
 #
 #   make app        the tool: the books drawn in the browser, kept by clicking
-#                   (ledger_server draws the page, htmx_page.ady; each scenario,
+#                   (ledger_server draws the page, backend/htmx_page.ady; each scenario,
 #                   scenarios/NAME.books, gets a database NAME.db there)
-#   make ledger     build the ledger's command line (./ledger -h, ./ledger list)
-#   make gui        the example as a static web page      (accounting_gui.ady)
+#   make ledger     build the ledger's command line (backend/ledger -h, backend/ledger list)
+#   make gui        the example as a static web page      (shared/accounting_gui.ady)
 #   make test       the model and the ledger, no GUI (Nim only)
 #   make all        build the programs and the pages, open none
 #
 # $(OPEN) is xdg-open, or open on a Mac; `make gui OPEN=firefox` picks one.
+
+# backend/   compiled to C: the ledger, the server, the page it draws
+# frontend/  compiled to JavaScript: drag.ady, and the vendored htmx.min.js
+# shared/    compiled both ways: the model, and the drawing code drag.ady reuses
+# tests/     the tests (native)
 
 # This checkout's own transpiler, so that its STDLIB (the db module the ledger
 # imports) is the one used, whatever ady2nim is first on PATH.
@@ -24,42 +29,43 @@ PORT    ?= 8802
 
 all: ledger ledger_server build/accounting_gui.html build/drag.js build/htmx.min.js
 
-ledger: ledger.ady importers/gnucash.ady importers/beancount.ady importers/journal.ady importers/erp_csv.ady importers/plain_books.ady books_text.ady accounting_model.ady
-	@echo "building ledger"
-	@$(ADY2NIM) c ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
+# ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
+ledger:
+	@echo "building backend/ledger"
+	@$(ADY2NIM) c backend/ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-ledger_server: ledger_server.ady htmx_page.ady accounting_gui.ady ledger.ady importers/gnucash.ady importers/beancount.ady importers/journal.ady importers/erp_csv.ady importers/plain_books.ady books_text.ady accounting_model.ady
-	@echo "building ledger_server"
-	@$(ADY2NIM) c ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+ledger_server:
+	@echo "building backend/ledger_server"
+	@$(ADY2NIM) c backend/ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-build/accounting_gui.html: accounting_gui.ady accounting_model.ady
+build/accounting_gui.html: shared/accounting_gui.ady shared/accounting_model.ady
 	@mkdir -p build
 	@echo "building $@"
 	@$(ADY2NIM) c -r $< > $@ 2> build/accounting_gui.log \
 	    || { cat build/accounting_gui.log; rm -f $@; exit 1; }
 
-build/drag.js: drag.ady
+build/drag.js: frontend/drag.ady shared/accounting_gui.ady shared/accounting_model.ady
 	@mkdir -p build
 	@echo "building $@"
 	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }
-	@cp -L drag.js $@ && rm -f drag.js
+	@cp -L frontend/drag.js $@ && rm -f frontend/drag.js
 
-# static/htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
-static/htmx.min.js:
-	git checkout -- static/htmx.min.js
+# frontend/htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
+frontend/htmx.min.js:
+	git checkout -- frontend/htmx.min.js
 
-build/htmx.min.js: static/htmx.min.js
+build/htmx.min.js: frontend/htmx.min.js
 	@mkdir -p build
-	@cp static/htmx.min.js $@
+	@cp frontend/htmx.min.js $@
 
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 
 app: ledger_server build/drag.js build/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
-	./ledger_server --port $(PORT)
+	./backend/ledger_server --port $(PORT)
 
 test:
 	$(ADY2NIM) c -r tests/test_accounting_model.ady 2>/dev/null
@@ -71,5 +77,5 @@ test:
 	$(ADY2NIM) c -r tests/test_htmx.ady 2>/dev/null
 
 clean:
-	rm -rf build scenarios/*.db $(basename $(wildcard *.ady)) $(basename $(wildcard tests/*.ady))
-	rm -f *.js                          # what ady2nim js leaves beside the source; static/htmx.min.js is not built here, and stays
+	rm -rf build scenarios/*.db $(foreach d,backend shared frontend tests,$(basename $(wildcard $(d)/*.ady)))
+	rm -f frontend/drag.js              # frontend/htmx.min.js is not built here, and stays

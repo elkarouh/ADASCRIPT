@@ -5,7 +5,7 @@ the material bought on credit and the loan, that kleppmann() adds.
 
     ady2nim c -r test_accounting_model.ady
 """
-from accounting_model import BookFailure_T, Cents_T, Entry, Flow, Graph, Posting, moves, Transaction, example_entries, kleppmann
+from shared/accounting_model import BookFailure_T, Cents_T, Entry, Flow, Graph, Posting, moves, Transaction, example_entries, kleppmann
 
 let g: Graph = kleppmann()
 

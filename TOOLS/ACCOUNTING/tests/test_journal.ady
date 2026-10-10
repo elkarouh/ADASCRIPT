@@ -8,9 +8,9 @@ with several debits against several credits.
     ady2nim c -r test_journal.ady
 """
 from os nimport removeFile, fileExists
-from accounting_model import BookFailure_T, Graph
-from books_text import Books, graph_of, text_of_books
-from importers/journal import books_of_journal
+from shared/accounting_model import BookFailure_T, Graph
+from backend/books_text import Books, graph_of, text_of_books
+from backend/journal import books_of_journal
 
 const FIXTURE: str = "/tmp/test_journal_file.journal"
 

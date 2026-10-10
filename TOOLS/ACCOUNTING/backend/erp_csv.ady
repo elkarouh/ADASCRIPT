@@ -18,9 +18,9 @@ given, else from the first digit of the number (1 assets, 2 liabilities,
 """
 from os nimport fileExists
 from math nimport round
-from accounting_model import BookFailure_T, Kind_T, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
-from books_text import Books, bad
-from plain_books import Collector, Leg, kind_of_root
+from shared/accounting_model import BookFailure_T, Kind_T, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from backend/books_text import Books, bad
+from backend/plain_books import Collector, Leg, kind_of_root
 
 # The fields of a CSV line: a field in double quotes may hold commas and "" for a quote.
 def csv_fields(line: str) -> []str:

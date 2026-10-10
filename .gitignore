@@ -112,8 +112,8 @@ node_modules/
 EXAMPLES/HTML/build/
 
 # The accounting tool: its program, tests and pages, and the database it keeps.
-TOOLS/ACCOUNTING/ledger
-TOOLS/ACCOUNTING/ledger_server
+TOOLS/ACCOUNTING/backend/ledger
+TOOLS/ACCOUNTING/backend/ledger_server
 TOOLS/ACCOUNTING/tests/test_ledger
 TOOLS/ACCOUNTING/tests/test_gnucash
 TOOLS/ACCOUNTING/tests/test_beancount
@@ -122,7 +122,7 @@ TOOLS/ACCOUNTING/tests/test_erp
 TOOLS/ACCOUNTING/tests/test_htmx
 TOOLS/ACCOUNTING/tests/test_accounting_model
 TOOLS/ACCOUNTING/*.js
-TOOLS/ACCOUNTING/accounting_gui
+TOOLS/ACCOUNTING/shared/accounting_gui
 TOOLS/ACCOUNTING/accounting.db
 TOOLS/ACCOUNTING/build/
 TOOLS/ACCOUNTING/scenarios/*.db

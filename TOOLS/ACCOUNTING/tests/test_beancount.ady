@@ -7,9 +7,9 @@ directives that are ignored.
     ady2nim c -r test_beancount.ady
 """
 from os nimport removeFile, fileExists
-from accounting_model import BookFailure_T, Graph
-from books_text import Books, graph_of, text_of_books
-from importers/beancount import books_of_beancount
+from shared/accounting_model import BookFailure_T, Graph
+from backend/books_text import Books, graph_of, text_of_books
+from backend/beancount import books_of_beancount
 
 const FIXTURE: str = "/tmp/test_beancount_file.beancount"
 

@@ -1444,14 +1444,14 @@ test: compile
 	        (cd $(TOOLDIR)/ACCOUNTING && $(ADY2NIM) c -r tests/$$t.ady >/dev/null 2>&1) \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
-	    printf '  %-42s' "ACCOUNTING/ledger_server.ady (nim)"; \
-	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/ledger_server.ady >/dev/null 2>&1 \
+	    printf '  %-42s' "ACCOUNTING/backend/ledger_server.ady (nim)"; \
+	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/backend/ledger_server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    if [ -z "$(HTML_SKIPPED)" ]; then \
-	        printf '  %-42s' "ACCOUNTING/drag.ady (ady2nim js)"; \
-	        $(ADY2NIM) js $(TOOLDIR)/ACCOUNTING/drag.ady >/dev/null 2>&1 \
+	        printf '  %-42s' "ACCOUNTING/frontend/drag.ady (ady2nim js)"; \
+	        $(ADY2NIM) js $(TOOLDIR)/ACCOUNTING/frontend/drag.ady >/dev/null 2>&1 \
 	            && echo OK || { echo FAIL; exit 1; }; \
-	        rm -f $(TOOLDIR)/ACCOUNTING/drag.js; \
+	        rm -f $(TOOLDIR)/ACCOUNTING/frontend/drag.js; \
 	    fi; \
 	fi
 

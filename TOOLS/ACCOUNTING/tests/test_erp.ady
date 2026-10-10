@@ -6,9 +6,9 @@ account the chart does not know, and the chart's names and kinds.
     ady2nim c -r test_erp.ady
 """
 from os nimport removeFile, fileExists
-from accounting_model import BookFailure_T, Graph
-from books_text import Books, graph_of, text_of_books
-from importers/erp_csv import books_of_erp
+from shared/accounting_model import BookFailure_T, Graph
+from backend/books_text import Books, graph_of, text_of_books
+from backend/erp_csv import books_of_erp
 
 const CSV_FILE: str = "/tmp/test_erp_journal.csv"
 const CHART_FILE: str = "/tmp/test_erp_chart.json"

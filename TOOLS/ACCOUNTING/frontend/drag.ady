@@ -16,8 +16,8 @@ arrow, a red line to the mouse. Let go over another account, and its name goes
 into the hidden field `target` before the same Redraw: the server answers with
 the popup that asks when, what and how much.
 """
-from accounting_model import Account, Cents_T, Flow, Graph, GREEN
-from accounting_gui import Point, Route, boxes, routes_of
+from shared/accounting_model import Account, Cents_T, Flow, Graph, GREEN
+from shared/accounting_gui import Point, Route, boxes, routes_of
 from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
 const WIDTH: float = 980.0

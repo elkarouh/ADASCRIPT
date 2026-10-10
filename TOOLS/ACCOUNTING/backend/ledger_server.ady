@@ -31,10 +31,10 @@ made from NAME.books the first time NAME is shown and again by Start over.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
-from books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books
-from htmx_page import Params, account_numbered, all_text, entry_of, fresh_params, has_account, int_of, params_of, shell_text, year_end, retained_account
-from ledger import Config, Ledger, Scenarios, read_config
+from shared/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
+from backend/books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books
+from backend/htmx_page import Params, account_numbered, all_text, entry_of, fresh_params, has_account, int_of, params_of, shell_text, year_end, retained_account
+from backend/ledger import Config, Ledger, Scenarios, read_config
 
 var config: Config = Config("USD", [])
 var books: Ledger = Ledger(":memory:")
