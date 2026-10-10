@@ -5,6 +5,9 @@ native, the browser only shows what the server draws, and htmx carries the
 clicks.
 
 ```
+make app                      # builds drag.js and the server, starts it and opens the page
+make test                     # the algorithm and the page, no server
+# or by hand:
 ady2nim js drag.ady            # the one script of our own, drag.js
 ady2nim c -r server.ady        # then open http://127.0.0.1:8810/ (run from this directory)
 ady2nim c -r test_dijkstra.ady # the algorithm and the page, no server
