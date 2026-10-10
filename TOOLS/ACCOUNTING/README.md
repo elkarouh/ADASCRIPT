@@ -186,8 +186,9 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `backend/accounting_gui.ady` | `to_html` for the model's objects (boxes, arrows, tables, statements), the page's texts, and the static example (`make gui`) |
 | `backend/accounting_page.ady` | the page, drawn by the server for htmx, and which event each part of it sends (`hx-*` attributes) |
 | `backend/books_text.ady` | the books as text, as the server and the page pass them |
-| `backend/gnucash.ady`, `beancount.ady`, `journal.ady`, `erp_csv.ady`, `plain_books.ady` | reading other programs' files; `plain_books` is what the text formats share |
 | `backend/accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
+| `importers/` (native; used by `ledger` to make a scenario from another program's file) | |
+| `importers/gnucash.ady`, `beancount.ady`, `journal.ady`, `erp_csv.ady`, `plain_books.ady` | reading GnuCash, Beancount, ledger-style journal and ERP CSV files into `Books`; `plain_books` is what the text formats share |
 | `frontend/` (compiled to JavaScript) | |
 | `frontend/accounting_js_events.ady` | the events that stay in the browser: dragging accounts and drawing arrows; everything else is declared in the page and handled on the server |
 | `frontend/htmx.min.js` | htmx, vendored, copied to `build/` |
@@ -297,7 +298,7 @@ accountants write them. Virtual postings in parentheses, automated and
 periodic transactions, prices, declarations, comments and balance
 assertions are ignored.
 
-Beancount and journal files make entries the same way (`backend/plain_books.ady`):
+Beancount and journal files make entries the same way (`importers/plain_books.ady`):
 a transaction with several debits against several credits becomes two
 entries through a `Clearing` account.
 

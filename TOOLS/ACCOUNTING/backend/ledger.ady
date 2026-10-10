@@ -41,10 +41,10 @@ from os nimport walkFiles, removeFile, fileExists, splitFile, getLastModificatio
 from times nimport toUnix
 from algorithm nimport sort
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, example_entries, money_text
-from backend/gnucash import books_of_gnucash
-from backend/beancount import books_of_beancount
-from backend/journal import books_of_journal
-from backend/erp_csv import books_of_erp
+from importers/gnucash import books_of_gnucash
+from importers/beancount import books_of_beancount
+from importers/journal import books_of_journal
+from importers/erp_csv import books_of_erp
 from backend/books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
 
 # ---------------------------------------------------------------------

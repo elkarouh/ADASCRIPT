@@ -25,7 +25,7 @@ from os nimport fileExists
 from math nimport round
 from backend/accounting_model import BookFailure_T
 from backend/books_text import Books, bad
-from backend/plain_books import Collector, Leg, digits_only, is_account
+from importers/plain_books import Collector, Leg, digits_only, is_account
 
 # The words of S, apart at spaces and tabs, a quoted string being one.
 def words_of(s: str) -> []str:

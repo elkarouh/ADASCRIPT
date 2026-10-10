@@ -27,7 +27,7 @@ from os nimport fileExists
 from math nimport round
 from backend/accounting_model import BookFailure_T
 from backend/books_text import Books, bad
-from backend/plain_books import Collector, Leg, digits_only
+from importers/plain_books import Collector, Leg, digits_only
 
 # 2013/1/6 or 2013-01-06 or 2013.01.06 (a secondary =date after it ignored) as
 # 2013-01-06, or "" when WORD starts no transaction; 1/6 is read in YEAR, if there is one.

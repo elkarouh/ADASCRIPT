@@ -20,7 +20,7 @@ from os nimport fileExists
 from math nimport round
 from backend/accounting_model import BookFailure_T, Kind_T, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
 from backend/books_text import Books, bad
-from backend/plain_books import Collector, Leg, kind_of_root
+from importers/plain_books import Collector, Leg, kind_of_root
 
 # The fields of a CSV line: a field in double quotes may hold commas and "" for a quote.
 def csv_fields(line: str) -> []str:

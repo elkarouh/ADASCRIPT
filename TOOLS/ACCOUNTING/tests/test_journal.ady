@@ -10,7 +10,7 @@ with several debits against several credits.
 from os nimport removeFile, fileExists
 from backend/accounting_model import BookFailure_T, Graph
 from backend/books_text import Books, graph_of, text_of_books
-from backend/journal import books_of_journal
+from importers/journal import books_of_journal
 
 const FIXTURE: str = "/tmp/test_journal_file.journal"
 
