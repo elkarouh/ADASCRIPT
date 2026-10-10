@@ -188,7 +188,10 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `accounting.conf` | the currency and the chart of accounts a new scenario starts with |
 | `scenarios/*.books` | the scenarios the page offers |
 | `accounting_gui.ady` | the example as a static web page (`make gui`) |
-| `test_accounting_model.ady`, `test_ledger.ady` | the tests (`make test`) |
+| `importers/` | reading other programs' files: `gnucash.ady`, `beancount.ady`, `journal.ady`, `erp_csv.ady`, and `plain_books.ady` which they share |
+| `tests/` | the tests, one `test_*.ady` for each part (`make test`) |
+| `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`) |
+| `static/` | `htmx.min.js`, vendored, copied to `build/` |
 
 ## The ledger
 
@@ -283,7 +286,7 @@ accountants write them. Virtual postings in parentheses, automated and
 periodic transactions, prices, declarations, comments and balance
 assertions are ignored.
 
-Beancount and journal files make entries the same way (`plain_books.ady`):
+Beancount and journal files make entries the same way (`importers/plain_books.ady`):
 a transaction with several debits against several credits becomes two
 entries through a `Clearing` account.
 
@@ -357,7 +360,7 @@ that check what the learner records, and the year-end closing.
 ## How the page is made (HTMX)
 
 `ledger_server` draws the page itself: http://127.0.0.1:8802/. It is
-htmx (`htmx.min.js`, 14 KB gzipped, kept here and copied to `build/`) swapping in the HTML
+htmx (`static/htmx.min.js`, 14 KB gzipped, copied to `build/`) swapping in the HTML
 that `htmx_page.ady` makes, with the same `accounting_gui.ady`, `books_text.ady` and
 `accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
 state: the scenario, the grouping, the folding, the opened groups and the tab are the fields

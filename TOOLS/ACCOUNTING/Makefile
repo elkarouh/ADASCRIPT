@@ -24,12 +24,12 @@ PORT    ?= 8802
 
 all: ledger ledger_server build/accounting_gui.html build/drag.js build/htmx.min.js
 
-ledger: ledger.ady gnucash.ady beancount.ady journal.ady erp_csv.ady plain_books.ady books_text.ady accounting_model.ady
+ledger: ledger.ady importers/gnucash.ady importers/beancount.ady importers/journal.ady importers/erp_csv.ady importers/plain_books.ady books_text.ady accounting_model.ady
 	@echo "building ledger"
 	@$(ADY2NIM) c ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-ledger_server: ledger_server.ady htmx_page.ady accounting_gui.ady ledger.ady gnucash.ady beancount.ady journal.ady erp_csv.ady plain_books.ady books_text.ady accounting_model.ady
+ledger_server: ledger_server.ady htmx_page.ady accounting_gui.ady ledger.ady importers/gnucash.ady importers/beancount.ady importers/journal.ady importers/erp_csv.ady importers/plain_books.ady books_text.ady accounting_model.ady
 	@echo "building ledger_server"
 	@$(ADY2NIM) c ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
@@ -46,13 +46,13 @@ build/drag.js: drag.ady
 	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }
 	@cp -L drag.js $@ && rm -f drag.js
 
-# htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
-htmx.min.js:
-	git checkout -- htmx.min.js
+# static/htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
+static/htmx.min.js:
+	git checkout -- static/htmx.min.js
 
-build/htmx.min.js: htmx.min.js
+build/htmx.min.js: static/htmx.min.js
 	@mkdir -p build
-	@cp htmx.min.js $@
+	@cp static/htmx.min.js $@
 
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
@@ -62,14 +62,14 @@ app: ledger_server build/drag.js build/htmx.min.js
 	./ledger_server --port $(PORT)
 
 test:
-	$(ADY2NIM) c -r test_accounting_model.ady 2>/dev/null
-	$(ADY2NIM) c -r test_ledger.ady 2>/dev/null
-	$(ADY2NIM) c -r test_gnucash.ady 2>/dev/null
-	$(ADY2NIM) c -r test_beancount.ady 2>/dev/null
-	$(ADY2NIM) c -r test_journal.ady 2>/dev/null
-	$(ADY2NIM) c -r test_erp.ady 2>/dev/null
-	$(ADY2NIM) c -r test_htmx.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_accounting_model.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_ledger.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_gnucash.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_beancount.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_journal.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_erp.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_htmx.ady 2>/dev/null
 
 clean:
-	rm -rf build scenarios/*.db $(basename $(wildcard *.ady))
-	find . -maxdepth 1 -name '*.js' ! -name htmx.min.js -delete      # htmx.min.js is kept: it is not built here
+	rm -rf build scenarios/*.db $(basename $(wildcard *.ady)) $(basename $(wildcard tests/*.ady))
+	rm -f *.js                          # what ady2nim js leaves beside the source; static/htmx.min.js is not built here, and stays

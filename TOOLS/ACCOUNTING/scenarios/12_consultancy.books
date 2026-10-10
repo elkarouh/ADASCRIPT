@@ -1,4 +1,4 @@
-# scenarios/12_consultancy.books: made by make_consultancy.py. Amounts are in cents.
+# scenarios/12_consultancy.books: made by generators/make_consultancy.py. Amounts are in cents.
 title	12. An IT consultancy's year: no stock, people are the cost
 about	A made-up consultancy of two consultants and a freelancer. There is no stock: the cost is people. Clients are invoiced every month with 21% VAT and pay a month later; one client pays 12,000 in advance for a September project, which is then set against the invoice.
 about	Rent, software on a company card, a freelance developer, travel, salaries with withholding tax and social contributions, and the VAT returns are booked quarterly. At the year end the laptops are depreciated and the income tax on the profit is owed.

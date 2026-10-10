@@ -1,4 +1,4 @@
-# scenarios/11_bakery.books: made by make_bakery.py. Amounts are in cents.
+# scenarios/11_bakery.books: made by generators/make_bakery.py. Amounts are in cents.
 title	11. A bakery-cafe's year: monthly takings, quarterly bills
 about	A made-up small bakery-cafe with a shop and some catering: the owner's money and a bank loan buy the ovens; takings are booked monthly with 21% VAT; ingredients, rent, energy, wages, social contributions and loan interest are booked quarterly, as are the catering invoices and the VAT returns.
 about	At the year end the ovens are depreciated and the income tax on the profit is owed. About sixty entries in all: few enough to follow a whole year in the graph.

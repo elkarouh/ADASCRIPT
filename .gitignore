@@ -114,13 +114,13 @@ EXAMPLES/HTML/build/
 # The accounting tool: its program, tests and pages, and the database it keeps.
 TOOLS/ACCOUNTING/ledger
 TOOLS/ACCOUNTING/ledger_server
-TOOLS/ACCOUNTING/test_ledger
-TOOLS/ACCOUNTING/test_gnucash
-TOOLS/ACCOUNTING/test_beancount
-TOOLS/ACCOUNTING/test_journal
-TOOLS/ACCOUNTING/test_erp
-TOOLS/ACCOUNTING/test_htmx
-TOOLS/ACCOUNTING/test_accounting_model
+TOOLS/ACCOUNTING/tests/test_ledger
+TOOLS/ACCOUNTING/tests/test_gnucash
+TOOLS/ACCOUNTING/tests/test_beancount
+TOOLS/ACCOUNTING/tests/test_journal
+TOOLS/ACCOUNTING/tests/test_erp
+TOOLS/ACCOUNTING/tests/test_htmx
+TOOLS/ACCOUNTING/tests/test_accounting_model
 TOOLS/ACCOUNTING/*.js
 TOOLS/ACCOUNTING/accounting_gui
 TOOLS/ACCOUNTING/accounting.db

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_consultancy -- writes scenarios/12_consultancy.books: a year of a small IT consultancy.
 
-Made up, not real: about seventy entries. Run: python3 make_consultancy.py [FILE]
+Made up, not real: about seventy entries. Run (from TOOLS/ACCOUNTING): python3 generators/make_consultancy.py [FILE]
 """
 import sys
 from pathlib import Path
@@ -88,7 +88,7 @@ entry("2024-12-31", f"Income tax, 25% of the profit of {profit//c:,}, owed", ("I
 
 entries.sort(key=lambda e: e[0])
 out = [
-    "# scenarios/12_consultancy.books: made by make_consultancy.py. Amounts are in cents.",
+    "# scenarios/12_consultancy.books: made by generators/make_consultancy.py. Amounts are in cents.",
     "title\t12. An IT consultancy's year: no stock, people are the cost",
     "about\tA made-up consultancy of two consultants and a freelancer. There is no stock: the cost is people. Clients are invoiced every month with 21% VAT and pay a month later; one client pays 12,000 in advance for a September project, which is then set against the invoice.",
     "about\tRent, software on a company card, a freelance developer, travel, salaries with withholding tax and social contributions, and the VAT returns are booked quarterly. At the year end the laptops are depreciated and the income tax on the profit is owed.",

@@ -2,7 +2,7 @@
 """make_bakery -- writes scenarios/11_bakery.books: a year of a small bakery-cafe.
 
 Made up, not real: about sixty entries, so that the whole year can be followed.
-Run: python3 make_bakery.py [scenarios/11_bakery.books]
+Run (from TOOLS/ACCOUNTING): python3 generators/make_bakery.py [scenarios/11_bakery.books]
 """
 import sys
 from pathlib import Path
@@ -91,7 +91,7 @@ entry("2024-12-31", f"Income tax, 25% of the profit of {profit//c:,}, owed", ("I
 
 entries.sort(key=lambda e: e[0])
 out = [
-    "# scenarios/11_bakery.books: made by make_bakery.py. Amounts are in cents.",
+    "# scenarios/11_bakery.books: made by generators/make_bakery.py. Amounts are in cents.",
     "title\t11. A bakery-cafe's year: monthly takings, quarterly bills",
     "about\tA made-up small bakery-cafe with a shop and some catering: the owner's money and a bank loan buy the ovens; takings are booked monthly with 21% VAT; ingredients, rent, energy, wages, social contributions and loan interest are booked quarterly, as are the catering invoices and the VAT returns.",
     "about\tAt the year end the ovens are depreciated and the income tax on the profit is owed. About sixty entries in all: few enough to follow a whole year in the graph.",
