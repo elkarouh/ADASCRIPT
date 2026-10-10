@@ -17,7 +17,7 @@ not have yet: drawing an arrow, the replay, recording a
 transaction, T-accounts.
 """
 from uri nimport decodeUrl
-from accounting_model import Account, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting
+from accounting_model import Account, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, Point, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
 from books_text import AccountRow, Books, graph_of, kind_text
 
@@ -32,9 +32,21 @@ type Params is record:
     toggle:   str
     pos:      str                   # where accounts were dragged to: "id@x,y|id@x,y"
     tidy:     bool
+    source:   str                   # the frozen account, where the money leaves, or ""
+    target:   str                   # the account an arrow from it was dropped on, or ""
+    freeze:   str                   # an account clicked: frozen, or let go if it was
+    cancel:   bool                  # the popup closed
+    date:     str                   # the popup's fields
+    what:     str
+    howmuch:  str
+    vat:      str
+    note:     str                   # what the server says: recorded, or why not
+
+def fresh_params(tab: str) -> Params:
+    return Params("", tab, "", 0, [], "", "", "", False, "", "", "", False, "", "", "", "", "")
 
 def params_of(query: str) -> Params:
-    var p: Params = Params("", "Transactions", "", 0, [], "", "", "", False)
+    var p: Params = fresh_params("Transactions")
     for pair in query.split("&"):
         let at: int = pair.find("=")
         if at < 0:
@@ -65,6 +77,22 @@ def params_of(query: str) -> Params:
             p.pos = value
         elif key == "tidy":
             p.tidy = value != ""
+        elif key == "source":
+            p.source = value
+        elif key == "target":
+            p.target = value
+        elif key == "freeze":
+            p.freeze = value
+        elif key == "cancel":
+            p.cancel = value != ""
+        elif key == "date":
+            p.date = value
+        elif key == "what":
+            p.what = value
+        elif key == "amount":
+            p.howmuch = value
+        elif key == "vat":
+            p.vat = value
     return p
 
 # ---------------------------------------------------------------------
@@ -303,23 +331,30 @@ def placed(g: Graph, rows: []AccountRow, pos: str) -> Placed:
             height = max(height, at.y + tall[i] + 20.0)
     return Placed(names, points, tall, height, split_y)
 
-def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str) -> Html:
+# A string as a JSON string, for hx-vals.
+def json_quote(s: str) -> str:
+    return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str, frozen: bool) -> Html:
     let shape: Shape = Shape(True, boxes().half_w, tall)
     let x: str = f"{p.x:.1f}"
     let y: str = f"{p.y:.1f}"
+    let h: str = f"{tall:.1f}"
+    let css: str = ("node from" if frozen else "node")
+    let freeze_vals: str = "{\"freeze\": " + json_quote(a.name) + "}"
     if key == "":
         html:
-            g class="node" data_id=id data_x=x data_y=y:
+            g class=css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=freeze_vals data_hx_target="#all" data_hx_swap="outerHTML":
                 title: tip
                 + box_html(a, p, shape)
     else:
         let vals: str = "{\"toggle\": \"" + key + "\"}"
         html:
-            g class="node group" data_id=id data_x=x data_y=y data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+            g class="node group" data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
                 title: tip
                 + box_html(a, p, shape)
 
-def graph_html(g: Graph, gr: Grouped, pos: str) -> Html:
+def graph_html(g: Graph, gr: Grouped, pos: str, source: str) -> Html:
     let rows: []AccountRow = gr.books.accounts
     let at: Placed = placed(g, rows, pos)
     let size: Point = Point(WIDTH, at.height)
@@ -342,8 +377,9 @@ def graph_html(g: Graph, gr: Grouped, pos: str) -> Html:
             stext class="side" x=rx y=by: "Revenue"
             for i in range(len(g.flows)):
                 + to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
+            path id="rubber" class="rubber" d=""
             for i in range(len(g.accounts)):
-                + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]))
+                + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source)
 
 def group_key(gr: Grouped, name: str) -> str:
     for i in range(len(gr.names)):
@@ -356,6 +392,86 @@ def node_tip(g: Graph, gr: Grouped, a: Account) -> str:
         if gr.names[i] == a.name:
             return f"{a.name}: balance {money(a.balance)}\n{gr.members[i]}\nClick to open the group"
     return account_tip(g, a)
+
+# ---------------------------------------------------------------------
+# Recording a transaction: click an account to freeze it, drag an arrow from it to another
+# (drag.ady), and say when, what and how much
+# ---------------------------------------------------------------------
+
+def kind_of(b: Books, name: str) -> int:
+    for r in b.accounts:
+        if r.name == name:
+            return int(r.kind)
+    return -1
+
+def has_account(b: Books, name: str) -> bool:
+    return kind_of(b, name) >= 0
+
+# The account whose number starts with PREFIX: 411 is VAT receivable, 451 VAT payable.
+def account_numbered(b: Books, prefix: str) -> str:
+    for r in b.accounts:
+        if r.number.startswith(prefix):
+            return r.name
+    return ""
+
+def last_date(b: Books) -> str:
+    return (b.entries[len(b.entries) - 1].date if len(b.entries) > 0 else "")
+
+# The transaction the popup describes: from the frozen account to the one the arrow went to,
+# AMOUNT before VAT. With VAT, a sale (the source is revenue) owes it to the tax office, a
+# purchase claims it back.
+def entry_of(b: Books, p: Params) -> Entry | !BookFailure_T:
+    if len(p.date) != 10:
+        return BookFailure_T("The date is written 2012-01-31.")
+    if p.what == "":
+        return BookFailure_T("Say what happened.")
+    do:
+        amount <- parse_float(p.howmuch.replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
+        rate <- parse_enum(VatRate_T, p.vat) else BookFailure_T("Pick a VAT rate from the list.")
+    let net: Cents_T = Cents_T(int(amount * 100.0 + 0.5))
+    if net <= 0:
+        return BookFailure_T("The amount is more than zero: the arrow says which way it goes.")
+    if rate == NO_VAT:
+        return entry(p.date, p.what, p.source, p.target, net)
+    let is_sale: bool = kind_of(b, p.source) == int(REVENUE)
+    let vat: str = account_numbered(b, "451" if is_sale else "411")
+    if vat == "":
+        return BookFailure_T(f"There is no {('VAT payable (451...)' if is_sale else 'VAT receivable (411...)')} account to put the VAT in.")
+    if is_sale:
+        return sale_with_vat(p.date, p.what, p.source, p.target, vat, net, rate)
+    return purchase_with_vat(p.date, p.what, p.source, p.target, vat, net, rate)
+
+def vat_option_html(rate: VatRate_T, chosen: str) -> Html:
+    let name: str = str(rate)
+    let label: str = vat_text(rate)
+    if name == chosen or (chosen == "" and rate == NO_VAT):
+        html:
+            option value=name selected="selected": label
+    else:
+        html:
+            option value=name: label
+
+def popup_html(b: Books, p: Params) -> Html:
+    let title: str = f"{p.source}  →  {p.target}"
+    let date: str = (p.date if p.date != "" else last_date(b))
+    let cancel_vals: str = "{\"cancel\": \"1\"}"
+    html:
+        form id="popup" class="popup" data_hx_post="/h/record" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML":
+            h3: title
+            label: "Date"
+            input name="date" value=date placeholder="2012-01-31"
+            label: "What happened"
+            input name="what" value=p.what placeholder="a chair for the office"
+            label: "Amount, before VAT"
+            input name="amount" value=p.howmuch placeholder="605.00"
+            label: "VAT"
+            select name="vat":
+                for rate in VatRate_T:
+                    + vat_option_html(rate, p.vat)
+            if p.note != "":
+                p class="refused": p.note
+            button type="submit": "Record"
+            button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=cancel_vals data_hx_target="#all" data_hx_swap="outerHTML": "Cancel"
 
 # ---------------------------------------------------------------------
 # The tabs
@@ -451,6 +567,17 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
             opened.append(p.toggle)
     let tab: str = (p.go if p.go != "" else p.tab)
     let pos: str = ("" if p.tidy else p.pos)
+    var source: str = p.source
+    var target: str = p.target
+    if p.freeze != "":
+        source = ("" if source == p.freeze else p.freeze)
+        target = ""
+    if p.cancel:
+        target = ""
+    if not has_account(b, source) or not has_account(b, target) or source == target:
+        target = ""
+    if not has_account(b, source):
+        source = ""
     let gr: Grouped = grouped(b, detail, p.fold, opened)
     let g: Graph = graph_of(gr.books)
     let real: Graph = graph_of(b)
@@ -476,10 +603,16 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
                 input type="hidden" name="opened" value=opened_text
                 input type="hidden" name="tab" value=tab
                 input type="hidden" name="pos" value=pos
+                input type="hidden" name="source" value=source
+                input type="hidden" name="target" value=target
                 button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
                 button type="button" id="redraw" class="redraw" data_hx_get="/h/all" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "Redraw"
             h2: b.title
-            + graph_html(g, gr, pos)
+            if p.note != "" and not (source != "" and target != ""):
+                p class="note": p.note
+            if source != "" and target != "":
+                + popup_html(b, p)
+            + graph_html(g, gr, pos, source)
             div class="tabs":
                 for name in TABS:
                     + tab_button(name, tab)
@@ -494,6 +627,15 @@ text.side { font-size: 14px; font-weight: bold; fill: #666; }
 button.redraw { display: none; }
 svg.graph { user-select: none; }
 g.node { cursor: grab; }
+g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
+g.from { cursor: crosshair; }
+path.rubber { stroke: #c62828; stroke-width: 3; stroke-dasharray: 8 4; fill: none; marker-end: url(#arrow); }
+form.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #333; border-radius: 6px; padding: 1em 1.5em; box-shadow: 0 4px 24px #0006; z-index: 10; min-width: 24em; }
+form.popup label { display: block; margin-top: 0.6em; font-weight: bold; }
+form.popup input, form.popup select { width: 100%; box-sizing: border-box; }
+form.popup button { margin: 1em 0.5em 0 0; }
+p.refused { color: #b71c1c; font-weight: bold; }
+p.note { background: #e8f5e9; padding: 0.3em 0.8em; border-radius: 4px; }
 g.group { cursor: pointer; }
 div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4f4; cursor: pointer; }
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }

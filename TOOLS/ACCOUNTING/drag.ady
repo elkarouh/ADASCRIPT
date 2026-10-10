@@ -9,8 +9,13 @@ moves it, as a translation. Letting go writes the new centre into the form's
 hidden field `pos`, and clicks the hidden Redraw button, which asks the
 server for the page again, with the arrows drawn to the new place.
 A press that does not move is a click, and goes on to htmx.
+
+The frozen account (class "from") is not moved: dragging from it draws an
+arrow, a red line to the mouse. Let go over another account, and its name goes
+into the hidden field `target` before the same Redraw: the server answers with
+the popup that asks when, what and how much.
 """
-from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, click, stopPropagation, preventDefault, closest, value
+from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
 
 const WIDTH: float = 980.0
 const MOVED: float = 4.0                # pixels before a press is a drag
@@ -23,6 +28,7 @@ var centre_x: float = 0.0               # the node's centre when pressed, in the
 var centre_y: float = 0.0
 var now_x: float = 0.0                  # and where it has been dragged to
 var now_y: float = 0.0
+var arrowing: bool = False             # the node pressed is the frozen one: an arrow is drawn from it
 var moved: bool = False
 var dragged: bool = False               # a drag has just ended: the click that follows is not a click
 
@@ -46,6 +52,7 @@ def on_down(e: Event):
     if node == nil:
         return
     held = node
+    arrowing = " from" in (" " + str(node.getAttribute(cstring("class"))) + " ")
     held_id = str(node.getAttribute(cstring("data_id")))
     down_x = float(m.clientX)
     down_y = float(m.clientY)
@@ -66,6 +73,11 @@ def on_move(e: Event):
         return
     moved = True
     let k: float = scale()
+    if arrowing:
+        now_x = centre_x + dx * k
+        now_y = centre_y + dy * k
+        document.querySelector("#rubber").setAttribute(cstring("d"), cstring(f"M {centre_x:.1f} {centre_y:.1f} L {now_x:.1f} {now_y:.1f}"))
+        return
     now_x = max(110.0, min(WIDTH - 110.0, centre_x + dx * k))
     now_y = max(20.0, centre_y + dy * k)
     held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
@@ -79,11 +91,36 @@ def with_position(pos: str, id: str, x: float, y: float) -> str:
     kept.append(f"{id}@{x:.1f},{y:.1f}")
     return "|".join(kept)
 
+# The name of the account (not a group) the point (X, Y) is over, other than the one named FROM, or "".
+def account_at(x: float, y: float, from_name: str) -> str:
+    for n in document.querySelectorAll("g.node"):
+        let name: str = str(n.getAttribute(cstring("data_name")))
+        let cls: str = " " + str(n.getAttribute(cstring("class"))) + " "
+        if name != from_name and not (" group " in cls):
+            let half_h: float = number_of(n, "data_h")
+            if abs(x - number_of(n, "data_x")) <= 110.0 and abs(y - number_of(n, "data_y")) <= half_h:
+                return name
+    return ""
+
 def on_up(e: Event):
     if held == nil:
         return
     let was_moved: bool = moved
+    let drawn: bool = arrowing
+    let from_name: str = str(held.getAttribute(cstring("data_name")))
     held = nil
+    arrowing = False
+    if was_moved and drawn:
+        dragged = True                  # no click after the arrow
+        document.querySelector("#rubber").setAttribute(cstring("d"), cstring(""))
+        let over: str = account_at(now_x, now_y, from_name)
+        if over != "":
+            let field: InputElement = InputElement(document.querySelector("input[name=target]"))
+            field.value = cstring(over)
+            dragged = False
+            document.querySelector("#redraw").click()
+            dragged = True
+        return
     if was_moved:
         let field: InputElement = InputElement(document.querySelector("input[name=pos]"))
         field.value = cstring(with_position(str(field.value), held_id, now_x, now_y))

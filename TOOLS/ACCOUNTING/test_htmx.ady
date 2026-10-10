@@ -3,9 +3,9 @@
 
     ady2nim c -r test_htmx.ady
 """
-from accounting_model import Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, REVENUE
+from accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from books_text import AccountRow, Books
-from htmx_page import Grouped, Params, all_text, auto_detail, grouped, params_of, shell_text
+from htmx_page import Grouped, Params, all_text, auto_detail, entry_of, fresh_params, grouped, params_of, shell_text
 
 def row(number: str, kind: Kind_T, name: str) -> AccountRow:
     return AccountRow(number, kind, name)
@@ -57,7 +57,48 @@ assert "<script src=\"/htmx.min.js\"" in shell_text()
 assert params_of("pos=100000%2F0%40600.0%2C300.0%7C610000%2F2%4040.5%2C50").pos == "100000/0@600.0,300.0|610000/2@40.5,50"
 assert params_of("tidy=1").tidy and not params_of("").tidy
 let moved: str = all_text(b, ["x"], ["X"], "x", params_of("pos=100000%2F0%40600.0%2C300.0"))
-assert "data_id=\"100000/0\" data_x=\"600.0\" data_y=\"300.0\"" in moved
+assert "data_x=\"600.0\" data_y=\"300.0\"" in moved
 assert "data_x=\"600.0\"" not in all_text(b, ["x"], ["X"], "x", params_of("pos=100000%2F0%40600.0%2C300.0&tidy=1"))
 assert "<script src=\"/drag.js\"" in shell_text()
+# the popup's transaction
+let vat_books: Books = Books("USD", [row("550000", ASSET, "Bank"), row("700000", REVENUE, "Sales"), row("610000", EXPENSE, "Rent"),
+                                    row("411000", ASSET, "VAT receivable"), row("451000", LIABILITY, "VAT payable")], [], [], "T", "")
+
+def popup(source: str, target: str, date: str, what: str, howmuch: str, vat: str) -> Params:
+    var p: Params = fresh_params("Transactions")
+    p.source = source
+    p.target = target
+    p.date = date
+    p.what = what
+    p.howmuch = howmuch
+    p.vat = vat
+    return p
+
+def posting_amounts(made: Entry | !BookFailure_T) -> []int:
+    var cents: []int = []
+    case made:
+        when BookFailure_T:
+            cents.append(0)
+        when Entry:
+            for p in made.postings:
+                cents.append(int(p.amount))
+    return cents
+
+assert posting_amounts(entry_of(vat_books, popup("Bank", "Rent", "2024-02-01", "rent", "1,000.50", "NO_VAT"))) == [-100050, 100050]
+# a purchase with 21% VAT: the bank pays the rent and the VAT, which is claimed back
+assert posting_amounts(entry_of(vat_books, popup("Bank", "Rent", "2024-02-01", "rent", "100", "STANDARD"))) == [-12100, 10000, 2100]
+# a sale with 21% VAT: the customer (here the bank) owes the sale and the VAT
+assert posting_amounts(entry_of(vat_books, popup("Sales", "Bank", "2024-02-01", "sale", "100", "STANDARD"))) == [-10000, -2100, 12100]
+assert entry_of(vat_books, popup("Bank", "Rent", "2024", "x", "1", "NO_VAT")) is BookFailure_T         # the date
+assert entry_of(vat_books, popup("Bank", "Rent", "2024-02-01", "", "1", "NO_VAT")) is BookFailure_T    # no description
+assert entry_of(vat_books, popup("Bank", "Rent", "2024-02-01", "x", "abc", "NO_VAT")) is BookFailure_T # not a number
+assert entry_of(vat_books, popup("Bank", "Rent", "2024-02-01", "x", "0", "NO_VAT")) is BookFailure_T    # nothing
+
+# the page: a frozen account, the popup when both ends are there, and neither for an unknown account
+let frozen: str = all_text(vat_books, ["x"], ["X"], "x", params_of("freeze=Bank"))
+assert "class=\"node from\"" in frozen and "id=\"popup\"" not in frozen
+let drawn: str = all_text(vat_books, ["x"], ["X"], "x", params_of("source=Bank&target=Rent"))
+assert "id=\"popup\"" in drawn and "Bank  →  Rent" in drawn
+assert "id=\"popup\"" not in all_text(vat_books, ["x"], ["X"], "x", params_of("source=Bank&target=Nothing"))
+assert "id=\"popup\"" not in all_text(vat_books, ["x"], ["X"], "x", params_of("source=Bank&target=Rent&cancel=1"))
 print "htmx page: all checks passed"

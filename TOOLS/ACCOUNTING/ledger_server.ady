@@ -30,7 +30,7 @@ from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from accounting_model import BookFailure_T, Entry
 from books_text import AccountRow, Books, parse_books, text_of_books
-from htmx_page import Params, all_text, params_of, shell_text
+from htmx_page import Params, all_text, entry_of, fresh_params, has_account, params_of, shell_text
 from ledger import Config, Ledger, Scenarios, read_config
 
 var config: Config = Config("USD", [])
@@ -136,13 +136,39 @@ async def handler(req: Request):
         var p: Params = params_of(req.url.query)
         if p.scenario != "" and p.scenario != current:
             let shown: None | !BookFailure_T = show(p.scenario, False)
-            p = Params("", p.tab, "", 0, [], "", "", "", False)      # another scenario: its own grouping
+            p = fresh_params(p.tab)           # another scenario: its own grouping
         let b: Books = books.books(config.currency)
         let names: []str = scenarios.names()
         var titles: []str = []
         for n in names:
             titles.append(scenarios.title_of(n))
         await req.respond(Http200, all_text(b, names, titles, current, p), html_type)
+    elif req.reqMethod'Image == "POST" and path == "/h/record":
+        var p: Params = params_of(req.body)
+        let b: Books = books.books(config.currency)
+        let made: Entry | !BookFailure_T = entry_of(b, p)
+        if made is BookFailure_T:
+            p.note = made.detail
+        else:
+            var recorded: None | !BookFailure_T = None
+            try:
+                recorded = books.record(made)
+            except:
+                recorded = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
+            if recorded is BookFailure_T:
+                p.note = recorded.detail
+            else:
+                p.note = f"Recorded: {made.what}"
+                p.source = ""
+                p.target = ""
+                p.what = ""
+                p.howmuch = ""
+        let after: Books = books.books(config.currency)
+        let names: []str = scenarios.names()
+        var titles: []str = []
+        for n in names:
+            titles.append(scenarios.title_of(n))
+        await req.respond(Http200, all_text(after, names, titles, current, p), html_type)
     elif req.reqMethod'Image == "GET" and path == "/books":
         await req.respond(Http200, text_of_books(books.books(config.currency)), text)
     elif req.reqMethod'Image == "GET" and path == "/scenarios":
