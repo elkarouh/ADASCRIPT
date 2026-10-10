@@ -19,7 +19,7 @@ transaction, T-accounts.
 from uri nimport decodeUrl
 from accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, Point, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
-from books_text import AccountRow, Books, graph_of, kind_text
+from books_text import AccountRow, Books, Ratio, graph_of, kind_text, ratios_of
 
 # The settings, as the query gives them.
 type Params is record:
@@ -580,7 +580,7 @@ def popup_html(b: Books, p: Params) -> Html:
 # The tabs
 # ---------------------------------------------------------------------
 
-const TABS: []str = ["Transactions", "Accounts", "Statements"]
+const TABS: []str = ["Transactions", "T-accounts", "Accounts", "Statements"]
 
 def posting_text(e: Entry) -> str:
     var parts: []str = []
@@ -621,7 +621,69 @@ def accounts_html(b: Books, g: Graph) -> Html:
                     td: kind_text(r.kind)
                     td class="num": money(g.balance(r.name))
 
+def ratio_row_html(r: Ratio) -> Html:
+    html:
+        tr:
+            td: r.name
+            td class="num": r.value
+            td: r.meaning
+
+def ratios_html(b: Books, g: Graph) -> Html:
+    html:
+        table:
+            tr:
+                th: "Ratio"
+                th: "Value"
+                th: "What it tells"
+            for r in ratios_of(b, g):
+                + ratio_row_html(r)
+
+# One account as a T: its debits on the left, its credits on the right, in the transactions E.
+def t_account_html(row: AccountRow, entries: []Entry, g: Graph) -> Html:
+    var debits: []Cents_T = []
+    var credits: []Cents_T = []
+    for e in entries:
+        for p in e.postings:
+            if p.account == row.name:
+                if p.amount > 0:
+                    debits.append(p.amount)
+                else:
+                    credits.append(Cents_T(-int(p.amount)))
+    let balance: Cents_T = g.balance(row.name)
+    let words: str = ("" if balance == 0 else (" debit" if balance > 0 else " credit"))
+    let owed: str = f"Balance {money(Cents_T(abs(int(balance))))}{words}"
+    let css: str = css_of(g.account(row.name))
+    let heading: str = f"{row.number} {row.name}"
+    html:
+        div class="taccount":
+            h4 class=css: heading
+            div class="tbody":
+                div class="tdebit":
+                    for d in debits:
+                        p: money(d)
+                div class="tcredit":
+                    for c in credits:
+                        p: money(c)
+            p class="tbalance": owed
+
+def touched(row: AccountRow, entries: []Entry) -> bool:
+    for e in entries:
+        for p in e.postings:
+            if p.account == row.name:
+                return True
+    return False
+
+def t_accounts_html(b: Books, g: Graph, step: int) -> Html:
+    let entries: []Entry = upto(b, step).entries
+    html:
+        div class="tgrid":
+            for r in b.accounts:
+                if touched(r, entries):
+                    + t_account_html(r, entries, g)
+
 def tab_body(tab: str, b: Books, g: Graph, step: int) -> []Html:
+    if tab == "T-accounts":
+        return [t_accounts_html(b, g, step)]
     if tab == "Accounts":
         return [accounts_html(b, g)]
     if tab == "Statements":
@@ -629,6 +691,7 @@ def tab_body(tab: str, b: Books, g: Graph, step: int) -> []Html:
         var out: []Html = []
         for i in range(1, len(after)):
             out.append(after[i])
+        out.append(ratios_html(b, g))
         return out
     return [transactions_html(b, step)]
 
@@ -853,6 +916,19 @@ p.replay { margin: 0.5em 0 0 0; }
 p.caption { margin: 0.3em 0 0 0; }
 input[type=range] { vertical-align: middle; width: 16em; }
 g.group { cursor: pointer; }
+div.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 0.8em; align-items: start; }
+div.taccount { border: 1px solid #999; border-radius: 4px; background: #fff; font-size: 0.9em; }
+div.taccount h4 { margin: 0; padding: 4px 8px; border-bottom: 2px solid #333; font-size: 1em; }
+div.taccount h4.green { background: #d6f0d6; }
+div.taccount h4.liability { background: #e3d6f5; }
+div.taccount h4.revenue { background: #a9cdf5; }
+div.taccount h4.expense { background: #fbd29c; }
+div.taccount h4.untouched { background: #eee; }
+div.taccount h4.pink { background: #f8d6e6; }
+div.tbody { display: grid; grid-template-columns: 1fr 1fr; min-height: 2.4em; }
+div.tdebit { padding: 4px 8px; text-align: right; border-right: 2px solid #333; font-variant-numeric: tabular-nums; }
+div.tcredit { padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+div.tbody p, p.tbalance { margin: 0; padding: 0 8px; }
 div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4f4; cursor: pointer; }
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }
 """

@@ -120,4 +120,8 @@ assert "name=\"step\" value=\"-1\"" in all_text(b, ["x"], ["X"], "x", params_of(
 # a frozen account: Play replays its transactions alone
 let alone: str = all_text(b, ["x"], ["X"], "x", params_of("source=Rent&act=play"))
 assert "Rent: transaction 1 of 1 (number 4 of 5)" in alone
+# the T-accounts and the ratios
+let ts: str = all_text(b, ["x"], ["X"], "x", params_of("go=T-accounts"))
+assert "class=\"taccount\"" in ts and "class=\"tdebit\"" in ts and "Balance" in ts
+assert "Current ratio" in all_text(b, ["x"], ["X"], "x", params_of("go=Statements"))
 print "htmx page: all checks passed"
