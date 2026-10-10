@@ -20,4 +20,9 @@ assert "A → F → E, cost 23" in all_text("start=A&goal=E&c6=40")             
 assert "name=\"c6\" value=\"2\"" in all_text("")
 assert "start=\"B\"" not in all_text("start=A&goal=B&pick=C") and "name=\"start\" value=\"C\"" in all_text("start=A&goal=B&pick=C")   # a third click starts again
 assert "data-hx-get=\"/all\"" in all_text("")
+# a node dragged somewhere (drag.ady): the page is drawn from `pos`, the way is the same
+let moved: str = all_text("start=A&goal=E&pos=B%4099%2C77")
+assert "data-name=\"B\" data-x=\"99\" data-y=\"77\"" in moved or "data_name" in moved or "data-x=\"99\"" in moved
+assert "name=\"pos\" value=\"B@99,77\"" in moved and "A → C → F → E, cost 20" in moved
+assert "name=\"pos\" value=\"\"" in all_text("start=A&goal=E&pos=B%4099%2C77&act=clear")      # Clear puts them back
 print "dijkstra page: all checks passed"

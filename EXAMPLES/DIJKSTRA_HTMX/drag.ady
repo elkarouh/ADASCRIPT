@@ -1,0 +1,132 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""drag -- the one script of our own: a node is dragged with the mouse.
+
+A node is a <g class="node" data_name=".." data_x=".." data_y=".."> (its centre, in the
+drawing's units) and an edge a <g data_from=".." data_to=".."> holding a path and its
+cost. While a node is dragged it moves and its edges follow, here in the browser, at once.
+Letting go writes the new centre into the form's hidden field `pos`, and clicks the hidden
+Redraw button, which asks the server for the page again: it draws the same, from `pos`.
+
+A press that does not move is a click, and goes on to htmx (it picks the node).
+"""
+from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
+
+const WIDTH: float = 580.0              # the drawing's width, in its own units
+const HEIGHT: float = 380.0
+const MOVED: float = 4.0                # pixels before a press is a drag
+const MARGIN: float = 30.0
+
+var held: Node = nil                    # the node pressed, or nil
+var held_name: str = ""
+var down_x: float = 0.0                 # where the mouse went down, in pixels
+var down_y: float = 0.0
+var centre_x: float = 0.0               # the node's centre when pressed
+var centre_y: float = 0.0
+var now_x: float = 0.0                  # and where it has been dragged to
+var now_y: float = 0.0
+var moved: bool = False
+var dragged: bool = False               # a drag has just ended: the click that follows is not a click
+
+def float_of(text: str) -> float:
+    let r: float | !ParseFailure_T = parse_float(text)
+    if r is ParseFailure_T:
+        return 0.0
+    else:
+        return r
+
+def number_of(node: Node, attr: str) -> float:
+    return float_of(str(node.getAttribute(cstring(attr))))
+
+# How many drawing units a pixel is.
+def scale() -> float:
+    let box: BoundingRect = document.querySelector("svg.graph").getBoundingClientRect()
+    return WIDTH / box.width
+
+def node_named(name: str) -> Node:
+    for n in document.querySelectorAll("g.node"):
+        if str(n.getAttribute(cstring("data_name"))) == name:
+            return n
+    return nil
+
+# NAME at (X, Y): its edges drawn again from it, and their costs moved to their middles.
+def follow(name: str, x: float, y: float):
+    for e in document.querySelectorAll("g[data_from]"):
+        let from_name: str = str(e.getAttribute(cstring("data_from")))
+        let to_name: str = str(e.getAttribute(cstring("data_to")))
+        if from_name == name or to_name == name:
+            let a: Node = node_named(from_name)
+            let b: Node = node_named(to_name)
+            let x1: float = (x if from_name == name else number_of(a, "data_x"))
+            let y1: float = (y if from_name == name else number_of(a, "data_y"))
+            let x2: float = (x if to_name == name else number_of(b, "data_x"))
+            let y2: float = (y if to_name == name else number_of(b, "data_y"))
+            e.querySelector("path").setAttribute(cstring("d"), cstring(f"M {x1:.0f} {y1:.0f} L {x2:.0f} {y2:.0f}"))
+            let cost: Node = e.querySelector("text.cost")
+            cost.setAttribute(cstring("x"), cstring(f"{(x1 + x2) / 2.0:.0f}"))
+            cost.setAttribute(cstring("y"), cstring(f"{(y1 + y2) / 2.0 - 6.0:.0f}"))
+
+def on_down(e: Event):
+    let m: MouseEvent = MouseEvent(e)
+    if m.button != 0:
+        return
+    let node: Node = e.target.closest("g.node")
+    if node == nil:
+        return
+    held = node
+    held_name = str(node.getAttribute(cstring("data_name")))
+    down_x = float(m.clientX)
+    down_y = float(m.clientY)
+    centre_x = number_of(node, "data_x")
+    centre_y = number_of(node, "data_y")
+    now_x = centre_x
+    now_y = centre_y
+    moved = False
+    e.preventDefault()                  # no text selected while dragging
+
+def on_move(e: Event):
+    if held == nil:
+        return
+    let m: MouseEvent = MouseEvent(e)
+    let dx: float = float(m.clientX) - down_x
+    let dy: float = float(m.clientY) - down_y
+    if not moved and abs(dx) < MOVED and abs(dy) < MOVED:
+        return
+    moved = True
+    let k: float = scale()
+    now_x = max(MARGIN, min(WIDTH - MARGIN, centre_x + dx * k))
+    now_y = max(MARGIN, min(HEIGHT - MARGIN, centre_y + dy * k))
+    held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
+    follow(held_name, now_x, now_y)
+
+# The field pos holds "name@x,y|name@x,y": NAME's entry replaced, or added.
+def with_position(pos: str, name: str, x: float, y: float) -> str:
+    var kept: []str = []
+    for entry in pos.split("|"):
+        if entry != "" and not entry.startswith(name + "@"):
+            kept.append(entry)
+    kept.append(f"{name}@{x:.0f},{y:.0f}")
+    return "|".join(kept)
+
+def on_up(e: Event):
+    if held == nil:
+        return
+    let was_moved: bool = moved
+    let name: str = held_name
+    held = nil
+    if was_moved:
+        let field: InputElement = InputElement(document.querySelector("input[name=pos]"))
+        field.value = cstring(with_position(str(field.value), name, now_x, now_y))
+        document.querySelector("#redraw").click()
+        dragged = True                  # after the click above, which must go through
+
+# The click after a drag is swallowed before htmx sees it: a node is not picked by being moved.
+def on_click(e: Event):
+    if dragged:
+        dragged = False
+        e.stopPropagation()
+
+document.addEventListener("mousedown", on_down)
+document.addEventListener("mousemove", on_move)
+document.addEventListener("mouseup", on_up)
+document.addEventListener("click", on_click, True)

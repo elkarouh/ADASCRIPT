@@ -5,18 +5,21 @@ native, the browser only shows what the server draws, and htmx carries the
 clicks.
 
 ```
-ady2nim c -r server.ady        # then open http://127.0.0.1:8810/
+ady2nim js drag.ady            # the one script of our own, drag.js
+ady2nim c -r server.ady        # then open http://127.0.0.1:8810/ (run from this directory)
 ady2nim c -r test_dijkstra.ady # the algorithm and the page, no server
 ```
 
 Click a node to start from, another to go to; the shortest way is drawn in
-orange. Change a cost in the table and the way is found again.
+orange. Change a cost in the table and the way is found again. Drag a node and
+its edges follow; where you let go is kept in the page and drawn by the server.
 
 | File | What it knows |
 |---|---|
 | `dijkstra.ady` | the problem: edges, `shortest_way`. No HTML, no HTTP. |
 | `page.ady` | how to draw it: the SVG, the form, the text. A function from the settings to HTML. |
-| `server.ady` | HTTP: three routes (`/`, `/all`, `/htmx.min.js`). |
+| `server.ady` | HTTP: four routes (`/`, `/all`, `/htmx.min.js`, `/drag.js`). |
+| `drag.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then writes the place into the form and asks the server for the page, which draws the same. About 100 lines. |
 | `test_dijkstra.ady` | tests of the first two, by calling them; nothing is started. |
 | `htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
@@ -39,8 +42,9 @@ It fits when an answer is cheap to compute and a round trip per click is fine:
 algorithms, forms, tables, dashboards, a graph that is re-drawn. Everything
 stays in one language, and what the browser runs is almost nothing.
 
-It does not fit what must follow the mouse every frame (dragging, drawing). That
-is a small script of your own in the browser (Adascript to JavaScript), as
-`TOOLS/ACCOUNTING/frontend/drag.ady` does, reusing the same code the server
-draws with where it must give the same result. Nothing here needs it: a click
-is one request.
+It does not fit what must follow the mouse every frame. That is what
+`drag.ady` is for: the same language, compiled to JavaScript, doing only the
+moving; the page and the answer are still the server's. A drag is the one place
+where the drawing exists twice (here the straight line of an edge, in
+`../../TOOLS/ACCOUNTING/frontend/drag.ady` the same `routes_of` the server
+uses), so keep that part small.
