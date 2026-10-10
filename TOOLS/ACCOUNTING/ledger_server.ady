@@ -8,6 +8,7 @@ config file) and, as text (books_text.ady), the books of one scenario and
 what the page does to them:
 
     GET  /books            the accounts and every transaction
+    GET  /h, /h/all        the same page drawn by the server for htmx (htmx_page.ady)
     GET  /scenarios        "current", a tab and the scenario shown, then
                            "scenario", NAME and TITLE for each one there is
     POST /scenario         a scenario's name: shows that one from now on
@@ -29,6 +30,7 @@ from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from accounting_model import BookFailure_T, Entry
 from books_text import AccountRow, Books, parse_books, text_of_books
+from htmx_page import Params, all_text, params_of, shell_text
 from ledger import Config, Ledger, Scenarios, read_config
 
 var config: Config = Config("USD", [])
@@ -37,7 +39,7 @@ var www: Path = Path("build")            # where the page is: build/, beside the
 var scenarios: Scenarios = Scenarios(Path("scenarios"))   # beside the config file
 var current: str = ""                    # the scenario shown
 
-const PAGES: []str = ["app.html", "accounting_app.js"]
+const PAGES: []str = ["app.html", "accounting_app.js", "htmx.min.js"]
 
 def content_type(file: str) -> str:
     return ("text/javascript" if file.endswith(".js") else "text/html; charset=utf-8")
@@ -127,7 +129,21 @@ def post(path: str, body: str) -> str:
 async def handler(req: Request):
     let path: str = req.url.path
     let text: HttpHeaders = newHttpHeaders([("Content-Type", "text/plain; charset=utf-8")])
-    if req.reqMethod'Image == "GET" and path == "/books":
+    let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
+    if req.reqMethod'Image == "GET" and path == "/h":
+        await req.respond(Http200, shell_text(), html_type)
+    elif req.reqMethod'Image == "GET" and path == "/h/all":
+        var p: Params = params_of(req.url.query)
+        if p.scenario != "" and p.scenario != current:
+            let shown: None | !BookFailure_T = show(p.scenario, False)
+            p = Params("", p.tab, "", 0, [], "", "")      # another scenario: its own grouping
+        let b: Books = books.books(config.currency)
+        let names: []str = scenarios.names()
+        var titles: []str = []
+        for n in names:
+            titles.append(scenarios.title_of(n))
+        await req.respond(Http200, all_text(b, names, titles, current, p), html_type)
+    elif req.reqMethod'Image == "GET" and path == "/books":
         await req.respond(Http200, text_of_books(books.books(config.currency)), text)
     elif req.reqMethod'Image == "GET" and path == "/scenarios":
         await req.respond(Http200, scenarios_text(), text)

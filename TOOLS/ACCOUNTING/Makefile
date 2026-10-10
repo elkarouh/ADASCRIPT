@@ -29,7 +29,7 @@ ledger: ledger.ady gnucash.ady beancount.ady journal.ady erp_csv.ady plain_books
 	@$(ADY2NIM) c ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-ledger_server: ledger_server.ady ledger.ady gnucash.ady beancount.ady journal.ady erp_csv.ady plain_books.ady books_text.ady accounting_model.ady
+ledger_server: ledger_server.ady htmx_page.ady accounting_gui.ady ledger.ady gnucash.ady beancount.ady journal.ady erp_csv.ady plain_books.ady books_text.ady accounting_model.ady
 	@echo "building ledger_server"
 	@$(ADY2NIM) c ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
@@ -45,7 +45,7 @@ build/accounting_app.js: accounting_app.ady accounting_gui.ady books_text.ady ac
 	@echo "building $@"
 	@$(ADY2NIM) js $< > build/accounting_app.log 2>&1 || { cat build/accounting_app.log; exit 1; }
 	@cp -L accounting_app.js $@ && rm -f accounting_app.js
-	@cp app.html build/
+	@cp app.html htmx.min.js build/
 
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
@@ -61,6 +61,7 @@ test:
 	$(ADY2NIM) c -r test_beancount.ady 2>/dev/null
 	$(ADY2NIM) c -r test_journal.ady 2>/dev/null
 	$(ADY2NIM) c -r test_erp.ady 2>/dev/null
+	$(ADY2NIM) c -r test_htmx.ady 2>/dev/null
 
 clean:
 	rm -rf build *.js scenarios/*.db $(basename $(wildcard *.ady))

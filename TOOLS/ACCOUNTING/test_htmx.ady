@@ -1,0 +1,56 @@
+#!/usr/bin/env ady2nim
+"""htmx_page.ady: the settings read from a query, the groups, and the page drawn.
+
+    ady2nim c -r test_htmx.ady
+"""
+from accounting_model import Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, REVENUE
+from books_text import AccountRow, Books
+from htmx_page import Grouped, Params, all_text, auto_detail, grouped, params_of, shell_text
+
+def row(number: str, kind: Kind_T, name: str) -> AccountRow:
+    return AccountRow(number, kind, name)
+
+def pay(date: str, what: str, from_name: str, to_name: str, cents: int) -> Entry:
+    return Entry(date, what, [Posting(from_name, Cents_T(-cents)), Posting(to_name, Cents_T(cents))])
+
+let accounts: []AccountRow = [row("100000", ASSET, "Bank"), row("101000", ASSET, "Cash"), row("102000", ASSET, "Savings"),
+                              row("610000", EXPENSE, "Rent"), row("610100", EXPENSE, "Energy"), row("700000", REVENUE, "Sales")]
+let entries: []Entry = [pay("2024-01-01", "takings", "Sales", "Bank", 1000), pay("2024-01-02", "cash", "Sales", "Cash", 500),
+                        pay("2024-01-03", "to savings", "Bank", "Savings", 300), pay("2024-01-04", "rent", "Bank", "Rent", 200),
+                        pay("2024-01-05", "energy", "Cash", "Energy", 50)]
+let b: Books = Books("USD", accounts, entries, [0, 0, 0, 0, 0], "Test", "")
+
+# the query
+let p: Params = params_of("scenario=x&tab=Accounts&detail=2&fold=5&opened=10%2F1%7C61%2F2&toggle=61%2F2&go=Statements")
+assert p.scenario == "x" and p.tab == "Accounts" and p.detail == "2" and p.fold == 5
+assert p.opened == ["10/1", "61/2"]
+assert p.toggle == "61/2" and p.go == "Statements"
+assert params_of("").detail == "" and params_of("").tab == "Transactions"
+
+# grouped by 2 digits: Bank, Cash and Savings are one asset group (10), Rent and Energy one expense group (61)
+let two: Grouped = grouped(b, 2, 0, [])
+assert len(two.names) == 2
+assert len(two.books.accounts) == 3          # the two groups and Sales
+# the transfer to savings is inside the group: it is gone
+assert len(two.books.entries) == 4
+assert len(two.members[0].split("\n")) == 3
+# an opened group is its accounts again
+let opened: Grouped = grouped(b, 2, 0, [two.keys[0]])
+assert len(opened.names) == 1 and len(opened.books.accounts) == 5
+# nothing grouped
+assert len(grouped(b, 0, 0, []).names) == 0
+# folded: fewer than 2 transactions: Savings alone stays, Rent and Energy are one quiet expense group
+let quiet: Grouped = grouped(b, 0, 2, [])
+assert len(quiet.names) == 1
+assert auto_detail(b) == 0                                            # few accounts: not grouped
+
+# the page: a group is clickable, the controls and tabs are there, htmx's attributes have hyphens
+let text: str = all_text(b, ["x"], ["X"], "x", params_of("detail=2&go=Accounts"))
+assert "data-hx-get=\"/h/all\"" in text
+assert "name=\"detail\"" not in text                                  # six accounts: no grouping controls
+assert "data_hx" not in text
+let big: str = all_text(Books("USD", accounts, entries, [0, 0, 0, 0, 0], "Test", ""), ["x"], ["X"], "x", params_of("detail=2"))
+assert "class=\"group\"" in big                                       # grouped by the URL, whatever the number of accounts
+assert "<table" in text and "Savings" in text
+assert "<script src=\"/htmx.min.js\"" in shell_text()
+print "htmx page: all checks passed"

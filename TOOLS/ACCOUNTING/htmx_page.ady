@@ -1,0 +1,479 @@
+#!/usr/bin/env ady2nim
+"""htmx_page -- the page as HTML the server draws, for htmx to swap in.
+
+    GET /h        the shell: a script tag and a div that loads /h/all
+    GET /h/all    the whole page, drawn from the books and the settings in the query
+
+The server keeps no state. The settings (scenario, grouping, tab) are the
+fields of a form inside the page; a change to one asks /h/all for the page
+again with all of them, and the answer replaces the page. A click on a
+group, or on a tab, adds one more field, `go` or `toggle`, to the request.
+
+The same books_text.ady, accounting_gui.ady and accounting_model.ady the
+JavaScript page uses draw it, here native: the amounts are 64-bit, and the
+grouping is not limited to what a browser's int can count. What it does
+not have yet: moving accounts, drawing an arrow, the replay, recording a
+transaction, T-accounts.
+"""
+from uri nimport decodeUrl
+from accounting_model import Account, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting
+from accounting_gui import STYLE, Point, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
+from books_text import AccountRow, Books, graph_of, kind_text
+
+# The settings, as the query gives them.
+type Params is record:
+    scenario: str
+    tab:      str
+    detail:   str                   # "" the first time: the page picks
+    fold:     int
+    opened:   []str
+    go:       str
+    toggle:   str
+
+def params_of(query: str) -> Params:
+    var p: Params = Params("", "Transactions", "", 0, [], "", "")
+    for pair in query.split("&"):
+        let at: int = pair.find("=")
+        if at < 0:
+            continue
+        let key: str = pair[:at]
+        let value: str = decodeUrl(pair[at + 1:])
+        if key == "scenario":
+            p.scenario = value
+        elif key == "tab":
+            p.tab = value
+        elif key == "detail":
+            p.detail = value
+        elif key == "fold":
+            let n: int | !ParseFailure_T = parse_int(value)
+            if n is ParseFailure_T:
+                p.fold = 0
+            else:
+                p.fold = n
+        elif key == "opened":
+            for k in value.split("|"):
+                if k != "":
+                    p.opened.append(k)
+        elif key == "go":
+            p.go = value
+        elif key == "toggle":
+            p.toggle = value
+    return p
+
+# ---------------------------------------------------------------------
+# Groups: the same idea as the JavaScript page, on the server
+# ---------------------------------------------------------------------
+
+type Grouped is record:
+    books:   Books                  # the books with a group in place of its accounts
+    names:   []str                  # the groups
+    keys:    []str
+    members: []str                  # each group's accounts, a line each
+
+def prefix_of(number: str, digits: int) -> str:
+    return (number[:digits] if len(number) > digits else number)
+
+def key_of(r: AccountRow, digits: int) -> str:
+    return prefix_of(r.number, digits) + "/" + str(int(r.kind))
+
+def groups_at(b: Books, digits: int) -> int:
+    var keys: []str = []
+    for r in b.accounts:
+        let k: str = key_of(r, digits)
+        if k not in keys:
+            keys.append(k)
+    return len(keys)
+
+def longest_number(b: Books) -> int:
+    var most: int = 0
+    for r in b.accounts:
+        most = max(most, len(r.number))
+    return most
+
+# A big chart starts grouped, to the longest prefix that leaves about thirty nodes.
+def auto_detail(b: Books) -> int:
+    if len(b.accounts) <= 40:
+        return 0
+    var best: int = 1
+    for d in range(1, 7):
+        if groups_at(b, d) <= 30:
+            best = d
+    return best
+
+def moves_counts(b: Books) -> []int:
+    var counts: []int = []
+    for r in b.accounts:
+        counts.append(0)
+    for e in b.entries:
+        for p in e.postings:
+            for i in range(len(b.accounts)):
+                if b.accounts[i].name == p.account:
+                    counts[i] += 1
+    return counts
+
+def grouped(b: Books, detail: int, fold: int, opened: []str) -> Grouped:
+    if detail == 0 and fold == 0:
+        return Grouped(b, [], [], [])
+    let counts: []int = moves_counts(b)
+    var keys: []str = []
+    for i in range(len(b.accounts)):
+        let r: AccountRow = b.accounts[i]
+        if fold > 0 and counts[i] < fold:
+            keys.append("q/" + str(int(r.kind)))
+        elif detail > 0:
+            keys.append(key_of(r, detail))
+        else:
+            keys.append("")
+    var out: Books = b
+    out.accounts = []
+    var names: []str = []
+    var gkeys: []str = []
+    var members: []str = []
+    var seen: []int = []
+    var from_names: []str = []
+    var to_names: []str = []
+    for i in range(len(b.accounts)):
+        let r: AccountRow = b.accounts[i]
+        var n: int = 0
+        for k in keys:
+            if k == keys[i]:
+                n += 1
+        if keys[i] == "" or n == 1 or keys[i] in opened:
+            out.accounts.append(r)
+        else:
+            if keys[i] not in gkeys:
+                var name: str = f"{prefix_of(r.number, detail)}… {r.name} +{n - 1}"
+                var number: str = prefix_of(r.number, detail)
+                if keys[i].startswith("q/"):
+                    name = f"{n} quiet {kind_text(r.kind)}"
+                    number = "999999"
+                gkeys.append(keys[i])
+                names.append(name)
+                members.append("")
+                seen.append(0)
+                out.accounts.append(AccountRow(number, r.kind, name))
+            let at: int = gkeys.index(keys[i])
+            if seen[at] < 12:
+                let line: str = f"{r.number} {r.name}"
+                members[at] = (line if members[at] == "" else members[at] + "\n" + line)
+            elif seen[at] == 12:
+                members[at] = members[at] + "\n..."
+            seen[at] += 1
+            from_names.append(r.name)
+            to_names.append(names[at])
+    out.entries = []
+    out.ids = []
+    for e in b.entries:
+        var merged: []Posting = []
+        for p in e.postings:
+            var n: str = p.account
+            for i in range(len(from_names)):
+                if from_names[i] == p.account:
+                    n = to_names[i]
+            var at: int = -1
+            for k in range(len(merged)):
+                if merged[k].account == n:
+                    at = k
+            if at >= 0:
+                merged[at].amount = Cents_T(int(merged[at].amount) + int(p.amount))
+            else:
+                merged.append(Posting(n, p.amount))
+        var kept: []Posting = []
+        for p in merged:
+            if int(p.amount) != 0:
+                kept.append(p)
+        if len(kept) >= 2:
+            out.entries.append(Entry(e.date, e.what, kept))
+            out.ids.append(0)
+    return Grouped(out, names, gkeys, members)
+
+# ---------------------------------------------------------------------
+# The graph: four quarters, an account a box, stacked in number order
+# ---------------------------------------------------------------------
+
+const WIDTH: float = 980.0
+const GAP: float = 10.0
+
+def quarter_of(k: Kind_T) -> int:
+    if k == ASSET:
+        return 0
+    if k == LIABILITY or k == EQUITY:
+        return 1
+    if k == EXPENSE:
+        return 2
+    return 3
+
+def number_before(a: str, b: str) -> bool:
+    return len(a) < len(b) or (len(a) == len(b) and a < b)
+
+def tall_of(g: Graph, name: str) -> float:
+    var ins: int = 0
+    var outs: int = 0
+    for f in g.flows:
+        if f.target.name == name:
+            ins += 1
+        if f.source.name == name:
+            outs += 1
+    return max(15.0, 4.5 * float(max(ins, outs)) + 8.0)
+
+type Placed is record:
+    names:  []str
+    points: []Point
+    tall:   []float
+    height: float
+    split_y: float
+
+def placed(g: Graph, rows: []AccountRow) -> Placed:
+    let shape: Shape = boxes()
+    var names: []str = []
+    var points: []Point = []
+    var tall: []float = []
+    for r in rows:
+        names.append(r.name)
+        points.append(Point(0.0, 0.0))
+        tall.append(tall_of(g, r.name))
+    var tops: []float = [60.0, 60.0, 0.0, 0.0]
+    var heights: []float = [0.0, 0.0, 0.0, 0.0]
+    for q in range(4):
+        var mine: []int = []
+        for i in range(len(rows)):
+            if quarter_of(rows[i].kind) == q:
+                mine.append(i)
+        for a in range(1, len(mine)):               # by number: an insertion sort
+            var j: int = a
+            while j > 0 and number_before(rows[mine[j]].number, rows[mine[j - 1]].number):
+                let t: int = mine[j]
+                mine[j] = mine[j - 1]
+                mine[j - 1] = t
+                j -= 1
+        let cols: int = (2 if len(mine) > 12 else 1)
+        var used: []float = []
+        for c in range(cols):
+            used.append(0.0)
+        for k in range(len(mine)):
+            let c: int = k % cols
+            let x0: float = (10.0 if q % 2 == 0 else WIDTH / 2.0 + 10.0)
+            let col_w: float = (WIDTH / 2.0 - 20.0) / float(cols)
+            points[mine[k]] = Point(x0 + col_w * (float(c) + 0.5), used[c] + tall[mine[k]])
+            used[c] += 2.0 * tall[mine[k]] + GAP
+        var most: float = 0.0
+        for u in used:
+            most = max(most, u)
+        heights[q] = most
+    let top_h: float = max(heights[0], heights[1])
+    let split_y: float = 60.0 + top_h + 20.0
+    for i in range(len(rows)):
+        let q: int = quarter_of(rows[i].kind)
+        let base: float = (60.0 if q < 2 else split_y + 50.0)
+        points[i] = Point(points[i].x, points[i].y + base)
+    let bottom_h: float = max(heights[2], heights[3])
+    return Placed(names, points, tall, split_y + 50.0 + bottom_h + 20.0, split_y)
+
+def node_html(a: Account, p: Point, tall: float, key: str, tip: str) -> Html:
+    let shape: Shape = Shape(True, boxes().half_w, tall)
+    if key == "":
+        html:
+            g:
+                title: tip
+                + box_html(a, p, shape)
+    else:
+        let vals: str = "{\"toggle\": \"" + key + "\"}"
+        html:
+            g class="group" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+                title: tip
+                + box_html(a, p, shape)
+
+def graph_html(g: Graph, gr: Grouped) -> Html:
+    let rows: []AccountRow = gr.books.accounts
+    let at: Placed = placed(g, rows)
+    let size: Point = Point(WIDTH, at.height)
+    let routes: []Route = routes_of(g, at.names, at.points, at.tall, size, [], [], boxes())
+    let box: str = f"0 0 {WIDTH:.0f} {at.height:.0f}"
+    let across: str = f"M 8 {px(at.split_y)} L {px(WIDTH - 8.0)} {px(at.split_y)}"
+    let rx: str = px(WIDTH / 2.0 + 20.0)
+    let by: str = px(at.split_y + 30.0)
+    let down: str = f"M {px(WIDTH / 2.0)} 8 L {px(WIDTH / 2.0)} {px(at.height - 8.0)}"
+    html:
+        svg viewBox=box class="graph":
+            defs:
+                marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                    polygon points="0 0, 10 3.5, 0 7"
+            path class="split" d=down
+            path class="split" d=across
+            stext class="side" x="20" y="30": "Assets"
+            stext class="side" x=rx y="30": "Liabilities and equity"
+            stext class="side" x="20" y=by: "Expenses"
+            stext class="side" x=rx y=by: "Revenue"
+            for i in range(len(g.flows)):
+                + to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
+            for i in range(len(g.accounts)):
+                + node_html(g.accounts[i], at.points[i], at.tall[i], group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]))
+
+def group_key(gr: Grouped, name: str) -> str:
+    for i in range(len(gr.names)):
+        if gr.names[i] == name:
+            return gr.keys[i]
+    return ""
+
+def node_tip(g: Graph, gr: Grouped, a: Account) -> str:
+    for i in range(len(gr.names)):
+        if gr.names[i] == a.name:
+            return f"{a.name}: balance {money(a.balance)}\n{gr.members[i]}\nClick to open the group"
+    return account_tip(g, a)
+
+# ---------------------------------------------------------------------
+# The tabs
+# ---------------------------------------------------------------------
+
+const TABS: []str = ["Transactions", "Accounts", "Statements"]
+
+def posting_text(e: Entry) -> str:
+    var parts: []str = []
+    for p in e.postings:
+        parts.append(f"{p.account} {money(p.amount)}")
+    return ", ".join(parts)
+
+def transactions_html(b: Books) -> Html:
+    html:
+        table:
+            tr:
+                th: "Date"
+                th: "What"
+                th: "Postings"
+            for e in b.entries:
+                tr:
+                    td: e.date
+                    td: e.what
+                    td: posting_text(e)
+
+def accounts_html(b: Books, g: Graph) -> Html:
+    html:
+        table:
+            tr:
+                th: "Number"
+                th: "Account"
+                th: "Kind"
+                th class="num": "Balance"
+            for r in b.accounts:
+                tr:
+                    td: r.number
+                    td: r.name
+                    td: kind_text(r.kind)
+                    td class="num": money(g.balance(r.name))
+
+def tab_body(tab: str, b: Books, g: Graph) -> []Html:
+    if tab == "Accounts":
+        return [accounts_html(b, g)]
+    if tab == "Statements":
+        let after: []Html = sections_after_graph(g, False)
+        var out: []Html = []
+        for i in range(1, len(after)):
+            out.append(after[i])
+        return out
+    return [transactions_html(b)]
+
+def tab_button(name: str, chosen: str) -> Html:
+    let vals: str = "{\"go\": \"" + name + "\"}"
+    let css: str = ("selected" if name == chosen else "")
+    html:
+        button class=css data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": name
+
+def option_html(value: str, label: str, chosen: bool) -> Html:
+    if chosen:
+        html:
+            option value=value selected="selected": label
+    else:
+        html:
+            option value=value: label
+
+def detail_label(d: int) -> str:
+    return ("All accounts" if d == 0 else (f"{d} digit" if d == 1 else f"{d} digits"))
+
+def fold_label(q: int) -> str:
+    return ("Every account" if q == 0 else f"Fewer than {q} transactions")
+
+const FOLDS: []int = [0, 2, 5, 10, 20, 50, 100]
+
+# The whole page for the books B of scenario CURRENT, as the settings P ask.
+def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> Html:
+    var detail: int = (auto_detail(b) if p.detail == "" else 0)
+    if p.detail != "":
+        let n: int | !ParseFailure_T = parse_int(p.detail)
+        if n is ParseFailure_T:
+            detail = 0
+        else:
+            detail = n
+    var opened: []str = p.opened
+    if p.toggle != "":
+        if p.toggle in opened:
+            var kept: []str = []
+            for k in opened:
+                if k != p.toggle:
+                    kept.append(k)
+            opened = kept
+        else:
+            opened.append(p.toggle)
+    let tab: str = (p.go if p.go != "" else p.tab)
+    let gr: Grouped = grouped(b, detail, p.fold, opened)
+    let g: Graph = graph_of(gr.books)
+    let real: Graph = graph_of(b)
+    let sizes: int = longest_number(b)
+    let opened_text: str = "|".join(opened)
+    html:
+        div id="all":
+            form id="state" data_hx_get="/h/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
+                strong: "Scenario "
+                select name="scenario":
+                    for i in range(len(names)):
+                        + option_html(names[i], titles[i], names[i] == current)
+                if len(b.accounts) > 12:
+                    span: " Group by "
+                    select name="detail":
+                        for d in range(0, sizes):
+                            + option_html(str(d), detail_label(d), d == detail)
+                    span: " fold "
+                    select name="fold":
+                        for q in FOLDS:
+                            + option_html(str(q), fold_label(q), q == p.fold)
+                input type="hidden" name="opened" value=opened_text
+                input type="hidden" name="tab" value=tab
+            h2: b.title
+            + graph_html(g, gr)
+            div class="tabs":
+                for name in TABS:
+                    + tab_button(name, tab)
+            for part in tab_body(tab, b, real):
+                + part
+
+const EXTRA: str = """
+body { max-width: 80em; }
+form#state { background: #eaf2fb; padding: 0.5em 0.8em; border-radius: 4px; margin: 0.5em 0; }
+path.split { stroke: #999; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
+text.side { font-size: 14px; font-weight: bold; fill: #666; }
+g.group { cursor: pointer; }
+div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4f4; cursor: pointer; }
+div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }
+"""
+
+def shell() -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: "Accounting, as graph theory (HTMX)"
+                style: STYLE + EXTRA
+                script src="/htmx.min.js"
+            body:
+                h1: "Accounting, as graph theory"
+                div id="all" data_hx_get="/h/all" data_hx_trigger="load": "Loading..."
+
+# The pages as text, for the server. An html: block writes an attribute
+# with underscores (data_hx_get), and htmx wants it with hyphens.
+def hyphens(text: str) -> str:
+    return text.replace("data_hx_", "data-hx-")
+
+def shell_text() -> str:
+    return "<!doctype html>" + hyphens(str(shell()))
+
+def all_text(b: Books, names: []str, titles: []str, current: str, p: Params) -> str:
+    return hyphens(str(all_html(b, names, titles, current, p)))
