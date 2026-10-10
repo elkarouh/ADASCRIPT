@@ -23,7 +23,7 @@ is left out; both are counted in the books' description.
 """
 from os nimport fileExists
 from math nimport round
-from shared/accounting_model import BookFailure_T
+from backend/accounting_model import BookFailure_T
 from backend/books_text import Books, bad
 from backend/plain_books import Collector, Leg, digits_only, is_account
 

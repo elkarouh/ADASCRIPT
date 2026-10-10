@@ -17,7 +17,7 @@ books' description; so are transactions that net to nothing.
 """
 from db import DB
 from os nimport fileExists, splitFile
-from shared/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from backend/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
 from backend/books_text import AccountRow, Books, bad, field
 
 type Found is record:

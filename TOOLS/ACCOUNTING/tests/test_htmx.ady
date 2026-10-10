@@ -3,7 +3,7 @@
 
     ady2nim c -r test_htmx.ady
 """
-from shared/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
+from backend/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from backend/books_text import AccountRow, Books
 from backend/htmx_page import Grouped, Params, all_text, auto_detail, dates_of, entry_of, fresh_params, grouped, params_of, replayable, replayable_by, shell_text, slider_position, upto
 

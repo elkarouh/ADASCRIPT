@@ -40,7 +40,7 @@ from math nimport round
 from os nimport walkFiles, removeFile, fileExists, splitFile, getLastModificationTime
 from times nimport toUnix
 from algorithm nimport sort
-from shared/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, example_entries, money_text
+from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, example_entries, money_text
 from backend/gnucash import books_of_gnucash
 from backend/beancount import books_of_beancount
 from backend/journal import books_of_journal

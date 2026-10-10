@@ -18,7 +18,7 @@ given, else from the first digit of the number (1 assets, 2 liabilities,
 """
 from os nimport fileExists
 from math nimport round
-from shared/accounting_model import BookFailure_T, Kind_T, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+from backend/accounting_model import BookFailure_T, Kind_T, ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
 from backend/books_text import Books, bad
 from backend/plain_books import Collector, Leg, kind_of_root
 

@@ -20,9 +20,9 @@ saves it and deletes it. What changes the books is POSTed to /h/do and
 /h/record; the rest is GET /h/all.
 """
 from uri nimport decodeUrl
-from shared/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
-from shared/routes import Point, Shape, boxes, money, px, routes_of, Route
-from backend/accounting_gui import STYLE, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
+from shared/routes import Point, Shape, boxes, px, Route
+from backend/accounting_gui import STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
 
 # The settings, as the query gives them.
@@ -458,16 +458,15 @@ def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str, fr
 def arrow_html(g: Graph, f: Flow, route: Route, now: bool) -> Html:
     let css: str = ("now" if now else "")
     let tip: str = tip_of(g, f)
-    let cents: str = str(min(int(f.amount), 2000000000))      # the page's numbers are 32-bit; only the length of the text matters
     html:
-        g class=css data_from=f.source.name data_to=f.target.name data_amount=cents:
+        g class=css data_from=f.source.name data_to=f.target.name:
             + to_html(f, route, tip)
 
 def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str, picked: []str) -> Html:
     let rows: []AccountRow = gr.books.accounts
     let at: Placed = placed(whole, rows, pos)
     let size: Point = Point(WIDTH, at.height)
-    let routes: []Route = routes_of(g, at.names, at.points, at.tall, size, [], [], boxes())
+    let routes: []Route = routes_for(g, at.names, at.points, at.tall, size, boxes())
     let box: str = f"0 0 {WIDTH:.0f} {at.height:.0f}"
     let across: str = f"M 8 {px(at.split_y)} L {px(WIDTH - 8.0)} {px(at.split_y)}"
     let rx: str = px(WIDTH / 2.0 + 20.0)

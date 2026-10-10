@@ -19,7 +19,7 @@ page reads it; the page writes one account or one entry the same way, and
 the server reads it. Nothing here needs a database or a browser, so both
 compile it.
 """
-from shared/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, money_text
+from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, money_text
 
 # An account as a chart of accounts lists it.
 type AccountRow is record:

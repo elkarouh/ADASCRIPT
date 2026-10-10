@@ -14,8 +14,23 @@ https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html)
 Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
-from shared/routes import NODE_RADIUS, Point, Route, Shape, boxes, circles, covers, money, px, rim, routes_of, toward
-from shared/accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
+from shared/routes import NODE_RADIUS, Point, Route, Shape, boxes, circles, covers, px, rim, routes_of, toward
+from backend/accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
+
+# 1234567 cents -> "12,345.67": Dollars_T converts, the format groups.
+def money(c: Cents_T) -> str:
+    return f"{Dollars_T(c):,.2f}"
+
+# The arrows of G routed by shared/routes.ady, which knows only names, points and texts.
+def routes_for(g: Graph, names: []str, points: []Point, tall: []float, size: Point, shape: Shape) -> []Route:
+    var sources: []str = []
+    var targets: []str = []
+    var texts: []str = []
+    for f in g.flows:
+        sources.append(f.source.name)
+        targets.append(f.target.name)
+        texts.append(money(f.amount))
+    return routes_of(sources, targets, texts, names, points, tall, size, [], [], shape)
 
 const STYLE: str = """
 body { font-family: sans-serif; max-width: 52em; margin: 2em auto; padding: 0 1em; line-height: 1.45; }
@@ -217,7 +232,7 @@ def to_html(g: Graph) -> Html:
         names.append(a.name)
         points.append(place(a))
         tall.append(NODE_RADIUS)
-    let routes: []Route = routes_of(g, names, points, tall, Point(980.0, 670.0), [], [], circles())
+    let routes: []Route = routes_for(g, names, points, tall, Point(980.0, 670.0), circles())
     html:
         svg viewBox="0 0 980 670" class="graph":
             defs:

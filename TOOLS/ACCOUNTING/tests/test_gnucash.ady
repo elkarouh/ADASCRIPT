@@ -8,7 +8,7 @@ the two ways GnuCash writes them.
 """
 from db import DB
 from os nimport removeFile, fileExists
-from shared/accounting_model import BookFailure_T, Graph
+from backend/accounting_model import BookFailure_T, Graph
 from backend/books_text import Books, graph_of, text_of_books
 from backend/gnucash import books_of_gnucash
 

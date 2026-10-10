@@ -186,12 +186,12 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `backend/htmx_page.ady` | the page, drawn by the server for htmx: the books, recorded by clicking |
 | `backend/books_text.ady` | the books as text, as the server and the page pass them |
 | `backend/gnucash.ady`, `beancount.ady`, `journal.ady`, `erp_csv.ady`, `plain_books.ady` | reading other programs' files; `plain_books` is what the text formats share |
+| `backend/accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
 | `frontend/` (compiled to JavaScript) | |
 | `frontend/drag.ady` | the page's one script of our own: dragging accounts and drawing arrows |
 | `frontend/htmx.min.js` | htmx, vendored, copied to `build/` |
 | `shared/` (compiled both ways) | |
-| `shared/accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
-| `shared/routes.ady` | where accounts are drawn and how the arrows run between them (`routes_of`): the server draws the page with it, and `drag.js` runs the same code to route the arrows again while you drag |
+| `shared/routes.ady` | where accounts are drawn and how the arrows run between them (`routes_of`, on plain names, points and texts, so the model stays in `backend/`): the server draws the page with it, and `drag.js` runs the same code to route the arrows again while you drag |
 | `tests/` | the tests, one `test_*.ady` for each part (`make test`) |
 | `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`) |
 | `accounting.conf`, `scenarios/*.books` | the currency and chart a new scenario starts with, and the scenarios the page offers |
@@ -365,7 +365,7 @@ that check what the learner records, and the year-end closing.
 `ledger_server` draws the page itself: http://127.0.0.1:8802/. It is
 htmx (`frontend/htmx.min.js`, 14 KB gzipped, copied to `build/`) swapping in the HTML
 that `backend/htmx_page.ady` makes, with the same `backend/accounting_gui.ady`, `backend/books_text.ady`, `shared/routes.ady` and
-`shared/accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
+`backend/accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
 state: the scenario, the grouping, the folding, the opened groups and the tab are the fields
 of a form in the page, and a change to one, or a click on a group or a tab, asks `/h/all`
 for the whole page again. Amounts are 64-bit here, so no grouping is refused for being

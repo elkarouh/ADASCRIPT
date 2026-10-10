@@ -8,7 +8,7 @@ with several debits against several credits.
     ady2nim c -r test_journal.ady
 """
 from os nimport removeFile, fileExists
-from shared/accounting_model import BookFailure_T, Graph
+from backend/accounting_model import BookFailure_T, Graph
 from backend/books_text import Books, graph_of, text_of_books
 from backend/journal import books_of_journal
 

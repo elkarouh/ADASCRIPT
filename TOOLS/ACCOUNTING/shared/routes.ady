@@ -6,7 +6,6 @@ by frontend/drag.ady, which routes the arrows again, in the browser, while an ac
 dragged. The two must give the same curves, so they are the same code. No HTML in here.
 """
 from math nimport sqrt
-from shared/accounting_model import Account, Cents_T, Dollars_T, Flow, Graph
 
 const NODE_RADIUS: float = 42.0
 
@@ -22,10 +21,6 @@ def circles() -> Shape:
 
 def boxes() -> Shape:
     return Shape(True, 110.0, 15.0)
-
-# 1234567 cents -> "12,345.67": Dollars_T converts, the format groups.
-def money(c: Cents_T) -> str:
-    return f"{Dollars_T(c):,.2f}"
 
 def px(v: float) -> str:
     return f"{v:.1f}"
@@ -141,11 +136,10 @@ def hits(pts: []Point, others: []Point, size: Point, shape: Shape) -> int:
 # inside the drawing; if none does, the least. Money flowing both ways
 # between two accounts makes two arrows, each pushed to its own right, so
 # that both, and their amounts, show.
-def route_of(g: Graph, f: Flow, a: Point, b: Point, others: []Point, size: Point, shape: Shape) -> []Point:
+def route_of(has_back: bool, a: Point, b: Point, others: []Point, size: Point, shape: Shape) -> []Point:
     var shifts: []float = [CURVE, -CURVE, 40.0, -40.0, 70.0, -70.0, 100.0, -100.0, 140.0, -140.0, 180.0, -180.0]
-    for other in g.flows:
-        if other.source == f.target and other.target == f.source:
-            shifts = [30.0, 60.0, 100.0, 150.0, 190.0]
+    if has_back:
+        shifts = [30.0, 60.0, 100.0, 150.0, 190.0]
     var best: []Point = route_points(a, b, shifts[0], shifts[0], shape)
     var best_cost: float = 1000000.0
     for s1 in shifts:
@@ -242,14 +236,14 @@ def bezier_at(c: []Point, t: float) -> Point:
 # arrows on one side of a box spread along it, in the order of the boxes at
 # their other ends, top to bottom, so that they do not cross there. Two
 # numbers a flow, its start's and its end's.
-def ports_of(g: Graph, names: []str, points: []Point, size: Point, shape: Shape, tall: []float) -> []float:
+def ports_of(sources: []str, targets: []str, names: []str, points: []Point, size: Point, shape: Shape, tall: []float) -> []float:
     var ports: []float = []
     var ends: []int = []                # for each end of each flow: its box,
     var sides: []float = []             # the side it is on,
     var heights: []float = []           # and how high the box at the other end is
-    for f in g.flows:
-        let i: int = names.index(f.source.name)
-        let j: int = names.index(f.target.name)
+    for n in range(len(sources)):
+        let i: int = names.index(sources[n])
+        let j: int = names.index(targets[n])
         let out: float = side_of(points[i], points[j], size, shape)
         let into: float = (-out if abs(points[i].x - points[j].x) > 2.0 * shape.half_w else out)
         ends.append(i)
@@ -276,15 +270,14 @@ def ports_of(g: Graph, names: []str, points: []Point, size: Point, shape: Shape,
 # a drawing SIZE wide and high: each one's route, then each one's amount, placed clear of
 # those already placed and of other text, whose middles are at TAKEN and
 # half-widths in HALVES.
-def routes_of(g: Graph, names: []str, points: []Point, tall: []float, size: Point, words: []Point, widths: []float, shape: Shape) -> []Route:
+def routes_of(sources: []str, targets: []str, texts: []str, names: []str, points: []Point, tall: []float, size: Point, words: []Point, widths: []float, shape: Shape) -> []Route:
     var routes: []Route = []
     var taken: []Point = words
     var halves: []float = widths
-    let ports: []float = (ports_of(g, names, points, size, shape, tall) if shape.boxes else [])
-    for n in range(len(g.flows)):
-        let f: Flow = g.flows[n]
-        let i: int = names.index(f.source.name)
-        let j: int = names.index(f.target.name)
+    let ports: []float = (ports_of(sources, targets, names, points, size, shape, tall) if shape.boxes else [])
+    for n in range(len(sources)):
+        let i: int = names.index(sources[n])
+        let j: int = names.index(targets[n])
         var d: str = ""
         var samples: []Point = []
         if shape.boxes:
@@ -297,11 +290,15 @@ def routes_of(g: Graph, names: []str, points: []Point, tall: []float, size: Poin
             for k in range(len(points)):
                 if k != i and k != j:
                     others.append(points[k])
-            let pts: []Point = route_of(g, f, points[i], points[j], others, size, shape)
+            var has_back: bool = False
+            for m in range(len(sources)):
+                if sources[m] == targets[n] and targets[m] == sources[n]:
+                    has_back = True
+            let pts: []Point = route_of(has_back, points[i], points[j], others, size, shape)
             d = spline_d(pts)
             for k in range(31):
                 samples.append(spline_at(pts, float(k) / 10.0))
-        let text: str = money(f.amount)
+        let text: str = texts[n]
         let label: Point = label_spot(samples, text, points, tall, taken, halves, shape, size)
         taken.append(Point(label.x, label.y - 4.0))
         halves.append(3.3 * float(len(text)) + 3.0)
