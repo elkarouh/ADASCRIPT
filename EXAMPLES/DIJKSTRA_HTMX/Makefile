@@ -2,7 +2,7 @@
 # Needs karax >= 1.5.0 (nimble install karax@1.5.0).
 #
 #   make app      build drag.js and the server, start it, open the page
-#   make test     the algorithm and the page, no server
+#   make test     the model, the page and the requests, no server
 #   make all      build the server and drag.js, start nothing
 #   make clean    remove what was built
 #
@@ -19,7 +19,7 @@ PORT    ?= 8810
 all: server frontend/drag.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
-server: backend/dijkstra_model.ady backend/dijkstra_gui.ady backend/server.ady
+server: backend/dijkstra_model.ady backend/dijkstra_gui.ady backend/requests.ady backend/server.ady
 	@echo "building backend/server"
 	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log

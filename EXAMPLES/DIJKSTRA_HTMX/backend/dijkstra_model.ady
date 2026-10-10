@@ -1,49 +1,176 @@
 #!/usr/bin/env ady2nim
-"""dijkstra_model -- the model: the nodes, the edges and their costs, and the way between two.
+"""dijkstra_model -- the model: a network of nodes and edges, what may be done to it, and
+where it is kept.
 
-The algorithm is TO_NIM/STDLIB/graphs.ady; what is here is the problem (nodes named by
-strings, undirected edges with a cost) turned into the graph the library wants
-(build_graph); dijkstra_gui.ady hands that to the library's shortest_route itself. A placeholder:
-replace this file with your own model; dijkstra_gui.ady needs what it imports from here.
-No HTML, no HTTP.
+A node has a name and a place in the drawing; an edge joins two nodes, both ways, at a
+cost. The network is changed only through the functions below (create, update, delete),
+each of which says what was wrong, or "" when it was done. It is kept in a text file,
+one line a node or an edge. The shortest way itself is the library's
+(TO_NIM/STDLIB/graphs.ady): build_graph turns the network into the graph it wants.
+
+A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
 
-# The problem: six nodes, nine edges between them, and what each costs to start with.
-const ENDS: []str = ["A B", "A C", "A F", "B C", "B D", "C D", "C F", "D E", "E F"]
-const START_COSTS: []int = [7, 9, 14, 10, 15, 11, 2, 6, 9]
+const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 type Node_T is record:
     name: str
-
-let NODES: []Node_T = [Node_T("A"), Node_T("B"), Node_T("C"), Node_T("D"), Node_T("E"), Node_T("F")]
-
-def names_of(nodes: []Node_T) -> []str:
-    var names: []str = []
-    for n in nodes:
-        names.append(n.name)
-    return names
+    x:    float                     # its centre in the drawing, 580 wide and 380 high
+    y:    float
 
 type Edge is record:
     a:    str
     b:    str
     cost: int
 
-# The edges, with COSTS in the order of ENDS.
-def edges_of(costs: []int) -> []Edge:
-    var edges: []Edge = []
-    for i in range(len(ENDS)):
-        let ab: []str = ENDS[i].split(" ")
-        edges.append(Edge(ab[0], ab[1], costs[i]))
-    return edges
+type Network is record:
+    nodes: []Node_T
+    edges: []Edge
+
+# What there is to start with, and after Reset.
+def sample() -> Network:
+    let nodes: []Node_T = [Node_T("A", 60.0, 190.0), Node_T("B", 200.0, 60.0), Node_T("C", 200.0, 190.0),
+                           Node_T("D", 380.0, 60.0), Node_T("E", 520.0, 190.0), Node_T("F", 330.0, 320.0)]
+    let edges: []Edge = [Edge("A", "B", 7), Edge("A", "C", 9), Edge("A", "F", 14), Edge("B", "C", 10),
+                         Edge("B", "D", 15), Edge("C", "D", 11), Edge("C", "F", 2), Edge("D", "E", 6),
+                         Edge("E", "F", 9)]
+    return Network(nodes, edges)
+
+def names_of(net: Network) -> []str:
+    var names: []str = []
+    for n in net.nodes:
+        names.append(n.name)
+    return names
+
+# The edge between A and B, either way round: its index, or -1.
+def edge_at(net: Network, a: str, b: str) -> int:
+    for i in range(len(net.edges)):
+        let e: Edge = net.edges[i]
+        if (e.a == a and e.b == b) or (e.a == b and e.b == a):
+            return i
+    return -1
+
+# ---- create, update, delete: each returns what was wrong, or "" ----
+
+def add_node(net: Network, name: str, x: float, y: float) -> str:
+    if len(name) == 0 or len(name) > 8:
+        return "A name is 1 to 8 letters or digits."
+    for c in name:
+        if c not in LETTERS:
+            return "A name is 1 to 8 letters or digits."
+    if name in names_of(net):
+        return f"There is a node {name} already."
+    net.nodes.append(Node_T(name, x, y))
+    return ""
+
+def move_node(net: Network, name: str, x: float, y: float) -> str:
+    for i in range(len(net.nodes)):
+        if net.nodes[i].name == name:
+            net.nodes[i].x = x
+            net.nodes[i].y = y
+            return ""
+    return f"There is no node {name}."
+
+# The node goes, and every edge that ends at it.
+def remove_node(net: Network, name: str) -> str:
+    if name not in names_of(net):
+        return f"There is no node {name}."
+    var left: []Node_T = []
+    for n in net.nodes:
+        if n.name != name:
+            left.append(n)
+    net.nodes = left
+    var kept: []Edge = []
+    for e in net.edges:
+        if e.a != name and e.b != name:
+            kept.append(e)
+    net.edges = kept
+    return ""
+
+def add_edge(net: Network, a: str, b: str, cost: int) -> str:
+    if a not in names_of(net) or b not in names_of(net):
+        return "Pick two nodes for the edge."
+    if a == b:
+        return "An edge joins two different nodes."
+    if edge_at(net, a, b) >= 0:
+        return f"There is an edge {a} - {b} already."
+    if cost < 1:
+        return "A cost is 1 or more."
+    net.edges.append(Edge(a, b, cost))
+    return ""
+
+def set_cost(net: Network, a: str, b: str, cost: int) -> str:
+    let i: int = edge_at(net, a, b)
+    if i < 0:
+        return f"There is no edge {a} - {b}."
+    if cost < 1:
+        return "A cost is 1 or more."
+    net.edges[i].cost = cost
+    return ""
+
+def remove_edge(net: Network, a: str, b: str) -> str:
+    let i: int = edge_at(net, a, b)
+    if i < 0:
+        return f"There is no edge {a} - {b}."
+    var kept: []Edge = []
+    for k in range(len(net.edges)):
+        if k != i:
+            kept.append(net.edges[k])
+    net.edges = kept
+    return ""
+
+# ---- kept in a text file: "node A 60 190" and "edge A B 7", a line each ----
+
+def text_of(net: Network) -> str:
+    var lines: []str = []
+    for n in net.nodes:
+        lines.append(f"node {n.name} {n.x:.0f} {n.y:.0f}")
+    for e in net.edges:
+        lines.append(f"edge {e.a} {e.b} {e.cost}")
+    return "\n".join(lines) + "\n"
+
+def network_of(text: str) -> Network:
+    var net: Network = Network([], [])
+    for line in text.split("\n"):
+        let w: []str = line.split()
+        if len(w) == 4 and w[0] == "node":
+            let x: float | !ParseFailure_T = parse_float(w[2])
+            let y: float | !ParseFailure_T = parse_float(w[3])
+            if x is ParseFailure_T:
+                continue
+            if y is ParseFailure_T:
+                continue
+            let added: str = add_node(net, w[1], x, y)
+        elif len(w) == 4 and w[0] == "edge":
+            let c: int | !ParseFailure_T = parse_int(w[3])
+            if c is ParseFailure_T:
+                continue
+            let joined: str = add_edge(net, w[1], w[2], c)
+    return net
+
+# The network kept at PATH, or the sample when there is none yet.
+def load(path: Path) -> Network:
+    let text: str | !PathFailure_T = path.read_text()
+    if text is PathFailure_T:
+        return sample()
+    return network_of(text)
+
+def save(net: Network, path: Path) -> str:
+    let done: None | !PathFailure_T = path.write_text(text_of(net))
+    if done is PathFailure_T:
+        return f"Could not write {path}."
+    return ""
+
+# ---- for the library ----
 
 # The graph the library wants: each node to its (cost, neighbour) pairs. The edges are
 # undirected, so each one is entered both ways.
-def build_graph(nodes: []Node_T, edges: []Edge) -> {str}[](float, str):
+def build_graph(net: Network) -> {str}[](float, str):
     var graph: {str}[](float, str)
     let none: [](float, str) = []
-    for n in nodes:
+    for n in net.nodes:
         graph[n.name] = none
-    for e in edges:
+    for e in net.edges:
         graph[e.a].append((float(e.cost), e.b))
         graph[e.b].append((float(e.cost), e.a))
     return graph

@@ -1,0 +1,55 @@
+#!/usr/bin/env ady2nim
+"""requests -- what each request does, and the network it does it to; no HTTP.
+
+server.ady hands every request here as a method, a path and its fields, and sends back
+the page that comes out. The tests call answer() the same way, with no server running.
+The network is kept in a text file (keep_in), written after every change.
+"""
+from backend/dijkstra_model import Network, add_edge, add_node, load, move_node, remove_edge, remove_node, sample, save, set_cost
+from backend/dijkstra_gui import all_text, field_of, new_spot, params_of
+
+var net: Network = sample()
+var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
+
+# From now on the network is the one kept in PATH ("": the sample, kept nowhere).
+def keep_in(path: str):
+    store = path
+    net = (load(Path(path)) if path != "" else sample())
+
+def number_of(text: str) -> float:
+    let n: float | !ParseFailure_T = parse_float(text)
+    if n is ParseFailure_T:
+        return -1.0
+    else:
+        return n
+
+# What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): the page to
+# send back, or "" when there is no such thing.
+def answer(method: str, path: str, fields: str) -> str:
+    var problem: str = ""
+    let name: str = field_of(fields, "name")
+    let a: str = field_of(fields, "a")
+    let b: str = field_of(fields, "b")
+    let cost: int = int(number_of(field_of(fields, "cost")))
+    if method == "GET" and path == "/all":
+        pass
+    elif method == "POST" and path == "/nodes":
+        let at: []float = new_spot(net)
+        problem = add_node(net, name, at[0], at[1])
+    elif method == "PUT" and path == "/nodes":
+        problem = move_node(net, name, number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
+    elif method == "DELETE" and path == "/nodes":
+        problem = remove_node(net, name)
+    elif method == "POST" and path == "/edges":
+        problem = add_edge(net, a, b, cost)
+    elif method == "PUT" and path == "/edges":
+        problem = set_cost(net, a, b, cost)
+    elif method == "DELETE" and path == "/edges":
+        problem = remove_edge(net, a, b)
+    elif method == "POST" and path == "/reset":
+        net = sample()
+    else:
+        return ""
+    if method != "GET" and problem == "" and store != "":
+        problem = save(net, Path(store))
+    return all_text(net, params_of(fields), problem)

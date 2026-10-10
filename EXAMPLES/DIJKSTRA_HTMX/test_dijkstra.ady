@@ -1,29 +1,50 @@
 #!/usr/bin/env ady2nim
-"""dijkstra_model.ady and dijkstra_gui.ady, with no server: ady2nim c -r test_dijkstra.ady"""
+"""The model, the page and the requests, with no server running: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
-from backend/dijkstra_model import Edge, NODES, START_COSTS, build_graph, edges_of, uses
-from backend/dijkstra_gui import all_text
+from backend/dijkstra_model import Edge, Network, add_edge, add_node, build_graph, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
+from backend/requests import answer, keep_in
 
-let g: {str}[](float, str) = build_graph(NODES, edges_of(START_COSTS))
-let w: (float, []str) = shortest_route[str](g, "A", "E")
+# ---- the model ----
+var net: Network = sample()
+let w: (float, []str) = shortest_route[str](build_graph(net), "A", "E")
 assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
-assert shortest_route[str](g, "E", "A")[1] == ["E", "F", "C", "A"]               # the edges go both ways
-assert len(shortest_route[str](g, "A", "Z")[1]) == 0
-assert len(shortest_route[str](build_graph(NODES, [Edge("A", "B", 1)]), "A", "C")[1]) == 0   # nothing joins them
+assert shortest_route[str](build_graph(net), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
 assert uses(w[1], Edge("C", "F", 2)) and not uses(w[1], Edge("A", "B", 7))
 
-# the page: nothing is kept, so the query says it all
-assert "Click the node to start from." in all_text("")
-assert "click the node to go to." in all_text("pick=A")
-assert "Shortest way from A to E: A → C → F → E, cost 20." in all_text("start=A&goal=E")
-assert "cost 11" not in all_text("start=A&goal=E")
-assert "A → F → E, cost 23" in all_text("start=A&goal=E&c6=40")                    # C-F made dear: the direct A-F wins
-assert "name=\"c6\" value=\"2\"" in all_text("")
-assert "start=\"B\"" not in all_text("start=A&goal=B&pick=C") and "name=\"start\" value=\"C\"" in all_text("start=A&goal=B&pick=C")   # a third click starts again
-assert "data-hx-get=\"/all\"" in all_text("")
-# a node dragged somewhere (drag.ady): the page is drawn from `pos`, the way is the same
-let moved: str = all_text("start=A&goal=E&pos=B%4099%2C77")
-assert "data-name=\"B\" data-x=\"99\" data-y=\"77\"" in moved or "data_name" in moved or "data-x=\"99\"" in moved
-assert "name=\"pos\" value=\"B@99,77\"" in moved and "A → C → F → E, cost 20" in moved
-assert "name=\"pos\" value=\"\"" in all_text("start=A&goal=E&pos=B%4099%2C77&act=clear")      # Clear puts them back
-print "dijkstra page: all checks passed"
+assert add_node(net, "G", 10.0, 20.0) == ""
+assert add_node(net, "G", 10.0, 20.0) == "There is a node G already."
+assert add_node(net, "a b", 10.0, 20.0) != ""                    # letters and digits only
+assert add_edge(net, "G", "A", 3) == ""
+assert add_edge(net, "A", "G", 4) != ""                          # either way round, one edge
+assert add_edge(net, "G", "G", 4) != "" and add_edge(net, "G", "Z", 4) != ""
+assert set_cost(net, "A", "G", 5) == "" and set_cost(net, "A", "G", 0) != ""
+assert move_node(net, "G", 99.0, 88.0) == ""
+assert "node G 99 88" in text_of(net) and "edge G A 5" in text_of(net)
+assert text_of(network_of(text_of(net))) == text_of(net)         # kept and read back, the same
+assert remove_edge(net, "G", "A") == "" and remove_edge(net, "G", "A") != ""
+assert remove_node(net, "C") == ""
+assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edges went with it
+
+# ---- the page, through the requests the server answers (kept nowhere) ----
+keep_in("")
+assert "Click the node to start from." in answer("GET", "/all", "")
+assert "click the node to go to." in answer("GET", "/all", "pick=A")
+assert "Shortest way from A to E: A → C → F → E, cost 20." in answer("GET", "/all", "start=A&goal=E")
+assert "name=\"start\" value=\"C\"" in answer("GET", "/all", "start=A&goal=B&pick=C")    # a third click starts again
+assert "data-hx-get=\"/all\"" in answer("GET", "/all", "")
+assert answer("GET", "/nowhere", "") == ""
+
+assert "A → F → E, cost 23" in answer("PUT", "/edges", "start=A&goal=E&a=C&b=F&cost=40")   # C-F made dear
+assert "A → C → F → E, cost 20" in answer("PUT", "/edges", "start=A&goal=E&a=F&b=C&cost=2")
+assert "A → F → E, cost 23" in answer("DELETE", "/edges", "start=A&goal=E&a=C&b=F")
+let added: str = answer("POST", "/nodes", "name=H")
+assert "data_name=\"H\"" in added or "data-name=\"H\"" in added
+assert "There is a node H already." in answer("POST", "/nodes", "name=H")
+assert "A → F → E, cost 23" in answer("POST", "/edges", "start=A&goal=E&a=A&b=H&cost=1")      # H leads nowhere yet
+assert "A → H → E, cost 2." in answer("POST", "/edges", "start=A&goal=E&a=H&b=E&cost=1")
+let moved: str = answer("PUT", "/nodes", "name=H&x=300&y=100")
+assert "data_x=\"300\"" in moved or "data-x=\"300\"" in moved
+assert "A → F → E, cost 23" in answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
+assert "Click the node to start from." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")   # the start went
+assert "A → C → F → E, cost 20" in answer("POST", "/reset", "start=A&goal=E")
+print "dijkstra: all checks passed"

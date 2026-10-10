@@ -1,24 +1,33 @@
 #!/usr/bin/env ady2nim
-"""server -- the one place that knows about HTTP.
+"""server -- the one place that knows about HTTP; what a request does is requests.ady.
 
     make app [PORT=n]  (or: ady2nim js frontend/drag.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
 
-    GET /            the page: a script tag and a div that loads /all
-    GET /all?...     the page again, from the settings in the query
-    GET /htmx.min.js htmx itself
-    GET /drag.js     drag.ady, compiled to JavaScript
+    GET    /            the page: a script tag and a div that loads /all
+    GET    /all         the page again                      (start, goal, pick, act)
+    POST   /nodes       create a node                       (name)
+    PUT    /nodes       move a node, after a drag           (name, x, y)
+    DELETE /nodes       delete a node and its edges         (name)
+    POST   /edges       create an edge                      (a, b, cost)
+    PUT    /edges       change an edge's cost               (a, b, cost)
+    DELETE /edges       delete an edge                      (a, b)
+    POST   /reset       put the sample network back
+    GET    /htmx.min.js htmx itself
+    GET    /drag.js     drag.ady, compiled to JavaScript
+
+Every answer but the scripts is the whole page, which htmx swaps in. The network is kept
+in graph.txt, in the directory the server runs in; it is written after every change.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from backend/dijkstra_gui import all_text, shell_text
+from backend/dijkstra_gui import shell_text
+from backend/requests import answer, keep_in
 
 async def handler(req: Request):
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
     let path: str = req.url.path
     if path == "/":
         await req.respond(Http200, shell_text(), html_type)
-    elif path == "/all":
-        await req.respond(Http200, all_text(req.url.query), html_type)
     elif path in ["/htmx.min.js", "/drag.js"]:
         let script: str | !PathFailure_T = (Path("frontend") / path[1:]).read_text()
         if script is PathFailure_T:
@@ -26,7 +35,11 @@ async def handler(req: Request):
         else:
             await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
     else:
-        await req.respond(Http404, "not found")
+        let page: str = answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
+        if page == "":
+            await req.respond(Http404, "not found")
+        else:
+            await req.respond(Http200, page, html_type)
 
 def main():
     var port: int = 8810
@@ -37,7 +50,8 @@ def main():
             pass
         else:
             port = n
-    print f"http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    keep_in("graph.txt")
+    print f"http://127.0.0.1:{port}/ (Ctrl-C to stop); the network is kept in graph.txt"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))
 

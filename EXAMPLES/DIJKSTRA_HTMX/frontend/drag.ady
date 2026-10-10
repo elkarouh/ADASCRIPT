@@ -5,8 +5,8 @@
 A node is a <g class="node" data_name=".." data_x=".." data_y=".."> (its centre, in the
 drawing's units) and an edge a <g data_from=".." data_to=".."> holding a path and its
 cost. While a node is dragged it moves and its edges follow, here in the browser, at once.
-Letting go writes the new centre into the form's hidden field `pos`, and clicks the hidden
-Redraw button, which asks the server for the page again: it draws the same, from `pos`.
+Letting go writes the node's name and new centre into the hidden form `#move` and clicks
+its button, which sends PUT /nodes: the server keeps the new place and draws the page again.
 
 A press that does not move is a click, and goes on to htmx (it picks the node).
 """
@@ -99,14 +99,9 @@ def on_move(e: Event):
     held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
     follow(held_name, now_x, now_y)
 
-# The field pos holds "name@x,y|name@x,y": NAME's entry replaced, or added.
-def with_position(pos: str, name: str, x: float, y: float) -> str:
-    var kept: []str = []
-    for entry in pos.split("|"):
-        if entry != "" and not entry.startswith(name + "@"):
-            kept.append(entry)
-    kept.append(f"{name}@{x:.0f},{y:.0f}")
-    return "|".join(kept)
+def set_field(name: str, value: str):
+    let field: InputElement = InputElement(document.querySelector(cstring("#move input[name=" + name + "]")))
+    field.value = cstring(value)
 
 def on_up(e: Event):
     if held == nil:
@@ -115,8 +110,9 @@ def on_up(e: Event):
     let name: str = held_name
     held = nil
     if was_moved:
-        let field: InputElement = InputElement(document.querySelector("input[name=pos]"))
-        field.value = cstring(with_position(str(field.value), name, now_x, now_y))
+        set_field("name", name)
+        set_field("x", f"{now_x:.0f}")
+        set_field("y", f"{now_y:.0f}")
         document.querySelector("#redraw").click()
         dragged = True                  # after the click above, which must go through
 

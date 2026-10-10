@@ -1,84 +1,54 @@
 #!/usr/bin/env ady2nim
 """dijkstra_gui -- the page as HTML the server draws, for htmx to swap in.
 
-The server keeps nothing between requests. What the page is showing -- the
-costs, the two nodes picked -- lives in the form `#state` inside the page. A
-click, or a change to a cost, asks GET /all for the whole page again, with the
-form's fields in the query, and the answer replaces the page. One-shot fields
-(`pick`, `act`) come with the click and are not in the form.
+What the page shows is a function of the network (the model, which the server keeps)
+and of what the reader has picked: the start and the goal, the fields of the form
+`#state`. Every request sends that form along and gets the whole page back, which
+htmx swaps in. Reading is GET /all; the buttons and fields that change the network
+send POST, PUT or DELETE to /nodes or /edges (see server.ady). One-shot fields
+(`pick`, `act`) come with a click and are not in the form.
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
-from backend/dijkstra_model import Edge, Node_T, NODES, ENDS, names_of, START_COSTS, build_graph, edges_of, uses
+from backend/dijkstra_model import Edge, Network, Node_T, build_graph, names_of, uses
 
-const XS: []float = [60.0, 200.0, 200.0, 380.0, 520.0, 330.0]       # where the nodes start
-const YS: []float = [190.0, 60.0, 190.0, 60.0, 190.0, 320.0]
+const WIDTH: float = 580.0
+const HEIGHT: float = 380.0
 
 type Params is record:
     start: str
     goal:  str
-    costs: []int
-    pos:   str                      # where nodes were dragged to: "A@x,y|B@x,y" (drag.ady)
     pick:  str                      # the node clicked
     act:   str                      # clear
 
-def fresh() -> Params:
-    return Params("", "", START_COSTS, "", "", "")
-
-def params_of(query: str) -> Params:
-    var p: Params = fresh()
-    for pair in query.split("&"):
+# The value of KEY in a query or a form body ("a=1&b=2"), or "".
+def field_of(text: str, key: str) -> str:
+    for pair in text.split("&"):
         let at: int = pair.find("=")
-        if at < 0:
-            continue
-        let key: str = pair[:at]
-        let value: str = decodeUrl(pair[at + 1:])
-        if key == "start":
-            p.start = value
-        elif key == "goal":
-            p.goal = value
-        elif key == "pos":
-            p.pos = value
-        elif key == "pick":
-            p.pick = value
-        elif key == "act":
-            p.act = value
-        elif key.startswith("c"):
-            let i: int | !ParseFailure_T = parse_int(key[1:])
-            let n: int | !ParseFailure_T = parse_int(value)
-            if i is ParseFailure_T:
-                pass
-            else:
-                if n is ParseFailure_T:
-                    pass
-                else:
-                    if i >= 0 and i < len(p.costs) and n >= 1:
-                        p.costs[i] = n
-    return p
+        if at > 0 and pair[:at] == key:
+            return decodeUrl(pair[at + 1:])
+    return ""
 
-def at(name: str) -> int:
-    return names_of(NODES).index(name)
+def params_of(text: str) -> Params:
+    return Params(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
 
-# Where node NAME is: where it was dragged to, else where it starts.
-def spot(name: str, pos: str) -> []float:
-    for entry in pos.split("|"):
-        if entry.startswith(name + "@"):
-            let xy: []str = entry[len(name) + 1:].split(",")
-            if len(xy) == 2:
-                let x: float | !ParseFailure_T = parse_float(xy[0])
-                let y: float | !ParseFailure_T = parse_float(xy[1])
-                if x is ParseFailure_T:
-                    pass
-                else:
-                    if y is ParseFailure_T:
-                        pass
-                    else:
-                        return [x, y]
-    return [XS[at(name)], YS[at(name)]]
+# Where node NAME is drawn.
+def spot(net: Network, name: str) -> []float:
+    for n in net.nodes:
+        if n.name == name:
+            return [n.x, n.y]
+    return [0.0, 0.0]
 
-def to_html(e: Edge, on_way: bool, pos: str) -> Html:
-    let p1: []float = spot(e.a, pos)
-    let p2: []float = spot(e.b, pos)
+# Where a new node goes: along the bottom, left to right, then again a row up.
+def new_spot(net: Network) -> []float:
+    let k: int = len(net.nodes)
+    return [40.0 + float((k * 70) % 500), HEIGHT - 30.0 - float((k * 70) // 500 % 4) * 60.0]
+
+# ---- the drawing ----
+
+def to_html(e: Edge, on_way: bool, net: Network) -> Html:
+    let p1: []float = spot(net, e.a)
+    let p2: []float = spot(net, e.b)
     let d: str = f"M {p1[0]:.0f} {p1[1]:.0f} L {p2[0]:.0f} {p2[1]:.0f}"
     let css: str = ("edge way" if on_way else "edge")
     let lx: str = f"{(p1[0] + p2[0]) / 2.0:.0f}"
@@ -89,82 +59,129 @@ def to_html(e: Edge, on_way: bool, pos: str) -> Html:
             path class=css d=d
             stext class="cost" x=lx y=ly: label
 
-def to_html(n: Node_T, role: str, pos: str) -> Html:
-    let name: str = n.name
-    let p1: []float = spot(name, pos)
-    let cx: str = f"{p1[0]:.0f}"
-    let cy: str = f"{p1[1]:.0f}"
-    let ty: str = f"{p1[1] + 5.0:.0f}"
+def to_html(n: Node_T, role: str) -> Html:
+    let cx: str = f"{n.x:.0f}"
+    let cy: str = f"{n.y:.0f}"
+    let ty: str = f"{n.y + 5.0:.0f}"
     let css: str = "node " + role
-    let vals: str = "{\"pick\": \"" + name + "\"}"
+    let vals: str = "{\"pick\": \"" + n.name + "\"}"
     html:
-        g class=css data_name=name data_x=cx data_y=cy data_hx_get="/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+        g class=css data_name=n.name data_x=cx data_y=cy data_hx_get="/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
             circle cx=cx cy=cy r="24"
-            stext class="name" x=cx y=ty: name
+            stext class="name" x=cx y=ty: n.name
 
-def cost_row_html(i: int, cost: int) -> Html:
-    let field: str = f"c{i}"
-    let value: str = str(cost)
-    let label: str = ENDS[i].replace(" ", " - ")
+# ---- the tables: a row for each node and each edge, with what can be done to it ----
+
+def row_html(n: Node_T) -> Html:
+    let vals: str = "{\"name\": \"" + n.name + "\"}"
+    let ask: str = f"Delete {n.name} and its edges?"
+    html:
+        tr:
+            td: n.name
+            td:
+                button type="button" class="delete" title="Delete" data_hx_delete="/nodes" data_hx_vals=vals data_hx_confirm=ask data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "✕"
+
+def row_html(e: Edge) -> Html:
+    let label: str = e.a + " - " + e.b
+    let value: str = str(e.cost)
+    let vals: str = "{\"a\": \"" + e.a + "\", \"b\": \"" + e.b + "\"}"
     html:
         tr:
             td: label
             td:
-                input type="number" name=field value=value min="1" max="99"
+                input type="number" name="cost" value=value min="1" max="999" data_hx_put="/edges" data_hx_trigger="change" data_hx_vals=vals data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML"
+            td:
+                button type="button" class="delete" title="Delete" data_hx_delete="/edges" data_hx_vals=vals data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "✕"
 
-def all_html(p0: Params) -> Html:
+def choice_html(name: str, names: []str) -> Html:
+    html:
+        select name=name:
+            for n in names:
+                option value=n: n
+
+def all_html(net: Network, p0: Params, problem: str) -> Html:
     var p: Params = p0
+    let names: []str = names_of(net)
     if p.act == "clear":
         p.start = ""
         p.goal = ""
-        p.pos = ""
-    if p.pick != "" and p.pick in names_of(NODES):
+    if p.start not in names:            # deleted since
+        p.start = ""
+    if p.goal not in names:
+        p.goal = ""
+    if p.pick != "" and p.pick in names:
         if p.start == "" or p.goal != "":
             p.start = p.pick
             p.goal = ""
         elif p.pick != p.start:
             p.goal = p.pick
-    let edges: []Edge = edges_of(p.costs)
-    let found: (float, []str) = shortest_route[str](build_graph(NODES, edges), p.start, p.goal)
+    let found: (float, []str) = shortest_route[str](build_graph(net), p.start, p.goal)
     let way: []str = found[1]
     let said: str = ("Click the node to start from." if p.start == "" else
                      f"From {p.start}: click the node to go to." if p.goal == "" else
                      f"No way from {p.start} to {p.goal}." if len(way) == 0 else
                      f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {found[0]:.0f}.")
     let clear_vals: str = "{\"act\": \"clear\"}"
+    let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
+    # form#move: drag.ady fills in its fields and clicks its button
     html:
         div id="all":
-            form id="state" data_hx_get="/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
+            form id="state":
                 input type="hidden" name="start" value=p.start
                 input type="hidden" name="goal" value=p.goal
-                input type="hidden" name="pos" value=p.pos
-                button type="button" id="redraw" class="redraw" data_hx_get="/all" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "Redraw"
+            form id="move":
+                input type="hidden" name="name" value=""
+                input type="hidden" name="x" value=""
+                input type="hidden" name="y" value=""
+                button type="button" id="redraw" class="redraw" data_hx_put="/nodes" data_hx_include="#move, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
+            div class="side":
+                table:
+                    tr:
+                        th: "Node"
+                        th: ""
+                    for n in net.nodes:
+                        + row_html(n)
+                form data_hx_post="/nodes" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML":
+                    input type="text" name="name" placeholder="name" size="6" maxlength="8"
+                    button: "Add node"
                 table:
                     tr:
                         th: "Edge"
                         th: "Cost"
-                    for i in range(len(ENDS)):
-                        + cost_row_html(i, p.costs[i])
-                button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear"
+                        th: ""
+                    for e in net.edges:
+                        + row_html(e)
+                form data_hx_post="/edges" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML":
+                    + choice_html("a", names)
+                    + choice_html("b", names)
+                    input type="number" name="cost" value="1" min="1" max="999"
+                    button: "Add edge"
+                p:
+                    button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear"
+                    button type="button" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset"
+            if problem != "":
+                p class="problem": problem
             p class="said": said
-            svg viewBox="0 0 580 380" class="graph":
-                for i in range(len(edges)):
-                    + to_html(edges[i], uses(way, edges[i]), p.pos)
-                for n in NODES:
-                    + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))), p.pos)
+            svg viewBox=box class="graph":
+                for e in net.edges:
+                    + to_html(e, uses(way, e), net)
+                for n in net.nodes:
+                    + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
 
 const STYLE: str = """
-body { font-family: sans-serif; max-width: 46em; margin: 2em auto; padding: 0 1em; }
-form#state { float: right; margin-left: 1em; }
-td, th { padding: 0.1em 0.6em; text-align: left; }
+body { font-family: sans-serif; max-width: 52em; margin: 2em auto; padding: 0 1em; }
+div.side { float: right; margin-left: 1em; width: 16em; }
+div.side form { margin: 0.3em 0 1em; }
+td, th { padding: 0.1em 0.5em; text-align: left; }
 input[type=number] { width: 4em; }
-svg.graph { width: 100%; height: auto; }
+button.delete { border: none; background: none; color: #b71c1c; cursor: pointer; }
+p.problem { color: #b71c1c; }
+svg.graph { width: 100%; height: auto; user-select: none; }
 path.edge { stroke: #999; stroke-width: 2; fill: none; }
 path.edge.way { stroke: #e65100; stroke-width: 5; }
 text.cost { font-size: 13px; fill: #444; text-anchor: middle; }
 g.node { cursor: grab; }
 button.redraw { display: none; }
-svg.graph { user-select: none; }
 g.node circle { fill: #fff; stroke: #555; stroke-width: 2; }
 g.node.way circle { stroke: #e65100; stroke-width: 4; }
 g.node.start circle { fill: #c8e6c9; stroke: #2e7d32; stroke-width: 4; }
@@ -193,5 +210,5 @@ def hyphens(text: str) -> str:
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
 
-def all_text(query: str) -> str:
-    return hyphens(str(all_html(params_of(query))))
+def all_text(net: Network, p: Params, problem: str) -> str:
+    return hyphens(str(all_html(net, p, problem)))
