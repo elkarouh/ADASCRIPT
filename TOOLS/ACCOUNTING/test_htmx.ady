@@ -5,7 +5,7 @@
 """
 from accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from books_text import AccountRow, Books
-from htmx_page import Grouped, Params, all_text, auto_detail, entry_of, fresh_params, grouped, params_of, shell_text
+from htmx_page import Grouped, Params, all_text, auto_detail, dates_of, entry_of, fresh_params, grouped, params_of, replayable, replayable_by, shell_text, slider_position, upto
 
 def row(number: str, kind: Kind_T, name: str) -> AccountRow:
     return AccountRow(number, kind, name)
@@ -101,4 +101,23 @@ let drawn: str = all_text(vat_books, ["x"], ["X"], "x", params_of("source=Bank&t
 assert "id=\"popup\"" in drawn and "Bank  →  Rent" in drawn
 assert "id=\"popup\"" not in all_text(vat_books, ["x"], ["X"], "x", params_of("source=Bank&target=Nothing"))
 assert "id=\"popup\"" not in all_text(vat_books, ["x"], ["X"], "x", params_of("source=Bank&target=Rent&cancel=1"))
+# the replay: five transactions on five days, those touching Bank being 1, 3 and 4 (numbers 0, 2, 3)
+assert dates_of(b) == ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
+assert replayable(b, "") == [0, 1, 2, 3, 4]
+assert replayable(b, "Bank") == [0, 2, 3]
+assert replayable_by(b, "", -1, 1) == 0 and replayable_by(b, "", -1, -1) == 4        # from the first, going back from the last
+assert replayable_by(b, "", 2, 1) == 3 and replayable_by(b, "", 2, -1) == 1
+assert replayable_by(b, "", 4, 1) == 4                                               # the last one stays
+assert replayable_by(b, "Bank", 0, 1) == 2 and replayable_by(b, "Bank", 1, 1) == 2 and replayable_by(b, "Bank", 1, -1) == 0
+assert slider_position(b, -1) == 4 and slider_position(b, 2) == 2
+assert len(upto(b, 1).entries) == 2 and len(upto(b, -1).entries) == 5
+let seen: str = all_text(b, ["x"], ["X"], "x", params_of("step=1&act=next"))
+assert "Transaction 3 of 5, 2024-01-03" in seen
+assert "name=\"step\" value=\"2\"" in seen and "class=\"now\"" in seen
+assert "class=\"ticker\"" in all_text(b, ["x"], ["X"], "x", params_of("step=0&playing=1&act=tick"))
+assert "class=\"ticker\"" not in all_text(b, ["x"], ["X"], "x", params_of("step=0&playing=1&act=pause"))
+assert "name=\"step\" value=\"-1\"" in all_text(b, ["x"], ["X"], "x", params_of("step=3&act=all"))
+# a frozen account: Play replays its transactions alone
+let alone: str = all_text(b, ["x"], ["X"], "x", params_of("source=Rent&act=play"))
+assert "Rent: transaction 1 of 1 (number 4 of 5)" in alone
 print "htmx page: all checks passed"

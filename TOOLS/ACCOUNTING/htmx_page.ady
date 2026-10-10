@@ -17,7 +17,7 @@ not have yet: drawing an arrow, the replay, recording a
 transaction, T-accounts.
 """
 from uri nimport decodeUrl
-from accounting_model import Account, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, purchase_with_vat, sale_with_vat, vat_text
+from accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, purchase_with_vat, sale_with_vat, vat_text
 from accounting_gui import STYLE, Point, Shape, boxes, box_html, css_of, money, px, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph, Route
 from books_text import AccountRow, Books, graph_of, kind_text
 
@@ -41,9 +41,14 @@ type Params is record:
     howmuch:  str
     vat:      str
     note:     str                   # what the server says: recorded, or why not
+    step:     int                   # the transaction shown last; -1: not replaying, all shown
+    playing:  bool
+    only:     str                   # the account whose transactions alone are replayed, or ""
+    act:      str                   # next, prev, play, pause, all, tick
+    slide:    str                   # where the date slider is
 
 def fresh_params(tab: str) -> Params:
-    return Params("", tab, "", 0, [], "", "", "", False, "", "", "", False, "", "", "", "", "")
+    return Params("", tab, "", 0, [], "", "", "", False, "", "", "", False, "", "", "", "", "", -1, False, "", "", "")
 
 def params_of(query: str) -> Params:
     var p: Params = fresh_params("Transactions")
@@ -93,6 +98,20 @@ def params_of(query: str) -> Params:
             p.howmuch = value
         elif key == "vat":
             p.vat = value
+        elif key == "step":
+            let n: int | !ParseFailure_T = parse_int(value)
+            if n is ParseFailure_T:
+                p.step = -1
+            else:
+                p.step = n
+        elif key == "playing":
+            p.playing = value == "1"
+        elif key == "only":
+            p.only = value
+        elif key == "act":
+            p.act = value
+        elif key == "slide":
+            p.slide = value
     return p
 
 # ---------------------------------------------------------------------
@@ -104,6 +123,8 @@ type Grouped is record:
     names:   []str                  # the groups
     keys:    []str
     members: []str                  # each group's accounts, a line each
+    from_names: []str               # an account in a group ...
+    to_names:   []str               # ... and the group's name
 
 def prefix_of(number: str, digits: int) -> str:
     return (number[:digits] if len(number) > digits else number)
@@ -146,9 +167,31 @@ def moves_counts(b: Books) -> []int:
                     counts[i] += 1
     return counts
 
+# Entry E's postings with each account in a group put in it, the ones that add up to nothing gone.
+def mapped(e: Entry, from_names: []str, to_names: []str) -> []Posting:
+    var merged: []Posting = []
+    for p in e.postings:
+        var n: str = p.account
+        for i in range(len(from_names)):
+            if from_names[i] == p.account:
+                n = to_names[i]
+        var at: int = -1
+        for k in range(len(merged)):
+            if merged[k].account == n:
+                at = k
+        if at >= 0:
+            merged[at].amount = Cents_T(int(merged[at].amount) + int(p.amount))
+        else:
+            merged.append(Posting(n, p.amount))
+    var kept: []Posting = []
+    for p in merged:
+        if int(p.amount) != 0:
+            kept.append(p)
+    return kept
+
 def grouped(b: Books, detail: int, fold: int, opened: []str) -> Grouped:
     if detail == 0 and fold == 0:
-        return Grouped(b, [], [], [])
+        return Grouped(b, [], [], [], [], [])
     let counts: []int = moves_counts(b)
     var keys: []str = []
     for i in range(len(b.accounts)):
@@ -199,28 +242,11 @@ def grouped(b: Books, detail: int, fold: int, opened: []str) -> Grouped:
     out.entries = []
     out.ids = []
     for e in b.entries:
-        var merged: []Posting = []
-        for p in e.postings:
-            var n: str = p.account
-            for i in range(len(from_names)):
-                if from_names[i] == p.account:
-                    n = to_names[i]
-            var at: int = -1
-            for k in range(len(merged)):
-                if merged[k].account == n:
-                    at = k
-            if at >= 0:
-                merged[at].amount = Cents_T(int(merged[at].amount) + int(p.amount))
-            else:
-                merged.append(Posting(n, p.amount))
-        var kept: []Posting = []
-        for p in merged:
-            if int(p.amount) != 0:
-                kept.append(p)
+        let kept: []Posting = mapped(e, from_names, to_names)
         if len(kept) >= 2:
             out.entries.append(Entry(e.date, e.what, kept))
             out.ids.append(0)
-    return Grouped(out, names, gkeys, members)
+    return Grouped(out, names, gkeys, members, from_names, to_names)
 
 # ---------------------------------------------------------------------
 # The graph: four quarters, an account a box, stacked in number order
@@ -335,12 +361,12 @@ def placed(g: Graph, rows: []AccountRow, pos: str) -> Placed:
 def json_quote(s: str) -> str:
     return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str, frozen: bool) -> Html:
+def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str, frozen: bool, now: bool) -> Html:
     let shape: Shape = Shape(True, boxes().half_w, tall)
     let x: str = f"{p.x:.1f}"
     let y: str = f"{p.y:.1f}"
     let h: str = f"{tall:.1f}"
-    let css: str = ("node from" if frozen else "node")
+    let css: str = ("node from" if frozen else ("node now" if now else "node"))
     let freeze_vals: str = "{\"freeze\": " + json_quote(a.name) + "}"
     if key == "":
         html:
@@ -349,14 +375,22 @@ def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str, fr
                 + box_html(a, p, shape)
     else:
         let vals: str = "{\"toggle\": \"" + key + "\"}"
+        let group_css: str = css + " group"
         html:
-            g class="node group" data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+            g class=group_css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
                 title: tip
                 + box_html(a, p, shape)
 
-def graph_html(g: Graph, gr: Grouped, pos: str, source: str) -> Html:
+def arrow_html(g: Graph, f: Flow, route: Route, now: bool) -> Html:
+    let css: str = ("now" if now else "")
+    let tip: str = tip_of(g, f)
+    html:
+        g class=css:
+            + to_html(f, route, tip)
+
+def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str) -> Html:
     let rows: []AccountRow = gr.books.accounts
-    let at: Placed = placed(g, rows, pos)
+    let at: Placed = placed(whole, rows, pos)
     let size: Point = Point(WIDTH, at.height)
     let routes: []Route = routes_of(g, at.names, at.points, at.tall, size, [], [], boxes())
     let box: str = f"0 0 {WIDTH:.0f} {at.height:.0f}"
@@ -369,6 +403,8 @@ def graph_html(g: Graph, gr: Grouped, pos: str, source: str) -> Html:
             defs:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
+                marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
+                    polygon class="now" points="0 0, 4.3 1.5, 0 3"
             path class="split" d=down
             path class="split" d=across
             stext class="side" x="20" y="30": "Assets"
@@ -376,10 +412,10 @@ def graph_html(g: Graph, gr: Grouped, pos: str, source: str) -> Html:
             stext class="side" x="20" y=by: "Expenses"
             stext class="side" x=rx y=by: "Revenue"
             for i in range(len(g.flows)):
-                + to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
+                + arrow_html(g, g.flows[i], routes[i], (g.flows[i].source.name + "\t" + g.flows[i].target.name) in now_arrows)
             path id="rubber" class="rubber" d=""
             for i in range(len(g.accounts)):
-                + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source)
+                + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source, g.accounts[i].name in now_accounts)
 
 def group_key(gr: Grouped, name: str) -> str:
     for i in range(len(gr.names)):
@@ -392,6 +428,73 @@ def node_tip(g: Graph, gr: Grouped, a: Account) -> str:
         if gr.names[i] == a.name:
             return f"{a.name}: balance {money(a.balance)}\n{gr.members[i]}\nClick to open the group"
     return account_tip(g, a)
+
+# ---------------------------------------------------------------------
+# The replay: the transactions one at a time, the books as they stood after each
+# ---------------------------------------------------------------------
+
+def dates_of(b: Books) -> []str:
+    var days: []str = []
+    for e in b.entries:
+        if len(days) == 0 or days[len(days) - 1] != e.date:
+            days.append(e.date)
+    return days
+
+# Where the slider stands: the position, among the days, of the books shown.
+def slider_position(b: Books, step: int) -> int:
+    let days: []str = dates_of(b)
+    if step < 0 or step >= len(b.entries):
+        return max(0, len(days) - 1)
+    return max(0, days.index(b.entries[step].date))
+
+# The transactions replayed, by number: those touching ONLY, or all.
+def replayable(b: Books, only: str) -> []int:
+    var found: []int = []
+    for i in range(len(b.entries)):
+        var touches: bool = only == ""
+        for p in b.entries[i].postings:
+            if p.account == only:
+                touches = True
+        if touches:
+            found.append(i)
+    return found
+
+# The replayable transaction D places after (D < 0: before) STEP; from the first one if not
+# replaying going forward, the last going back; -1 if there is none.
+def replayable_by(b: Books, only: str, step: int, d: int) -> int:
+    let found: []int = replayable(b, only)
+    if len(found) == 0:
+        return -1
+    if step < 0:
+        return (found[0] if d > 0 else found[len(found) - 1])
+    var at: int = -1                    # where STEP is among them, or just before it
+    for k in range(len(found)):
+        if found[k] <= step:
+            at = k
+    if at >= 0 and found[at] != step and d < 0:
+        at += 1                         # STEP is not one of them: back from the next one
+    return found[max(0, min(len(found) - 1, at + d))]
+
+# The books as they stood after transaction STEP; all of them when STEP is -1.
+def upto(b: Books, step: int) -> Books:
+    if step < 0:
+        return b
+    var out: Books = b
+    out.entries = b.entries[:step + 1]
+    return out
+
+# The same, with the groups of GR.
+def replayed_books(b: Books, gr: Grouped, step: int) -> Books:
+    var out: Books = gr.books
+    out.entries = []
+    out.ids = []
+    for i in range(len(b.entries)):
+        if step < 0 or i <= step:
+            let kept: []Posting = mapped(b.entries[i], gr.from_names, gr.to_names)
+            if len(kept) >= 2:
+                out.entries.append(Entry(b.entries[i].date, b.entries[i].what, kept))
+                out.ids.append(0)
+    return out
 
 # ---------------------------------------------------------------------
 # Recording a transaction: click an account to freeze it, drag an arrow from it to another
@@ -485,18 +588,23 @@ def posting_text(e: Entry) -> str:
         parts.append(f"{p.account} {money(p.amount)}")
     return ", ".join(parts)
 
-def transactions_html(b: Books) -> Html:
+def row_html(e: Entry, now: bool) -> Html:
+    let css: str = ("now" if now else "")
+    html:
+        tr class=css:
+            td: e.date
+            td: e.what
+            td: posting_text(e)
+
+def transactions_html(b: Books, step: int) -> Html:
     html:
         table:
             tr:
                 th: "Date"
                 th: "What"
                 th: "Postings"
-            for e in b.entries:
-                tr:
-                    td: e.date
-                    td: e.what
-                    td: posting_text(e)
+            for i in range(len(b.entries)):
+                + row_html(b.entries[i], i == step)
 
 def accounts_html(b: Books, g: Graph) -> Html:
     html:
@@ -513,7 +621,7 @@ def accounts_html(b: Books, g: Graph) -> Html:
                     td: kind_text(r.kind)
                     td class="num": money(g.balance(r.name))
 
-def tab_body(tab: str, b: Books, g: Graph) -> []Html:
+def tab_body(tab: str, b: Books, g: Graph, step: int) -> []Html:
     if tab == "Accounts":
         return [accounts_html(b, g)]
     if tab == "Statements":
@@ -522,7 +630,12 @@ def tab_body(tab: str, b: Books, g: Graph) -> []Html:
         for i in range(1, len(after)):
             out.append(after[i])
         return out
-    return [transactions_html(b)]
+    return [transactions_html(b, step)]
+
+def act_button(act: str, label: str) -> Html:
+    let vals: str = "{\"act\": \"" + act + "\"}"
+    html:
+        button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": label
 
 def tab_button(name: str, chosen: str) -> Html:
     let vals: str = "{\"go\": \"" + name + "\"}"
@@ -579,11 +692,84 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
     if not has_account(b, source):
         source = ""
     let gr: Grouped = grouped(b, detail, p.fold, opened)
-    let g: Graph = graph_of(gr.books)
-    let real: Graph = graph_of(b)
+    # the replay: STEP is the transaction shown last, -1 for all of them
+    var step: int = min(p.step, len(b.entries) - 1)
+    var only: str = (p.only if has_account(b, p.only) else "")
+    var playing: bool = p.playing
+    var act: str = p.act
+    if act in ["next", "prev", "play"] and source != "":      # a frozen account: only its transactions are replayed
+        only = source
+        source = ""
+        target = ""
+    if act == "all":
+        step = -1
+        playing = False
+        only = ""
+    elif act == "prev" or act == "next":
+        playing = False
+        let i: int = replayable_by(b, only, step, (1 if act == "next" else -1))
+        if i >= 0:
+            step = i
+    elif act == "play":
+        let found: []int = replayable(b, only)
+        if len(found) > 0:
+            if step < 0 or step >= found[len(found) - 1] or (only != "" and step not in found):
+                step = found[0]
+            playing = True
+    elif act == "pause":
+        playing = False
+    elif act == "tick":
+        if playing:
+            let next: int = replayable_by(b, only, step, 1)
+            if next > step:
+                step = next
+            else:
+                playing = False
+    elif p.slide != "":                                         # the date slider moved
+        let days: []str = dates_of(b)
+        let at: int | !ParseFailure_T = parse_int(p.slide)
+        if at is ParseFailure_T:
+            pass
+        else:
+            if at != slider_position(b, step) and at >= 0 and at < len(days):
+                playing = False
+                var last: int = 0
+                for i in range(len(b.entries)):
+                    if b.entries[i].date <= days[at]:
+                        last = i
+                step = last
+    let shown: Books = replayed_books(b, gr, step)
+    let g: Graph = graph_of(shown)
+    let whole: Graph = (g if step < 0 else graph_of(gr.books))
+    let real: Graph = graph_of(upto(b, step))
+    var now_arrows: []str = []
+    var now_accounts: []str = []
+    if step >= 0:
+        var one: Books = gr.books
+        one.entries = []
+        one.ids = []
+        let kept: []Posting = mapped(b.entries[step], gr.from_names, gr.to_names)
+        for q in kept:
+            now_accounts.append(q.account)
+        if len(kept) >= 2:
+            one.entries = [Entry(b.entries[step].date, b.entries[step].what, kept)]
+            one.ids = [0]
+        for f in graph_of(one).flows:
+            now_arrows.append(f.source.name + "\t" + f.target.name)
     let sizes: int = longest_number(b)
     let opened_text: str = "|".join(opened)
     let tidy_vals: str = "{\"tidy\": \"1\"}"
+    let tick_vals: str = "{\"act\": \"tick\"}"
+    let playing_text: str = ("1" if playing else "0")
+    let days: []str = dates_of(b)
+    let position: str = str(slider_position(b, step))
+    let last_day: str = str(max(len(days) - 1, 0))
+    let found: []int = replayable(b, only)
+    let play_label: str = (f"Play {source}'s transactions" if source != "" else (f"Play {only}'s transactions" if only != "" else "Play the transactions"))
+    let which: str = ("" if step < 0 else
+                      f"Transaction {step + 1} of {len(b.entries)}, {b.entries[step].date}" if only == "" or step not in found else
+                      f"{only}: transaction {found.index(step) + 1} of {len(found)} (number {step + 1} of {len(b.entries)}), {b.entries[step].date}")
+    let what: str = (b.entries[step].what if step >= 0 else "")
     html:
         div id="all":
             form id="state" data_hx_get="/h/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
@@ -605,19 +791,41 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
                 input type="hidden" name="pos" value=pos
                 input type="hidden" name="source" value=source
                 input type="hidden" name="target" value=target
+                input type="hidden" name="step" value=str(step)
+                input type="hidden" name="playing" value=playing_text
+                input type="hidden" name="only" value=only
                 button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
                 button type="button" id="redraw" class="redraw" data_hx_get="/h/all" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "Redraw"
+                p class="replay":
+                    if playing:
+                        + act_button("pause", "Pause")
+                    else:
+                        + act_button("play", play_label)
+                    + act_button("prev", "Previous")
+                    + act_button("next", "Next")
+                    if step >= 0:
+                        + act_button("all", "Show all")
+                    if len(days) > 1:
+                        span: " Books as at "
+                        strong: days[int(position)]
+                        input type="range" name="slide" min="0" max=last_day value=position
+                if step >= 0:
+                    p class="caption":
+                        strong: which
+                        span: "  " + what
             h2: b.title
             if p.note != "" and not (source != "" and target != ""):
                 p class="note": p.note
             if source != "" and target != "":
                 + popup_html(b, p)
-            + graph_html(g, gr, pos, source)
+            + graph_html(g, whole, gr, pos, source, now_arrows, now_accounts)
             div class="tabs":
                 for name in TABS:
                     + tab_button(name, tab)
-            for part in tab_body(tab, b, real):
+            for part in tab_body(tab, b, real, step):
                 + part
+            if playing:
+                div class="ticker" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tick_vals data_hx_trigger="load delay:1800ms" data_hx_target="#all" data_hx_swap="outerHTML"
 
 const EXTRA: str = """
 body { max-width: 80em; }
@@ -636,6 +844,14 @@ form.popup input, form.popup select { width: 100%; box-sizing: border-box; }
 form.popup button { margin: 1em 0.5em 0 0; }
 p.refused { color: #b71c1c; font-weight: bold; }
 p.note { background: #e8f5e9; padding: 0.3em 0.8em; border-radius: 4px; }
+g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }
+polygon.now { fill: #e65100; }
+g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
+g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
+tr.now td { background: #ffe0b2; font-weight: bold; }
+p.replay { margin: 0.5em 0 0 0; }
+p.caption { margin: 0.3em 0 0 0; }
+input[type=range] { vertical-align: middle; width: 16em; }
 g.group { cursor: pointer; }
 div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4f4; cursor: pointer; }
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }
