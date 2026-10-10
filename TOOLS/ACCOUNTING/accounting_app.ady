@@ -19,7 +19,7 @@ from karax/karax nimport setRenderer, redraw
 from math nimport sqrt
 from karax/kajax nimport ajaxGet, ajaxPost
 from accounting_model import Account, BookFailure_T, Cents_T, Entry, Flow, Graph, Kind_T, Posting, VatRate_T, entry, moves, purchase_with_vat, sale_with_vat, vat_text
-from accounting_gui import STYLE, GRAPH_TEXT, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
+from accounting_gui import STYLE, GRAPH_TEXT, ACCOUNTS_TEXT, RATIOS_TEXT, T_TEXT, APP_TITLE, APP_INTRO, RETAINED, NODE_RADIUS, Point, Shape, circles, boxes, box_html, rim, covers, css_of, money, px, signed, toward, Route, routes_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from books_text import AccountRow, Books, Ratio, account_line, closing_entries, entry_lines, graph_of, kind_named, kind_text, parse_books, ratios_of
 
 const WIDTH: float = 980.0
@@ -1132,7 +1132,6 @@ def record_entry():
 # Closing the year: costs and revenue into retained earnings
 # ---------------------------------------------------------------------
 
-const RETAINED: str = "Retained earnings"
 var closing_urls: []str = []            # what is left to send, in order: the account, then the entries
 var closing_bodies: []str = []
 
@@ -1749,7 +1748,6 @@ def accounts_html() -> Html:
                 td:
                     button id="open" onclick=open_account(): "Open"
 
-const ACCOUNTS_TEXT: str = "Every account, with its number in the chart of accounts, its kind and its balance. An account starts at zero; money coming in adds to it, money going out subtracts, and as every transaction is counted once as positive and once as negative, all the balances add up to zero: the books balance. Open a new account on the last row; an account can be deleted once no transaction touches it."
 
 # A VAT rate as the popup offers it: its member's name, its percentage shown.
 def vat_option_html(rate: VatRate_T) -> Html:
@@ -1864,7 +1862,6 @@ def journal_html() -> Html:
 # The ratios: the balance sheet read the way a banker reads it
 # ---------------------------------------------------------------------
 
-const RATIOS_TEXT: str = "What an accountant or a banker reads off the balance sheet, for the books as shown: they change with every transaction, with the replay and with the date slider. Current means due or turned into cash within the year."
 
 def ratio_row_html(r: Ratio) -> Html:
     html:
@@ -1888,7 +1885,6 @@ def ratios_html() -> Html:
 # The T-accounts: each account's debits on its left, its credits on its right
 # ---------------------------------------------------------------------
 
-const T_TEXT: str = "Every transaction is written twice, as a debit in one account and a credit in another, for the same amount. An account is a T: its debits on the left, its credits on the right, and its balance is the bigger side less the smaller. Assets and expenses grow on the debit side; liabilities, equity and revenue grow on the credit side. In the graph, an arrow goes from the account that is credited to the account that is debited."
 
 # How many transactions the T-accounts count: the ones shown so far.
 def counted_entries() -> int:
@@ -2057,8 +2053,6 @@ def on_key(e: Event):
         record_entry()
         redraw()
 
-const APP_TITLE: str = "Accounting, as graph theory"
-const APP_INTRO: str = "Your books, as the ledger keeps them. Pick a scenario below: each is a small company's books showing one idea, yours to change; Start over brings it back as it was, Save as keeps your version as a scenario of its own. To record a transaction, click the account the money leaves, so that it freezes, then drag an arrow from it to the account the money reaches, and say when, what and how much; with VAT, the amount is before VAT and the VAT goes to its own account. Transactions are listed below the graph, accounts further down; each has a Delete button there, and a new account is opened on the last row of the accounts. Drag the accounts about within their quarters, and Tidy up lays them out again; drag the circle where the lines cross to resize the quarters. Hover over an account or an arrow to see its transactions; Play the transactions replays them one at a time, each highlighted, with the balances as they stood after it; Slide the date to see the books as they stood on each day; Debit and credit writes the transactions as a journal does and shows each account as a T; Exercise asks you to draw the arrows of the transactions yourself, one at a time; Close the year moves the costs and the revenue into retained earnings, so that the profit sits in equity and the cost and revenue accounts start again from zero; with an account frozen, only that account's transactions."
 
 # The graph with its controls; its title and caption are help, like the rest.
 def graph_section_html() -> Html:

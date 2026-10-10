@@ -28,19 +28,19 @@ assert p.toggle == "61/2" and p.go == "Statements"
 assert params_of("").detail == "" and params_of("").tab == "Transactions"
 
 # grouped by 2 digits: Bank, Cash and Savings are one asset group (10), Rent and Energy one expense group (61)
-let two: Grouped = grouped(b, 2, 0, [])
+let two: Grouped = grouped(b, 2, 0, [], [])
 assert len(two.names) == 2
 assert len(two.books.accounts) == 3          # the two groups and Sales
 # the transfer to savings is inside the group: it is gone
 assert len(two.books.entries) == 4
 assert len(two.members[0].split("\n")) == 3
 # an opened group is its accounts again
-let opened: Grouped = grouped(b, 2, 0, [two.keys[0]])
+let opened: Grouped = grouped(b, 2, 0, [two.keys[0]], [])
 assert len(opened.names) == 1 and len(opened.books.accounts) == 5
 # nothing grouped
-assert len(grouped(b, 0, 0, []).names) == 0
+assert len(grouped(b, 0, 0, [], []).names) == 0
 # folded: fewer than 2 transactions: Savings alone stays, Rent and Energy are one quiet expense group
-let quiet: Grouped = grouped(b, 0, 2, [])
+let quiet: Grouped = grouped(b, 0, 2, [], [])
 assert len(quiet.names) == 1
 assert auto_detail(b) == 0                                            # few accounts: not grouped
 
@@ -124,4 +124,47 @@ assert "Rent: transaction 1 of 1 (number 4 of 5)" in alone
 let ts: str = all_text(b, ["x"], ["X"], "x", params_of("go=T-accounts"))
 assert "class=\"taccount\"" in ts and "class=\"tdebit\"" in ts and "Balance" in ts
 assert "Current ratio" in all_text(b, ["x"], ["X"], "x", params_of("go=Statements"))
+# the exercise: the first transaction is Sales to Bank
+let ask: str = all_text(b, ["x"], ["X"], "x", params_of("act=exercise"))
+assert "Exercise: transaction 1 of 5, 2024-01-01, 0 right so far" in ask and "Show the answer" in ask
+assert "name=\"ex\" value=\"0\"" in ask
+let right: str = all_text(b, ["x"], ["X"], "x", params_of("ex=0&score=0&tries=0&source=Sales&target=Bank"))
+assert "Right: money leaves Sales and reaches Bank" in right and "name=\"ex\" value=\"1\"" in right and "name=\"score\" value=\"1\"" in right
+let wrong: str = all_text(b, ["x"], ["X"], "x", params_of("ex=0&score=0&tries=0&source=Bank&target=Sales"))
+assert "Other way round" in wrong and "name=\"tries\" value=\"1\"" in wrong and "class=\"refused\"" in wrong
+let lost: str = all_text(b, ["x"], ["X"], "x", params_of("ex=0&score=0&tries=0&source=Bank&target=Rent"))
+assert "Not Bank to Rent" in lost and "Or press Show the answer" not in lost
+assert "Or press Show the answer" in all_text(b, ["x"], ["X"], "x", params_of("ex=0&score=0&tries=1&source=Bank&target=Rent"))     # the second miss
+assert "The answer: " in all_text(b, ["x"], ["X"], "x", params_of("ex=0&act=answer"))
+let last: str = all_text(b, ["x"], ["X"], "x", params_of("ex=4&score=3&tries=0&source=Cash&target=Energy"))
+assert "That was the last one: 4 right at the first try, out of 5" in last and "Exercise finished" in last
+let stopped: str = all_text(b, ["x"], ["X"], "x", params_of("ex=2&score=1&act=stopex"))
+assert "Exercise stopped: 1 right" in stopped and "name=\"ex\" value=\"-1\"" in stopped and "name=\"step\" value=\"-1\"" in stopped
+assert "Exercise" not in all_text(b, ["x"], ["X"], "x", params_of("detail=2")).replace("Exercise stopped", "")           # not while grouped
+
+# merging shift-clicked accounts into a group of one's own
+let picking: str = all_text(b, ["x"], ["X"], "x", params_of("pick=Bank"))
+assert "name=\"picked\" value=\"Bank\"" in picking and "node picked" in picking
+assert "Merge the picked" in all_text(b, ["x"], ["X"], "x", params_of("picked=Bank%7CCash"))
+let made: Grouped = grouped(b, 0, 0, [], ["Money~Bank~Cash"])
+assert len(made.names) == 1 and made.names[0] == "Money" and len(made.books.accounts) == 5
+assert len(made.books.entries) == 5                              # every transaction still moves money between two nodes
+let merged: str = all_text(b, ["x"], ["X"], "x", params_of("picked=Bank%7CCash&mergename=Money&act=merge"))
+assert "name=\"merges\" value=\"Money~Bank~Cash\"" in merged and "name=\"picked\" value=\"\"" in merged
+assert "Merge accounts of one kind only" in all_text(b, ["x"], ["X"], "x", params_of("picked=Bank%7CRent&mergename=Mixed&act=merge"))
+assert "There is already an account" in all_text(b, ["x"], ["X"], "x", params_of("picked=Bank%7CCash&mergename=Rent&act=merge"))
+
+# help, debits and credits, the buttons that change the books
+let helped: str = all_text(b, ["x"], ["X"], "x", params_of("act=help&go=Accounts"))
+assert "name=\"help\" value=\"1\"" in helped and "Hide help" in helped and "Every account, with its number" in helped
+assert "Every account, with its number" not in all_text(b, ["x"], ["X"], "x", params_of("go=Accounts"))
+let journal: str = all_text(b, ["x"], ["X"], "x", params_of("dc=1"))
+assert "<th>Debit</th>" in journal and "class=\"entry\"" in journal and "Plus and minus" in journal
+assert "Debit and credit" in all_text(b, ["x"], ["X"], "x", params_of(""))
+let books_page: str = all_text(b, ["x"], ["X"], "x", params_of("go=Accounts"))
+assert "data-hx-post=\"/h/do\"" in books_page and "name=\"acctname\"" in books_page and "Delete the account Bank?" in books_page
+assert "Delete the transaction of 2024-01-01, takings?" in all_text(b, ["x"], ["X"], "x", params_of(""))
+assert "Start over" in books_page and "Delete scenario" in books_page and "Save as..." in books_page and "value=\"x_mine\"" in books_page
+assert "Close the year" in books_page                              # the revenue and costs are not zero
+
 print "htmx page: all checks passed"

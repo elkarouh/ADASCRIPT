@@ -8,7 +8,8 @@ its centre in the drawing's units). Pressing on it and moving the mouse
 moves it, as a translation. Letting go writes the new centre into the form's
 hidden field `pos`, and clicks the hidden Redraw button, which asks the
 server for the page again, with the arrows drawn to the new place.
-A press that does not move is a click, and goes on to htmx.
+A press that does not move is a click, and goes on to htmx; with the shift key
+held it picks the account, to be merged with others (the field `pick`).
 
 The frozen account (class "from") is not moved: dragging from it draws an
 arrow, a red line to the mouse. Let go over another account, and its name goes
@@ -132,6 +133,17 @@ def on_click(e: Event):
     if dragged:
         dragged = False
         e.stopPropagation()
+        return
+    let m: MouseEvent = MouseEvent(e)
+    if m.shiftKey:                      # a shift-click picks an account to merge with others, or lets it go
+        let node: Node = e.target.closest("g.node")
+        if node != nil and not (" group " in (" " + str(node.getAttribute(cstring("class"))) + " ")):
+            e.stopPropagation()
+            let field: InputElement = InputElement(document.querySelector("input[name=pick]"))
+            field.value = node.getAttribute(cstring("data_name"))
+            dragged = False
+            document.querySelector("#redraw").click()
+            field.value = cstring("")
 
 document.addEventListener("mousedown", on_down)
 document.addEventListener("mousemove", on_move)

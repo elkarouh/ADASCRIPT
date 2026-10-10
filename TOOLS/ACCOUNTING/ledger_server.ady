@@ -28,9 +28,9 @@ made from NAME.books the first time NAME is shown and again by Start over.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from accounting_model import BookFailure_T, Entry
-from books_text import AccountRow, Books, parse_books, text_of_books
-from htmx_page import Params, all_text, entry_of, fresh_params, has_account, params_of, shell_text
+from accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
+from books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books
+from htmx_page import Params, account_numbered, all_text, entry_of, fresh_params, has_account, int_of, params_of, shell_text, year_end, retained_account
 from ledger import Config, Ledger, Scenarios, read_config
 
 var config: Config = Config("USD", [])
@@ -96,6 +96,77 @@ def delete_scenario() -> None | !BookFailure_T:
         return show(name, False)
     return None
 
+# The htmx page for the settings P.
+def page_text(p: Params) -> str:
+    let b: Books = books.books(config.currency)
+    let names: []str = scenarios.names()
+    var titles: []str = []
+    for n in names:
+        titles.append(scenarios.title_of(n))
+    return all_text(b, names, titles, current, p)
+
+# The year closed: the costs and the revenue moved into retained earnings.
+def close_year(b: Books) -> None | !BookFailure_T:
+    if len(b.entries) == 0:
+        return BookFailure_T("There is nothing to close.")
+    let date: str = year_end(b)
+    let name: str = retained_account(b)
+    let made: []Entry = closing_entries(b, date, name)
+    if len(made) == 0:
+        return BookFailure_T("Nothing to close: every cost and revenue account is already at zero.")
+    if account_numbered(b, "14") == "":
+        do:
+            books.open_account("140000", EQUITY, name)
+    for e in made:
+        do:
+            books.record(e)
+    return None
+
+# What the htmx page asked P.op of the books B, done: what to tell, or why not.
+def do_op(p: Params, b: Books) -> str | !BookFailure_T:
+    if p.op == "startover":
+        do:
+            show(current, True)
+        return "Started over."
+    if p.op == "saveas":
+        let name: str = p.newname.strip()
+        if name == "":
+            return BookFailure_T("Name the new scenario.")
+        do:
+            save_as(name)
+        return f"Saved as {name}."
+    if p.op == "delete":
+        do:
+            delete_scenario()
+        return "Scenario deleted."
+    if p.op == "delentry":
+        let id: int = int_of(p.arg, 0)
+        var what: str = ""
+        for i in range(len(b.ids)):
+            if b.ids[i] == id:
+                what = b.entries[i].what
+        do:
+            books.delete_entry(id)
+        return f"Deleted: {what}"
+    if p.op == "delaccount":
+        do:
+            books.delete_account(p.arg)
+        return f"Deleted the account {p.arg}."
+    if p.op == "openaccount":
+        let kind: Kind_T | !BookFailure_T = kind_named(p.akind)
+        if kind is BookFailure_T:
+            return kind
+        if p.number.strip() == "" or p.acctname.strip() == "":
+            return BookFailure_T("An account needs a number and a name.")
+        do:
+            books.open_account(p.number.strip(), kind, p.acctname.strip())
+        return f"Opened: {p.number.strip()} {p.acctname.strip()}"
+    if p.op == "closeyear":
+        do:
+            close_year(b)
+        return f"Closed the year on {year_end(b)}: the profit is in {retained_account(b)}"
+    return BookFailure_T("The page asked for what the ledger does not do.")
+
 # What the page posts to PATH, done; the answer to send back.
 def post(path: str, body: str) -> str:
     if path == "/scenario":
@@ -137,18 +208,14 @@ async def handler(req: Request):
         if p.scenario != "" and p.scenario != current:
             let shown: None | !BookFailure_T = show(p.scenario, False)
             p = fresh_params(p.tab)           # another scenario: its own grouping
-        let b: Books = books.books(config.currency)
-        let names: []str = scenarios.names()
-        var titles: []str = []
-        for n in names:
-            titles.append(scenarios.title_of(n))
-        await req.respond(Http200, all_text(b, names, titles, current, p), html_type)
+        await req.respond(Http200, page_text(p), html_type)
     elif req.reqMethod'Image == "POST" and path == "/h/record":
         var p: Params = params_of(req.body)
         let b: Books = books.books(config.currency)
         let made: Entry | !BookFailure_T = entry_of(b, p)
         if made is BookFailure_T:
             p.note = made.detail
+            p.bad = True
         else:
             var recorded: None | !BookFailure_T = None
             try:
@@ -157,18 +224,31 @@ async def handler(req: Request):
                 recorded = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
             if recorded is BookFailure_T:
                 p.note = recorded.detail
+                p.bad = True
             else:
                 p.note = f"Recorded: {made.what}"
                 p.source = ""
                 p.target = ""
                 p.what = ""
                 p.howmuch = ""
-        let after: Books = books.books(config.currency)
-        let names: []str = scenarios.names()
-        var titles: []str = []
-        for n in names:
-            titles.append(scenarios.title_of(n))
-        await req.respond(Http200, all_text(after, names, titles, current, p), html_type)
+        await req.respond(Http200, page_text(p), html_type)
+    elif req.reqMethod'Image == "POST" and path == "/h/do":
+        var p: Params = params_of(req.body)
+        var done: str | !BookFailure_T = ""
+        try:
+            done = do_op(p, books.books(config.currency))
+        except:
+            done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
+        if done is BookFailure_T:
+            p.note = done.detail
+            p.bad = True
+        else:
+            let told: str = done
+            if p.op in ["startover", "saveas", "delete"]:     # another scenario, or the same one again: its own settings
+                p = fresh_params(p.tab)
+            p.note = told
+            p.bad = False
+        await req.respond(Http200, page_text(p), html_type)
     elif req.reqMethod'Image == "GET" and path == "/books":
         await req.respond(Http200, text_of_books(books.books(config.currency)), text)
     elif req.reqMethod'Image == "GET" and path == "/scenarios":
