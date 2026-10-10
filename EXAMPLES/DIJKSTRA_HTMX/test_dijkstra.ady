@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
-"""dijkstra.ady and page.ady, with no server: ady2nim c -r test_dijkstra.ady"""
-from backend/dijkstra import Edge, Way, shortest_way, uses
-from backend/page import NAMES, START_COSTS, edges_of, all_text
+"""dijkstra_model.ady and page.ady, with no server: ady2nim c -r test_dijkstra.ady"""
+from backend/dijkstra_model import Edge, Way, NAMES, START_COSTS, edges_of, shortest_way, uses
+from backend/page import all_text
 
 let edges: []Edge = edges_of(START_COSTS)
 let w: Way = shortest_way(NAMES, edges, "A", "E")

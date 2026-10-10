@@ -1,17 +1,30 @@
 #!/usr/bin/env ady2nim
-"""dijkstra -- the model: a placeholder around the library's shortest_path.
+"""dijkstra_model -- the model: the nodes, the edges and their costs, and the way between two.
 
-The algorithm is TO_NIM/STDLIB/graphs.ady; all that is here is the problem as the page
-states it (undirected edges with a cost, nodes named by strings) turned into the graph
-the library wants. Replace this file with your own model; page.ady only needs Edge, Way,
-shortest_way and uses. No HTML, no HTTP.
+The algorithm is TO_NIM/STDLIB/graphs.ady; what is here is the problem (nodes named by
+strings, undirected edges with a cost) turned into the graph the library wants. A
+placeholder: replace this file with your own model; page.ady needs what it imports from here.
+No HTML, no HTTP.
 """
 from graphs import shortest_path
+
+# The problem: six nodes, nine edges between them, and what each costs to start with.
+const NAMES: []str = ["A", "B", "C", "D", "E", "F"]
+const ENDS: []str = ["A B", "A C", "A F", "B C", "B D", "C D", "C F", "D E", "E F"]
+const START_COSTS: []int = [7, 9, 14, 10, 15, 11, 2, 6, 9]
 
 type Edge is record:
     a:    str
     b:    str
     cost: int
+
+# The edges, with COSTS in the order of ENDS.
+def edges_of(costs: []int) -> []Edge:
+    var edges: []Edge = []
+    for i in range(len(ENDS)):
+        let ab: []str = ENDS[i].split(" ")
+        edges.append(Edge(ab[0], ab[1], costs[i]))
+    return edges
 
 # The way from START to GOAL: the nodes on it, and what it costs; cost -1 and no nodes when
 # there is no way.

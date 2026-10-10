@@ -19,7 +19,7 @@ PORT    ?= 8810
 all: server frontend/drag.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
-server: backend/dijkstra.ady backend/page.ady backend/server.ady
+server: backend/dijkstra_model.ady backend/page.ady backend/server.ady
 	@echo "building backend/server"
 	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log

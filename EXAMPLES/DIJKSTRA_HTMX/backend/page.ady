@@ -8,13 +8,10 @@ form's fields in the query, and the answer replaces the page. One-shot fields
 (`pick`, `act`) come with the click and are not in the form.
 """
 from uri nimport decodeUrl
-from backend/dijkstra import Edge, Way, shortest_way, uses
+from backend/dijkstra_model import Edge, Way, NAMES, ENDS, START_COSTS, edges_of, shortest_way, uses
 
-const NAMES: []str = ["A", "B", "C", "D", "E", "F"]
 const XS: []float = [60.0, 200.0, 200.0, 380.0, 520.0, 330.0]       # where the nodes start
 const YS: []float = [190.0, 60.0, 190.0, 60.0, 190.0, 320.0]
-const ENDS: []str = ["A B", "A C", "A F", "B C", "B D", "C D", "C F", "D E", "E F"]
-const START_COSTS: []int = [7, 9, 14, 10, 15, 11, 2, 6, 9]
 
 type Params is record:
     start: str
@@ -57,13 +54,6 @@ def params_of(query: str) -> Params:
                     if i >= 0 and i < len(p.costs) and n >= 1:
                         p.costs[i] = n
     return p
-
-def edges_of(costs: []int) -> []Edge:
-    var edges: []Edge = []
-    for i in range(len(ENDS)):
-        let ab: []str = ENDS[i].split(" ")
-        edges.append(Edge(ab[0], ab[1], costs[i]))
-    return edges
 
 def at(name: str) -> int:
     return NAMES.index(name)
