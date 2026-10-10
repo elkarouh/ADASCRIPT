@@ -22,7 +22,7 @@ PORT    ?= 8802
 
 .PHONY: all app ledger ledger_server gui test clean
 
-all: ledger ledger_server build/accounting_gui.html build/accounting_app.js
+all: ledger ledger_server build/accounting_gui.html build/accounting_app.js build/drag.js
 
 ledger: ledger.ady gnucash.ady beancount.ady journal.ady erp_csv.ady plain_books.ady books_text.ady accounting_model.ady
 	@echo "building ledger"
@@ -47,10 +47,16 @@ build/accounting_app.js: accounting_app.ady accounting_gui.ady books_text.ady ac
 	@cp -L accounting_app.js $@ && rm -f accounting_app.js
 	@cp app.html htmx.min.js build/
 
+build/drag.js: drag.ady
+	@mkdir -p build
+	@echo "building $@"
+	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }
+	@cp -L drag.js $@ && rm -f drag.js
+
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 
-app: ledger_server build/accounting_app.js
+app: ledger_server build/accounting_app.js build/drag.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
 	./ledger_server --port $(PORT)
 

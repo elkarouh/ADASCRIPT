@@ -1,0 +1,102 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""drag -- the one script of our own in the htmx page (htmx_page.ady): an
+account is dragged with the mouse. The server draws everything else.
+
+A node is a <g class="node" data_id=".." data_x=".." data_y=".."> (its id and
+its centre in the drawing's units). Pressing on it and moving the mouse
+moves it, as a translation. Letting go writes the new centre into the form's
+hidden field `pos`, and clicks the hidden Redraw button, which asks the
+server for the page again, with the arrows drawn to the new place.
+A press that does not move is a click, and goes on to htmx.
+"""
+from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, click, stopPropagation, preventDefault, closest, value
+
+const WIDTH: float = 980.0
+const MOVED: float = 4.0                # pixels before a press is a drag
+
+var held: Node = nil                    # the node pressed, or nil
+var held_id: str = ""
+var down_x: float = 0.0                 # where the mouse went down, in pixels
+var down_y: float = 0.0
+var centre_x: float = 0.0               # the node's centre when pressed, in the drawing's units
+var centre_y: float = 0.0
+var now_x: float = 0.0                  # and where it has been dragged to
+var now_y: float = 0.0
+var moved: bool = False
+var dragged: bool = False               # a drag has just ended: the click that follows is not a click
+
+def number_of(node: Node, attr: str) -> float:
+    let r: float | !ParseFailure_T = parse_float(str(node.getAttribute(cstring(attr))))
+    if r is ParseFailure_T:
+        return 0.0
+    else:
+        return r
+
+# How many drawing units a pixel is.
+def scale() -> float:
+    let box: BoundingRect = document.querySelector("svg.graph").getBoundingClientRect()
+    return WIDTH / box.width
+
+def on_down(e: Event):
+    let m: MouseEvent = MouseEvent(e)
+    if m.button != 0:
+        return
+    let node: Node = e.target.closest("g.node")
+    if node == nil:
+        return
+    held = node
+    held_id = str(node.getAttribute(cstring("data_id")))
+    down_x = float(m.clientX)
+    down_y = float(m.clientY)
+    centre_x = number_of(node, "data_x")
+    centre_y = number_of(node, "data_y")
+    now_x = centre_x
+    now_y = centre_y
+    moved = False
+    e.preventDefault()                  # no text selected while dragging
+
+def on_move(e: Event):
+    if held == nil:
+        return
+    let m: MouseEvent = MouseEvent(e)
+    let dx: float = float(m.clientX) - down_x
+    let dy: float = float(m.clientY) - down_y
+    if not moved and abs(dx) < MOVED and abs(dy) < MOVED:
+        return
+    moved = True
+    let k: float = scale()
+    now_x = max(110.0, min(WIDTH - 110.0, centre_x + dx * k))
+    now_y = max(20.0, centre_y + dy * k)
+    held.setAttribute(cstring("transform"), cstring(f"translate({now_x - centre_x:.1f},{now_y - centre_y:.1f})"))
+
+# The field pos holds "id@x,y|id@x,y": ID's entry replaced, or added.
+def with_position(pos: str, id: str, x: float, y: float) -> str:
+    var kept: []str = []
+    for entry in pos.split("|"):
+        if entry != "" and not entry.startswith(id + "@"):
+            kept.append(entry)
+    kept.append(f"{id}@{x:.1f},{y:.1f}")
+    return "|".join(kept)
+
+def on_up(e: Event):
+    if held == nil:
+        return
+    let was_moved: bool = moved
+    held = nil
+    if was_moved:
+        let field: InputElement = InputElement(document.querySelector("input[name=pos]"))
+        field.value = cstring(with_position(str(field.value), held_id, now_x, now_y))
+        document.querySelector("#redraw").click()
+        dragged = True                  # after the click above, which must go through
+
+# The click after a drag is swallowed before htmx sees it: a group is not opened by being moved.
+def on_click(e: Event):
+    if dragged:
+        dragged = False
+        e.stopPropagation()
+
+document.addEventListener("mousedown", on_down)
+document.addEventListener("mousemove", on_move)
+document.addEventListener("mouseup", on_up)
+document.addEventListener("click", on_click, True)

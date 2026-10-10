@@ -363,6 +363,6 @@ state: the scenario, the grouping, the folding, the opened groups and the tab ar
 of a form in the page, and a change to one, or a click on a group or a tab, asks `/h/all`
 for the whole page again. Amounts are 64-bit here, so no grouping is refused for being
 too big for the browser. So far: the scenario picker, Group by, fold, click a group to open
-it, the graph (laid out by the server, not draggable), and the Transactions, Accounts and
-Statements tabs. Not yet: moving accounts, drawing arrows, the replay, recording a transaction,
+it, the graph (laid out by the server; drag an account and it is drawn again where you let go, Tidy up forgets that), and the Transactions, Accounts and
+Statements tabs. Dragging is the page's one script of our own, `drag.ady` (Nim to JavaScript, about 100 lines): it moves the account and tells the server where it was dropped. Not yet: drawing arrows, the replay, recording a transaction,
 T-accounts and the ratios.

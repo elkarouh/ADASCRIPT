@@ -11,8 +11,9 @@ group, or on a tab, adds one more field, `go` or `toggle`, to the request.
 
 The same books_text.ady, accounting_gui.ady and accounting_model.ady the
 JavaScript page uses draw it, here native: the amounts are 64-bit, and the
-grouping is not limited to what a browser's int can count. What it does
-not have yet: moving accounts, drawing an arrow, the replay, recording a
+grouping is not limited to what a browser's int can count. An account is
+dragged by drag.ady, the page's one script of our own. What it does
+not have yet: drawing an arrow, the replay, recording a
 transaction, T-accounts.
 """
 from uri nimport decodeUrl
@@ -29,9 +30,11 @@ type Params is record:
     opened:   []str
     go:       str
     toggle:   str
+    pos:      str                   # where accounts were dragged to: "id@x,y|id@x,y"
+    tidy:     bool
 
 def params_of(query: str) -> Params:
-    var p: Params = Params("", "Transactions", "", 0, [], "", "")
+    var p: Params = Params("", "Transactions", "", 0, [], "", "", "", False)
     for pair in query.split("&"):
         let at: int = pair.find("=")
         if at < 0:
@@ -58,6 +61,10 @@ def params_of(query: str) -> Params:
             p.go = value
         elif key == "toggle":
             p.toggle = value
+        elif key == "pos":
+            p.pos = value
+        elif key == "tidy":
+            p.tidy = value != ""
     return p
 
 # ---------------------------------------------------------------------
@@ -223,7 +230,28 @@ type Placed is record:
     height: float
     split_y: float
 
-def placed(g: Graph, rows: []AccountRow) -> Placed:
+# An account's id in the page: its number and kind, which group rows have too.
+def id_of(r: AccountRow) -> str:
+    return r.number + "/" + str(int(r.kind))
+
+# Where "id@x,y|..." puts account ID: its centre, or (-1, -1) when it does not say.
+def dragged_to(pos: str, id: str) -> Point:
+    for entry in pos.split("|"):
+        if entry.startswith(id + "@"):
+            let xy: []str = entry[len(id) + 1:].split(",")
+            if len(xy) == 2:
+                let x: float | !ParseFailure_T = parse_float(xy[0])
+                let y: float | !ParseFailure_T = parse_float(xy[1])
+                if x is ParseFailure_T:
+                    pass
+                else:
+                    if y is ParseFailure_T:
+                        pass
+                    else:
+                        return Point(x, y)
+    return Point(-1.0, -1.0)
+
+def placed(g: Graph, rows: []AccountRow, pos: str) -> Placed:
     let shape: Shape = boxes()
     var names: []str = []
     var points: []Point = []
@@ -267,25 +295,33 @@ def placed(g: Graph, rows: []AccountRow) -> Placed:
         let base: float = (60.0 if q < 2 else split_y + 50.0)
         points[i] = Point(points[i].x, points[i].y + base)
     let bottom_h: float = max(heights[2], heights[3])
-    return Placed(names, points, tall, split_y + 50.0 + bottom_h + 20.0, split_y)
+    var height: float = split_y + 50.0 + bottom_h + 20.0
+    for i in range(len(rows)):                      # the ones dragged somewhere
+        let at: Point = dragged_to(pos, id_of(rows[i]))
+        if at.x >= 0.0:
+            points[i] = at
+            height = max(height, at.y + tall[i] + 20.0)
+    return Placed(names, points, tall, height, split_y)
 
-def node_html(a: Account, p: Point, tall: float, key: str, tip: str) -> Html:
+def node_html(a: Account, p: Point, tall: float, id: str, key: str, tip: str) -> Html:
     let shape: Shape = Shape(True, boxes().half_w, tall)
+    let x: str = f"{p.x:.1f}"
+    let y: str = f"{p.y:.1f}"
     if key == "":
         html:
-            g:
+            g class="node" data_id=id data_x=x data_y=y:
                 title: tip
                 + box_html(a, p, shape)
     else:
         let vals: str = "{\"toggle\": \"" + key + "\"}"
         html:
-            g class="group" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+            g class="node group" data_id=id data_x=x data_y=y data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
                 title: tip
                 + box_html(a, p, shape)
 
-def graph_html(g: Graph, gr: Grouped) -> Html:
+def graph_html(g: Graph, gr: Grouped, pos: str) -> Html:
     let rows: []AccountRow = gr.books.accounts
-    let at: Placed = placed(g, rows)
+    let at: Placed = placed(g, rows, pos)
     let size: Point = Point(WIDTH, at.height)
     let routes: []Route = routes_of(g, at.names, at.points, at.tall, size, [], [], boxes())
     let box: str = f"0 0 {WIDTH:.0f} {at.height:.0f}"
@@ -307,7 +343,7 @@ def graph_html(g: Graph, gr: Grouped) -> Html:
             for i in range(len(g.flows)):
                 + to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
             for i in range(len(g.accounts)):
-                + node_html(g.accounts[i], at.points[i], at.tall[i], group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]))
+                + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]))
 
 def group_key(gr: Grouped, name: str) -> str:
     for i in range(len(gr.names)):
@@ -414,11 +450,13 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
         else:
             opened.append(p.toggle)
     let tab: str = (p.go if p.go != "" else p.tab)
+    let pos: str = ("" if p.tidy else p.pos)
     let gr: Grouped = grouped(b, detail, p.fold, opened)
     let g: Graph = graph_of(gr.books)
     let real: Graph = graph_of(b)
     let sizes: int = longest_number(b)
     let opened_text: str = "|".join(opened)
+    let tidy_vals: str = "{\"tidy\": \"1\"}"
     html:
         div id="all":
             form id="state" data_hx_get="/h/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
@@ -437,8 +475,11 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
                             + option_html(str(q), fold_label(q), q == p.fold)
                 input type="hidden" name="opened" value=opened_text
                 input type="hidden" name="tab" value=tab
+                input type="hidden" name="pos" value=pos
+                button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
+                button type="button" id="redraw" class="redraw" data_hx_get="/h/all" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "Redraw"
             h2: b.title
-            + graph_html(g, gr)
+            + graph_html(g, gr, pos)
             div class="tabs":
                 for name in TABS:
                     + tab_button(name, tab)
@@ -450,6 +491,9 @@ body { max-width: 80em; }
 form#state { background: #eaf2fb; padding: 0.5em 0.8em; border-radius: 4px; margin: 0.5em 0; }
 path.split { stroke: #999; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
 text.side { font-size: 14px; font-weight: bold; fill: #666; }
+button.redraw { display: none; }
+svg.graph { user-select: none; }
+g.node { cursor: grab; }
 g.group { cursor: pointer; }
 div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4f4; cursor: pointer; }
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }
@@ -463,6 +507,7 @@ def shell() -> Html:
                 title: "Accounting, as graph theory (HTMX)"
                 style: STYLE + EXTRA
                 script src="/htmx.min.js"
+                script src="/drag.js"
             body:
                 h1: "Accounting, as graph theory"
                 div id="all" data_hx_get="/h/all" data_hx_trigger="load": "Loading..."

@@ -39,7 +39,7 @@ var www: Path = Path("build")            # where the page is: build/, beside the
 var scenarios: Scenarios = Scenarios(Path("scenarios"))   # beside the config file
 var current: str = ""                    # the scenario shown
 
-const PAGES: []str = ["app.html", "accounting_app.js", "htmx.min.js"]
+const PAGES: []str = ["app.html", "accounting_app.js", "htmx.min.js", "drag.js"]
 
 def content_type(file: str) -> str:
     return ("text/javascript" if file.endswith(".js") else "text/html; charset=utf-8")
@@ -136,7 +136,7 @@ async def handler(req: Request):
         var p: Params = params_of(req.url.query)
         if p.scenario != "" and p.scenario != current:
             let shown: None | !BookFailure_T = show(p.scenario, False)
-            p = Params("", p.tab, "", 0, [], "", "")      # another scenario: its own grouping
+            p = Params("", p.tab, "", 0, [], "", "", "", False)      # another scenario: its own grouping
         let b: Books = books.books(config.currency)
         let names: []str = scenarios.names()
         var titles: []str = []
