@@ -1332,7 +1332,7 @@ def shell() -> Html:
         html lang="en":
             head:
                 meta charset="utf-8"
-                title: "Accounting, as graph theory (HTMX)"
+                title: "Accounting, as graph theory"
                 style: STYLE + EXTRA
                 script src="/htmx.min.js"
                 script src="/drag.js"

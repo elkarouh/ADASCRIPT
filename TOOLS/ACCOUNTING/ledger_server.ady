@@ -3,12 +3,14 @@
 
     ledger_server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
 
-Serves the page (build/app.html and build/accounting_app.js, beside the
-config file) and, as text (books_text.ady), the books of one scenario and
+Serves the page (drawn by htmx_page.ady, with build/htmx.min.js and
+build/drag.js beside the config file) and, as text (books_text.ady), the books of one scenario and
 what the page does to them:
 
     GET  /books            the accounts and every transaction
-    GET  /h, /h/all        the same page drawn by the server for htmx (htmx_page.ady)
+    GET  /, /h             the page, drawn by the server for htmx (htmx_page.ady)
+    GET  /h/all            the page again, from the settings in the query
+    POST /h/record, /h/do  what the page changes in the books
     GET  /scenarios        "current", a tab and the scenario shown, then
                            "scenario", NAME and TITLE for each one there is
     POST /scenario         a scenario's name: shows that one from now on
@@ -39,7 +41,7 @@ var www: Path = Path("build")            # where the page is: build/, beside the
 var scenarios: Scenarios = Scenarios(Path("scenarios"))   # beside the config file
 var current: str = ""                    # the scenario shown
 
-const PAGES: []str = ["app.html", "accounting_app.js", "htmx.min.js", "drag.js"]
+const PAGES: []str = ["htmx.min.js", "drag.js"]
 
 def content_type(file: str) -> str:
     return ("text/javascript" if file.endswith(".js") else "text/html; charset=utf-8")
@@ -201,7 +203,7 @@ async def handler(req: Request):
     let path: str = req.url.path
     let text: HttpHeaders = newHttpHeaders([("Content-Type", "text/plain; charset=utf-8")])
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
-    if req.reqMethod'Image == "GET" and path == "/h":
+    if req.reqMethod'Image == "GET" and (path == "/h" or path == "/"):
         await req.respond(Http200, shell_text(), html_type)
     elif req.reqMethod'Image == "GET" and path == "/h/all":
         var p: Params = params_of(req.url.query)
@@ -261,7 +263,7 @@ async def handler(req: Request):
             answer = "error\tthe database failed: " + getCurrentExceptionMsg()
         await req.respond(Http200, answer, text)
     else:
-        let file: str = ("app.html" if path == "/" else path[1:])
+        let file: str = path[1:]
         if file in PAGES:
             let page: str | !PathFailure_T = (www / file).read_text()
             if page is PathFailure_T:

@@ -1439,7 +1439,7 @@ test: compile
 	@# their directory, where test_ledger.ady reads accounting.conf.
 	@echo "=== TOOLS/ACCOUNTING (model, ledger, server, page) ==="
 	@if [ -z "$(call nim_has,db_connector/db_sqlite)" ]; then echo "  SKIPPED, db_connector not installed"; else \
-	    for t in test_accounting_model test_ledger; do \
+	    for t in test_accounting_model test_ledger test_htmx; do \
 	        printf '  %-42s' "ACCOUNTING/$$t.ady (nim)"; \
 	        (cd $(TOOLDIR)/ACCOUNTING && $(ADY2NIM) c -r $$t.ady >/dev/null 2>&1) \
 	            && echo OK || { echo FAIL; exit 1; }; \
@@ -1448,10 +1448,10 @@ test: compile
 	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/ledger_server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    if [ -z "$(HTML_SKIPPED)" ]; then \
-	        printf '  %-42s' "ACCOUNTING/accounting_app.ady (ady2nim js)"; \
-	        $(ADY2NIM) js $(TOOLDIR)/ACCOUNTING/accounting_app.ady >/dev/null 2>&1 \
+	        printf '  %-42s' "ACCOUNTING/drag.ady (ady2nim js)"; \
+	        $(ADY2NIM) js $(TOOLDIR)/ACCOUNTING/drag.ady >/dev/null 2>&1 \
 	            && echo OK || { echo FAIL; exit 1; }; \
-	        rm -f $(TOOLDIR)/ACCOUNTING/accounting_app.js; \
+	        rm -f $(TOOLDIR)/ACCOUNTING/drag.js; \
 	    fi; \
 	fi
 

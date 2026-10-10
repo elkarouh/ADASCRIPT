@@ -183,7 +183,8 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
 | `ledger_server.ady` | serves the page, and the books to it; records what the page sends |
 | `books_text.ady` | the books as text, as the server and the page pass them |
-| `accounting_app.ady` | the page: the books drawn, and recorded by clicking |
+| `htmx_page.ady` | the page, drawn by the server for htmx: the books, recorded by clicking |
+| `drag.ady` | the page's one script of our own: dragging accounts and drawing arrows |
 | `accounting.conf` | the currency and the chart of accounts a new scenario starts with |
 | `scenarios/*.books` | the scenarios the page offers |
 | `accounting_gui.ady` | the example as a static web page (`make gui`) |
@@ -353,15 +354,15 @@ chooses another config, and with it the scenarios/ beside it.
 A journal view (each arrow as debit and credit), a time slider, exercises
 that check what the learner records, and the year-end closing.
 
-## The page drawn by the server (HTMX), a prototype
+## How the page is made (HTMX)
 
-`ledger_server` also draws the page itself: http://127.0.0.1:8802/h. It is
+`ledger_server` draws the page itself: http://127.0.0.1:8802/. It is
 htmx (`htmx.min.js`, 14 KB gzipped, kept here and copied to `build/`) swapping in the HTML
 that `htmx_page.ady` makes, with the same `accounting_gui.ady`, `books_text.ady` and
-`accounting_model.ady` the JavaScript page uses, compiled natively. The server keeps no
+`accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
 state: the scenario, the grouping, the folding, the opened groups and the tab are the fields
 of a form in the page, and a change to one, or a click on a group or a tab, asks `/h/all`
 for the whole page again. Amounts are 64-bit here, so no grouping is refused for being
-too big for the browser. So far: the scenario picker, Group by, fold, click a group to open
+too big for the browser. The page has: the scenario picker, Group by, fold, click a group to open
 it, the graph (laid out by the server; drag an account and it is drawn again where you let go, Tidy up forgets that), and the Transactions, Accounts and
-Statements tabs. Dragging is the page's one script of our own, `drag.ady` (Nim to JavaScript, about 100 lines): it moves the account and tells the server where it was dropped. To record a transaction, click an account (it freezes, a red dashed outline), drag an arrow from it to another and answer the popup (when, what, how much, VAT), as on the JavaScript page; the server checks and records it. The replay works too: Previous, Next, Play (the server ticks every 1.8 seconds), Pause, a date slider and Show all; with an account frozen, Play steps through that account's transactions alone. The T-accounts tab (debits left, credits right, up to the replay step) and the ratios (under Statements) are there too. The rest of the JavaScript page's features are ported as well: Help, Debit and credit, the Exercise (draw each transaction's arrow, with Show the answer), shift-click to pick accounts and Merge the picked into a group of one's own (Close groups takes them apart), Close the year, opening and deleting accounts and transactions, Start over, Save as and Delete scenario. What changes the books is POSTed to `/h/do` (or `/h/record`); the page asks first (`hx-confirm`) where the JavaScript page used `window.confirm`. Nothing is left that only the JavaScript page does.
+Statements tabs. Dragging is the page's one script of our own, `drag.ady` (Nim to JavaScript, about 100 lines): it moves the account and tells the server where it was dropped. To record a transaction, click an account (it freezes, a red dashed outline), drag an arrow from it to another and answer the popup (when, what, how much, VAT), the server checks and records it. The replay works too: Previous, Next, Play (the server ticks every 1.8 seconds), Pause, a date slider and Show all; with an account frozen, Play steps through that account's transactions alone. The T-accounts tab (debits left, credits right, up to the replay step) and the ratios (under Statements) are there too. Also: Help, Debit and credit, the Exercise (draw each transaction's arrow, with Show the answer), shift-click to pick accounts and Merge the picked into a group of one's own (Close groups takes them apart), Close the year, opening and deleting accounts and transactions, Start over, Save as and Delete scenario. What changes the books is POSTed to `/h/do` (or `/h/record`); the page asks first (`hx-confirm`) before deleting or starting over. This page replaced an earlier one written in Adascript for the browser (`accounting_app.ady`, 2,100 lines, with its own copy of the model); it is in git history.

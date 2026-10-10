@@ -624,7 +624,7 @@ def main():
 if __name__ == "__main__":       # not when accounting_live.ady imports this
     main()
 
-# The texts both pages (accounting_app.ady, htmx_page.ady) show.
+# The texts the page (htmx_page.ady) shows.
 const RETAINED: str = "Retained earnings"
 const ACCOUNTS_TEXT: str = "Every account, with its number in the chart of accounts, its kind and its balance. An account starts at zero; money coming in adds to it, money going out subtracts, and as every transaction is counted once as positive and once as negative, all the balances add up to zero: the books balance. Open a new account on the last row; an account can be deleted once no transaction touches it."
 const RATIOS_TEXT: str = "What an accountant or a banker reads off the balance sheet, for the books as shown: they change with every transaction, with the replay and with the date slider. Current means due or turned into cash within the year."
