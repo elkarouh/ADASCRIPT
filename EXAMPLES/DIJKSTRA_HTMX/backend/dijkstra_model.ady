@@ -3,8 +3,8 @@
 
 The algorithm is TO_NIM/STDLIB/graphs.ady; what is here is the problem (nodes named by
 strings, undirected edges with a cost) turned into the graph the library wants
-(build_graph); page.ady hands that to the library's shortest_route itself. A placeholder:
-replace this file with your own model; page.ady needs what it imports from here.
+(build_graph); dijkstra_gui.ady hands that to the library's shortest_route itself. A placeholder:
+replace this file with your own model; dijkstra_gui.ady needs what it imports from here.
 No HTML, no HTTP.
 """
 
@@ -38,7 +38,7 @@ def build_graph(names: []str, edges: []Edge) -> {str}[](float, str):
         graph[e.b].append((float(e.cost), e.a))
     return graph
 
-# Whether ROUTE runs along the edge E, in either direction: page.ady draws those edges in orange.
+# Whether ROUTE runs along the edge E, in either direction: dijkstra_gui.ady draws those edges in orange.
 def uses(route: []str, e: Edge) -> bool:
     for i in range(len(route) - 1):
         if (route[i] == e.a and route[i + 1] == e.b) or (route[i] == e.b and route[i + 1] == e.a):

@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""page -- the page as HTML the server draws, for htmx to swap in.
+"""dijkstra_gui -- the page as HTML the server draws, for htmx to swap in.
 
 The server keeps nothing between requests. What the page is showing -- the
 costs, the two nodes picked -- lives in the form `#state` inside the page. A
@@ -76,7 +76,7 @@ def spot(name: str, pos: str) -> []float:
                         return [x, y]
     return [XS[at(name)], YS[at(name)]]
 
-def edge_html(e: Edge, on_way: bool, pos: str) -> Html:
+def to_html(e: Edge, on_way: bool, pos: str) -> Html:
     let p1: []float = spot(e.a, pos)
     let p2: []float = spot(e.b, pos)
     let d: str = f"M {p1[0]:.0f} {p1[1]:.0f} L {p2[0]:.0f} {p2[1]:.0f}"
@@ -148,7 +148,7 @@ def all_html(p0: Params) -> Html:
             p class="said": said
             svg viewBox="0 0 580 380" class="graph":
                 for i in range(len(edges)):
-                    + edge_html(edges[i], uses(way, edges[i]), p.pos)
+                    + to_html(edges[i], uses(way, edges[i]), p.pos)
                 for name in NAMES:
                     + node_html(name, ("start" if name == p.start else ("goal" if name == p.goal else ("way" if name in way else ""))), p.pos)
 

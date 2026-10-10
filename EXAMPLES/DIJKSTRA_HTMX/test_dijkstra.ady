@@ -1,8 +1,8 @@
 #!/usr/bin/env ady2nim
-"""dijkstra_model.ady and page.ady, with no server: ady2nim c -r test_dijkstra.ady"""
+"""dijkstra_model.ady and dijkstra_gui.ady, with no server: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
 from backend/dijkstra_model import Edge, NAMES, START_COSTS, build_graph, edges_of, uses
-from backend/page import all_text
+from backend/dijkstra_gui import all_text
 
 let g: {str}[](float, str) = build_graph(NAMES, edges_of(START_COSTS))
 let w: (float, []str) = shortest_route[str](g, "A", "E")

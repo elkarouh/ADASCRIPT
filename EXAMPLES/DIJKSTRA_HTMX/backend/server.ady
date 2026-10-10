@@ -10,7 +10,7 @@
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from backend/page import all_text, shell_text
+from backend/dijkstra_gui import all_text, shell_text
 
 async def handler(req: Request):
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
