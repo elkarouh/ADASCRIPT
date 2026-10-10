@@ -263,12 +263,18 @@ def _drop_type_applications(output):
         return
     alt = "|".join(sorted((_re_ta.escape(n) for n in names), key=len, reverse=True))
     pat = _re_ta.compile(rf'(?<![\w.])({alt})\[[^][]*\]\s*\(')
-    for i, line in enumerate(output):
+    for i, chunk in enumerate(output):
         # A `def f[T](...)` line declares the parameters rather than
         # applying them -- PEP 695, which Python takes as written. Only
-        # call sites are rewritten.
-        if "[" in line and not line.lstrip().startswith(("def ", "async def ")):
-            output[i] = pat.sub(r'\1(', line)
+        # call sites are rewritten. An entry is a whole statement, so a
+        # function is one entry starting with its `def`: the test is made
+        # line by line, or the calls in its body were never rewritten.
+        if "[" in chunk:
+            lines = chunk.split("\n")
+            for j, line in enumerate(lines):
+                if "[" in line and not line.lstrip().startswith(("def ", "async def ")):
+                    lines[j] = pat.sub(r'\1(', line)
+            output[i] = "\n".join(lines)
 
 
 # What Nim's math calls what Python's calls something else: a file `nimport`s math

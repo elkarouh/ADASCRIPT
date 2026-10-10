@@ -2,11 +2,11 @@
 """dijkstra_model -- the model: the nodes, the edges and their costs, and the way between two.
 
 The algorithm is TO_NIM/STDLIB/graphs.ady; what is here is the problem (nodes named by
-strings, undirected edges with a cost) turned into the graph the library wants. A
-placeholder: replace this file with your own model; page.ady needs what it imports from here.
+strings, undirected edges with a cost) turned into the graph the library wants
+(build_graph); page.ady hands that to the library's shortest_route itself. A placeholder:
+replace this file with your own model; page.ady needs what it imports from here.
 No HTML, no HTTP.
 """
-from graphs import shortest_path
 
 # The problem: six nodes, nine edges between them, and what each costs to start with.
 const NAMES: []str = ["A", "B", "C", "D", "E", "F"]
@@ -26,12 +26,6 @@ def edges_of(costs: []int) -> []Edge:
         edges.append(Edge(ab[0], ab[1], costs[i]))
     return edges
 
-# The way from START to GOAL: the nodes on it, and what it costs; cost -1 and no nodes when
-# there is no way.
-type Way is record:
-    nodes: []str
-    cost:  int
-
 # The graph the library wants: each node to its (cost, neighbour) pairs. The edges are
 # undirected, so each one is entered both ways.
 def build_graph(names: []str, edges: []Edge) -> {str}[](float, str):
@@ -44,21 +38,9 @@ def build_graph(names: []str, edges: []Edge) -> {str}[](float, str):
         graph[e.b].append((float(e.cost), e.a))
     return graph
 
-def shortest_way(names: []str, edges: []Edge, start: str, goal: str) -> Way:
-    let graph: {str}[](float, str) = build_graph(names, edges)
-    if start not in graph or goal not in graph:
-        return Way([], -1)
-    let nodes: []str = shortest_path[str](graph, start, goal)
-    var cost: int = 0
-    for i in range(len(nodes) - 1):
-        for e in edges:
-            if (e.a == nodes[i] and e.b == nodes[i + 1]) or (e.b == nodes[i] and e.a == nodes[i + 1]):
-                cost += e.cost
-    return Way(nodes, cost if len(nodes) > 0 else -1)
-
-# Whether the way uses the edge E, in either direction: page.ady draws those edges in orange.
-def uses(w: Way, e: Edge) -> bool:
-    for i in range(len(w.nodes) - 1):
-        if (w.nodes[i] == e.a and w.nodes[i + 1] == e.b) or (w.nodes[i] == e.b and w.nodes[i + 1] == e.a):
+# Whether ROUTE runs along the edge E, in either direction: page.ady draws those edges in orange.
+def uses(route: []str, e: Edge) -> bool:
+    for i in range(len(route) - 1):
+        if (route[i] == e.a and route[i + 1] == e.b) or (route[i] == e.b and route[i + 1] == e.a):
             return True
     return False

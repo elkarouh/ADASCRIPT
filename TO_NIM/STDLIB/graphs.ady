@@ -26,6 +26,7 @@ and it is simply absent from the result.
     let d: {City_T}float = dijkstra[City_T](g, PAR)
     print d[BER]                              # 5.0
     print shortest_path[City_T](g, PAR, BER)  # PAR, LON, BER
+    print shortest_route[City_T](g, PAR, BER) # (5.0, [PAR, LON, BER])
 
 The brackets name the node type explicitly; both backends infer it from the
 argument when they are left off.
@@ -60,12 +61,12 @@ def dijkstra[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T) -> {Node_T
 
 
 # ---------------------------------------------------------------------------
-# shortest_path[Node_T](graph, start, goal) — the route itself, start..goal inclusive
-#   Empty when there is no route, or when either end is not in the graph.
-#   A single-node path is [start], so an empty result is never ambiguous.
+# shortest_route[Node_T](graph, start, goal) — what the best route costs, and the route
+#   itself, start..goal inclusive. (Inf, []) when there is no route, or when either
+#   end is not in the graph; (0.0, [start]) from a node to itself.
 # ---------------------------------------------------------------------------
 
-def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal: Node_T) -> []Node_T:
+def shortest_route[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal: Node_T) -> (float, []Node_T):
     var route: []Node_T = []
     var dist: {Node_T}float = {n: (0.0 if n == start else Inf) for n in graph}
     var came_from: {Node_T}Node_T = {:}
@@ -87,7 +88,7 @@ def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal:
                 came_from[neighbour] = node
                 queue.push((candidate, neighbour))
     if goal != start and goal not in came_from:
-        return route
+        return (Inf, route)
     # Walk the predecessors back from the goal, then reverse.
     var backwards: []Node_T = [goal]
     var at: Node_T = goal
@@ -96,4 +97,15 @@ def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal:
         backwards.append(at)
     for i in 0 ..< len(backwards):
         route.append(backwards[len(backwards) - 1 - i])
-    return route
+    return (dist.get(goal, 0.0), route)    # 0.0: start == goal, and not even in the graph
+
+
+# ---------------------------------------------------------------------------
+# shortest_path[Node_T](graph, start, goal) — the route alone, as shortest_route finds it
+#   Empty when there is no route, or when either end is not in the graph.
+#   A single-node path is [start], so an empty result is never ambiguous.
+# ---------------------------------------------------------------------------
+
+def shortest_path[Node_T](graph: {Node_T}[](float, Node_T), start: Node_T, goal: Node_T) -> []Node_T:
+    let found: (float, []Node_T) = shortest_route[Node_T](graph, start, goal)
+    return found[1]

@@ -19,7 +19,7 @@ its edges follow; where you let go is kept in the page and drawn by the server.
 
 | File | What it knows |
 |---|---|
-| `backend/dijkstra_model.ady` | the model, a placeholder: the nodes, edges and costs, and `shortest_way`, which hands the graph to the library's `shortest_path` (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
+| `backend/dijkstra_model.ady` | the model, a placeholder: the nodes, edges and costs, and `build_graph`, which makes of them the graph the library's `shortest_route` (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
 | `backend/page.ady` | how to draw it: the SVG, the form, the text. A function from the settings to HTML. |
 | `backend/server.ady` | HTTP: four routes (`/`, `/all`, `/htmx.min.js`, `/drag.js`). |
 | `frontend/drag.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then writes the place into the form and asks the server for the page, which draws the same. About 100 lines. |
@@ -39,7 +39,7 @@ its edges follow; where you let go is kept in the page and drawn by the server.
 * So the page is a pure function, `all_text(query)`, and testing the GUI is
   testing a function: see the last lines of `test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command
-  line, a test) uses `shortest_way` unchanged.
+  line, a test) uses `build_graph` and `shortest_route` unchanged.
 
 ## When it fits, and when it does not
 

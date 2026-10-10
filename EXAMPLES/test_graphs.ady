@@ -6,7 +6,7 @@
 # The point of the library is that one definition serves any node type, so
 # every case here runs against three of them: an enum, a string and an int.
 
-from graphs import dijkstra, shortest_path
+from graphs import dijkstra, shortest_path, shortest_route
 
 type City_T is enum PAR, LON, BER, ROM
 
@@ -26,6 +26,10 @@ assert shortest_path[City_T](ge, PAR, BER) == [PAR, LON, BER]
 assert shortest_path[City_T](ge, PAR, PAR) == [PAR]        # a node reaches itself
 assert shortest_path[City_T](ge, PAR, ROM) == []           # unreachable
 assert shortest_path[City_T](ge, BER, PAR) == []           # edges are directed
+let rc: (float, []City_T) = shortest_route[City_T](ge, PAR, BER)
+assert rc[0] == 5.0 and rc[1] == [PAR, LON, BER]      # the cost comes with the route
+assert shortest_route[City_T](ge, PAR, PAR)[0] == 0.0
+assert shortest_route[City_T](ge, PAR, ROM)[0] == Inf
 
 # --- string nodes ----------------------------------------------------------
 let gs: {str}[](float, str) = {
@@ -41,6 +45,9 @@ assert ds["d"] == 5.0            # 1.5+2.5+1, beating the direct 10
 assert shortest_path[str](gs, "a", "d") == ["a", "b", "c", "d"]
 assert shortest_path[str](gs, "a", "zz") == []          # goal not in the graph
 assert shortest_path[str](gs, "zz", "a") == []          # start not in the graph
+let rs: (float, []str) = shortest_route[str](gs, "a", "d")
+assert rs[0] == 5.0 and rs[1] == ["a", "b", "c", "d"]
+assert shortest_route[str](gs, "zz", "zz")[0] == 0.0    # not in the graph, but itself
 
 # --- int nodes -------------------------------------------------------------
 let gi: {int}[](float, int) = {1: [(7.0, 2)], 2: [(1.0, 3)], 3: []}

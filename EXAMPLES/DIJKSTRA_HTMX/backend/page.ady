@@ -8,7 +8,8 @@ form's fields in the query, and the answer replaces the page. One-shot fields
 (`pick`, `act`) come with the click and are not in the form.
 """
 from uri nimport decodeUrl
-from backend/dijkstra_model import Edge, Way, NAMES, ENDS, START_COSTS, edges_of, shortest_way, uses
+from graphs import shortest_route
+from backend/dijkstra_model import Edge, NAMES, ENDS, START_COSTS, build_graph, edges_of, uses
 
 const XS: []float = [60.0, 200.0, 200.0, 380.0, 520.0, 330.0]       # where the nodes start
 const YS: []float = [190.0, 60.0, 190.0, 60.0, 190.0, 320.0]
@@ -123,11 +124,12 @@ def all_html(p0: Params) -> Html:
         elif p.pick != p.start:
             p.goal = p.pick
     let edges: []Edge = edges_of(p.costs)
-    let way: Way = shortest_way(NAMES, edges, p.start, p.goal)
+    let found: (float, []str) = shortest_route[str](build_graph(NAMES, edges), p.start, p.goal)
+    let way: []str = found[1]
     let said: str = ("Click the node to start from." if p.start == "" else
                      f"From {p.start}: click the node to go to." if p.goal == "" else
-                     f"No way from {p.start} to {p.goal}." if way.cost < 0 else
-                     f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way.nodes) + f", cost {way.cost}.")
+                     f"No way from {p.start} to {p.goal}." if len(way) == 0 else
+                     f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {found[0]:.0f}.")
     let clear_vals: str = "{\"act\": \"clear\"}"
     html:
         div id="all":
@@ -148,7 +150,7 @@ def all_html(p0: Params) -> Html:
                 for i in range(len(edges)):
                     + edge_html(edges[i], uses(way, edges[i]), p.pos)
                 for name in NAMES:
-                    + node_html(name, ("start" if name == p.start else ("goal" if name == p.goal else ("way" if name in way.nodes else ""))), p.pos)
+                    + node_html(name, ("start" if name == p.start else ("goal" if name == p.goal else ("way" if name in way else ""))), p.pos)
 
 const STYLE: str = """
 body { font-family: sans-serif; max-width: 46em; margin: 2em auto; padding: 0 1em; }
