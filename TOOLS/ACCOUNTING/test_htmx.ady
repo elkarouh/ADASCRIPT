@@ -52,7 +52,7 @@ assert "data_hx" not in text
 let big: str = all_text(Books("USD", accounts, entries, [0, 0, 0, 0, 0], "Test", ""), ["x"], ["X"], "x", params_of("detail=2"))
 assert "class=\"node group\"" in big                                       # grouped by the URL, whatever the number of accounts
 assert "<table" in text and "Savings" in text
-assert "<script src=\"/htmx.min.js\"" in shell_text()
+assert "src=\"/htmx.min.js\"" in shell_text()
 # dragged accounts: the position is read, drawn at, and tidy forgets it
 assert params_of("pos=100000%2F0%40600.0%2C300.0%7C610000%2F2%4040.5%2C50").pos == "100000/0@600.0,300.0|610000/2@40.5,50"
 assert params_of("tidy=1").tidy and not params_of("").tidy

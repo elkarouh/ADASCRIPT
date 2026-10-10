@@ -1345,8 +1345,11 @@ def shell() -> Html:
 def hyphens(text: str) -> str:
     return text.replace("data_hx_", "data-hx-")
 
+# karax turns an onerror attribute into a handler of its own, so it is added to the text.
+const MISSING: str = "<script onerror=\"addEventListener('load', function () { document.getElementById('all').textContent = 'htmx.min.js did not load: run make app, which copies it to build/.' })\" src=\"/htmx.min.js\">"
+
 def shell_text() -> str:
-    return "<!doctype html>" + hyphens(str(shell()))
+    return "<!doctype html>" + hyphens(str(shell())).replace("<script src=\"/htmx.min.js\">", MISSING)
 
 def all_text(b: Books, names: []str, titles: []str, current: str, p: Params) -> str:
     return hyphens(str(all_html(b, names, titles, current, p)))

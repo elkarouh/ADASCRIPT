@@ -309,6 +309,10 @@ def main():
     let shown: None | !BookFailure_T = show((first if first != "" else names[0]), False)
     if shown is BookFailure_T:
         die(shown.detail)
+    for file in PAGES:
+        let found: str | !PathFailure_T = (www / file).read_text()
+        if found is PathFailure_T:
+            print f"warning: {www / file} is missing: run make app, which builds it"
     print f"scenario {current} of {scenarios.dir}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))
