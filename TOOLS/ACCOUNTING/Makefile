@@ -46,6 +46,10 @@ build/drag.js: drag.ady
 	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }
 	@cp -L drag.js $@ && rm -f drag.js
 
+# htmx.min.js is vendored (in git); if it was deleted, it is restored from git.
+htmx.min.js:
+	git checkout -- htmx.min.js
+
 build/htmx.min.js: htmx.min.js
 	@mkdir -p build
 	@cp htmx.min.js $@
