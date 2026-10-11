@@ -7,7 +7,7 @@ its value (`value`) and what it is (`changed`); the server works it out and send
 drawing again, which htmx swaps in (see server.ady).
 """
 from uri nimport decodeUrl
-from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, PRODUCTS, Plan, Outcome, evaluate
+from backend/roi_model import BLOCKS, BLOCK_H, BLOCK_W, CURRENT_YEAR, FIRST_YEAR, HIGH, PRODUCTS, WIDE, Plan, Outcome, evaluate
 
 # The value of KEY in a query or a form body ("a=1&b=2"), or "".
 def field_of(text: str, key: str) -> str:
@@ -21,15 +21,9 @@ const LABELS: []str = ["Gold", "Bitcoin", "S&P 500"]
 const COLORS: []str = ["#F7E3AE", "#9C9EC8", "#FFCCD6"]
 const INVEST_COLOR: str = "#D4D9D7"
 
-# Where the boxes are: the investment, the three products, the performance of each and of all.
-const INVEST_X: int = 20
-const INVEST_Y: int = 240
-const PRODUCT_X: int = 290
-const PRODUCT_Y: []int = [60, 290, 520]
-const PERF_X: int = 640
-const PERF_Y: []int = [170, 295, 420]
-const OVERALL_X: int = 610
-const OVERALL_Y: int = 110
+# Where the results of each product are inside the box of the results, from its top left.
+const PERF_DX: float = 30.0
+const PERF_DY: []float = [60.0, 185.0, 310.0]
 
 # A number as a person writes it: 25, not 25.0; 12.5 stays.
 def plain(v: float) -> str:
@@ -40,23 +34,45 @@ def plain(v: float) -> str:
 def money(v: float) -> str:
     return f"{v:.2f}"
 
-# The arrow from (X1, Y1) to (X2, Y2): a dark outline, the colour on it, and the head.
-def arrow_html(x1: int, y1: int, x2: int, y2: int, color: str) -> Html:
-    let mid: int = (x1 + x2) // 2
-    let d: str = f"M {x1} {y1} C {mid} {y1} {mid} {y2} {x2} {y2}"
+# Where block NUMBER has its top left corner.
+def left_of(plan: Plan, number: int) -> float:
+    return plan.cx[number] - BLOCK_W[number] / 2.0
+
+def top_of(plan: Plan, number: int) -> float:
+    return plan.cy[number] - BLOCK_H[number] / 2.0
+
+# The curve from (X1, Y1) to (X2, Y2), leaving and arriving sideways.
+def curve(x1: float, y1: float, x2: float, y2: float) -> str:
+    let mid: float = (x1 + x2) / 2.0
+    return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {x2:.1f} {y2:.1f}"
+
+# The arrow from block FROM to block TO: a dark outline, the colour on it, and the head. It
+# starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's. The page
+# writes those on it (data_*), for the script that redraws it while a block is dragged.
+def arrow_html(plan: Plan, from_block: int, fx: float, fy: float, to_block: int, tx: float, ty: float, color: str) -> Html:
+    let d: str = curve(left_of(plan, from_block) + fx, top_of(plan, from_block) + fy,
+                       left_of(plan, to_block) + tx, top_of(plan, to_block) + ty)
     html:
-        g class="arrow":
+        g class="arrow" data_a=BLOCKS[from_block] data_ax=str(fx) data_ay=str(fy) data_b=BLOCKS[to_block] data_bx=str(tx) data_by=str(ty):
             path class="outline" d=d
             path class="line" d=d stroke=color marker_end="url(#head)"
 
-# A box of W by H at (X, Y), filled with COLOR, with what is in it written as HTML.
-def box_html(x: int, y: int, w: int, h: int, color: str, inside: Html) -> Html:
+# A box at (X, Y), W by H, filled with COLOR, with what is in it written as HTML. It belongs
+# to the block called BLOCK, and moves with it. A box that is a block of its own, FOR_DRAG,
+# is the grip: the script lets the mouse take hold of its rectangle and nothing else, so the
+# fields in it can still be clicked.
+def box_html(block: str, x: float, y: float, w: float, h: float, color: str, inside: Html, grip: bool) -> Html:
     let wide: str = str(w)
     let high: str = str(h)
+    let at_x: str = str(x)
+    let at_y: str = str(y)
+    let css: str = ("node" if grip else "body")
+    let centre_x: str = str(x + w / 2.0)
+    let centre_y: str = str(y + h / 2.0)
     html:
-        g transform=f"translate({x},{y})":
-            rect class="body" rx="10" ry="10" width=wide height=high fill=color
-            foreignObject width=wide height=high:
+        g class="box":
+            rect class=css x=at_x y=at_y rx="10" ry="10" width=wide height=high fill=color data_block=block data_name=block data_x=centre_x data_y=centre_y
+            foreignObject x=at_x y=at_y width=wide height=high data_block=block:
                 div class="form":
                     + inside
 
@@ -119,21 +135,27 @@ def overall_html(r: Outcome) -> Html:
 
 def all_html(plan: Plan) -> Html:
     let r: Outcome = evaluate(plan)
+    let box: str = f"0 0 {WIDE:.0f} {HIGH:.0f}"
     html:
         div id="all":
-            svg viewBox="0 0 900 680" class="drawing":
+            form id="move":
+                input type="hidden" name="name" value=""
+                input type="hidden" name="x" value=""
+                input type="hidden" name="y" value=""
+                button type="button" id="redraw" class="redraw" data_hx_put="/move" data_hx_include="#move" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
+            svg viewBox=box class="drawing":
                 defs:
                     marker id="head" viewBox="0 0 12 12" refX="12" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
                         path d="M 0 0 L 12 6 L 0 12 z"
-                + box_html(INVEST_X, INVEST_Y, 140, 230, INVEST_COLOR, invest_html(plan))
+                + box_html("investment", left_of(plan, 0), top_of(plan, 0), BLOCK_W[0], BLOCK_H[0], INVEST_COLOR, invest_html(plan), True)
                 for i in 0 ..< 3:
-                    + box_html(PRODUCT_X, PRODUCT_Y[i], 140, 120, COLORS[i], product_html(plan, i))
-                + box_html(OVERALL_X, OVERALL_Y, 260, 520, "#EAECEA", overall_html(r))
+                    + box_html(BLOCKS[i + 1], left_of(plan, i + 1), top_of(plan, i + 1), BLOCK_W[i + 1], BLOCK_H[i + 1], COLORS[i], product_html(plan, i), True)
+                + box_html("overall", left_of(plan, 4), top_of(plan, 4), BLOCK_W[4], BLOCK_H[4], "#EAECEA", overall_html(r), True)
                 for i in 0 ..< 3:
-                    + box_html(PERF_X, PERF_Y[i], 200, 100, INVEST_COLOR, perf_html(r, i))
+                    + box_html("overall", left_of(plan, 4) + PERF_DX, top_of(plan, 4) + PERF_DY[i], 200.0, 100.0, INVEST_COLOR, perf_html(r, i), False)
                 for i in 0 ..< 3:
-                    + arrow_html(INVEST_X + 140, INVEST_Y + 40 + 75 * i, PRODUCT_X, PRODUCT_Y[i] + 60, INVEST_COLOR)
-                    + arrow_html(PRODUCT_X + 140, PRODUCT_Y[i] + 60, PERF_X, PERF_Y[i] + 50, COLORS[i])
+                    + arrow_html(plan, 0, 140.0, 40.0 + 75.0 * float(i), i + 1, 0.0, 60.0, INVEST_COLOR)
+                    + arrow_html(plan, i + 1, 140.0, 60.0, 4, PERF_DX, PERF_DY[i] + 50.0, COLORS[i])
 
 const STYLE: str = """
 body { font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; color: #1f2933; background: #f6f4f4;
@@ -141,17 +163,21 @@ body { font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; colo
 h1 { font-size: 1.4em; margin: 0 0 0.2em; }
 p.about { color: #616e7c; margin: 0 0 1em; }
 svg.drawing { width: 100%; max-width: 62em; height: auto; display: block; margin: 0 auto; }
-rect.body { stroke: #333; stroke-width: 2; }
+rect.body, rect.node { stroke: #333; stroke-width: 2; }
+rect.node { cursor: grab; }
+button.redraw { display: none; }
+svg.drawing { user-select: none; }
+div.form input, div.form select { user-select: auto; }
 path.outline { fill: none; stroke: #000; stroke-width: 8; stroke-linejoin: round; }
 path.line { fill: none; stroke-width: 4; stroke-linejoin: round; }
 marker path { fill: #000; }
-div.form { font: 13px system-ui, -apple-system, Helvetica, Arial, sans-serif; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; height: 100%; box-sizing: border-box; }
+div.form { pointer-events: none; font: 13px system-ui, -apple-system, Helvetica, Arial, sans-serif; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; height: 100%; box-sizing: border-box; }
 div.form h2 { font-size: 18px; text-align: center; margin: 4px 0 10px; }
 div.form h3 { font-size: 13px; text-align: center; margin: 0 0 2px; }
 div.form label { display: block; }
 div.fields { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
 div.overall > label { text-align: center; }
-div.form input, div.form select, div.form output { display: block; box-sizing: border-box; width: 100%; font: inherit; text-align: right;
+div.form input, div.form select, div.form output { pointer-events: auto; display: block; box-sizing: border-box; width: 100%; font: inherit; text-align: right;
        border: 1px solid #888; border-radius: 4px; padding: 2px 4px; background: #fff; min-height: 1.6em; }
 div.form span.unit { display: flex; align-items: center; gap: 4px; }
 div.form span.unit input { width: 5em; }
@@ -168,6 +194,7 @@ def shell() -> Html:
                 title: "Return of investment"
                 style: STYLE
                 script src="/htmx.min.js"
+                script src="/roi_js_events.js"
             body:
                 h1: "Return of investment"
                 p class="about": "Change the money, the year or a share; the other shares adjust. Drawn by the server, no JointJS."

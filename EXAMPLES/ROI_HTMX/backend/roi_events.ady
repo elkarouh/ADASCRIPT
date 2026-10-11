@@ -5,7 +5,7 @@ server.ady hands every request here as a method, a path and its fields, and send
 drawing that comes out. The tests call answer() the same way, with no server running. The
 plan lives here, in memory: it starts again when the server does.
 """
-from backend/roi_model import PRODUCTS, Plan, FIRST_YEAR, CURRENT_YEAR, new_plan, set_share
+from backend/roi_model import PRODUCTS, Plan, FIRST_YEAR, CURRENT_YEAR, move_block, new_plan, set_share
 from backend/roi_gui import all_text, field_of
 
 var plan: Plan = new_plan()
@@ -20,6 +20,7 @@ def number_of(text: str, fallback: float) -> float:
 # back, or "" when there is no such thing.
 #   GET /all?changed=gold&value=40   the share of gold is now 40, and the others adjust
 #   GET /all?changed=funds&value=500 the money invested; likewise changed=year
+#   PUT /move                        a block dragged: name, x, y (its centre)
 #   POST /reset                      the starting plan again
 def answer(method: str, path: str, fields: str) -> str:
     if method == "GET" and path == "/all":
@@ -36,6 +37,8 @@ def answer(method: str, path: str, fields: str) -> str:
                 for i in 0 ..< len(PRODUCTS):
                     if PRODUCTS[i] == what:
                         set_share(plan, i, min(value, 100.0))
+    elif method == "PUT" and path == "/move":                    # name, x, y: where a block was let go
+        move_block(plan, field_of(fields, "name"), number_of(field_of(fields, "x"), 0.0), number_of(field_of(fields, "y"), 0.0))
     elif method == "POST" and path == "/reset":
         plan = new_plan()
     else:

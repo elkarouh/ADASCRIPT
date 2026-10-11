@@ -1,6 +1,6 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_roi.ady"""
-from backend/roi_model import Plan, Outcome, evaluate, new_plan, set_share
+from backend/roi_model import Plan, Outcome, evaluate, move_block, new_plan, set_share
 from backend/roi_events import answer
 
 # ---- the model ----
@@ -17,6 +17,10 @@ assert plan.pcts == [70.0, 0.0, 5.0]
 set_share(plan, 2, 0.0)                                                     # S&P 500 down by 5: the first product takes it
 assert plan.pcts == [75.0, 0.0, 0.0]
 
+assert move_block(plan, "gold", 300.0, 200.0) == "" and plan.cx[1] == 300.0 and plan.cy[1] == 200.0
+assert move_block(plan, "gold", -50.0, 9999.0) == "" and plan.cx[1] == 70.0 and plan.cy[1] == 620.0     # kept inside the drawing
+assert move_block(plan, "nothing", 1.0, 1.0) != ""
+
 # ---- the page, through the requests the server answers ----
 let first: str = answer("GET", "/all", "")
 assert "<svg" in first and "Investment" in first and "S&amp;P 500" in first
@@ -29,5 +33,10 @@ assert "value=\"500\"" in answer("GET", "/all", "changed=funds&value=500")
 assert "2020" in answer("GET", "/all", "changed=year&value=2020")
 assert "value=\"500\"" in answer("GET", "/all", "changed=year&value=1999")  # an impossible year is ignored, the rest stays
 assert "value=\"25\"" in answer("POST", "/reset", "")
+assert "data_a=\"investment\"" in first or "data-a=\"investment\"" in first or "data_a" in first   # the arrows say what they join
+assert "data_name=\"gold\"" in first and "data_x=\"360.0\"" in first                                    # a block says where its centre is
+assert "data_x=\"200.0\"" in answer("PUT", "/move", "name=gold&x=200&y=300")                             # and a drop moves it
+assert "data_y=\"300.0\"" in answer("GET", "/all", "")                                                   # the server keeps it
+assert "data_x=\"360.0\"" in answer("POST", "/reset", "")
 assert answer("GET", "/nowhere", "") == ""
 print "ok"

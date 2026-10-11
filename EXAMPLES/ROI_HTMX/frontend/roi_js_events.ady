@@ -1,0 +1,91 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""roi_js_events -- the events that stay in the browser: a box dragged with the mouse.
+
+Every other event is declared in the HTML (hx-* attributes, roi_gui.ady) and handled on the
+server (roi_events.ady); only what must follow the mouse every frame is here.
+
+A box that can be dragged is a <rect class="node" data_name=".." data_x=".." data_y=".."> (its
+centre, in the drawing's units); the elements that belong to it, the rectangle itself and the
+form on it, carry data_block=".." with the same name. An arrow is a <g class="arrow"> that says
+which blocks it joins and where on each (data_a, data_ax, data_ay for its start: the block's
+name and the distance from its top left corner; data_b, data_bx, data_by for its end), and
+holds two <path>s.
+
+While a box is dragged it moves with everything that belongs to it, and the arrows that end
+at it are drawn again, here in the browser, at once. Letting go writes the block's name and
+new centre into the hidden form `#move` and clicks its button, which sends PUT /move: the
+server keeps the place and draws the page again.
+
+Only the rectangle can be taken hold of, not the fields on it, so they can still be clicked.
+The drag itself is the standard library's svg_drag, and the page its browser module.
+"""
+from browser import Element_T, page, find, all, data, number, fill, press
+from svg_drag import Unit_T, Spot, spot_of, between, shift, trace, no_click, draggable
+
+const WIDTH: Unit_T = Unit_T(900.0)     # the drawing's size (the svg's viewBox)
+const HEIGHT: Unit_T = Unit_T(680.0)
+
+# What the server wrote on an element, read as if it were a field: `rect.data_name`.
+def data_name(n: Element_T) -> str:
+    return n.data("name")
+
+def data_a(a: Element_T) -> str:
+    return a.data("a")
+
+def data_b(a: Element_T) -> str:
+    return a.data("b")
+
+# The rectangle that is the block called NAME.
+def block_named(name: str) -> Element_T:
+    return page.find(f"rect.node[data_name=\"{name}\"]")
+
+# Where a block's top left corner is, when its centre is AT.
+def corner_of(block: Element_T, at: Spot) -> Spot:
+    return Spot(x=at.x - Unit_T(block.number("width") / 2.0), y=at.y - Unit_T(block.number("height") / 2.0))
+
+# The curve from A to B, leaving and arriving sideways.
+def curve(a: Spot, b: Spot) -> str:
+    let mid: float = float(a.x + b.x) / 2.0
+    return f"M {a.x:.1f} {a.y:.1f} C {mid:.1f} {a.y:.1f} {mid:.1f} {b.y:.1f} {b.x:.1f} {b.y:.1f}"
+
+# Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
+# being dragged (NODE), else where the server drew it; OFFSET_X and OFFSET_Y from its top left.
+def end_of(node: Element_T, at: Spot, name: str, dx: float, dy: float) -> Spot:
+    let block: Element_T = block_named(name)
+    let centre: Spot = (at if name == node.data_name else spot_of(block))
+    let corner: Spot = corner_of(block, centre)
+    return Spot(x=corner.x + Unit_T(dx), y=corner.y + Unit_T(dy))
+
+# Redraw, in the browser, the arrows that end at NODE's block, as if it stood at AT.
+def redraw_arrows_of(node: Element_T, at: Spot):
+    let name: str = node.data_name
+    for arrow in page.all("g.arrow"):
+        if name in [arrow.data_a, arrow.data_b]:
+            let a: Spot = end_of(node, at, arrow.data_a, arrow.number("data_ax"), arrow.number("data_ay"))
+            let b: Spot = end_of(node, at, arrow.data_b, arrow.number("data_bx"), arrow.number("data_by"))
+            for path in arrow.all("path"):
+                path.trace(curve(a, b))
+
+# While NODE is dragged: its block goes where the mouse takes it, kept inside the drawing, and
+# the arrows follow.
+def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
+    let half_w: Unit_T = Unit_T(node.number("width") / 2.0)
+    let half_h: Unit_T = Unit_T(node.number("height") / 2.0)
+    let now: Spot = Spot(x=between(wanted.x, half_w, WIDTH - half_w), y=between(wanted.y, half_h, HEIGHT - half_h))
+    for part in page.all(f"[data_block=\"{node.data_name}\"]"):
+        shift(part, centre, now)
+    redraw_arrows_of(node, now)
+    return now
+
+# NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
+# block's name and new centre, and its button #redraw sends it (hx-put="/move", see
+# roi_gui.ady); htmx puts the page the server answers with in place of this one.
+def dropped(node: Element_T, at: Spot):
+    let form: Element_T = page.find("#move")
+    form.fill("name", node.data_name)
+    form.fill("x", f"{at.x:.0f}")
+    form.fill("y", f"{at.y:.0f}")
+    page.press("#redraw")
+
+draggable("rect.node", "svg.drawing", WIDTH, moved, dropped, no_click)
