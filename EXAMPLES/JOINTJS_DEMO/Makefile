@@ -1,6 +1,7 @@
 .PHONY: all clean run
 
 PORT ?= 8800
+OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 
 all: roi.js
 
@@ -15,7 +16,7 @@ run: roi.js
 	@if curl -s http://localhost:9222/json/version > /dev/null 2>&1; then \
 	    curl -s -X PUT "http://localhost:9222/json/new?http://127.0.0.1:$(PORT)/index.html" > /dev/null; \
 	else \
-	    xdg-open http://127.0.0.1:$(PORT)/index.html; \
+	    $(OPEN) http://127.0.0.1:$(PORT)/index.html; \
 	fi
 
 clean:

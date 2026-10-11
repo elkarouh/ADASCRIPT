@@ -50,7 +50,7 @@ let paper: JsObject = jsnew dia["Paper"]({
     "background": {"color": "#f6f4f4"},
     "preventDefaultViewAction": false,
     "interactive": {"stopDelegation": false},
-    "elementView": dia["ElementView"].extend({
+    "elementView": dia["ElementView"]["extend"].call(dia["ElementView"], {
         "events": {"change input,select": "onInputChange"},
         "onInputChange": onInputChange
     })
@@ -188,14 +188,14 @@ NODE_OVERALL.set_visual_params(   {"color": "#EAECEA",
                "value": {"tabindex": 12}, "roi": {"tabindex": 13}},
     "markup": util.svg([MARKUP_OVERALL])})
 
-let investColor: str = str(NODE_INVESTMENT.visual_params["color"].to(cstring))
+let investColor: cstring = NODE_INVESTMENT.visual_params["color"].to(cstring)
 LINKS[0].set_visual_params({"color": investColor, "srcAnchor": "top",    "tgtAnchor": "left"})
 LINKS[1].set_visual_params({"color": investColor, "srcAnchor": "right",  "tgtAnchor": "left"})
 LINKS[2].set_visual_params({"color": investColor, "srcAnchor": "bottom", "tgtAnchor": "left"})
 
 # Set visual params on each link (color and anchors are rendering concerns)
 for i in 3..<len(LINKS):
-    let c: str = str(LINKS[i].src.visual_params["color"].to(cstring))
+    let c: cstring = LINKS[i].src.visual_params["color"].to(cstring)
     LINKS[i].set_visual_params({"color": c, "srcAnchor": "right", "tgtAnchor": "left"})
 
 # Instantiate nodes — positions and tab indices are layout/UI concerns, kept here
@@ -328,7 +328,7 @@ def onChangeAttrs(cell: JsObject, attrs: JsObject, opts: JsObject):
             if i != idx:
                 let p:   JsElem = PRODUCT_NODES[i].getJsObject().to(JsElem)
                 let pct: float  = p.attr("percentage/props/value").to(float) + diff
-                p.attr("percentage/props/value", max(pct, 0.0).toJs)
+                p.elem.attr("percentage/props/value", max(pct, 0.0).toJs)
                 if pct < 0.0:
                     diff = pct
                 else:
