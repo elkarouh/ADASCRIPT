@@ -1,10 +1,14 @@
 #!/usr/bin/env ady2nim
-"""A page as a tree of objects, each rendering itself.
+#ady2nim-args js
+"""A page as a tree of objects, each rendering itself, with working buttons.
 
 The application renders the page, and asks each child for its own HTML
-(`+ child.to_html()`), which asks its children in turn. Needs karax
-(`nimble install karax`). Build for the browser with `ady2nim js`.
+(`+ child.to_html()`), which asks its children in turn. A button is an
+object too: `onclick=self.press` calls its own method, and the page is
+drawn again. Build and serve it with `make app`; needs karax
+(`nimble install karax`).
 """
+from karax/karax nimport setRenderer
 
 @virtual
 class Widget:
@@ -12,27 +16,36 @@ class Widget:
         html:
             div class="widget"
 
-class Label(Widget):
-    var text: str
+@virtual
+class Counter:
+    var count: int = 0
 
-    def __init__(self, text: str):
-        self.text = text
+class Label(Widget):
+    var model: Counter
+
+    def __init__(self, model: Counter):
+        self.model = model
 
     def to_html(self) -> Html:
         html:
-            span class="label": self.text
+            span class="label": f"count: {self.model.count}"
 
 class Button(Widget):
-    var id:    str
+    var model: Counter
     var label: str
+    var step:  int
 
-    def __init__(self, id: str, label: str):
-        self.id = id
+    def __init__(self, model: Counter, label: str, step: int):
+        self.model = model
         self.label = label
+        self.step = step
+
+    def press(self):
+        self.model.count += self.step
 
     def to_html(self) -> Html:
         html:
-            button id=self.id: self.label
+            button onclick=self.press: self.label
 
 class Panel(Widget):
     var title:    str
@@ -62,17 +75,18 @@ class App(Widget):
 
     def to_html(self) -> Html:
         html:
-            html lang="en":
-                head:
-                    title: self.title
-                body:
-                    h1: self.title
-                    + self.body.to_html()
+            div:
+                h1: self.title
+                + self.body.to_html()
 
+let model: Counter = Counter()
 var panel: Panel = Panel("Counter")
-panel.add(Label("count: 0"))
-panel.add(Button("inc", "+1"))
-panel.add(Button("dec", "-1"))
+panel.add(Label(model))
+panel.add(Button(model, "+1", 1))
+panel.add(Button(model, "-1", -1))
 let app: App = App("Demo", panel)
-print "<!doctype html>"
-print app.to_html()
+
+def render() -> Html:
+    return app.to_html()
+
+setRenderer(render)

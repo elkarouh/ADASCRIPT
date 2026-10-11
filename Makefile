@@ -1422,16 +1422,16 @@ test: compile
 	@# so for it the check is that `nim js` accepts it.
 	@echo "=== html: blocks (karax) ==="
 	@if [ -n "$(HTML_SKIPPED)" ]; then echo "  SKIPPED, karax not installed"; else \
-	    for t in 'html_card:<h2>Counter</h2>' 'html_app:<button id="dec">-1</button>'; do \
+	    for t in 'html_card:<h2>Counter</h2>'; do \
 	        n=$${t%%:*}; want=$${t#*:}; \
 	        printf '  %-42s' "HTML/$$n.ady"; \
 	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
-	    printf '  %-42s' "HTML/html_counter.ady (ady2nim js)"; \
-	    $(ADY2NIM) js $(EXDIR)/HTML/html_counter.ady >/dev/null 2>&1 \
+	    printf '  %-42s' "HTML/html_app.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(EXDIR)/HTML/html_app.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    rm -f $(EXDIR)/HTML/html_counter.js; \
+	    rm -f $(EXDIR)/HTML/html_app.js; \
 	fi
 
 	@# TOOLS/ACCOUNTING: the model and the ledger it keeps in SQLite, run from

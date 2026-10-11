@@ -474,8 +474,8 @@ The page is redrawn after every handler. A class whose handlers change its
 own fields is `@virtual`, so the handler and the page share one object.
 A page with a handler builds only under `ady2nim js` (`#ady2nim-args js` on
 the second line); it needs a `<div id="ROOT">` and the compiled script in an
-HTML file. `EXAMPLES/HTML/html_counter.ady` and its `index.html` are the whole
-program, and `make counter` there serves it. Handlers that take the event object
+HTML file. `EXAMPLES/HTML/html_app.ady` and its `index.html` are the whole
+program, and `make app` there serves it. Handlers that take the event object
 are not built.
 
 ---
