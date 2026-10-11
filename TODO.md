@@ -480,6 +480,16 @@ it but do:. Not yet:
       HTML-escaped (`"Segoe UI"` -> `&quot;Segoe UI&quot;`), which breaks the
       declaration. Karax's `style=` attribute is a typed `VStyle`, so
       `style="fill:#fff"` is refused; classes and a `<style>` element do.
+      An attribute value in an `html:` block ends at a space, so it cannot
+      hold one: `x=str(a + b)`, `class=("n" if g else "b")` and
+      `viewBox=f"0 0 {w} {h}"` do not parse (a call or a spaceless f-string
+      does: `x=f"{x}"`, `data_x=f"{x+w/2.0}"`). Worse, `+` joins silently:
+      `marker_end="url(#head"+color[1:]+")"` compiles and writes only
+      `marker_end="url(#head"`, the rest dropped without a word; and a format
+      spec or a slice inside an attribute f-string (`{w:.0f}`, `{c[1:]}`)
+      does not parse. The same escaping hits `>` in a `style:` block (a child
+      combinator, `a > b`, comes out `&gt;`). Each should either work or say
+      what it refuses.
 - [x] Nim: a `T | !F` passed as an *argument* whose value is a plain T or E
       -- `f(3)` where f takes `int | !Failure_T` -- is typed from the
       parameter (EXAMPLES/test_union_args.ady).
