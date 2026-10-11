@@ -44,13 +44,15 @@ def block_named(name: str) -> Element_T:
 def corner_of(block: Element_T, at: Spot) -> Spot:
     return Spot(x=at.x - Unit_T(block.number("width") / 2.0), y=at.y - Unit_T(block.number("height") / 2.0))
 
-# The curve from A to B, leaving and arriving sideways, as roi_gui.ady draws it: it stops a
-# head's length short of B, where the arrow's head begins.
+# The curve from A to B, as roi_gui.ady draws it: it stops a head's length short of B, where
+# the arrow's head begins, and with UP it leaves A straight up or down, not sideways.
 const HEAD: float = 12.0
 
-def curve(a: Spot, b: Spot) -> str:
+def curve(a: Spot, b: Spot, up: bool) -> str:
     let end: float = float(b.x) - HEAD
     let mid: float = (float(a.x) + end) / 2.0
+    if up:
+        return f"M {a.x:.1f} {a.y:.1f} C {a.x:.1f} {b.y:.1f} {mid:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
     return f"M {a.x:.1f} {a.y:.1f} C {mid:.1f} {a.y:.1f} {mid:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
 
 # Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
@@ -69,7 +71,7 @@ def redraw_arrows_of(node: Element_T, at: Spot):
             let a: Spot = end_of(node, at, arrow.data_a, arrow.number("data_ax"), arrow.number("data_ay"))
             let b: Spot = end_of(node, at, arrow.data_b, arrow.number("data_bx"), arrow.number("data_by"))
             for path in arrow.all("path"):
-                path.trace(curve(a, b))
+                path.trace(curve(a, b, arrow.data("up") == "1"))
 
 # While NODE is dragged: its block goes where the mouse takes it, kept inside the drawing, and
 # the arrows follow.

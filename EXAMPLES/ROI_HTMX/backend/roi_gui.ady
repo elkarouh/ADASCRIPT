@@ -25,6 +25,11 @@ const INVEST_COLOR: str = "#D4D9D7"
 const PERF_DX: float = 30.0
 const PERF_DY: []float = [60.0, 185.0, 310.0]
 
+# Where the arrows to the products leave the investment box, from its top left: out of the top
+# for gold, the right side for bitcoin, the bottom for the S&P 500.
+const SEND_X: []float = [70.0, 140.0, 70.0]
+const SEND_Y: []float = [0.0, 115.0, 230.0]
+
 # A number as a person writes it: 25, not 25.0; 12.5 stays.
 def plain(v: float) -> str:
     if v == float(int(v)):
@@ -41,25 +46,29 @@ def left_of(plan: Plan, number: int) -> float:
 def top_of(plan: Plan, number: int) -> float:
     return plan.cy[number] - BLOCK_H[number] / 2.0
 
-# The curve from (X1, Y1) to (X2, Y2), leaving and arriving sideways. It stops a head's length
+# The curve from (X1, Y1) to (X2, Y2), arriving sideways. It stops a head's length
 # short of X2, where the head begins: the head's tip is at X2, the box's edge, and the lines
 # do not run on under it. (frontend/roi_js_events.ady draws it the same way.)
 const HEAD: float = 12.0
 
-def curve(x1: float, y1: float, x2: float, y2: float) -> str:
+# With UP, it leaves the top or bottom of its box straight up or down, not sideways.
+def curve(x1: float, y1: float, x2: float, y2: float, up: bool) -> str:
     let end: float = x2 - HEAD
     let mid: float = (x1 + end) / 2.0
+    if up:
+        return f"M {x1:.1f} {y1:.1f} C {x1:.1f} {y2:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
     return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
 
 # The arrow from block FROM to block TO: a dark outline, the colour on it, and the head. It
 # starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's. The page
 # writes those on it (data_*), for the script that redraws it while a block is dragged.
-def arrow_html(plan: Plan, from_block: int, fx: float, fy: float, to_block: int, tx: float, ty: float, color: str) -> Html:
+def arrow_html(plan: Plan, from_block: int, fx: float, fy: float, to_block: int, tx: float, ty: float, color: str, up: bool) -> Html:
     let d: str = curve(left_of(plan, from_block) + fx, top_of(plan, from_block) + fy,
-                       left_of(plan, to_block) + tx, top_of(plan, to_block) + ty)
+                       left_of(plan, to_block) + tx, top_of(plan, to_block) + ty, up)
     let head: str = "url(#head" + color[1:] + ")"
+    let vertical: str = ("1" if up else "0")
     html:
-        g class="arrow" data_a=BLOCKS[from_block] data_ax=str(fx) data_ay=str(fy) data_b=BLOCKS[to_block] data_bx=str(tx) data_by=str(ty):
+        g class="arrow" data_a=BLOCKS[from_block] data_ax=str(fx) data_ay=str(fy) data_b=BLOCKS[to_block] data_bx=str(tx) data_by=str(ty) data_up=vertical:
             path class="outline" d=d
             path class="line" d=d stroke=color marker_end=head
 
@@ -169,8 +178,8 @@ def all_html(plan: Plan) -> Html:
                 for i in 0 ..< 3:
                     + box_html("overall", left_of(plan, 4) + PERF_DX, top_of(plan, 4) + PERF_DY[i], 200.0, 100.0, INVEST_COLOR, perf_html(r, i), False)
                 for i in 0 ..< 3:
-                    + arrow_html(plan, 0, 140.0, 40.0 + 75.0 * float(i), i + 1, 0.0, 60.0, INVEST_COLOR)
-                    + arrow_html(plan, i + 1, 140.0, 60.0, 4, PERF_DX, PERF_DY[i] + 50.0, COLORS[i])
+                    + arrow_html(plan, 0, SEND_X[i], SEND_Y[i], i + 1, 0.0, 60.0, INVEST_COLOR, i != 1)
+                    + arrow_html(plan, i + 1, 140.0, 60.0, 4, PERF_DX, PERF_DY[i] + 50.0, COLORS[i], False)
 
 const STYLE: str = """
 body { font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; color: #1f2933; background: #f6f4f4;
