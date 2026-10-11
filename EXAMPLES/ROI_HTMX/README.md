@@ -25,7 +25,7 @@ How a box and an arrow are drawn, without JointJS:
 - a box that is dragged moves in the browser, with its arrows (`frontend/roi_js_events.ady`,
   built on the library's `svg_drag`, as in `TOOLS/ACCOUNTING`); letting go sends `PUT /move`;
 - a field that is changed asks `GET /all` with its value and what it is
-  (`changed=gold&value=40`); the server changes the plan, works out the values and
+  (`changed=gold&value=40`); the server changes the portfolio, works out the values and
   sends the whole diagram, which htmx puts in place of the old one.
 
 Drag a box (the investment, a product, or the big box of the results, which takes its three
