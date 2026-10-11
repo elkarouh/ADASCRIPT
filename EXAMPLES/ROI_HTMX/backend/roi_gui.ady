@@ -49,14 +49,16 @@ def top_of(plan: Plan, number: int) -> float:
 # The curve from (X1, Y1) to (X2, Y2), arriving sideways. It stops a head's length
 # short of X2, where the head begins: the head's tip is at X2, the box's edge, and the lines
 # do not run on under it. (frontend/roi_js_events.ady draws it the same way.)
-const HEAD: float = 12.0
+const HEAD: float = 13.0
 
 # With UP, it leaves the top or bottom of its box straight up or down, not sideways.
 def curve(x1: float, y1: float, x2: float, y2: float, up: bool) -> str:
     let end: float = x2 - HEAD
     let mid: float = (x1 + end) / 2.0
     if up:
-        return f"M {x1:.1f} {y1:.1f} C {x1:.1f} {y2:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
+        let turn: float = y1 + (y2 - y1) * 0.58
+        let across: float = x1 + (end - x1) * 0.44
+        return f"M {x1:.1f} {y1:.1f} C {x1:.1f} {turn:.1f} {across:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
     return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
 
 # The arrow from block FROM to block TO: a dark outline, the colour on it, and the head. It
@@ -148,13 +150,13 @@ def overall_html(r: Outcome) -> Html:
                 label: "ROI"
                 output: money(r.roi)
 
-# The head of an arrow of COLOR: the colour, outlined in black, open at the back so that the
-# arrow's colour runs into it. The arrow's line stops where it starts (HEAD long).
+# The head of an arrow of COLOR: the colour, outlined in black, with a notch at the back where
+# the arrow's band runs into it, as in JointJS. The arrow's line stops where it starts (HEAD long).
 def head_html(color: str) -> Html:
     let id: str = "head" + color[1:]
     html:
-        marker id=id viewBox="0 0 12 12" refX="0" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
-            path d="M -1 0 L 12 6 L -1 12" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
+        marker id=id viewBox="-2 -12 17 24" refX="0" refY="0" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="24" orient="auto":
+            path d="M 0 4 L 0 10 L 13 0 L 0 -10 L 0 -4" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
 
 def all_html(plan: Plan) -> Html:
     let r: Outcome = evaluate(plan)

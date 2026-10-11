@@ -46,13 +46,15 @@ def corner_of(block: Element_T, at: Spot) -> Spot:
 
 # The curve from A to B, as roi_gui.ady draws it: it stops a head's length short of B, where
 # the arrow's head begins, and with UP it leaves A straight up or down, not sideways.
-const HEAD: float = 12.0
+const HEAD: float = 13.0
 
 def curve(a: Spot, b: Spot, up: bool) -> str:
     let end: float = float(b.x) - HEAD
     let mid: float = (float(a.x) + end) / 2.0
     if up:
-        return f"M {a.x:.1f} {a.y:.1f} C {a.x:.1f} {b.y:.1f} {mid:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
+        let turn: float = float(a.y) + float(b.y - a.y) * 0.58
+        let across: float = float(a.x) + (end - float(a.x)) * 0.44
+        return f"M {a.x:.1f} {a.y:.1f} C {a.x:.1f} {turn:.1f} {across:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
     return f"M {a.x:.1f} {a.y:.1f} C {mid:.1f} {a.y:.1f} {mid:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
 
 # Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
