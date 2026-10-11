@@ -57,10 +57,11 @@ def curve(x1: float, y1: float, x2: float, y2: float) -> str:
 def arrow_html(plan: Plan, from_block: int, fx: float, fy: float, to_block: int, tx: float, ty: float, color: str) -> Html:
     let d: str = curve(left_of(plan, from_block) + fx, top_of(plan, from_block) + fy,
                        left_of(plan, to_block) + tx, top_of(plan, to_block) + ty)
+    let head: str = "url(#head" + color[1:] + ")"
     html:
         g class="arrow" data_a=BLOCKS[from_block] data_ax=str(fx) data_ay=str(fy) data_b=BLOCKS[to_block] data_bx=str(tx) data_by=str(ty):
             path class="outline" d=d
-            path class="line" d=d stroke=color marker_end="url(#head)"
+            path class="line" d=d stroke=color marker_end=head
 
 # A box at (X, Y), W by H, filled with COLOR, with what is in it written as HTML. It belongs
 # to the block called BLOCK, and moves with it. A box that is a block of its own, FOR_DRAG,
@@ -138,6 +139,14 @@ def overall_html(r: Outcome) -> Html:
                 label: "ROI"
                 output: money(r.roi)
 
+# The head of an arrow of COLOR: the colour, outlined in black, open at the back so that the
+# arrow's colour runs into it. The arrow's line stops where it starts (HEAD long).
+def head_html(color: str) -> Html:
+    let id: str = "head" + color[1:]
+    html:
+        marker id=id viewBox="0 0 12 12" refX="0" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
+            path d="M -1 0 L 12 6 L -1 12" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
+
 def all_html(plan: Plan) -> Html:
     let r: Outcome = evaluate(plan)
     let box: str = f"0 0 {WIDE:.0f} {HIGH:.0f}"
@@ -150,8 +159,9 @@ def all_html(plan: Plan) -> Html:
                 button type="button" id="redraw" class="redraw" data_hx_put="/move" data_hx_include="#move" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
             svg viewBox=box class="drawing":
                 defs:
-                    marker id="head" viewBox="0 0 12 12" refX="0" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
-                        path d="M 0 0 L 12 6 L 0 12 z"
+                    + head_html(INVEST_COLOR)
+                    for color in COLORS:
+                        + head_html(color)
                 + box_html("investment", left_of(plan, 0), top_of(plan, 0), BLOCK_W[0], BLOCK_H[0], INVEST_COLOR, invest_html(plan), True)
                 for i in 0 ..< 3:
                     + box_html(BLOCKS[i + 1], left_of(plan, i + 1), top_of(plan, i + 1), BLOCK_W[i + 1], BLOCK_H[i + 1], COLORS[i], product_html(plan, i), True)
@@ -176,7 +186,7 @@ svg.drawing { user-select: none; }
 div.form input, div.form select { user-select: auto; }
 path.outline { fill: none; stroke: #000; stroke-width: 8; stroke-linejoin: round; }
 path.line { fill: none; stroke-width: 4; stroke-linejoin: round; }
-marker path { fill: #000; }
+
 div.form { pointer-events: none; font: 13px system-ui, -apple-system, Helvetica, Arial, sans-serif; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; height: 100%; box-sizing: border-box; }
 div.form h2 { font-size: 18px; text-align: center; margin: 4px 0 10px; }
 div.form h3 { font-size: 13px; text-align: center; margin: 0 0 2px; }
@@ -208,7 +218,7 @@ def shell() -> Html:
 
 # An html: block writes an attribute with underscores (data_hx_get); htmx wants hyphens.
 def hyphens(text: str) -> str:
-    return text.replace("data_hx_", "data-hx-").replace("marker_end", "marker-end")
+    return text.replace("data_hx_", "data-hx-").replace("marker_end", "marker-end").replace("stroke_width", "stroke-width").replace("stroke_linejoin", "stroke-linejoin")
 
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
