@@ -165,6 +165,7 @@ p.about { color: #616e7c; margin: 0 0 1em; }
 svg.drawing { width: 100%; max-width: 62em; height: auto; display: block; margin: 0 auto; }
 rect.body, rect.node { stroke: #333; stroke-width: 2; }
 rect.node { cursor: grab; }
+foreignObject { pointer-events: none; }
 button.redraw { display: none; }
 svg.drawing { user-select: none; }
 div.form input, div.form select { user-select: auto; }
