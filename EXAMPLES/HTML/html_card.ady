@@ -1,4 +1,9 @@
 #!/usr/bin/env ady2nim
+"""A card drawn as SVG: a class with `to_html`, printed to standard output.
+
+No browser script and no events; the output is a whole .svg file.
+`make card` writes it to build/ and opens it in the browser.
+"""
 class Card:
     var title: str
     var items: []str
@@ -9,17 +14,27 @@ class Card:
         self.items = items
         self.done = done
 
-    def to_html(self) -> Html:
+    def line_html(self, i: int, item: str) -> Html:
+        let y: str = str(66 + 28 * i)
+        let text: str = "• " + item
         html:
-            div class="card":
-                h2: self.title
-                ul:
-                    for item in self.items:
-                        li: item
+            stext x="28" y=y class="item": text
+
+    def to_html(self) -> Html:
+        let high: str = str(30 + 28 * len(self.items) + 36)
+        let tall: str = str(30 + 28 * len(self.items) + 28)
+        let box: str = "0 0 240 " + high
+        let look: str = ".box{fill:#fff;stroke:#7b8794;stroke-width:2} .title{font:bold 22px sans-serif} .tick{fill:#e3f2e5;stroke:#3a9a4a;stroke-width:2} .mark{font:16px sans-serif;text-anchor:middle;fill:#3a9a4a} .item{font:16px sans-serif}"
+        html:
+            svg xmlns="http://www.w3.org/2000/svg" viewBox=box width="240" height=high:
+                style: look
+                rect x="4" y="4" width="232" height=tall rx="10" class="box"
+                stext x="20" y="38" class="title": self.title
                 if self.done:
-                    span: "done"
-                br
-                button id="inc": "+1"
+                    circle cx="206" cy="30" r="12" class="tick"
+                    stext x="206" y="36" class="mark": "✓"
+                for i, item in enumerate(self.items):
+                    + self.line_html(i, item)
 
 var c: Card = Card("Counter", ["a", "b"], True)
 print c.to_html()

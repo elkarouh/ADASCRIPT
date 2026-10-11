@@ -5,7 +5,7 @@ Two small programs that show how a page is built from objects. Each class has a
 put together. The HTML comes from karax, which Adascript's `html:` blocks compile to.
 
 ```
-make card       # one widget: a Card, printed as HTML           (html_card.ady)
+make card       # one widget: a Card, drawn as SVG, opened as a file  (html_card.ady)
 make app        # a page as a tree of widgets, with buttons, served (html_app.ady)
 make all        # build every page into build/, open none
 ```
@@ -16,7 +16,7 @@ You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
 
 | File | What it shows | Runs as |
 |---|---|---|
-| `html_card.ady` | A class with `to_html`, printed to standard output. Start here: no browser, no events. | native, `ady2nim c -r` |
+| `html_card.ady` | A class with `to_html`, printed to standard output as an SVG picture. Start here: no server, no events. | native, `ady2nim c -r` |
 | `html_app.ady` | `@virtual` and inheritance: a `Widget` base class, with `Label` and `Button` subclasses. The page asks each child for its own HTML, and each child asks its children in turn. Events: an attribute starting with `on`, such as `onclick=self.press`, is a call on the object, and the page is drawn again after each click. | browser: `ady2nim js`, served by `make app` |
 
 `index.html` is the page that loads `html_app.js`, and `make app` copies it into `build/`.

@@ -1422,7 +1422,7 @@ test: compile
 	@# so for it the check is that `nim js` accepts it.
 	@echo "=== html: blocks (karax) ==="
 	@if [ -n "$(HTML_SKIPPED)" ]; then echo "  SKIPPED, karax not installed"; else \
-	    for t in 'html_card:<h2>Counter</h2>'; do \
+	    for t in 'html_card:>Counter</text>'; do \
 	        n=$${t%%:*}; want=$${t#*:}; \
 	        printf '  %-42s' "HTML/$$n.ady"; \
 	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \
