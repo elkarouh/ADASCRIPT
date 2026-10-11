@@ -32,6 +32,25 @@ const TOP: Unit_T = Unit_T(20.0)        # how near the top an account may go
 
 # ---- Reading the page ----
 
+# What the server wrote on an element, read as if it were a field: `node.data_name` calls
+# data_name(node) (a function called with a dot, as Nim allows). An account carries
+# data_id, data_name and data_h (half its height); an arrow data_from and data_to, the names
+# of the accounts it joins.
+def data_id(n: Node) -> str:
+    return attr(n, "data_id")
+
+def data_name(n: Node) -> str:
+    return attr(n, "data_name")
+
+def data_h(n: Node) -> Unit_T:
+    return unit_of(n, "data_h")
+
+def data_from(a: Node) -> str:
+    return attr(a, "data_from")
+
+def data_to(a: Node) -> str:
+    return attr(a, "data_to")
+
 # shared/routes.ady, which the server uses too, works in plain floats (its Point).
 def point_of(s: Spot) -> Point:
     return Point(float(s.x), float(s.y))
@@ -46,10 +65,10 @@ def height() -> Unit_T:
 # The name of the account (not a group) the point AT is over, other than FROM_NAME, or "".
 def account_at(at: Spot, from_name: str) -> str:
     for n in document.querySelectorAll("g.node"):
-        let name: str = attr(n, "data_name")
+        let name: str = n.data_name
         if name != from_name and not has_class(n, "group"):
             let c: Spot = spot_of(n)
-            if abs(at.x - c.x) <= HALF_W and abs(at.y - c.y) <= unit_of(n, "data_h"):
+            if abs(at.x - c.x) <= HALF_W and abs(at.y - c.y) <= n.data_h:
                 return name
     return ""
 
@@ -61,24 +80,24 @@ def account_at(at: Spot, from_name: str) -> str:
 # each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
 # letting go asks the server, which draws the page again, and it comes out the same.
 def reroute_arrows(node: Node, at: Spot):
-    let name: str = attr(node, "data_name")   # arrows name the accounts they join: data_from, data_to
+    let name: str = node.data_name           # arrows name the accounts they join: data_from, data_to
     # the accounts: their names, centres (NODE's at AT) and half heights, in page order
     var names: []str = []
     var points: []Point = []
     var tall: []float = []
     for n in document.querySelectorAll("g.node"):
-        let who: str = attr(n, "data_name")
+        let who: str = n.data_name
         names.append(who)
         points.append(point_of(at if who == name else spot_of(n)))
-        tall.append(float(unit_of(n, "data_h")))
+        tall.append(float(n.data_h))
     # the arrows: which accounts each joins, and the amount written on it
     var arrows: []Node = []
     var sources: []str = []
     var targets: []str = []
     var texts: []str = []
     for a in document.querySelectorAll("g[data_from]"):
-        sources.append(attr(a, "data_from"))
-        targets.append(attr(a, "data_to"))
+        sources.append(a.data_from)
+        targets.append(a.data_to)
         let words: Node = a.querySelector("text.amount")
         texts.append(str(words.textContent) if words != nil else "")
         arrows.append(a)
@@ -133,14 +152,14 @@ def dropped(node: Node, at: Spot):
         # and the server answers with the popup that asks when, what and how much. Let go over
         # nothing, the arrow is just dropped.
         rubber("")
-        let over: str = account_at(at, attr(node, "data_name"))
+        let over: str = account_at(at, node.data_name)
         if over != "":
             field_named("target").value = cstring(over)
             redraw()
         return
     # an account moved: its new place goes into the hidden field pos
     let pos: InputElement = field_named("pos")
-    pos.value = cstring(with_position(str(pos.value), attr(node, "data_id"), at))
+    pos.value = cstring(with_position(str(pos.value), node.data_id, at))
     redraw()
 
 # A click with shift held picks an account to merge with others, or lets it go: its name goes
@@ -152,7 +171,7 @@ def clicked(e: Event):
     if node != nil and not has_class(node, "group"):
         e.stopPropagation()             # not an ordinary click: htmx must not see it
         let pick: InputElement = field_named("pick")
-        pick.value = cstring(attr(node, "data_name"))
+        pick.value = cstring(node.data_name)
         redraw()
         pick.value = cstring("")        # htmx has read the form by now: the next redraw picks nothing
 
