@@ -1,6 +1,6 @@
-# ROI_HTMX -- the JOINTJS_DEMO page, without JointJS
+# ROI_HTMX -- the ROI_JOINTJS page, without JointJS
 
-`EXAMPLES/JOINTJS_DEMO` draws a return-on-investment diagram with the JointJS
+`EXAMPLES/ROI_JOINTJS` draws a return-on-investment diagram with the JointJS
 library: boxes with fields in them, joined by arrows. This is the same page in
 the architecture of `TOOLS/ACCOUNTING` and `EXAMPLES/DIJKSTRA_HTMX`: the program
 is native, the diagram is an SVG that the server draws, and htmx carries each

@@ -436,7 +436,7 @@ So the rule is softer than it was:
 > **A program split across modules builds on both backends**, with the
 > differences above. Where a name must not clash, give it a name of its own.
 
-The multi-module projects (`CFMU/`, `TIMETABLE/`, `JOINTJS_DEMO/`, `PROJECT/`)
+The multi-module projects (`CFMU/`, `TIMETABLE/`, `ROI_JOINTJS/`, `PROJECT/`)
 were written for Nim and use what Nim gives them -- `PROJECT/` calls `sqrt`
 unqualified after `nimport math`, which is Nim's `math` and not Python's -- so
 not every one of them runs on Python. A module written to be shared says what

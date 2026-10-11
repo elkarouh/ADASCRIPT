@@ -168,7 +168,7 @@ history of this file if the reasoning behind one of them is ever wanted.
       component at transpile time with a pointer to `.parent`.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
-- [ ] `EXAMPLES/JOINTJS_DEMO/roi_glue.ady` crashes ady2py on `jsvar`, which the
+- [ ] `EXAMPLES/ROI_JOINTJS/roi_glue.ady` crashes ady2py on `jsvar`, which the
       grammar marks JS-backend-only. The file targets neither Python nor the
       Nim C backend (it does not compile there either), so this is a bad
       diagnostic rather than a missing feature: ady2py should say the construct
@@ -465,7 +465,7 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] two slips found making EXAMPLES/JOINTJS_DEMO run again and writing
+- [ ] two slips found making EXAMPLES/ROI_JOINTJS run again and writing
       EXAMPLES/ROI_HTMX (the same page, drawn by the server, no JointJS):
       (1) `.extend(...)` on any receiver becomes `.add(...)`
       (`_PY_UNIVERSAL_METHOD_TO_NIM` in hek_nim_expr.py), so JointJS's

@@ -1,4 +1,4 @@
-# EXAMPLES/ROI_HTMX: the JOINTJS_DEMO page without JointJS: the boxes and arrows are an
+# EXAMPLES/ROI_HTMX: the ROI_JOINTJS page without JointJS: the boxes and arrows are an
 # SVG the server draws, and htmx carries each change. Needs karax >= 1.5.0
 # (nimble install karax@1.5.0).
 #
