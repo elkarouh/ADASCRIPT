@@ -37,6 +37,22 @@ def data_from(e: Node) -> str:
 def data_to(e: Node) -> str:
     return attr(e, "data_to")
 
+# ...and written the same way, with a verb: `line.draw_line(a, b)`, `label.place_at(spot)`,
+# `form.fill("x", "120")`.
+
+# Draw the <path> LINE as a straight line from A to B (its d attribute: "M x1 y1 L x2 y2").
+def draw_line(line: Node, a: Spot, b: Spot):
+    line.setAttribute(cstring("d"), cstring(f"M {a.x:.0f} {a.y:.0f} L {b.x:.0f} {b.y:.0f}"))
+
+# Put the <text> LABEL at AT (its x and y attributes).
+def place_at(label: Node, at: Spot):
+    label.setAttribute(cstring("x"), cstring(f"{at.x:.0f}"))
+    label.setAttribute(cstring("y"), cstring(f"{at.y:.0f}"))
+
+# Put VALUE in the input NAME of FORM.
+def fill(form: Node, name: str, value: str):
+    InputElement(form.querySelector(cstring(f"input[name={name}]"))).value = cstring(value)
+
 # The node with that name: the <g class="node"> whose data_name is NAME.
 def node_named(name: str) -> Node:
     return document.querySelector(cstring(f"g.node[data_name=\"{name}\"]"))
@@ -57,10 +73,9 @@ def redraw_edges_of(node: Node, at: Spot):
             # the end that is NODE is at AT; the other end stays where it is
             let a: Spot = (at if ends[0] == name else spot_of(node_named(ends[0])))
             let b: Spot = (at if ends[1] == name else spot_of(node_named(ends[1])))
-            e.querySelector("path").setAttribute(cstring("d"), cstring(f"M {a.x:.0f} {a.y:.0f} L {b.x:.0f} {b.y:.0f}"))
-            let cost: Node = e.querySelector("text.cost")
-            cost.setAttribute(cstring("x"), cstring(f"{(a.x + b.x) / 2.0:.0f}"))
-            cost.setAttribute(cstring("y"), cstring(f"{(a.y + b.y) / 2.0 - 6.0:.0f}"))   # just above the line
+            e.querySelector("path").draw_line(a, b)
+            let middle: Spot = Spot(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0)   # just above the line
+            e.querySelector("text.cost").place_at(middle)
 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
@@ -70,18 +85,14 @@ def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
     redraw_edges_of(node, now)
     return now
 
-# Put VALUE in the hidden input NAME of the form #move.
-def set_field(name: str, value: str):
-    let field: InputElement = InputElement(document.querySelector(cstring(f"#move input[name={name}]")))
-    field.value = cstring(value)
-
 # NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
 # node's name and new centre, and its button #redraw sends it (hx-put="/nodes", see
 # dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
 def dropped(node: Node, at: Spot):
-    set_field("name", node.data_name)
-    set_field("x", f"{at.x:.0f}")
-    set_field("y", f"{at.y:.0f}")
+    let form: Node = document.querySelector("#move")
+    form.fill("name", node.data_name)
+    form.fill("x", f"{at.x:.0f}")
+    form.fill("y", f"{at.y:.0f}")
     document.querySelector("#redraw").click()
 
 draggable("g.node", "svg.graph", WIDTH, moved, dropped, no_click)
