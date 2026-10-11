@@ -30,10 +30,10 @@ const PRICES: [2013..2023]PriceRow = [
 ]
 
 # The boxes that can be dragged, with their size in the drawing's units (its viewBox is
-# WIDE by HIGH): the investment, a box for each product, and the box of the results, which
+# WIDE by HIGH, large, and shown one to one, so the page scrolls): the investment, a box for each product, and the box of the results, which
 # carries the results of each product with it.
-const WIDE: float = 900.0
-const HIGH: float = 680.0
+const WIDE: float = 3000.0
+const HIGH: float = 2000.0
 const BLOCKS: []str = ["investment", "gold", "bitcoin", "sp500", "overall"]
 const BLOCK_W: []float = [140.0, 140.0, 140.0, 140.0, 260.0]
 const BLOCK_H: []float = [230.0, 120.0, 120.0, 120.0, 520.0]

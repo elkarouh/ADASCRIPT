@@ -18,7 +18,7 @@ set_share(plan, 2, 0.0)                                                     # S&
 assert plan.pcts == [75.0, 0.0, 0.0]
 
 assert move_block(plan, "gold", 300.0, 200.0) == "" and plan.cx[1] == 300.0 and plan.cy[1] == 200.0
-assert move_block(plan, "gold", -50.0, 9999.0) == "" and plan.cx[1] == 70.0 and plan.cy[1] == 620.0     # kept inside the drawing
+assert move_block(plan, "gold", -50.0, 9999.0) == "" and plan.cx[1] == 70.0 and plan.cy[1] == 1940.0     # kept inside the drawing
 assert move_block(plan, "nothing", 1.0, 1.0) != ""
 
 # ---- the page, through the requests the server answers ----

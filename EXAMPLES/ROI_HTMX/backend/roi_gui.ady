@@ -169,6 +169,8 @@ def head_html(color: str) -> Html:
 def all_html(plan: Plan) -> Html:
     let r: Outcome = evaluate(plan)
     let box: str = f"0 0 {WIDE:.0f} {HIGH:.0f}"
+    let wide: str = f"{WIDE:.0f}"
+    let high: str = f"{HIGH:.0f}"
     html:
         div id="all":
             form id="move":
@@ -176,7 +178,7 @@ def all_html(plan: Plan) -> Html:
                 input type="hidden" name="x" value=""
                 input type="hidden" name="y" value=""
                 button type="button" id="redraw" class="redraw" data_hx_put="/move" data_hx_include="#move" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
-            svg viewBox=box class="drawing":
+            svg viewBox=box width=wide height=high class="drawing":
                 defs:
                     + head_html(INVEST_COLOR)
                     for color in COLORS:
@@ -194,7 +196,7 @@ def all_html(plan: Plan) -> Html:
 const STYLE: str = """
 * { font-family: sans-serif; }
 body { margin: 0; padding: 0; background-color: #f6f4f4; }
-svg.drawing { width: 100vw; height: 100vh; display: block; user-select: none; }
+svg.drawing { display: block; user-select: none; }
 rect.body, rect.node { stroke: #333; stroke-width: 2; }
 rect.node { cursor: grab; }
 foreignObject { pointer-events: none; }
