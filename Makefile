@@ -82,6 +82,7 @@ STANDALONE := \
     ownership_tour.ady \
     test_iters.ady \
     test_graphs.ady \
+    test_svg_path.ady \
     test_ansi.ady \
     test_queues.ady \
     test_regex.ady \
@@ -1415,6 +1416,9 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "STDLIB/svg_drag.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/svg_drag.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "STDLIB/svg_path.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/svg_path.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
 	@# html: blocks: the native build prints the page, which must hold one

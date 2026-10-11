@@ -1,0 +1,19 @@
+#!/usr/bin/env ady2nim
+# test_svg_path.ady -- tests for svg_path, the paths of an SVG drawing
+#
+#   ady2nim EXAMPLES/test_svg_path.ady -r
+
+from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
+
+# sideways: both ends flat, the controls half way across
+assert connector_d(0.0, 0.0, 100.0, 50.0) == "M 0.0 0.0 C 50.0 0.0 50.0 50.0 100.0 50.0"
+assert connector_d(0.0, 0.0, 100.0, 50.0, SIDEWAYS) == connector_d(0.0, 0.0, 100.0, 50.0)
+
+# stopping short: the head's room is taken off the far end
+assert connector_d(0.0, 0.0, 100.0, 50.0, SIDEWAYS, 10.0) == "M 0.0 0.0 C 45.0 0.0 45.0 50.0 90.0 50.0"
+
+# vertical: out of the start straight up (or down), turning 58% of the way, 44% across
+assert connector_d(10.0, 100.0, 110.0, 0.0, VERTICAL) == "M 10.0 100.0 C 10.0 42.0 54.0 0.0 110.0 0.0"
+assert connector_d(10.0, 0.0, 110.0, 100.0, VERTICAL) == "M 10.0 0.0 C 10.0 58.0 54.0 100.0 110.0 100.0"
+assert connector_d(10.0, 100.0, 110.0, 0.0, VERTICAL, 10.0) == "M 10.0 100.0 C 10.0 42.0 49.6 0.0 100.0 0.0"
+print "ok"

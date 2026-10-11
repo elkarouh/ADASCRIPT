@@ -9,8 +9,9 @@ A box that can be dragged is a <rect class="node" data_name=".." data_x=".." dat
 centre, in the drawing's units); the elements that belong to it, the rectangle itself and the
 form on it, carry data_block=".." with the same name. An arrow is a <g class="arrow"> that says
 which blocks it joins and where on each (data_a, data_ax, data_ay for its start: the block's
-name and the distance from its top left corner; data_b, data_bx, data_by for its end), and
-holds two <path>s.
+name and the distance from its top left corner; data_b, data_bx, data_by for its end; data_leave,
+how it leaves its start, and data_stop, how short of its end it stops), and holds two <path>s,
+which svg_path's connector_d draws, as the server does.
 
 While a box is dragged it moves with everything that belongs to it, and the arrows that end
 at it are drawn again, here in the browser, at once. Letting go writes the block's name and
@@ -21,6 +22,7 @@ Only the rectangle can be taken hold of, not the fields on it, so they can still
 The drag itself is the standard library's svg_drag, and the page its browser module.
 """
 from browser import Element_T, page, find, all, data, number, fill, press
+from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from svg_drag import Unit_T, Spot, spot_of, between, shift, trace, no_click, draggable
 
 const WIDTH: Unit_T = Unit_T(3000.0)    # the drawing's size (the svg's viewBox, and its size on the page)
@@ -44,19 +46,6 @@ def block_named(name: str) -> Element_T:
 def corner_of(block: Element_T, at: Spot) -> Spot:
     return Spot(x=at.x - Unit_T(block.number("width") / 2.0), y=at.y - Unit_T(block.number("height") / 2.0))
 
-# The curve from A to B, as roi_gui.ady draws it: it stops a head's length short of B, where
-# the arrow's head begins, and with UP it leaves A straight up or down, not sideways.
-const HEAD: float = 13.0
-
-def curve(a: Spot, b: Spot, up: bool) -> str:
-    let end: float = float(b.x) - HEAD
-    let mid: float = (float(a.x) + end) / 2.0
-    if up:
-        let turn: float = float(a.y) + float(b.y - a.y) * 0.58
-        let across: float = float(a.x) + (end - float(a.x)) * 0.44
-        return f"M {a.x:.1f} {a.y:.1f} C {a.x:.1f} {turn:.1f} {across:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
-    return f"M {a.x:.1f} {a.y:.1f} C {mid:.1f} {a.y:.1f} {mid:.1f} {b.y:.1f} {end:.1f} {b.y:.1f}"
-
 # Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
 # being dragged (NODE), else where the server drew it; OFFSET_X and OFFSET_Y from its top left.
 def end_of(node: Element_T, at: Spot, name: str, dx: float, dy: float) -> Spot:
@@ -72,8 +61,9 @@ def redraw_arrows_of(node: Element_T, at: Spot):
         if name in [arrow.data_a, arrow.data_b]:
             let a: Spot = end_of(node, at, arrow.data_a, arrow.number("data_ax"), arrow.number("data_ay"))
             let b: Spot = end_of(node, at, arrow.data_b, arrow.number("data_bx"), arrow.number("data_by"))
+            let leave: Leave_T = (VERTICAL if arrow.data("leave") == "vertical" else SIDEWAYS)
             for path in arrow.all("path"):
-                path.trace(curve(a, b, arrow.data("up") == "1"))
+                path.trace(connector_d(float(a.x), float(a.y), float(b.x), float(b.y), leave, arrow.number("data_stop")))
 
 # While NODE is dragged: its block goes where the mouse takes it, kept inside the drawing, and
 # the arrows follow.
