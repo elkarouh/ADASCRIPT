@@ -1,0 +1,49 @@
+#!/usr/bin/env ady2nim
+"""server -- the one place that knows about HTTP; what a request does is roi_events.ady.
+
+    make app [PORT=n]  (or: ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8820/
+
+    GET    /            the page: a script tag and a div that loads /all
+    GET    /all         the drawing, after a field changed   (changed, value)
+    GET    /htmx.min.js htmx itself
+
+Every answer but the script is the whole drawing, which htmx swaps in.
+"""
+from asyncdispatch nimport complete, newFuture, Port, waitFor
+from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from backend/roi_gui import shell_text
+from backend/roi_events import answer
+
+async def handler(req: Request):
+    let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
+    let path: str = req.url.path
+    if path == "/":
+        await req.respond(Http200, shell_text(), html_type)
+    elif path == "/htmx.min.js":
+        let script: str | !PathFailure_T = (Path("frontend") / "htmx.min.js").read_text()
+        if script is PathFailure_T:
+            await req.respond(Http404, "frontend/htmx.min.js is not here: run from the demo's directory")
+        else:
+            await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
+    else:
+        let page: str = answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
+        if page == "":
+            await req.respond(Http404, "not found")
+        else:
+            await req.respond(Http200, page, html_type)
+
+def main():
+    var port: int = 8820
+    let args: []str = $@
+    if len(args) > 0:
+        let n: int | !ParseFailure_T = parse_int(args[0])
+        if n is ParseFailure_T:
+            pass
+        else:
+            port = n
+    print f"http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    var server: AsyncHttpServer = newAsyncHttpServer()
+    waitFor(server.serve(Port(port), handler))
+
+if __name__ == "__main__":
+    main()

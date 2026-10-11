@@ -1,0 +1,83 @@
+#!/usr/bin/env ady2nim
+"""roi_model -- what an investment of FUNDS in a year would be worth now; no HTML, no HTTP.
+
+The money is split between three products, in percentages that add up to 100. When one
+percentage is changed, the others give or take the difference, first one first, and none
+goes below 0.
+"""
+
+const CURRENT_YEAR: int = 2023
+const FIRST_YEAR: int = 2013
+const PRODUCTS: []str = ["gold", "bitcoin", "sp500"]
+
+type PriceRow is tuple:
+    gold:    float
+    bitcoin: float
+    sp500:   float
+
+const PRICES: [2013..2023]PriceRow = [
+    2013: (gold: 1685.50, bitcoin:    13.51, sp500: 1480.40),
+    2014: (gold: 1219.75, bitcoin:   771.40, sp500: 1822.36),
+    2015: (gold: 1184.25, bitcoin:   314.25, sp500: 2028.18),
+    2016: (gold: 1060.20, bitcoin:   434.33, sp500: 1918.60),
+    2017: (gold: 1162.00, bitcoin:   998.33, sp500: 2275.12),
+    2018: (gold: 1312.80, bitcoin: 13657.20, sp500: 2789.80),
+    2019: (gold: 1287.20, bitcoin:  3800.00, sp500: 2607.39),
+    2020: (gold: 1520.55, bitcoin:  7197.92, sp500: 3278.20),
+    2021: (gold: 1947.60, bitcoin: 29624.63, sp500: 3793.75),
+    2022: (gold: 1800.10, bitcoin: 47434.29, sp500: 4573.82),
+    2023: (gold: 1824.16, bitcoin: 16610.44, sp500: 3960.66),
+]
+
+# What the investor chose: the money, the year it was invested, and the share of each product.
+type Plan is record:
+    funds: float
+    year:  int
+    pcts:  []float                  # one for each of PRODUCTS
+
+# What it is worth now, for one product and for the whole.
+type Outcome is record:
+    values: []float
+    rois:   []float
+    total:  float
+    roi:    float
+
+def new_plan() -> Plan:
+    return Plan(100.0, 2018, [25.0, 25.0, 25.0])
+
+def price_of(year: int, product: str) -> float:
+    let row: PriceRow = PRICES[year]
+    case product:
+        when "gold":
+            return row.gold
+        when "bitcoin":
+            return row.bitcoin
+        when others:
+            return row.sp500
+
+def roi_of(cost: float, value: float) -> float:
+    if cost == 0.0:
+        return 0.0
+    return (value - cost) / cost * 100.0
+
+def evaluate(plan: Plan) -> Outcome:
+    var values: []float = []
+    var rois: []float = []
+    var total: float = 0.0
+    for i in 0 ..< len(PRODUCTS):
+        let cost: float = plan.funds * plan.pcts[i] / 100.0
+        let value: float = cost * price_of(CURRENT_YEAR, PRODUCTS[i]) / price_of(plan.year, PRODUCTS[i])
+        values.append(value)
+        rois.append(roi_of(cost, value))
+        total += value
+    return Outcome(values, rois, total, roi_of(plan.funds, total))
+
+# Set the share of product NUMBER to PCT, and let the others give or take the difference.
+def set_share(plan: Plan, number: int, pct: float):
+    var diff: float = plan.pcts[number] - pct
+    plan.pcts[number] = pct
+    for i in 0 ..< len(PRODUCTS):
+        if i != number:
+            let moved: float = plan.pcts[i] + diff
+            plan.pcts[i] = max(moved, 0.0)
+            diff = (moved if moved < 0.0 else 0.0)

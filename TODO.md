@@ -465,6 +465,21 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
+- [ ] two slips found making EXAMPLES/JOINTJS_DEMO run again and writing
+      EXAMPLES/ROI_HTMX (the same page, drawn by the server, no JointJS):
+      (1) `.extend(...)` on any receiver becomes `.add(...)`
+      (`_PY_UNIVERSAL_METHOD_TO_NIM` in hek_nim_expr.py), so JointJS's
+      `dia["ElementView"].extend({...})` -- a method of a `JsObject` -- crashed
+      the page ("add is not a function") and nothing was drawn. The demo now
+      goes round it with `["extend"].call(dia["ElementView"], {...})`; the
+      mapping should leave a `JsObject` receiver alone. (2) an `html:` block
+      takes `+ text("...")` for bare text but not a bare string
+      (`"What % did you invest in "` -> `add(tmp, "...")`, "type mismatch"), so
+      text mixed with tags, as in `label: "..." strong: ...`, has no plain
+      spelling. Also seen: the CSS in a `style:` block comes out
+      HTML-escaped (`"Segoe UI"` -> `&quot;Segoe UI&quot;`), which breaks the
+      declaration. Karax's `style=` attribute is a typed `VStyle`, so
+      `style="fill:#fff"` is refused; classes and a `<style>` element do.
 - [x] Nim: a `T | !F` passed as an *argument* whose value is a plain T or E
       -- `f(3)` where f takes `int | !Failure_T` -- is typed from the
       parameter (EXAMPLES/test_union_args.ady).

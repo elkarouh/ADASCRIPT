@@ -1,0 +1,33 @@
+#!/usr/bin/env ady2nim
+"""The model, the page and the requests, with no server running: ady2nim c -r test_roi.ady"""
+from backend/roi_model import Plan, Outcome, evaluate, new_plan, set_share
+from backend/roi_events import answer
+
+# ---- the model ----
+var plan: Plan = new_plan()
+let r: Outcome = evaluate(plan)
+assert abs(r.values[0] - 100.0 * 0.25 * 1824.16 / 1312.80) < 0.0001        # gold, bought in 2018
+assert abs(r.total - (r.values[0] + r.values[1] + r.values[2])) < 0.0001
+assert abs(r.roi - (r.total - 100.0)) < 0.0001                              # the whole is 100, so ROI is the gain in %
+
+set_share(plan, 0, 40.0)                                                    # gold up by 15: gold takes it from bitcoin first
+assert plan.pcts == [40.0, 10.0, 25.0]
+set_share(plan, 0, 70.0)                                                    # up by 30: bitcoin gives 10 and stops at 0, S&P 500 gives the rest
+assert plan.pcts == [70.0, 0.0, 5.0]
+set_share(plan, 2, 0.0)                                                     # S&P 500 down by 5: the first product takes it
+assert plan.pcts == [75.0, 0.0, 0.0]
+
+# ---- the page, through the requests the server answers ----
+let first: str = answer("GET", "/all", "")
+assert "<svg" in first and "Investment" in first and "S&amp;P 500" in first
+assert "data-hx-get=\"/all\"" in first
+assert "value=\"2018\" selected" in first or "selected=\"selected\" value=\"2018\"" in first
+assert "34.74" in answer("GET", "/all", "")                                   # gold's value in the sample
+assert "value=\"40\"" in answer("GET", "/all", "changed=gold&value=40")
+assert "value=\"10\"" in answer("GET", "/all", "changed=gold&value=40")     # bitcoin gave 15
+assert "value=\"500\"" in answer("GET", "/all", "changed=funds&value=500")
+assert "2020" in answer("GET", "/all", "changed=year&value=2020")
+assert "value=\"500\"" in answer("GET", "/all", "changed=year&value=1999")  # an impossible year is ignored, the rest stays
+assert "value=\"25\"" in answer("POST", "/reset", "")
+assert answer("GET", "/nowhere", "") == ""
+print "ok"

@@ -1,0 +1,184 @@
+#!/usr/bin/env ady2nim
+"""roi_gui -- the page as HTML the server draws, for htmx to swap in; no JointJS, no script of our own.
+
+The page is one SVG: boxes (rects with a form inside, in a foreignObject) joined by arrows
+(paths). The browser draws it and nothing more. A field that is changed sends GET /all with
+its value (`value`) and what it is (`changed`); the server works it out and sends the whole
+drawing again, which htmx swaps in (see server.ady).
+"""
+from uri nimport decodeUrl
+from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, PRODUCTS, Plan, Outcome, evaluate
+
+# The value of KEY in a query or a form body ("a=1&b=2"), or "".
+def field_of(text: str, key: str) -> str:
+    for pair in text.split("&"):
+        let at: int = pair.find("=")
+        if at > 0 and pair[:at] == key:
+            return decodeUrl(pair[at + 1:])
+    return ""
+
+const LABELS: []str = ["Gold", "Bitcoin", "S&P 500"]
+const COLORS: []str = ["#F7E3AE", "#9C9EC8", "#FFCCD6"]
+const INVEST_COLOR: str = "#D4D9D7"
+
+# Where the boxes are: the investment, the three products, the performance of each and of all.
+const INVEST_X: int = 20
+const INVEST_Y: int = 240
+const PRODUCT_X: int = 290
+const PRODUCT_Y: []int = [60, 290, 520]
+const PERF_X: int = 640
+const PERF_Y: []int = [170, 295, 420]
+const OVERALL_X: int = 610
+const OVERALL_Y: int = 110
+
+# A number as a person writes it: 25, not 25.0; 12.5 stays.
+def plain(v: float) -> str:
+    if v == float(int(v)):
+        return str(int(v))
+    return f"{v:.2f}"
+
+def money(v: float) -> str:
+    return f"{v:.2f}"
+
+# The arrow from (X1, Y1) to (X2, Y2): a dark outline, the colour on it, and the head.
+def arrow_html(x1: int, y1: int, x2: int, y2: int, color: str) -> Html:
+    let mid: int = (x1 + x2) // 2
+    let d: str = f"M {x1} {y1} C {mid} {y1} {mid} {y2} {x2} {y2}"
+    html:
+        g class="arrow":
+            path class="outline" d=d
+            path class="line" d=d stroke=color marker_end="url(#head)"
+
+# A box of W by H at (X, Y), filled with COLOR, with what is in it written as HTML.
+def box_html(x: int, y: int, w: int, h: int, color: str, inside: Html) -> Html:
+    let wide: str = str(w)
+    let high: str = str(h)
+    html:
+        g transform=f"translate({x},{y})":
+            rect class="body" rx="10" ry="10" width=wide height=high fill=color
+            foreignObject width=wide height=high:
+                div class="form":
+                    + inside
+
+def invest_html(plan: Plan) -> Html:
+    let funds_vals: str = "{\"changed\": \"funds\"}"
+    let year_vals: str = "{\"changed\": \"year\"}"
+    var years: []int = []
+    var year: int = FIRST_YEAR
+    while year <= CURRENT_YEAR:
+        years.append(year)
+        year += 1
+    html:
+        div:
+            h2: "Investment"
+            label: "How much did you invest?"
+            input type="number" name="value" value=plain(plan.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=funds_vals data_hx_target="#all" data_hx_swap="outerHTML"
+            label: "What year it was?"
+            select name="value" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=year_vals data_hx_target="#all" data_hx_swap="outerHTML":
+                for y in years:
+                    if y == plan.year:
+                        option value=str(y) selected="selected": str(y)
+                    else:
+                        option value=str(y): str(y)
+
+def product_html(plan: Plan, i: int) -> Html:
+    let vals: str = "{\"changed\": \"" + PRODUCTS[i] + "\"}"
+    html:
+        div:
+            label:
+                + text("What % did you invest in ")
+                strong: LABELS[i]
+                + text("?")
+            span class="unit":
+                input type="number" name="value" value=plain(plan.pcts[i]) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML"
+                span: " %"
+
+def perf_html(r: Outcome, i: int) -> Html:
+    html:
+        div:
+            h3: LABELS[i]
+            div class="fields":
+                label: "Value"
+                output: money(r.values[i])
+                label: "ROI"
+                output: money(r.rois[i])
+
+def overall_html(r: Outcome) -> Html:
+    html:
+        div class="overall":
+            p:
+                + text("This is your portfolio now in ")
+                strong: str(CURRENT_YEAR)
+                + text(".")
+            label: "Your overall performance of investment is:"
+            div class="fields":
+                label: "Value"
+                output: money(r.total)
+                label: "ROI"
+                output: money(r.roi)
+
+def all_html(plan: Plan) -> Html:
+    let r: Outcome = evaluate(plan)
+    html:
+        div id="all":
+            svg viewBox="0 0 900 680" class="drawing":
+                defs:
+                    marker id="head" viewBox="0 0 12 12" refX="12" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
+                        path d="M 0 0 L 12 6 L 0 12 z"
+                + box_html(INVEST_X, INVEST_Y, 140, 230, INVEST_COLOR, invest_html(plan))
+                for i in 0 ..< 3:
+                    + box_html(PRODUCT_X, PRODUCT_Y[i], 140, 120, COLORS[i], product_html(plan, i))
+                + box_html(OVERALL_X, OVERALL_Y, 260, 520, "#EAECEA", overall_html(r))
+                for i in 0 ..< 3:
+                    + box_html(PERF_X, PERF_Y[i], 200, 100, INVEST_COLOR, perf_html(r, i))
+                for i in 0 ..< 3:
+                    + arrow_html(INVEST_X + 140, INVEST_Y + 40 + 75 * i, PRODUCT_X, PRODUCT_Y[i] + 60, INVEST_COLOR)
+                    + arrow_html(PRODUCT_X + 140, PRODUCT_Y[i] + 60, PERF_X, PERF_Y[i] + 50, COLORS[i])
+
+const STYLE: str = """
+body { font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; color: #1f2933; background: #f6f4f4;
+       margin: 0; padding: 1em; }
+h1 { font-size: 1.4em; margin: 0 0 0.2em; }
+p.about { color: #616e7c; margin: 0 0 1em; }
+svg.drawing { width: 100%; max-width: 62em; height: auto; display: block; margin: 0 auto; }
+rect.body { stroke: #333; stroke-width: 2; }
+path.outline { fill: none; stroke: #000; stroke-width: 8; stroke-linejoin: round; }
+path.line { fill: none; stroke-width: 4; stroke-linejoin: round; }
+marker path { fill: #000; }
+div.form { font: 13px system-ui, -apple-system, Helvetica, Arial, sans-serif; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; height: 100%; box-sizing: border-box; }
+div.form h2 { font-size: 18px; text-align: center; margin: 4px 0 10px; }
+div.form h3 { font-size: 13px; text-align: center; margin: 0 0 2px; }
+div.form label { display: block; }
+div.fields { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+div.overall > label { text-align: center; }
+div.form input, div.form select, div.form output { display: block; box-sizing: border-box; width: 100%; font: inherit; text-align: right;
+       border: 1px solid #888; border-radius: 4px; padding: 2px 4px; background: #fff; min-height: 1.6em; }
+div.form span.unit { display: flex; align-items: center; gap: 4px; }
+div.form span.unit input { width: 5em; }
+div.overall { display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; height: 100%; }
+div.overall p { text-align: center; margin: 0 0 auto; }
+
+"""
+
+def shell() -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: "Return of investment"
+                style: STYLE
+                script src="/htmx.min.js"
+            body:
+                h1: "Return of investment"
+                p class="about": "Change the money, the year or a share; the other shares adjust. Drawn by the server, no JointJS."
+                div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
+
+# An html: block writes an attribute with underscores (data_hx_get); htmx wants hyphens.
+def hyphens(text: str) -> str:
+    return text.replace("data_hx_", "data-hx-").replace("marker_end", "marker-end")
+
+def shell_text() -> str:
+    return "<!doctype html>" + hyphens(str(shell()))
+
+def all_text(plan: Plan) -> str:
+    return hyphens(str(all_html(plan)))
