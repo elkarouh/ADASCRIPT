@@ -41,10 +41,15 @@ def left_of(plan: Plan, number: int) -> float:
 def top_of(plan: Plan, number: int) -> float:
     return plan.cy[number] - BLOCK_H[number] / 2.0
 
-# The curve from (X1, Y1) to (X2, Y2), leaving and arriving sideways.
+# The curve from (X1, Y1) to (X2, Y2), leaving and arriving sideways. It stops a head's length
+# short of X2, where the head begins: the head's tip is at X2, the box's edge, and the lines
+# do not run on under it. (frontend/roi_js_events.ady draws it the same way.)
+const HEAD: float = 12.0
+
 def curve(x1: float, y1: float, x2: float, y2: float) -> str:
-    let mid: float = (x1 + x2) / 2.0
-    return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {x2:.1f} {y2:.1f}"
+    let end: float = x2 - HEAD
+    let mid: float = (x1 + end) / 2.0
+    return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
 
 # The arrow from block FROM to block TO: a dark outline, the colour on it, and the head. It
 # starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's. The page
@@ -145,7 +150,7 @@ def all_html(plan: Plan) -> Html:
                 button type="button" id="redraw" class="redraw" data_hx_put="/move" data_hx_include="#move" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
             svg viewBox=box class="drawing":
                 defs:
-                    marker id="head" viewBox="0 0 12 12" refX="12" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
+                    marker id="head" viewBox="0 0 12 12" refX="0" refY="6" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto":
                         path d="M 0 0 L 12 6 L 0 12 z"
                 + box_html("investment", left_of(plan, 0), top_of(plan, 0), BLOCK_W[0], BLOCK_H[0], INVEST_COLOR, invest_html(plan), True)
                 for i in 0 ..< 3:
