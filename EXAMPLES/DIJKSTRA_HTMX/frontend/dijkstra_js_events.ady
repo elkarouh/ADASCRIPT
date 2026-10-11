@@ -29,10 +29,15 @@ const MARGIN: Unit_T = Unit_T(30.0)             # how near its edge a node may g
 def node_named(name: str) -> Node:
     return document.querySelector(cstring(f"g.node[data_name=\"{name}\"]"))
 
-# The edges of node NAME drawn again as if it were at AT, and their costs moved to their
-# middles. Only the browser's copy changes: the server is told once, when the mouse is let go.
+# Redraw, in the browser, the edges that end at the node NAME, as if it stood at AT.
+#
+# While a node is dragged, the server is not asked (it is told once, when the mouse is let
+# go); but the node's edges must not be left pointing at where it was. So on every mouse move
+# each edge of NAME is drawn again from AT to its other end, which has not moved, and its cost
+# is put back at the line's middle. Edges that do not touch NAME are left alone.
+#
 # An edge is <g data_from="A" data_to="B"> holding a <path> (the line) and a <text class="cost">.
-def follow(name: str, at: Spot):
+def redraw_edges_of(name: str, at: Spot):
     for e in document.querySelectorAll("g[data_from]"):
         let ends: (str, str) = (attr(e, "data_from"), attr(e, "data_to"))
         if name in [ends[0], ends[1]]:
@@ -49,7 +54,7 @@ def follow(name: str, at: Spot):
 def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
     let now: Spot = Spot(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
     shift(node, centre, now)
-    follow(attr(node, "data_name"), now)
+    redraw_edges_of(attr(node, "data_name"), now)
     return now
 
 # Put VALUE in the hidden input NAME of the form #move.

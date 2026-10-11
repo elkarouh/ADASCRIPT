@@ -60,7 +60,7 @@ def account_at(at: Spot, from_name: str) -> str:
 # accounts (data_name, data_x, data_y, data_h) and the arrows (<g data_from=".." data_to="..">,
 # each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
 # letting go asks the server, which draws the page again, and it comes out the same.
-def follow(name: str, at: Spot):
+def reroute_arrows(name: str, at: Spot):
     # the accounts: their names, centres (NAME's at AT) and half heights, in page order
     var names: []str = []
     var points: []Point = []
@@ -122,7 +122,7 @@ def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
         return wanted                   # the arrow's tip
     let now: Spot = Spot(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
     shift(node, centre, now)
-    follow(attr(node, "data_name"), now)
+    reroute_arrows(attr(node, "data_name"), now)
     return now
 
 # NODE let go at AT.
