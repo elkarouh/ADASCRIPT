@@ -1,0 +1,53 @@
+#!/usr/bin/env ady2nim
+"""roi_layout -- where the boxes are drawn: what a drag changes, and nothing the model knows.
+
+The model (roi_model.ady) has no places. The drawing has five boxes that can be dragged, each
+called by a name: the investment, a box for each product, and the box of the results, which
+carries the results of each product with it. A Layout is where their centres are, in the
+drawing's units (its viewBox is WIDE by HIGH, large and shown one to one, so the page scrolls).
+"""
+const WIDE: float = 3000.0
+const HIGH: float = 2000.0
+
+const BLOCKS: []str = ["investment", "gold", "bitcoin", "sp500", "overall"]
+const BLOCK_W: []float = [140.0, 140.0, 140.0, 140.0, 260.0]
+const BLOCK_H: []float = [230.0, 120.0, 120.0, 120.0, 520.0]
+
+type Layout is record:
+    cx: []float                     # the centre of each of the BLOCKS
+    cy: []float
+
+def new_layout() -> Layout:
+    return Layout([90.0, 360.0, 360.0, 360.0, 740.0], [355.0, 120.0, 350.0, 580.0, 370.0])
+
+# Which of the BLOCKS is called NAME: its number, or -1.
+def index_of(name: str) -> int:
+    for i in 0 ..< len(BLOCKS):
+        if BLOCKS[i] == name:
+            return i
+    return -1
+
+def width_of(name: str) -> float:
+    return BLOCK_W[index_of(name)]
+
+def height_of(name: str) -> float:
+    return BLOCK_H[index_of(name)]
+
+# Where the block NAME has its top left corner.
+def left_of(layout: Layout, name: str) -> float:
+    let i: int = index_of(name)
+    return layout.cx[i] - BLOCK_W[i] / 2.0
+
+def top_of(layout: Layout, name: str) -> float:
+    let i: int = index_of(name)
+    return layout.cy[i] - BLOCK_H[i] / 2.0
+
+# Move the block NAME so that its centre is at (X, Y), kept inside the drawing. "" when it is
+# done, or what was wrong.
+def move_block(layout: Layout, name: str, x: float, y: float) -> str:
+    let i: int = index_of(name)
+    if i < 0:
+        return f"There is no block {name}."
+    layout.cx[i] = max(BLOCK_W[i] / 2.0, min(WIDE - BLOCK_W[i] / 2.0, x))
+    layout.cy[i] = max(BLOCK_H[i] / 2.0, min(HIGH - BLOCK_H[i] / 2.0, y))
+    return ""

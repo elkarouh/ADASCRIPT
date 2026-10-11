@@ -1,25 +1,35 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_roi.ady"""
-from backend/roi_model import Plan, Outcome, evaluate, move_block, new_plan, set_share
+from backend/roi_model import GOLD, BITCOIN, SP500, Outcome, Portfolio, evaluate, new_portfolio, set_share, set_year
+from backend/roi_layout import Layout, move_block, new_layout
 from backend/roi_events import answer
 
 # ---- the model ----
-var plan: Plan = new_plan()
-let r: Outcome = evaluate(plan)
-assert abs(r.values[0] - 100.0 * 0.25 * 1824.16 / 1312.80) < 0.0001        # gold, bought in 2018
-assert abs(r.total - (r.values[0] + r.values[1] + r.values[2])) < 0.0001
-assert abs(r.roi - (r.total - 100.0)) < 0.0001                              # the whole is 100, so ROI is the gain in %
+var p: Portfolio = new_portfolio()
+let r: Outcome = evaluate(p)
+let gold: float = r.list_of_outcomes[0].performance.value
+assert abs(gold - 100.0 * 0.25 * 1824.16 / 1312.80) < 0.0001                 # gold, bought in 2018
+let total: float = r.list_of_outcomes[0].performance.value + r.list_of_outcomes[1].performance.value + r.list_of_outcomes[2].performance.value
+assert abs(r.overall_performance.value - total) < 0.0001
+assert abs(r.overall_performance.roi - (total - 100.0)) < 0.0001             # the whole is 100, so ROI is the gain in %
 
-set_share(plan, 0, 40.0)                                                    # gold up by 15: gold takes it from bitcoin first
-assert plan.pcts == [40.0, 10.0, 25.0]
-set_share(plan, 0, 70.0)                                                    # up by 30: bitcoin gives 10 and stops at 0, S&P 500 gives the rest
-assert plan.pcts == [70.0, 0.0, 5.0]
-set_share(plan, 2, 0.0)                                                     # S&P 500 down by 5: the first product takes it
-assert plan.pcts == [75.0, 0.0, 0.0]
+def shares_of(portfolio: Portfolio) -> []float:
+    return [portfolio.shares[0].percentage, portfolio.shares[1].percentage, portfolio.shares[2].percentage]
 
-assert move_block(plan, "gold", 300.0, 200.0) == "" and plan.cx[1] == 300.0 and plan.cy[1] == 200.0
-assert move_block(plan, "gold", -50.0, 9999.0) == "" and plan.cx[1] == 70.0 and plan.cy[1] == 1940.0     # kept inside the drawing
-assert move_block(plan, "nothing", 1.0, 1.0) != ""
+set_share(p, GOLD, 40.0)                                                    # gold up by 15: gold takes it from bitcoin first
+assert shares_of(p) == [40.0, 10.0, 25.0]
+set_share(p, GOLD, 70.0)                                                    # up by 30: bitcoin gives 10 and stops at 0, S&P 500 gives the rest
+assert shares_of(p) == [70.0, 0.0, 5.0]
+set_share(p, SP500, 0.0)                                                    # S&P 500 down by 5: the first product takes it
+assert shares_of(p) == [75.0, 0.0, 0.0]
+assert set_year(p, 2020) == "" and p.investment.year == 2020
+assert set_year(p, 1999) != "" and p.investment.year == 2020                # no prices for 1999: refused, nothing changed
+
+# ---- the layout: where the boxes are, which the model knows nothing of ----
+var l: Layout = new_layout()
+assert move_block(l, "gold", 300.0, 200.0) == "" and l.cx[1] == 300.0 and l.cy[1] == 200.0
+assert move_block(l, "gold", -50.0, 9999.0) == "" and l.cx[1] == 70.0 and l.cy[1] == 1940.0     # kept inside the drawing
+assert move_block(l, "nothing", 1.0, 1.0) != ""
 
 # ---- the page, through the requests the server answers ----
 let first: str = answer("GET", "/all", "")

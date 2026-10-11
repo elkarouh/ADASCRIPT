@@ -1,14 +1,43 @@
 #!/usr/bin/env ady2nim
-"""roi_model -- what an investment of FUNDS in a year would be worth now; no HTML, no HTTP.
+"""roi_model -- what an investment would be worth now; no HTML, no HTTP, nothing about where it is drawn.
 
-The money is split between three products, in percentages that add up to 100. When one
-percentage is changed, the others give or take the difference, first one first, and none
-goes below 0.
+An Investment is some money put in at a year. It is split between three products, in
+percentages (an InvestmentPercentage each) that add up to 100: when one is changed, the
+others give or take the difference, first one first, and none goes below 0. That rule is
+about the three together, so a Portfolio, which holds them with the investment, owns it.
+evaluate() says what a Portfolio is worth now: an Outcome, one ProductOutcome for each
+product and the performance of the whole.
 """
 
 const CURRENT_YEAR: int = 2023
 const FIRST_YEAR: int = 2013
-const PRODUCTS: []str = ["gold", "bitcoin", "sp500"]
+
+type Product_T is enum GOLD, BITCOIN, SP500
+
+type Investment is record:
+    funds: float
+    year:  int
+
+type InvestmentPercentage is record:
+    kind:       Product_T
+    percentage: float
+
+type Portfolio is record:
+    investment: Investment
+    shares:     []InvestmentPercentage          # one for each product, in the order of Product_T
+
+# What something is worth now, and what it earned, in percent of what was put in.
+type Performance is record:
+    value: float
+    roi:   float
+
+type ProductOutcome is record:
+    kind:        Product_T
+    performance: Performance
+
+type Outcome is record:
+    list_of_outcomes:    []ProductOutcome        # one for each product
+    overall_performance: Performance
 
 type PriceRow is tuple:
     gold:    float
@@ -29,41 +58,19 @@ const PRICES: [2013..2023]PriceRow = [
     2023: (gold: 1824.16, bitcoin: 16610.44, sp500: 3960.66),
 ]
 
-# The boxes that can be dragged, with their size in the drawing's units (its viewBox is
-# WIDE by HIGH, large, and shown one to one, so the page scrolls): the investment, a box for each product, and the box of the results, which
-# carries the results of each product with it.
-const WIDE: float = 3000.0
-const HIGH: float = 2000.0
-const BLOCKS: []str = ["investment", "gold", "bitcoin", "sp500", "overall"]
-const BLOCK_W: []float = [140.0, 140.0, 140.0, 140.0, 260.0]
-const BLOCK_H: []float = [230.0, 120.0, 120.0, 120.0, 520.0]
+# 100 invested in 2018, a quarter in each product.
+def new_portfolio() -> Portfolio:
+    var shares: []InvestmentPercentage = []
+    for kind in Product_T:
+        shares.append(InvestmentPercentage(kind, 25.0))
+    return Portfolio(Investment(100.0, 2018), shares)
 
-# What the investor chose: the money, the year it was invested, and the share of each product;
-# and where each of the BLOCKS is, by its centre.
-type Plan is record:
-    funds: float
-    year:  int
-    pcts:  []float                  # one for each of PRODUCTS
-    cx:    []float                  # one for each of BLOCKS
-    cy:    []float
-
-# What it is worth now, for one product and for the whole.
-type Outcome is record:
-    values: []float
-    rois:   []float
-    total:  float
-    roi:    float
-
-def new_plan() -> Plan:
-    return Plan(100.0, 2018, [25.0, 25.0, 25.0],
-                [90.0, 360.0, 360.0, 360.0, 740.0], [355.0, 120.0, 350.0, 580.0, 370.0])
-
-def price_of(year: int, product: str) -> float:
+def price_of(year: int, kind: Product_T) -> float:
     let row: PriceRow = PRICES[year]
-    case product:
-        when "gold":
+    case kind:
+        when GOLD:
             return row.gold
-        when "bitcoin":
+        when BITCOIN:
             return row.bitcoin
         when others:
             return row.sp500
@@ -73,34 +80,32 @@ def roi_of(cost: float, value: float) -> float:
         return 0.0
     return (value - cost) / cost * 100.0
 
-def evaluate(plan: Plan) -> Outcome:
-    var values: []float = []
-    var rois: []float = []
+def evaluate(portfolio: Portfolio) -> Outcome:
+    var outcomes: []ProductOutcome = []
     var total: float = 0.0
-    for i in 0 ..< len(PRODUCTS):
-        let cost: float = plan.funds * plan.pcts[i] / 100.0
-        let value: float = cost * price_of(CURRENT_YEAR, PRODUCTS[i]) / price_of(plan.year, PRODUCTS[i])
-        values.append(value)
-        rois.append(roi_of(cost, value))
+    for share in portfolio.shares:
+        let cost: float = portfolio.investment.funds * share.percentage / 100.0
+        let value: float = cost * price_of(CURRENT_YEAR, share.kind) / price_of(portfolio.investment.year, share.kind)
+        outcomes.append(ProductOutcome(share.kind, Performance(value, roi_of(cost, value))))
         total += value
-    return Outcome(values, rois, total, roi_of(plan.funds, total))
+    return Outcome(outcomes, Performance(total, roi_of(portfolio.investment.funds, total)))
 
-# Set the share of product NUMBER to PCT, and let the others give or take the difference.
-def set_share(plan: Plan, number: int, pct: float):
-    var diff: float = plan.pcts[number] - pct
-    plan.pcts[number] = pct
-    for i in 0 ..< len(PRODUCTS):
-        if i != number:
-            let moved: float = plan.pcts[i] + diff
-            plan.pcts[i] = max(moved, 0.0)
+# Set the share of KIND to PCT, and let the others give or take the difference.
+def set_share(portfolio: Portfolio, kind: Product_T, pct: float):
+    var diff: float = 0.0
+    for i in 0 ..< len(portfolio.shares):
+        if portfolio.shares[i].kind == kind:
+            diff = portfolio.shares[i].percentage - pct
+            portfolio.shares[i].percentage = pct
+    for i in 0 ..< len(portfolio.shares):
+        if portfolio.shares[i].kind != kind:
+            let moved: float = portfolio.shares[i].percentage + diff
+            portfolio.shares[i].percentage = max(moved, 0.0)
             diff = (moved if moved < 0.0 else 0.0)
 
-# Move the block called NAME so that its centre is at (X, Y), kept inside the drawing. "" when
-# it is done, or what was wrong.
-def move_block(plan: Plan, name: str, x: float, y: float) -> str:
-    for i in 0 ..< len(BLOCKS):
-        if BLOCKS[i] == name:
-            plan.cx[i] = max(BLOCK_W[i] / 2.0, min(WIDE - BLOCK_W[i] / 2.0, x))
-            plan.cy[i] = max(BLOCK_H[i] / 2.0, min(HIGH - BLOCK_H[i] / 2.0, y))
-            return ""
-    return f"There is no block {name}."
+# The year the money was put in, if there are prices for it. "" when it is done, or what was wrong.
+def set_year(portfolio: Portfolio, year: int) -> str:
+    if year < FIRST_YEAR or year > CURRENT_YEAR:
+        return f"There are no prices for {year}: only {FIRST_YEAR} to {CURRENT_YEAR}."
+    portfolio.investment.year = year
+    return ""

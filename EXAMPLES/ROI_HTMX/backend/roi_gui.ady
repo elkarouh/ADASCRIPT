@@ -1,13 +1,18 @@
 #!/usr/bin/env ady2nim
-"""roi_gui -- the page as HTML the server draws, for htmx to swap in; no JointJS, no script of our own.
+"""roi_gui -- the page as HTML the server draws, for htmx to swap in; no JointJS.
 
 The page is one SVG: boxes (rects with a form inside, in a foreignObject) joined by arrows
 (paths). The browser draws it and nothing more. A field that is changed sends GET /all with
 its value (`value`) and what it is (`changed`); the server works it out and sends the whole
 drawing again, which htmx swaps in (see server.ady).
+
+Each box of the drawing is one thing of the model: the Investment, an InvestmentPercentage for
+each product, a ProductOutcome for each product's results, and the Outcome as a whole. `to_html`
+says what each looks like inside its box; where the boxes are is the Layout (roi_layout.ady).
 """
 from uri nimport decodeUrl
-from backend/roi_model import BLOCKS, BLOCK_H, BLOCK_W, CURRENT_YEAR, FIRST_YEAR, HIGH, PRODUCTS, WIDE, Plan, Outcome, evaluate
+from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPercentage, Outcome, Portfolio, Product_T, ProductOutcome, evaluate
+from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
 
 # The value of KEY in a query or a form body ("a=1&b=2"), or "".
 def field_of(text: str, key: str) -> str:
@@ -17,9 +22,31 @@ def field_of(text: str, key: str) -> str:
             return decodeUrl(pair[at + 1:])
     return ""
 
-const LABELS: []str = ["Gold", "Bitcoin", "S&P 500"]
-const COLORS: []str = ["#F7E3AE", "#9C9EC8", "#FFCCD6"]
 const INVEST_COLOR: str = "#D4D9D7"
+const OVERALL_COLOR: str = "#EAECEA"
+
+# What a product is called on the page, in the URL (the name of a block too), and what colour its boxes are.
+def label_of(kind: Product_T) -> str:
+    case kind:
+        when GOLD:
+            return "Gold"
+        when BITCOIN:
+            return "Bitcoin"
+        when others:
+            return "S&P 500"
+
+def name_of(kind: Product_T) -> str:
+    let image: str = kind'Image
+    return image.lower()
+
+def color_of(kind: Product_T) -> str:
+    case kind:
+        when GOLD:
+            return "#F7E3AE"
+        when BITCOIN:
+            return "#9C9EC8"
+        when others:
+            return "#FFCCD6"
 
 # Where the results of each product are inside the box of the results, from its top left.
 const PERF_DX: float = 30.0
@@ -39,13 +66,6 @@ def plain(v: float) -> str:
 def money(v: float) -> str:
     return f"{v:.2f}"
 
-# Where block NUMBER has its top left corner.
-def left_of(plan: Plan, number: int) -> float:
-    return plan.cx[number] - BLOCK_W[number] / 2.0
-
-def top_of(plan: Plan, number: int) -> float:
-    return plan.cy[number] - BLOCK_H[number] / 2.0
-
 # The curve from (X1, Y1) to (X2, Y2), arriving sideways. It stops a head's length
 # short of X2, where the head begins: the head's tip is at X2, the box's edge, and the lines
 # do not run on under it. (frontend/roi_js_events.ady draws it the same way.)
@@ -61,16 +81,16 @@ def curve(x1: float, y1: float, x2: float, y2: float, up: bool) -> str:
         return f"M {x1:.1f} {y1:.1f} C {x1:.1f} {turn:.1f} {across:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
     return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
 
-# The arrow from block FROM to block TO: a dark outline, the colour on it, and the head. It
-# starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's. The page
-# writes those on it (data_*), for the script that redraws it while a block is dragged.
-def arrow_html(plan: Plan, from_block: int, fx: float, fy: float, to_block: int, tx: float, ty: float, color: str, up: bool) -> Html:
-    let d: str = curve(left_of(plan, from_block) + fx, top_of(plan, from_block) + fy,
-                       left_of(plan, to_block) + tx, top_of(plan, to_block) + ty, up)
+# The arrow from the block called FROM to the block called TO: a dark outline, the colour on it,
+# and the head. It starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's.
+# The page writes those on it (data_*), for the script that redraws it while a block is dragged.
+def arrow_html(layout: Layout, from_block: str, fx: float, fy: float, to_block: str, tx: float, ty: float, color: str, up: bool) -> Html:
+    let d: str = curve(left_of(layout, from_block) + fx, top_of(layout, from_block) + fy,
+                       left_of(layout, to_block) + tx, top_of(layout, to_block) + ty, up)
     let head: str = "url(#head" + color[1:] + ")"
     let vertical: str = ("1" if up else "0")
     html:
-        g class="arrow" data_a=BLOCKS[from_block] data_ax=str(fx) data_ay=str(fy) data_b=BLOCKS[to_block] data_bx=str(tx) data_by=str(ty) data_up=vertical:
+        g class="arrow" data_a=from_block data_ax=str(fx) data_ay=str(fy) data_b=to_block data_bx=str(tx) data_by=str(ty) data_up=vertical:
             path class="outline" d=d
             path class="line" d=d stroke=color marker_end=head
 
@@ -93,7 +113,8 @@ def box_html(block: str, x: float, y: float, w: float, h: float, color: str, ins
                 div class="jj-form":
                     + inside
 
-def invest_html(plan: Plan) -> Html:
+# What the Investment looks like inside its box: the money, and the year it was put in.
+def to_html(investment: Investment) -> Html:
     let funds_vals: str = "{\"changed\": \"funds\"}"
     let year_vals: str = "{\"changed\": \"year\"}"
     var years: []int = []
@@ -107,27 +128,28 @@ def invest_html(plan: Plan) -> Html:
             div class="jj-field-vertical":
                 label:
                     + text("How much did you invest?")
-                    input class="jj-input" type="number" name="value" value=plain(plan.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=funds_vals data_hx_target="#all" data_hx_swap="outerHTML"
+                    input class="jj-input" type="number" name="value" value=plain(investment.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=funds_vals data_hx_target="#all" data_hx_swap="outerHTML"
             div class="jj-field-vertical":
                 label:
                     + text("What year it was?")
                     select class="jj-input" name="value" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=year_vals data_hx_target="#all" data_hx_swap="outerHTML":
                         for y in years:
-                            if y == plan.year:
+                            if y == investment.year:
                                 option value=str(y) selected="selected": str(y)
                             else:
                                 option value=str(y): str(y)
 
-def product_html(plan: Plan, i: int) -> Html:
-    let vals: str = "{\"changed\": \"" + PRODUCTS[i] + "\"}"
+# What an InvestmentPercentage looks like inside its box: the question, and the field.
+def to_html(share: InvestmentPercentage) -> Html:
+    let vals: str = "{\"changed\": \"" + name_of(share.kind) + "\"}"
     html:
         div class="jj-field-vertical":
             label:
                 + text("What % did you invest in ")
-                strong: LABELS[i]
+                strong: label_of(share.kind)
                 + text("?")
                 span class="jj-input-container":
-                    input class="jj-input" type="number" name="value" value=plain(plan.pcts[i]) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML"
+                    input class="jj-input" type="number" name="value" value=plain(share.percentage) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML"
                     span class="jj-input-unit": "%"
 
 # A line of a results box: what it is, and its value, which cannot be edited.
@@ -138,15 +160,17 @@ def line_html(name: str, value: float) -> Html:
                 span class="name": name
                 input class="jj-input" type="text" readonly="readonly" value=money(value)
 
-def perf_html(r: Outcome, i: int) -> Html:
+# What a ProductOutcome looks like inside its box: the product, its value and its ROI.
+def to_html(outcome: ProductOutcome) -> Html:
     html:
         fieldset:
             legend:
-                strong: LABELS[i]
-            + line_html("Value", r.values[i])
-            + line_html("ROI", r.rois[i])
+                strong: label_of(outcome.kind)
+            + line_html("Value", outcome.performance.value)
+            + line_html("ROI", outcome.performance.roi)
 
-def overall_html(r: Outcome) -> Html:
+# What the Outcome looks like inside the box of the results: the year, and the performance of the whole.
+def to_html(outcome: Outcome) -> Html:
     html:
         div class="between":
             p:
@@ -155,8 +179,8 @@ def overall_html(r: Outcome) -> Html:
                 + text(".")
             fieldset:
                 legend class="lead": "Your overall performance of investment is:"
-                + line_html("Value", r.total)
-                + line_html("ROI", r.roi)
+                + line_html("Value", outcome.overall_performance.value)
+                + line_html("ROI", outcome.overall_performance.roi)
 
 # The head of an arrow of COLOR: the colour, outlined in black, with a notch at the back where
 # the arrow's band runs into it, as in JointJS. The arrow's line stops where it starts (HEAD long).
@@ -166,8 +190,8 @@ def head_html(color: str) -> Html:
         marker id=id viewBox="-2 -12 17 24" refX="0" refY="0" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="24" orient="auto":
             path d="M 0 4 L 0 10 L 13 0 L 0 -10 L 0 -4" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
 
-def all_html(plan: Plan) -> Html:
-    let r: Outcome = evaluate(plan)
+def all_html(portfolio: Portfolio, layout: Layout) -> Html:
+    let outcome: Outcome = evaluate(portfolio)
     let box: str = f"0 0 {WIDE:.0f} {HIGH:.0f}"
     let wide: str = f"{WIDE:.0f}"
     let high: str = f"{HIGH:.0f}"
@@ -181,17 +205,17 @@ def all_html(plan: Plan) -> Html:
             svg viewBox=box width=wide height=high class="drawing":
                 defs:
                     + head_html(INVEST_COLOR)
-                    for color in COLORS:
-                        + head_html(color)
-                + box_html("investment", left_of(plan, 0), top_of(plan, 0), BLOCK_W[0], BLOCK_H[0], INVEST_COLOR, invest_html(plan), True)
-                for i in 0 ..< 3:
-                    + box_html(BLOCKS[i + 1], left_of(plan, i + 1), top_of(plan, i + 1), BLOCK_W[i + 1], BLOCK_H[i + 1], COLORS[i], product_html(plan, i), True)
-                + box_html("overall", left_of(plan, 4), top_of(plan, 4), BLOCK_W[4], BLOCK_H[4], "#EAECEA", overall_html(r), True)
-                for i in 0 ..< 3:
-                    + box_html("overall", left_of(plan, 4) + PERF_DX, top_of(plan, 4) + PERF_DY[i], 200.0, 100.0, INVEST_COLOR, perf_html(r, i), False)
-                for i in 0 ..< 3:
-                    + arrow_html(plan, 0, SEND_X[i], SEND_Y[i], i + 1, 0.0, 60.0, INVEST_COLOR, i != 1)
-                    + arrow_html(plan, i + 1, 140.0, 60.0, 4, PERF_DX, PERF_DY[i] + 50.0, COLORS[i], False)
+                    for share in portfolio.shares:
+                        + head_html(color_of(share.kind))
+                + box_html("investment", left_of(layout, "investment"), top_of(layout, "investment"), width_of("investment"), height_of("investment"), INVEST_COLOR, to_html(portfolio.investment), True)
+                for share in portfolio.shares:
+                    + box_html(name_of(share.kind), left_of(layout, name_of(share.kind)), top_of(layout, name_of(share.kind)), width_of(name_of(share.kind)), height_of(name_of(share.kind)), color_of(share.kind), to_html(share), True)
+                + box_html("overall", left_of(layout, "overall"), top_of(layout, "overall"), width_of("overall"), height_of("overall"), OVERALL_COLOR, to_html(outcome), True)
+                for i in 0 ..< len(outcome.list_of_outcomes):
+                    + box_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], 200.0, 100.0, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
+                for i in 0 ..< len(outcome.list_of_outcomes):
+                    + arrow_html(layout, "investment", SEND_X[i], SEND_Y[i], name_of(outcome.list_of_outcomes[i].kind), 0.0, 60.0, INVEST_COLOR, i != 1)
+                    + arrow_html(layout, name_of(outcome.list_of_outcomes[i].kind), 140.0, 60.0, "overall", PERF_DX, PERF_DY[i] + 50.0, color_of(outcome.list_of_outcomes[i].kind), False)
 
 const STYLE: str = """
 * { font-family: sans-serif; }
@@ -244,5 +268,5 @@ def hyphens(text: str) -> str:
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
 
-def all_text(plan: Plan) -> str:
-    return hyphens(str(all_html(plan)))
+def all_text(portfolio: Portfolio, layout: Layout) -> str:
+    return hyphens(str(all_html(portfolio, layout)))

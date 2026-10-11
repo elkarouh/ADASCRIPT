@@ -32,13 +32,14 @@ Drag a box (the investment, a product, or the big box of the results, which take
 results along) and its arrows follow, as curves, at once; where you let go is kept. Only the
 box itself can be taken hold of, not the fields in it.
 
-The plan, and where the boxes are, are kept in memory: it starts again when the server does.
+The portfolio, and where the boxes are, are kept in memory: it starts again when the server does.
 
 | File | What it knows |
 |---|---|
-| `backend/roi_model.ady` | the model: the prices, a `Plan` (money, year, the three shares, where the boxes are), `evaluate` for what it is worth now, `set_share` for the rebalancing, `move_block` for a drop. No HTML, no HTTP. |
-| `backend/roi_gui.ady` | how to draw it: a function from the plan to HTML; `box_html`, `arrow_html` and one function for the contents of each kind of box. |
-| `backend/roi_events.ady` | what each request does: `answer(method, path, fields)` changes the plan and returns the diagram. Holds the plan. No HTTP, so the tests call it. |
+| `backend/roi_model.ady` | the model, with no HTML, no HTTP and no places: an `Investment` (money, year), an `InvestmentPercentage` (product, percentage) for each of the three products, held with it by a `Portfolio`, which also owns the rebalancing (`set_share`); `evaluate` gives an `Outcome`, a `ProductOutcome` for each product and the overall performance. Each box of the drawing is one of these. |
+| `backend/roi_layout.ady` | where the boxes are: a `Layout` of centres, what a drag changes (`move_block`), and the size of the drawing. The model knows none of it. |
+| `backend/roi_gui.ady` | how to draw it: a `to_html` for each model type (what it looks like inside its box), and the boxes, the arrows and the page around them, from the portfolio and the layout. |
+| `backend/roi_events.ady` | what each request does: `answer(method, path, fields)` changes the portfolio or the layout and returns the diagram. Holds both. No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to `answer`, and serves the two scripts. |
 | `frontend/roi_js_events.ady` | the browser side, compiled to JavaScript: moves a box and redraws its arrows while the mouse moves, then sends the new place. |
 | `frontend/htmx.min.js` | htmx, vendored. |
