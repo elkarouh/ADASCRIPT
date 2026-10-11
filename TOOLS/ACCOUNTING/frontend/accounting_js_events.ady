@@ -55,13 +55,14 @@ def account_at(at: Spot, from_name: str) -> str:
 
 # ---- Changing the page ----
 
-# While NAME is dragged to AT, every arrow is routed again, here, by the same routes_of the
+# While NODE is dragged to AT, every arrow is routed again, here, by the same routes_of the
 # server uses (shared/routes.ady, compiled to JavaScript too), from what the page holds: the
 # accounts (data_name, data_x, data_y, data_h) and the arrows (<g data_from=".." data_to="..">,
 # each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
 # letting go asks the server, which draws the page again, and it comes out the same.
-def reroute_arrows(name: str, at: Spot):
-    # the accounts: their names, centres (NAME's at AT) and half heights, in page order
+def reroute_arrows(node: Node, at: Spot):
+    let name: str = attr(node, "data_name")   # arrows name the accounts they join: data_from, data_to
+    # the accounts: their names, centres (NODE's at AT) and half heights, in page order
     var names: []str = []
     var points: []Point = []
     var tall: []float = []
@@ -122,7 +123,7 @@ def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
         return wanted                   # the arrow's tip
     let now: Spot = Spot(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
     shift(node, centre, now)
-    reroute_arrows(attr(node, "data_name"), now)
+    reroute_arrows(node, now)
     return now
 
 # NODE let go at AT.
