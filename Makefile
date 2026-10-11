@@ -1410,6 +1410,9 @@ test: compile
 	@printf '  %-42s' "STDLIB/jointjs.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/jointjs.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "STDLIB/browser.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/browser.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "STDLIB/svg_drag.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/svg_drag.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }

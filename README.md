@@ -1681,27 +1681,27 @@ program, and `make counter` there serves it. Handlers that take the event object
 are not built.
 
 **The page, from a script.** A script built with `ady2nim js` reaches the
-page through Nim's `dom` module: `from dom nimport Node, document,
-querySelector, getAttribute, setAttribute`. Strings cross as the browser's own
-`cstring`, both ways: `document.querySelector(cstring("g.node"))`,
-`str(node.getAttribute(cstring("data_name")))`.
+page through the standard library's `browser` module, in the page's own words
+rather than JavaScript's: `page.find("#move")`, `page.all("g.node")`,
+`node.data("name")` (what the server wrote in `data_name`), `node.has_class("from")`,
+`form.fill("x", "120")`, `page.press("#redraw")`. Its doc comment lists the rest.
 
 **A function called with a dot.** Any function can be called on its first
 argument with a dot (Nim's uniform call syntax): with
 
 ```python
-def data_name(n: Node) -> str:
-    return str(n.getAttribute(cstring("data_name")))
+def data_name(n: Element_T) -> str:
+    return n.data("name")
 ```
 
 `node.data_name` (or `node.data_name()`) is `data_name(node)`. That gives a
-type the program did not declare, such as a DOM `Node`, what reads like fields,
+type the program did not declare, such as a page's `Element_T`, what reads like fields,
 with no wrapper class around it. **Nim only**: ady2py writes `node.data_name`
 as an attribute lookup, which fails.
 
 **Pages the server draws.** When the server draws the page and htmx keeps it
 current, the browser script holds only what must follow the mouse. `import
-svg_drag` (`TO_NIM/STDLIB/svg_drag.ady`) drags the shapes of such an SVG:
+svg_drag` (`TO_NIM/STDLIB/svg_drag.ady`, built on `browser`) drags the shapes of such an SVG:
 `draggable(shapes, svg, width, moved, dropped, clicked)`, where the three
 functions say what a drag means to the app. Pixels and drawing units are
 distinct types in it, with a scale between them. `EXAMPLES/DIJKSTRA_HTMX` and
@@ -1917,6 +1917,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import graphs`   | `dijkstra`, `shortest_path` and `shortest_route` (with its cost) over a weighted digraph, generic in the node type |
 | `import db`       | thin SQLite wrapper                                        |
 | `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
+| `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, a `Click` |
 | `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
@@ -3515,7 +3516,7 @@ ADASCRIPT/
 │       ├── graphs.ady         Shortest paths, generic in the node type
 │       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       ├── illwill.nim        Curses-like terminal library, pure Nim (one file)
-│       └── db.ady, jointjs.ady, svg_drag.ady, expect.nim
+│       └── db.ady, jointjs.ady, browser.ady, svg_drag.ady, expect.nim
 │
 ├── EXAMPLES/                  End-to-end example programs (`*.ady`)
 │                              Transpiled output is not kept here — it goes to

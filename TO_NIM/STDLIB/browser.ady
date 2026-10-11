@@ -1,0 +1,110 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""browser -- the page, for a script that runs in the browser (ady2nim js), in plain words.
+
+An Adascript programmer should not have to learn JavaScript and the DOM to make a page do
+something. This module says what a script needs in the words of the page itself: find an
+element, read what the server wrote on it, change where it is drawn, fill in a form, press a
+button. svg_drag builds on it; an app script imports what it uses:
+
+    from browser import Element_T, page, find, all, data, number, has_class, set_attr, fill, field, press
+
+Everything here is called with a dot on what it works on (Nim allows any function to be
+called on its first argument that way):
+
+    let form: Element_T = page.find("#move")    # the first element the CSS selector matches
+    for edge in page.all("g.edge"): ...         # all of them
+    node.data("name")                           # data_name="C" -> "C"  (what the server wrote)
+    node.number("data_x")                       # an attribute, as a number (0.0 if it is not one)
+    node.has_class("from")                      # class="node from" -> True
+    label.set_attr("x", "120")                  # change an attribute
+    form.fill("x", "120")                       # put a value in the form's input named x
+    form.field("pos")                           # and read one
+    page.press("#redraw")                       # click a button, as the user would
+
+A CSS selector names elements the way the page's stylesheet does: "g.node" is a <g> of class
+node, "#move" the element with id="move", "g[data_from]" a <g> that has a data_from
+attribute, "input[name=pos]" the <input> named pos.
+
+What is underneath, for the curious: the page as the browser holds it is the DOM ("document
+object model"), a tree of elements, one per HTML tag; `page` is its root. Strings cross into
+it as the browser's own cstring, which this module converts both ways.
+"""
+from dom nimport Node, Element, InputElement, Event, MouseEvent, document, getAttribute, setAttribute, querySelector, querySelectorAll, click, closest, stopPropagation, value
+
+# An element of the page: a <g>, a <path>, a <form>, an <input>, the page itself.
+type Element_T is Node
+
+# The whole page: what `find` and `all` search when nothing narrower is given.
+let page: Element_T = document
+
+# The first element below WITHIN that the CSS selector CSS matches, or nil when there is none.
+def find(within: Element_T, css: str) -> Element_T:
+    return within.querySelector(cstring(css))
+
+# All the elements below WITHIN that CSS matches, in the order of the page.
+def all(within: Element_T, css: str) -> []Element_T:
+    var found: []Element_T = []
+    for e in within.querySelectorAll(cstring(css)):
+        found.append(e)
+    return found
+
+# The text of attribute NAME of NODE ("" when it has none).
+def attr(node: Element_T, name: str) -> str:
+    return str(node.getAttribute(cstring(name)))
+
+# Set attribute NAME of NODE to VALUE.
+def set_attr(node: Element_T, name: str, value: str):
+    node.setAttribute(cstring(name), cstring(value))
+
+# What the server wrote in NODE's data_NAME attribute: `node.data("name")` reads data_name.
+def data(node: Element_T, name: str) -> str:
+    return attr(node, "data_" + name)
+
+# Attribute NAME of NODE as a number; 0.0 when it is not one.
+def number(node: Element_T, name: str) -> float:
+    let r: float | !ParseFailure_T = parse_float(attr(node, name))
+    if r is ParseFailure_T:
+        return 0.0
+    return r
+
+# The text inside NODE ("" for no element at all).
+def text(node: Element_T) -> str:
+    if node == nil:
+        return ""
+    return str(node.textContent)
+
+# Whether NODE has the CSS class WORD: class="node from" holds two.
+def has_class(node: Element_T, word: str) -> bool:
+    return f" {word} " in " " + attr(node, "class") + " "
+
+# The value of the input named NAME within FORM (or within the whole page).
+def field(form: Element_T, name: str) -> str:
+    return str(InputElement(form.find(f"input[name={name}]")).value)
+
+# Put VALUE in the input named NAME within FORM (or within the whole page).
+def fill(form: Element_T, name: str, value: str):
+    InputElement(form.find(f"input[name={name}]")).value = cstring(value)
+
+# Click the element CSS matches within WITHIN, as the user would: a button sends its form.
+def press(within: Element_T, css: str):
+    Element(within.find(css)).click()
+
+# ---- A click, as the script is told of it ----
+
+# What a click is to a script: whether shift was held, and the element clicked. `on(css)`
+# is the element CSS matches that the click was on or inside (nil when none), and `stop()`
+# keeps the click from going any further: nothing else on the page (htmx) hears of it.
+type Click is record:
+    shift:  bool
+    target: Element_T
+    event:  Event
+
+def click_of(e: Event) -> Click:
+    return Click(MouseEvent(e).shiftKey, e.target, e)
+
+def on(c: Click, css: str) -> Element_T:
+    return c.target.closest(cstring(css))
+
+def stop(c: Click):
+    c.event.stopPropagation()

@@ -7,9 +7,9 @@ the HTML, and only what must follow the mouse every frame runs in the browser. T
 holds what every such drag has in common; the app says what a drag means:
 
     from svg_drag import Spot, draggable, ...
-    def moved(node: Node, centre: Spot, wanted: Spot) -> Spot: ...   # during the drag
-    def dropped(node: Node, at: Spot): ...                           # when it is let go
-    draggable("g.node", "svg.graph", 580.0, moved, dropped, no_click)
+    def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot: ...   # during the drag
+    def dropped(node: Element_T, at: Spot): ...                           # when it is let go
+    draggable("g.node", "svg.graph", Unit_T(580.0), moved, dropped, no_click)
 
 A shape that can be dragged is an element (`g.node` above) carrying its centre, in the
 drawing's units, in the attributes data_x and data_y, as the server drew it. While it is
@@ -20,34 +20,16 @@ htmx sends the new place to the server, which draws the page again.
 
 A press that does not move is a click, and goes on to htmx. The click the browser sends
 after a drag is swallowed, so a shape is not clicked by being moved. Other clicks go to
-`on_click` first (a shift-click, say), which may stop them.
+`clicked` first, as a Click (browser.ady): a shift-click, say, which it may stop.
 
 Used by EXAMPLES/DIJKSTRA_HTMX and TOOLS/ACCOUNTING.
 
----- A few browser words, for a reader who does not write front ends ----
-
-The DOM ("document object model") is the page as the browser holds it: a tree of elements,
-one per HTML tag. `document` is its root. Each element is a `Node` here, and the same calls
-work on all of them:
-  querySelector("css")     the first element below that matches a CSS selector, or nil
-                           ("g.node" = a <g> of class node, "#move" = the element with
-                           id="move", "input[name=pos]" = the <input> named pos,
-                           "g[data_from]" = a <g> that has a data_from attribute)
-  querySelectorAll("css")  all of them
-  closest("css")           this element or the nearest one above it that matches
-  getAttribute / setAttribute   read or write one attribute, as text
-The drawing is SVG, which is HTML for pictures: a <g> groups shapes, a <path d="M x1 y1
-L x2 y2"> is a line from (x1, y1) to (x2, y2), and transform="translate(dx,dy)" shifts a
-group without changing what is in it.
-
-The browser calls a function of ours, a "listener", for each event it is given (see
-draggable). An event is a value describing what happened: for the mouse, which button,
-whether shift was held, and where (clientX, clientY, in pixels from the window's top left).
-A click is three events in this order: mousedown, mouseup, click. Every event goes down the
-tree to the element it is for and then back up; htmx listens at the top, on the way back up.
-cstring is the browser's own string type: Nim strings are converted at each call.
+The page itself (finding elements, reading what the server wrote, forms, clicks) is the
+browser module's, in plain words; this one adds the drawing: its units, a drag, and moving
+what is drawn.
 """
-from dom nimport Event, Element, InputElement, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, preventDefault, closest, value
+from browser import Element_T, page, find, attr, set_attr, number, Click, click_of
+from dom nimport Event, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, preventDefault, stopPropagation, closest
 
 # ---- Two units: the mouse's and the drawing's ----
 #
@@ -70,9 +52,9 @@ type Spot is tuple:                     # a place in the drawing
 const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
 
 # What the app says a drag means (see the docstring).
-type Moved_T is (Node, Spot, Spot) -> Spot   # the shape, its centre when pressed, where the mouse has taken it -> where it is
-type Dropped_T is (Node, Spot) -> None       # the shape, where it was let go
-type Clicked_T is (Event) -> None            # any click that is not the end of a drag
+type Moved_T is (Element_T, Spot, Spot) -> Spot   # the shape, its centre when pressed, where the mouse has taken it -> where it is
+type Dropped_T is (Element_T, Spot) -> None       # the shape, where it was let go
+type Clicked_T is (Click) -> None            # any click that is not the end of a drag
 
 # ---- The drag, as a small state machine ----
 #
@@ -100,7 +82,7 @@ type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
 type Grip_T (phase: Phase_T) is record:
     case phase is
         when PRESSED | DRAGGING:
-            node:   Node                # the shape held
+            node:   Element_T                # the shape held
             down:   Screen              # where the mouse went down
             centre: Spot                # the shape's centre then
             now:    Spot                # and where it is now, as `moved` answered
@@ -119,54 +101,51 @@ var clicked_hook: Clicked_T
 
 # ---- Reading the page ----
 
-# The text of attribute ATTR of NODE.
-def attr(node: Node, name: str) -> str:
-    return str(node.getAttribute(cstring(name)))
-
-# The number in attribute ATTR of NODE ("data_x", "data_y"), as drawing units; 0 if it is not
-# a number.
-def unit_of(node: Node, name: str) -> Unit_T:
-    let r: float | !ParseFailure_T = parse_float(attr(node, name))
-    if r is ParseFailure_T:
-        return 0.0
-    return Unit_T(r)
+# Attribute NAME of NODE ("data_x", "data_y") as drawing units; 0 if it is not a number.
+def unit_of(node: Element_T, name: str) -> Unit_T:
+    return Unit_T(node.number(name))
 
 # Where a shape's centre is, as the server last drew it.
-def spot_of(node: Node) -> Spot:
+def spot_of(node: Element_T) -> Spot:
     return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
 
 # Where the mouse was when event M happened.
 def screen_of(m: MouseEvent) -> Screen:
     return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
 
-# Whether NODE has the CSS class WORD: class="node from" holds several.
-def has_class(node: Node, word: str) -> bool:
-    return f" {word} " in " " + attr(node, "class") + " "
-
-# The <input name=NAME> of the page (a hidden field of a form, usually).
-def field_named(name: str) -> InputElement:
-    return InputElement(document.querySelector(cstring(f"input[name={name}]")))
-
 # How many drawing units a pixel is: the drawing is scaled to fit the page, so this is asked
 # each time (the window may have been resized). getBoundingClientRect is the element's size
 # and place on the screen, in pixels.
 def scale() -> Scale_T:
-    let box: BoundingRect = document.querySelector(cstring(drawing)).getBoundingClientRect()
+    let box: BoundingRect = page.find(drawing).getBoundingClientRect()
     return drawing_width / Pixel_T(box.width)   # units / pixels: a Scale_T
 
 # ---- Changing the page ----
 
 # Draw NODE, whose centre the server put at CENTRE, at NOW instead: its picture is shifted by
 # the difference. Its data_x/data_y stay CENTRE until the server draws the page again.
-def shift(node: Node, centre: Spot, now: Spot):
-    node.setAttribute(cstring("transform"), cstring(f"translate({now.x - centre.x:.1f},{now.y - centre.y:.1f})"))
+def shift(node: Element_T, centre: Spot, now: Spot):
+    node.set_attr("transform", f"translate({now.x - centre.x:.1f},{now.y - centre.y:.1f})")
+
+# Draw the <path> LINE as a straight line from A to B.
+def draw_line(line: Element_T, a: Spot, b: Spot):
+    line.set_attr("d", f"M {a.x:.1f} {a.y:.1f} L {b.x:.1f} {b.y:.1f}")
+
+# Give the <path> PATH the curve D, as SVG writes one ("M x y C ...").
+def trace(path: Element_T, d: str):
+    path.set_attr("d", d)
+
+# Put the <text> LABEL at AT.
+def place_at(label: Element_T, at: Spot):
+    label.set_attr("x", f"{at.x:.1f}")
+    label.set_attr("y", f"{at.y:.1f}")
 
 # V kept between LO and HI.
 def between(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
     return max(lo, min(hi, v))
 
 # For an app with nothing to do on a click.
-def no_click(e: Event):
+def no_click(c: Click):
     pass
 
 # ---- The listeners: what each mouse event does, by phase ----
@@ -176,7 +155,7 @@ def on_down(e: Event):
     let m: MouseEvent = MouseEvent(e)
     if m.button != 0:
         return
-    let node: Node = e.target.closest(cstring(shapes))   # the press may be on a part of the shape
+    let node: Element_T = e.target.closest(cstring(shapes))   # the press may be on a part of the shape
     if node == nil:
         return                          # not on a shape: leave the event to htmx
     let centre: Spot = spot_of(node)
@@ -220,7 +199,7 @@ def on_click(e: Event):
         grip = IDLE()
         e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
         return
-    clicked_hook(e)
+    clicked_hook(click_of(e))
 
 # Make the shapes SHAPES (a CSS selector) of the drawing DRAWING (the <svg>, WIDE units wide)
 # draggable: MOVED, DROPPED and CLICKED say what a drag means (see the docstring).

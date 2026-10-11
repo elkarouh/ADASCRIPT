@@ -21,3 +21,12 @@ What to run before pushing:
 - Anything else: only the checks for what changed (that app's own
   `make test`, the examples touched, the browser check of a page), not the
   full `make test`.
+
+## Scripts for the browser
+
+Adascript programmers are not expected to know JavaScript or the DOM. A script
+built with `ady2nim js` should read in the page's own words: it uses the
+stdlib's `browser` module (`page.find`, `node.data`, `form.fill`,
+`page.press`, `Click`) and `svg_drag`, and not `dom`, `cstring`,
+`querySelector` or `setAttribute`. What is missing goes into `browser.ady`,
+not into the app.

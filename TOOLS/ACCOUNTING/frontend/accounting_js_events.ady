@@ -16,15 +16,14 @@ The frozen account (class "from") is not moved: dragging from it draws an
 arrow, a red line to the mouse. Let go over another account, and its name goes
 into the hidden field `target` before the same Redraw: the server answers with
 the popup that asks when, what and how much.
-
-The drag itself (the mouse events, when a press becomes a drag, the click after it) is the
-standard library's svg_drag (TO_NIM/STDLIB/svg_drag.ady, which also explains the browser
-words used here). This file says only what a drag means in this app: `moved`, `dropped`,
-and `clicked` for the shift-click.
+The drag itself (the mouse, when a press becomes a drag, the click after it) is the standard
+library's svg_drag, and the page (finding elements, forms, clicks) its browser module, both
+in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved`, `dropped`, and
+`clicked` for the shift-click.
 """
 from shared/routes import Point, Route, boxes, routes_of
-from svg_drag import Unit_T, Spot, attr, unit_of, spot_of, has_class, between, shift, draggable
-from dom nimport Event, MouseEvent, Node, InputElement, document, getAttribute, setAttribute, querySelector, querySelectorAll, click, stopPropagation, closest, value
+from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click, on, stop
+from svg_drag import Unit_T, Spot, unit_of, spot_of, between, shift, trace, place_at, draggable
 
 const WIDTH: Unit_T = Unit_T(980.0)     # the drawing's width (the svg's viewBox); its height varies
 const HALF_W: Unit_T = Unit_T(110.0)    # half an account's box, as boxes() in shared/routes.ady
@@ -32,63 +31,45 @@ const TOP: Unit_T = Unit_T(20.0)        # how near the top an account may go
 
 # ---- Reading the page ----
 
-# What the server wrote on an element, read as if it were a field: `node.data_name` calls
-# data_name(node) (a function called with a dot, as Nim allows). An account carries
-# data_id, data_name and data_h (half its height); an arrow data_from and data_to, the names
-# of the accounts it joins.
-def data_id(n: Node) -> str:
-    return attr(n, "data_id")
+# What the server wrote on an element, read as if it were a field: `node.data_name` is
+# data_name(node). An account carries its id, its name and half its height; an arrow the
+# names of the accounts it joins.
+def data_id(n: Element_T) -> str:
+    return n.data("id")
 
-def data_name(n: Node) -> str:
-    return attr(n, "data_name")
+def data_name(n: Element_T) -> str:
+    return n.data("name")
 
-def data_h(n: Node) -> Unit_T:
+def data_h(n: Element_T) -> Unit_T:
     return unit_of(n, "data_h")
 
-def data_from(a: Node) -> str:
-    return attr(a, "data_from")
+def data_from(a: Element_T) -> str:
+    return a.data("from")
 
-def data_to(a: Node) -> str:
-    return attr(a, "data_to")
-
-# ...and written the same way, with a verb: `path.trace(d)`, `label.place_at(point)`,
-# `document.fill("pick", name)`.
-
-# Give the <path> PATH the curve D (its d attribute: "M x y C ...").
-def trace(path: Node, d: str):
-    path.setAttribute(cstring("d"), cstring(d))
-
-# Put the <text> LABEL at AT (its x and y attributes).
-def place_at(label: Node, at: Point):
-    label.setAttribute(cstring("x"), cstring(f"{at.x:.1f}"))
-    label.setAttribute(cstring("y"), cstring(f"{at.y:.1f}"))
-
-# The value of the input NAME within PAGE (the document, or a form in it), and putting one in.
-def field(page: Node, name: str) -> str:
-    return str(InputElement(page.querySelector(cstring(f"input[name={name}]"))).value)
-
-def fill(page: Node, name: str, value: str):
-    InputElement(page.querySelector(cstring(f"input[name={name}]"))).value = cstring(value)
+def data_to(a: Element_T) -> str:
+    return a.data("to")
 
 # shared/routes.ady, which the server uses too, works in plain floats (its Point).
 def point_of(s: Spot) -> Point:
     return Point(float(s.x), float(s.y))
 
+def spot_at(p: Point) -> Spot:
+    return Spot(x=Unit_T(p.x), y=Unit_T(p.y))
+
 # The drawing's height: the last of the four numbers of its viewBox, "0 0 980 670".
 def height() -> Unit_T:
-    let r: float | !ParseFailure_T = parse_float(attr(document.querySelector("svg.graph"), "viewBox").split(" ")[3])
+    let r: float | !ParseFailure_T = parse_float(page.find("svg.graph").attr("viewBox").split(" ")[3])
     if r is ParseFailure_T:
         return Unit_T(0.0)
     return Unit_T(r)
 
 # The name of the account (not a group) the point AT is over, other than FROM_NAME, or "".
 def account_at(at: Spot, from_name: str) -> str:
-    for n in document.querySelectorAll("g.node"):
-        let name: str = n.data_name
-        if name != from_name and not has_class(n, "group"):
+    for n in page.all("g.node"):
+        if n.data_name != from_name and not n.has_class("group"):
             let c: Spot = spot_of(n)
             if abs(at.x - c.x) <= HALF_W and abs(at.y - c.y) <= n.data_h:
-                return name
+                return n.data_name
     return ""
 
 # ---- Changing the page ----
@@ -98,37 +79,33 @@ def account_at(at: Spot, from_name: str) -> str:
 # accounts (data_name, data_x, data_y, data_h) and the arrows (<g data_from=".." data_to="..">,
 # each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
 # letting go asks the server, which draws the page again, and it comes out the same.
-def reroute_arrows(node: Node, at: Spot):
-    let name: str = node.data_name           # arrows name the accounts they join: data_from, data_to
+def reroute_arrows(node: Element_T, at: Spot):
     # the accounts: their names, centres (NODE's at AT) and half heights, in page order
     var names: []str = []
     var points: []Point = []
     var tall: []float = []
-    for n in document.querySelectorAll("g.node"):
-        let who: str = n.data_name
-        names.append(who)
-        points.append(point_of(at if who == name else spot_of(n)))
+    for n in page.all("g.node"):
+        names.append(n.data_name)
+        points.append(point_of(at if n.data_name == node.data_name else spot_of(n)))
         tall.append(float(n.data_h))
     # the arrows: which accounts each joins, and the amount written on it
-    var arrows: []Node = []
+    let arrows: []Element_T = page.all("g[data_from]")
     var sources: []str = []
     var targets: []str = []
     var texts: []str = []
-    for a in document.querySelectorAll("g[data_from]"):
+    for a in arrows:
         sources.append(a.data_from)
         targets.append(a.data_to)
-        let words: Node = a.querySelector("text.amount")
-        texts.append(str(words.textContent) if words != nil else "")
-        arrows.append(a)
+        texts.append(a.find("text.amount").text)
     let size: Spot = Spot(x=WIDTH, y=height())
     let routes: []Route = routes_of(sources, targets, texts, names, points, tall, point_of(size), [], [], boxes())
     # routes[k] is the way for arrows[k]: its curve and where its amount goes
     for k in range(len(arrows)):
-        for p in arrows[k].querySelectorAll("path"):
+        for p in arrows[k].all("path"):
             p.trace(routes[k].d)
-        let label: Node = arrows[k].querySelector("text.amount")
+        let label: Element_T = arrows[k].find("text.amount")
         if label != nil:
-            label.place_at(routes[k].label)
+            label.place_at(spot_at(routes[k].label))
 
 # The field pos holds every account the user has moved, "id@x,y|id@x,y": ID's entry replaced,
 # or added. The server lays the accounts out, then puts these where they were dropped.
@@ -142,20 +119,20 @@ def with_position(pos: str, id: str, at: Spot) -> str:
 
 # The red dashed line of an arrow being drawn, from the frozen account to the mouse ("" hides it).
 def rubber(d: str):
-    document.querySelector("#rubber").trace(d)
+    page.find("#rubber").trace(d)
 
 # Ask the server for the page again: the button #redraw sends the page's form (hx-get="/h/all",
 # see accounting_page.ady), hidden fields included, and htmx puts the answer in place.
 def redraw():
-    document.querySelector("#redraw").click()
+    page.press("#redraw")
 
 # ---- What a drag means here ----
 
 # While NODE is dragged. The frozen account (class "from") stays where it is: a line runs from
 # it to the mouse, the arrow being drawn. Any other account goes where the mouse takes it,
 # kept clear of the sides and the top, and the arrows follow.
-def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
-    if has_class(node, "from"):
+def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
+    if node.has_class("from"):
         rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
         return wanted                   # the arrow's tip
     let now: Spot = Spot(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
@@ -164,31 +141,31 @@ def moved(node: Node, centre: Spot, wanted: Spot) -> Spot:
     return now
 
 # NODE let go at AT.
-def dropped(node: Node, at: Spot):
-    if has_class(node, "from"):
+def dropped(node: Element_T, at: Spot):
+    if node.has_class("from"):
         # the arrow: let go over another account, its name goes into the hidden field target,
         # and the server answers with the popup that asks when, what and how much. Let go over
         # nothing, the arrow is just dropped.
         rubber("")
         let over: str = account_at(at, node.data_name)
         if over != "":
-            document.fill("target", over)
+            page.fill("target", over)
             redraw()
         return
     # an account moved: its new place goes into the hidden field pos
-    document.fill("pos", with_position(document.field("pos"), node.data_id, at))
+    page.fill("pos", with_position(page.field("pos"), node.data_id, at))
     redraw()
 
 # A click with shift held picks an account to merge with others, or lets it go: its name goes
 # into the hidden field pick, and the page is asked for again. Other clicks go on to htmx.
-def clicked(e: Event):
-    if not MouseEvent(e).shiftKey:
+def clicked(c: Click):
+    if not c.shift:
         return
-    let node: Node = e.target.closest("g.node")
-    if node != nil and not has_class(node, "group"):
-        e.stopPropagation()             # not an ordinary click: htmx must not see it
-        document.fill("pick", node.data_name)
+    let node: Element_T = c.on("g.node")
+    if node != nil and not node.has_class("group"):
+        c.stop()                        # not an ordinary click: htmx must not see it
+        page.fill("pick", node.data_name)
         redraw()
-        document.fill("pick", "")       # htmx has read the form by now: the next redraw picks nothing
+        page.fill("pick", "")           # htmx has read the form by now: the next redraw picks nothing
 
 draggable("g.node", "svg.graph", WIDTH, moved, dropped, clicked)
