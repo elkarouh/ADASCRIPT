@@ -23,7 +23,7 @@ const INVEST_COLOR: str = "#D4D9D7"
 
 # Where the results of each product are inside the box of the results, from its top left.
 const PERF_DX: float = 30.0
-const PERF_DY: []float = [60.0, 185.0, 310.0]
+const PERF_DY: []float = [50.0, 170.0, 290.0]
 
 # Where the arrows to the products leave the investment box, from its top left: out of the top
 # for gold, the right side for bitcoin, the bottom for the S&P 500.
@@ -90,7 +90,7 @@ def box_html(block: str, x: float, y: float, w: float, h: float, color: str, ins
         g class="box":
             rect class=css x=at_x y=at_y rx="10" ry="10" width=wide height=high fill=color data_block=block data_name=block data_x=centre_x data_y=centre_y
             foreignObject x=at_x y=at_y width=wide height=high data_block=block:
-                div class="form":
+                div class="jj-form":
                     + inside
 
 def invest_html(plan: Plan) -> Html:
@@ -104,51 +104,59 @@ def invest_html(plan: Plan) -> Html:
     html:
         div:
             h2: "Investment"
-            label: "How much did you invest?"
-            input type="number" name="value" value=plain(plan.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=funds_vals data_hx_target="#all" data_hx_swap="outerHTML"
-            label: "What year it was?"
-            select name="value" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=year_vals data_hx_target="#all" data_hx_swap="outerHTML":
-                for y in years:
-                    if y == plan.year:
-                        option value=str(y) selected="selected": str(y)
-                    else:
-                        option value=str(y): str(y)
+            div class="jj-field-vertical":
+                label:
+                    + text("How much did you invest?")
+                    input class="jj-input" type="number" name="value" value=plain(plan.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=funds_vals data_hx_target="#all" data_hx_swap="outerHTML"
+            div class="jj-field-vertical":
+                label:
+                    + text("What year it was?")
+                    select class="jj-input" name="value" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=year_vals data_hx_target="#all" data_hx_swap="outerHTML":
+                        for y in years:
+                            if y == plan.year:
+                                option value=str(y) selected="selected": str(y)
+                            else:
+                                option value=str(y): str(y)
 
 def product_html(plan: Plan, i: int) -> Html:
     let vals: str = "{\"changed\": \"" + PRODUCTS[i] + "\"}"
     html:
-        div:
+        div class="jj-field-vertical":
             label:
                 + text("What % did you invest in ")
                 strong: LABELS[i]
                 + text("?")
-            span class="unit":
-                input type="number" name="value" value=plain(plan.pcts[i]) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML"
-                span: " %"
+                span class="jj-input-container":
+                    input class="jj-input" type="number" name="value" value=plain(plan.pcts[i]) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML"
+                    span class="jj-input-unit": "%"
+
+# A line of a results box: what it is, and its value, which cannot be edited.
+def line_html(name: str, value: float) -> Html:
+    html:
+        div class="jj-field-horizontal":
+            label:
+                span class="name": name
+                input class="jj-input" type="text" readonly="readonly" value=money(value)
 
 def perf_html(r: Outcome, i: int) -> Html:
     html:
-        div:
-            h3: LABELS[i]
-            div class="fields":
-                label: "Value"
-                output: money(r.values[i])
-                label: "ROI"
-                output: money(r.rois[i])
+        fieldset:
+            legend:
+                strong: LABELS[i]
+            + line_html("Value", r.values[i])
+            + line_html("ROI", r.rois[i])
 
 def overall_html(r: Outcome) -> Html:
     html:
-        div class="overall":
+        div class="between":
             p:
                 + text("This is your portfolio now in ")
                 strong: str(CURRENT_YEAR)
                 + text(".")
-            label: "Your overall performance of investment is:"
-            div class="fields":
-                label: "Value"
-                output: money(r.total)
-                label: "ROI"
-                output: money(r.roi)
+            fieldset:
+                legend class="lead": "Your overall performance of investment is:"
+                + line_html("Value", r.total)
+                + line_html("ROI", r.roi)
 
 # The head of an arrow of COLOR: the colour, outlined in black, with a notch at the back where
 # the arrow's band runs into it, as in JointJS. The arrow's line stops where it starts (HEAD long).
@@ -184,33 +192,35 @@ def all_html(plan: Plan) -> Html:
                     + arrow_html(plan, i + 1, 140.0, 60.0, 4, PERF_DX, PERF_DY[i] + 50.0, COLORS[i], False)
 
 const STYLE: str = """
-body { font-family: system-ui, -apple-system, Helvetica, Arial, sans-serif; color: #1f2933; background: #f6f4f4;
-       margin: 0; padding: 1em; }
-h1 { font-size: 1.4em; margin: 0 0 0.2em; }
-p.about { color: #616e7c; margin: 0 0 1em; }
-svg.drawing { width: 100%; max-width: 62em; height: auto; display: block; margin: 0 auto; }
+* { font-family: sans-serif; }
+body { margin: 0; padding: 0; background-color: #f6f4f4; }
+svg.drawing { width: 100vw; height: 100vh; display: block; user-select: none; }
 rect.body, rect.node { stroke: #333; stroke-width: 2; }
 rect.node { cursor: grab; }
 foreignObject { pointer-events: none; }
 button.redraw { display: none; }
-svg.drawing { user-select: none; }
-div.form input, div.form select { user-select: auto; }
 path.outline { fill: none; stroke: #000; stroke-width: 8; stroke-linejoin: round; }
 path.line { fill: none; stroke-width: 4; stroke-linejoin: round; }
-
-div.form { pointer-events: none; font: 13px system-ui, -apple-system, Helvetica, Arial, sans-serif; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; height: 100%; box-sizing: border-box; }
-div.form h2 { font-size: 18px; text-align: center; margin: 4px 0 10px; }
-div.form h3 { font-size: 13px; text-align: center; margin: 0 0 2px; }
-div.form label { display: block; }
-div.fields { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
-div.overall > label { text-align: center; }
-div.form input, div.form select, div.form output { pointer-events: auto; display: block; box-sizing: border-box; width: 100%; font: inherit; text-align: right;
-       border: 1px solid #888; border-radius: 4px; padding: 2px 4px; background: #fff; min-height: 1.6em; }
-div.form span.unit { display: flex; align-items: center; gap: 4px; }
-div.form span.unit input { width: 5em; }
-div.overall { display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; height: 100%; }
-div.overall p { text-align: center; margin: 0 0 auto; }
-
+fieldset { border: none; margin: 0; padding: 0; }
+input:invalid { background-color: ivory; border: 2px solid lightgray; outline: 2px solid red; }
+.jj-form { position: static; font-size: 14px; text-align: center; padding: 10px; display: flex; flex-direction: column;
+           box-sizing: border-box; height: 100%; pointer-events: none; color: #000; }
+.jj-form input, .jj-form select { pointer-events: auto; }
+.jj-form .between { display: flex; flex-direction: column; justify-content: space-between; height: 100%; }
+.jj-form h2 { font-size: 1.5em; margin: 0.83em 0; }
+.jj-form p { margin: 1em 0; }
+.jj-form legend.lead { margin-bottom: 10px; }
+.jj-form legend { display: block; width: 100%; text-align: center; padding: 0; }
+.jj-field-vertical { display: flex; flex-direction: column; }
+.jj-field-vertical label { margin-top: 15px; }
+.jj-field-vertical .jj-input { margin-top: 10px; }
+.jj-field-horizontal label { display: flex; align-items: center; text-align: left; }
+.jj-field-horizontal span.name { width: 30%; flex-shrink: 0; }
+.jj-field-horizontal .jj-input { width: 70%; min-width: 0; }
+.jj-input { box-sizing: border-box; text-align: right; margin: 5px 0; font-size: 13.33px; }
+.jj-field-vertical .jj-input { width: 100%; }
+.jj-input-container { display: flex; flex-direction: row; align-items: center; }
+.jj-input-unit { flex-shrink: 0; padding-left: 5px; text-align: right; }
 """
 
 def shell() -> Html:
@@ -223,8 +233,6 @@ def shell() -> Html:
                 script src="/htmx.min.js"
                 script src="/roi_js_events.js"
             body:
-                h1: "Return of investment"
-                p class="about": "Change the money, the year or a share; the other shares adjust. Drawn by the server, no JointJS."
                 div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
 
 # An html: block writes an attribute with underscores (data_hx_get); htmx wants hyphens.
