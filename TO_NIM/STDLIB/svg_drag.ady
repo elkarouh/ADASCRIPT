@@ -6,10 +6,10 @@ For a page drawn on the server and kept up to date by htmx: everything else is d
 the HTML, and only what must follow the mouse every frame runs in the browser. This module
 holds what every such drag has in common; the app says what a drag means:
 
-    from svg_drag import Spot_T, draggable, ...
+    from svg_drag import Hooks_T, Spot_T, draggable
     def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T: ...   # during the drag
     def dropped(node: Element_T, at: Spot_T): ...                           # when it is let go
-    draggable("g.node", "svg.graph", 580.0, moved, dropped, no_click)
+    draggable("g.node", "svg.graph", 580.0, Hooks_T(moved=moved, dropped=dropped, clicked=no_click))
 
 A shape that can be dragged is an element (`g.node` above) carrying its centre, in the
 drawing's units, in the attributes data_x and data_y, as the server drew it. While it is
@@ -56,14 +56,18 @@ type Moved_T is (Element_T, Spot_T, Spot_T) -> Spot_T   # the shape, its centre 
 type Dropped_T is (Element_T, Spot_T) -> None       # the shape, where it was let go
 type Clicked_T is (Click_T) -> None                 # any click that is not the end of a drag
 
-# What draggable was given: the shapes, the drawing, and what a drag means.
-type Setup_T is record:
-    shapes:  str                        # the CSS selector of the shapes that can be dragged
-    svg:     str                        # the CSS selector of the <svg>
-    width:   Unit_T                     # its width, in its own units
+# What the app says a drag means, as one value for draggable.
+type Hooks_T is record:
     moved:   Moved_T
     dropped: Dropped_T
     clicked: Clicked_T
+
+# What draggable was given: the shapes, the drawing, and the hooks.
+type Setup_T is record:
+    shapes: str                         # the CSS selector of the shapes that can be dragged
+    svg:    str                         # the CSS selector of the <svg>
+    width:  Unit_T                      # its width, in its own units
+    hooks:  Hooks_T
 
 # ---- The drag, as a small state machine ----
 #
@@ -185,7 +189,7 @@ def on_move(e: Event):
                 return                  # not yet a drag: a hand shakes, and it may still be a click
             let k: Scale_T = scale()    # pixels * scale = drawing units
             let wanted: Spot_T = Spot_T(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
-            let now: Spot_T = setup.moved(grip.node, grip.centre, wanted)
+            let now: Spot_T = setup.hooks.moved(grip.node, grip.centre, wanted)
             grip = DRAGGING(grip.node, grip.down, grip.centre, now)
         when others:
             pass                        # nothing held: an ordinary mouse move
@@ -198,7 +202,7 @@ def on_up(e: Event):
         when DRAGGING:
             # still DRAGGING while the app answers, so a click it makes (on a form's button)
             # goes through on_click
-            setup.dropped(grip.node, grip.now)
+            setup.hooks.dropped(grip.node, grip.now)
             grip = DROPPED()
         when others:
             pass
@@ -211,16 +215,16 @@ def on_click(e: Event):
         grip = IDLE()
         e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
         return
-    setup.clicked(click_of(e))
+    setup.hooks.clicked(click_of(e))
 
-# Make the shapes SHAPE_CSS (a CSS selector) of the drawing DRAWING_CSS (the <svg>, WIDE units
-# wide) draggable: MOVED, DROPPED and CLICKED say what a drag means (see the docstring).
+# Make the shapes SHAPES (a CSS selector) of the drawing DRAWING (the <svg>, WIDTH units wide)
+# draggable: HOOKS say what a drag means (see the docstring).
 #
 # The listeners are on the whole document, so a drag goes on when the mouse leaves the
 # shape. The click listener gets True ("capture"): it is called on the way down the tree,
 # before htmx, which listens on the way up.
-def draggable(shape_css: str, drawing_css: str, wide: Unit_T, moved: Moved_T, dropped: Dropped_T, clicked: Clicked_T):
-    setup = Setup_T(shapes=shape_css, svg=drawing_css, width=wide, moved=moved, dropped=dropped, clicked=clicked)
+def draggable(shapes: str, drawing: str, width: Unit_T, hooks: Hooks_T):
+    setup = Setup_T(shapes=shapes, svg=drawing, width=width, hooks=hooks)
     document.addEventListener("mousedown", on_down)
     document.addEventListener("mousemove", on_move)
     document.addEventListener("mouseup", on_up)

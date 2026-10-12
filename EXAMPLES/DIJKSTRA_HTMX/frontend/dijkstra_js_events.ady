@@ -27,7 +27,7 @@ questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only 
 gesture means in this app.
 """
 from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
-from svg_drag import Unit_T, Spot_T, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
+from svg_drag import Hooks_T, Unit_T, Spot_T, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
 from backend/dijkstra_model import Node_T, Edge_T
 
 const WIDTH: Unit_T = 580.0     # the drawing's size (the svg's viewBox)
@@ -347,4 +347,4 @@ listen("dblclick", double_click)
 listen("contextmenu", context)
 listen("keydown", key_down)
 listen("htmx:afterSwap", forget_selection)
-draggable("g.node", "svg.graph", WIDTH, moved, dropped, clicked)
+draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved=moved, dropped=dropped, clicked=clicked))

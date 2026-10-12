@@ -23,7 +23,7 @@ The drag itself is the standard library's svg_drag, and the page its browser mod
 """
 from browser import Element_T, page, find, all, data, number, fill, press
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
-from svg_drag import Unit_T, Spot_T, spot_of, between, shift, trace, no_click, draggable
+from svg_drag import Hooks_T, Unit_T, Spot_T, spot_of, between, shift, trace, no_click, draggable
 
 const WIDTH: Unit_T = 3000.0    # the drawing's size (the svg's viewBox, and its size on the page)
 const HEIGHT: Unit_T = 2000.0
@@ -86,4 +86,4 @@ def dropped(node: Element_T, at: Spot_T):
     form.fill("y", f"{at.y:.0f}")
     page.press("#redraw")
 
-draggable("rect.node", "svg.drawing", WIDTH, moved, dropped, no_click)
+draggable("rect.node", "svg.drawing", WIDTH, Hooks_T(moved=moved, dropped=dropped, clicked=no_click))

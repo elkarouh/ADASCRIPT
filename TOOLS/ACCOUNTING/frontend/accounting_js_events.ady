@@ -23,7 +23,7 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved`, `d
 """
 from shared/routes import Point_T, Route_T, boxes, routes_of
 from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click_T, on, stop
-from svg_drag import Unit_T, Spot_T, unit_of, spot_of, between, shift, trace, place_at, draggable
+from svg_drag import Hooks_T, Unit_T, Spot_T, unit_of, spot_of, between, shift, trace, place_at, draggable
 
 const WIDTH: Unit_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
 const HALF_W: Unit_T = 110.0    # half an account's box, as boxes() in shared/routes.ady
@@ -168,4 +168,4 @@ def clicked(c: Click_T):
         redraw()
         page.fill("pick", "")           # htmx has read the form by now: the next redraw picks nothing
 
-draggable("g.node", "svg.graph", WIDTH, moved, dropped, clicked)
+draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved=moved, dropped=dropped, clicked=clicked))
