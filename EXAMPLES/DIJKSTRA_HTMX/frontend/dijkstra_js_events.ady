@@ -103,13 +103,20 @@ def dropped_cb(node: Element_T, at: Spot_T):
 
 # ---- The selection: the node or edge the reader last clicked ----
 
-# What the reader selected: kind is "node" (then node is it), "edge" (then edge is it), or "" for nothing.
-type Selection_T is record:
-    kind: str
-    node: Node_T
-    edge: Edge_T
+# What the reader selected. Which field exists depends on the kind: a node, an edge, or nothing.
+# NOTHING() is the empty selection; NODE(n) and EDGE(e) hold the node or the edge.
+type Kind_T is enum NOTHING, NODE, EDGE
 
-var selection: Selection_T = Selection_T("", Node_T("", 0.0, 0.0), Edge_T("", "", 0))
+type Selection_T (kind: Kind_T) is record:
+    case kind is
+        when NODE:
+            node: Node_T
+        when EDGE:
+            edge: Edge_T
+        when others:
+            pass
+
+var selection: Selection_T = NOTHING()
 
 # Outline ELEMENT, or take the outline off it.
 def mark(el: Element_T, lit: bool):
@@ -122,20 +129,18 @@ def mark(el: Element_T, lit: bool):
 def clear_selection():
     for el in page.all(".selected"):
         mark(el, false)
-    selection.kind = ""
+    selection = NOTHING()
 
 # Select NODE, in place of what was selected. Only the right click does this (see context).
 def select_node(node: Element_T):
     clear_selection()
-    selection.kind = "node"
-    selection.node = node_of(node)
+    selection = NODE(node_of(node))
     mark(node, true)
 
 # Select EDGE, in place of what was selected.
 def select_edge(edge: Element_T):
     clear_selection()
-    selection.kind = "edge"
-    selection.edge = edge_of(edge)
+    selection = EDGE(edge_of(edge))
     mark(edge, true)
 
 # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
@@ -158,7 +163,7 @@ def clicked_cb(c: Click_T):
 
 # The page was drawn again by the server: what was selected is gone with the old drawing.
 def forget_selection(e: Event_T):
-    selection.kind = ""
+    selection = NOTHING()
 
 # ---- Asking the reader, and sending the answer ----
 
@@ -187,11 +192,11 @@ def change_cost(edge: Edge_T):
 # Delete what is selected, after asking.
 def remove_selected():
     let form: Element_T = gesture()
-    if selection.kind == "node":
+    if selection.kind == NODE:
         if ask_yes(f"Delete the node {selection.node.name} and its edges?"):
             form.fill("name", selection.node.name)
             page.press("#drop_node")
-    elif selection.kind == "edge":
+    elif selection.kind == EDGE:
         if ask_yes(f"Delete the edge {selection.edge.a} — {selection.edge.b}?"):
             form.fill("a", selection.edge.a)
             form.fill("b", selection.edge.b)
@@ -263,7 +268,7 @@ def tool_click(e: Event_T):
         if name != "":
             send_node(name, f"{menu_at.x:.0f}", f"{menu_at.y:.0f}")
     elif tool == "cost":
-        if selection.kind == "edge":
+        if selection.kind == EDGE:
             change_cost(selection.edge)
     elif tool == "delete-node" or tool == "delete-edge":
         remove_selected()
