@@ -44,14 +44,6 @@ def node_of(el: Element_T) -> Node_T:
 def edge_of(el: Element_T) -> Edge_T:
     return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
-# The <g class="node"> that draws N.
-def node_element(n: Node_T) -> Element_T:
-    return page.element(f"g.node[data_name=\"{n.name}\"]")
-
-# The <g> that draws E.
-def edge_element(e: Edge_T) -> Element_T:
-    return page.element(f"g[data_from=\"{e.a}\"][data_to=\"{e.b}\"]")
-
 # The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
 def gesture() -> Element_T:
     return page.element("#gesture")
@@ -76,6 +68,31 @@ class NodeView:
         self.node = node_of(el)
         self.at = spot_of(el)
 
+    # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
+    def choose(self, unpick: bool):
+        let form: Element_T = gesture()
+        form.fill("pick", self.node.name)
+        form.fill("act", ("unpick" if unpick else ""))
+        page.press("#pick")
+
+    # Let it go at AT: the form #move gets its name and new centre, and #redraw sends them (see dijkstra_gui.ady).
+    def drop_at(self, at: Spot_T):
+        let form: Element_T = page.element("#move")
+        form.fill("name", self.node.name)
+        form.fill("x", f"{at.x:.0f}")
+        form.fill("y", f"{at.y:.0f}")
+        page.press("#redraw")
+
+    # Ask whether to delete this node and its edges, and if so send it.
+    def delete(self):
+        if ask_yes(f"Delete the node {self.node.name} and its edges?"):
+            gesture().fill("name", self.node.name)
+            page.press("#drop_node")
+
+    # Outline this node, or take the outline off it.
+    def mark(self, lit: bool):
+        mark_element(self.el, lit)
+
 class EdgeView:
     var edge: Edge_T
     var el: Element_T
@@ -83,6 +100,29 @@ class EdgeView:
     def __init__(self, el: Element_T):
         self.el = el
         self.edge = edge_of(el)
+
+    # Outline this edge, or take the outline off it.
+    def mark(self, lit: bool):
+        mark_element(self.el, lit)
+
+    # Ask whether to delete this edge, and if so send it.
+    def delete(self):
+        if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
+            let form: Element_T = gesture()
+            form.fill("a", self.edge.a)
+            form.fill("b", self.edge.b)
+            page.press("#drop_edge")
+
+    # Ask the cost of this edge, and send it.
+    def change_cost(self):
+        let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
+        if cost == "":
+            return
+        let form: Element_T = gesture()
+        form.fill("a", self.edge.a)
+        form.fill("b", self.edge.b)
+        form.fill("cost", cost)
+        page.press("#set_cost")
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -124,11 +164,7 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
 # node's name and new centre, and its button #redraw sends it (hx-put="/nodes", see
 # dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
 def dropped_cb(node: Element_T, at: Spot_T):
-    let form: Element_T = page.element("#move")
-    form.fill("name", node_of(node).name)
-    form.fill("x", f"{at.x:.0f}")
-    form.fill("y", f"{at.y:.0f}")
-    page.press("#redraw")
+    NodeView(node).drop_at(at)
 
 # ---- The selection: the node or edge the reader last clicked ----
 
@@ -139,16 +175,16 @@ type Kind_T is enum NOTHING, NODE, EDGE
 type Selection_T (kind: Kind_T) is record:
     case kind is
         when NODE:
-            node: Node_T
+            node: NodeView
         when EDGE:
-            edge: Edge_T
+            edge: EdgeView
         when others:
             pass
 
 var selection: Selection_T = NOTHING()
 
-# Outline ELEMENT, or take the outline off it.
-def mark(el: Element_T, lit: bool):
+# Outline ELEMENT, or take the outline off it (the views say it; see NodeView.mark).
+def mark_element(el: Element_T, lit: bool):
     let cls: str = el.attr("class")
     if lit:
         el.set_attr("class", cls + " selected")
@@ -157,20 +193,25 @@ def mark(el: Element_T, lit: bool):
 
 def clear_selection():
     for el in page.all(".selected"):
-        mark(el, false)
+        if has_class(el, "node"):
+            NodeView(el).mark(false)
+        else:
+            EdgeView(el).mark(false)
     selection = NOTHING()
 
 # Select NODE, in place of what was selected. Only the right click does this (see context).
 def select_node(node: Element_T):
     clear_selection()
-    selection = NODE(node_of(node))
-    mark(node, true)
+    let view: NodeView = NodeView(node)
+    selection = NODE(view)
+    view.mark(true)
 
 # Select EDGE, in place of what was selected.
 def select_edge(edge: Element_T):
     clear_selection()
-    selection = EDGE(edge_of(edge))
-    mark(edge, true)
+    let view: EdgeView = EdgeView(edge)
+    selection = EDGE(view)
+    view.mark(true)
 
 # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
 # it is chosen already (drawn as the start or the goal), takes it out of the route again. Anything
@@ -182,7 +223,7 @@ def clicked_cb(c: Click_T):
     let node: ?Element_T = on(c, "g.node")
     if node is not None:
         clear_selection()
-        choose(node_of(node), has_class(node, "start") or has_class(node, "goal"))
+        NodeView(node).choose(has_class(node, "start") or has_class(node, "goal"))
         return
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is None:
@@ -209,37 +250,12 @@ def send_node(name: str, x: str, y: str):
     form.fill("y", y)
     page.press("#make_node")
 
-# Ask the cost of EDGE, and send it.
-def change_cost(edge: Edge_T):
-    let cost: str = ask(f"Cost of the edge {edge.a} — {edge.b}?", str(edge.cost))
-    if cost == "":
-        return
-    let form: Element_T = gesture()
-    form.fill("a", edge.a)
-    form.fill("b", edge.b)
-    form.fill("cost", cost)
-    page.press("#set_cost")
-
 # Delete what is selected, after asking.
 def remove_selected():
-    let form: Element_T = gesture()
     if selection.kind == NODE:
-        if ask_yes(f"Delete the node {selection.node.name} and its edges?"):
-            form.fill("name", selection.node.name)
-            page.press("#drop_node")
+        selection.node.delete()
     elif selection.kind == EDGE:
-        if ask_yes(f"Delete the edge {selection.edge.a} — {selection.edge.b}?"):
-            form.fill("a", selection.edge.a)
-            form.fill("b", selection.edge.b)
-            page.press("#drop_edge")
-
-# Choose NODE for the route: the start, then the goal (the server decides which, and draws the way);
-# or, with UNPICK, take a chosen node out of the route again.
-def choose(node: Node_T, unpick: bool):
-    let form: Element_T = gesture()
-    form.fill("pick", node.name)
-    form.fill("act", ("unpick" if unpick else ""))
-    page.press("#pick")
+        selection.edge.delete()
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
@@ -247,7 +263,7 @@ def double_click(e: Event_T):
     let c: Click_T = click_of(e)
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is not None:
-        change_cost(edge_of(edge))
+        EdgeView(edge).change_cost()
         return
     if on(c, "svg.graph") is None or on(c, "g.node") is not None:
         return                          # outside the drawing, or on a node (which has no double-click)
@@ -300,7 +316,7 @@ def tool_click(e: Event_T):
             send_node(name, f"{menu_at.x:.0f}", f"{menu_at.y:.0f}")
     elif tool == "cost":
         if selection.kind == EDGE:
-            change_cost(selection.edge)
+            selection.edge.change_cost()
     elif tool == "delete-node" or tool == "delete-edge":
         remove_selected()
 
@@ -322,6 +338,7 @@ def key_down(e: Event_T):
 
 var linking: bool = false               # a wire is being drawn
 var from_node: Node_T = Node_T("")     # the node the wire starts at
+var from_at: Spot_T = Spot_T(x=0.0, y=0.0)     # and where it is drawn
 var swallow: bool = false               # the click after a wire is let go: not a click on a node
 
 def link_down(e: Event_T):
@@ -333,16 +350,17 @@ def link_down(e: Event_T):
         return
     stop(c)
     from_node = node_of(node)
+    from_at = spot_of(node)
     linking = true
     swallow = false
     let wire: Element_T = page.element("path#wire")
     wire.set_attr("visibility", "visible")
-    draw_line(wire, spot_of(node), spot_at(e))
+    draw_line(wire, from_at, spot_at(e))
 
 def link_move(e: Event_T):
     if not linking:
         return
-    draw_line(page.element("path#wire"), spot_of(node_element(from_node)), spot_at(e))
+    draw_line(page.element("path#wire"), from_at, spot_at(e))
 
 def link_up(e: Event_T):
     if not linking:
