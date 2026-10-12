@@ -5,13 +5,24 @@ where it is kept.
 A node has a name and a place in the drawing; an edge joins two nodes, both ways, at a
 cost. The network is changed only through the functions below (create, update, delete),
 each of which says what was wrong, or "" when it was done. It is kept in a text file,
-one line a node or an edge. The shortest way itself is the library's
+one line a node or an edge (text_of, network_of; the file itself is read and written by
+dijkstra_events.ady). The shortest way itself is the library's
 (TO_NIM/STDLIB/graphs.ady): build_graph turns the network into the graph it wants.
 
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
 
-from shared/network import Node_T, Edge_T
+# A node: its name, and its centre in the drawing (580 wide and 380 high).
+type Node_T is record:
+    name: str
+    x:    float
+    y:    float
+
+# An edge: the two nodes it joins, both ways, and its cost.
+type Edge_T is record:
+    a:    str
+    b:    str
+    cost: int
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
@@ -139,19 +150,6 @@ def network_of(text: str) -> Network_T:
                 continue
             let joined: str = add_edge(net, w[1], w[2], c)
     return net
-
-# The network kept at PATH, or the sample when there is none yet.
-def load(path: Path) -> Network_T:
-    let text: str | !PathFailure_T = path.read_text()
-    if text is PathFailure_T:
-        return sample()
-    return network_of(text)
-
-def save(net: Network_T, path: Path) -> str:
-    let done: None | !PathFailure_T = path.write_text(text_of(net))
-    if done is PathFailure_T:
-        return f"Could not write {path}."
-    return ""
 
 # ---- for the library ----
 

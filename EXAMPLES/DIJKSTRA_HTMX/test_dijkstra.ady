@@ -1,8 +1,7 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
-from shared/network import Edge_T
-from backend/dijkstra_model import Network_T, add_edge, add_node, build_graph, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
+from backend/dijkstra_model import Edge_T, Network_T, add_edge, add_node, build_graph, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
 from backend/dijkstra_events import answer, keep_in
 
 # ---- the model ----

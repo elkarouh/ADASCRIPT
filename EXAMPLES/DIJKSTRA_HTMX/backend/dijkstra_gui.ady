@@ -11,8 +11,7 @@ goal; `act` is unpick (a chosen node clicked again).
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
-from shared/network import Edge_T, Node_T
-from backend/dijkstra_model import Network_T, build_graph, names_of, uses
+from backend/dijkstra_model import Edge_T, Network_T, Node_T, build_graph, names_of, uses
 
 const WIDTH: float = 580.0
 const HEIGHT: float = 380.0

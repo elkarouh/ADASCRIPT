@@ -19,14 +19,14 @@ PORT    ?= 8810
 all: server frontend/dijkstra_js_events.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
-server: shared/network.ady backend/dijkstra_model.ady backend/dijkstra_gui.ady backend/dijkstra_events.ady backend/server.ady
+server: backend/dijkstra_model.ady backend/dijkstra_gui.ady backend/dijkstra_events.ady backend/server.ady
 	@echo "building backend/server"
 	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 # The one script of our own, Adascript compiled to JavaScript; the server sends it as /dijkstra_js_events.js.
-# backend/ is native (C), frontend/ is what the browser runs; shared/ (the node and the edge) is compiled both ways.
-frontend/dijkstra_js_events.js: frontend/dijkstra_js_events.ady shared/network.ady
+# backend/ is native (C), frontend/ is what the browser runs; the model (backend/dijkstra_model.ady) is compiled both ways.
+frontend/dijkstra_js_events.js: frontend/dijkstra_js_events.ady backend/dijkstra_model.ady
 	@echo "building frontend/dijkstra_js_events.js"
 	@$(ADY2NIM) js frontend/dijkstra_js_events.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
