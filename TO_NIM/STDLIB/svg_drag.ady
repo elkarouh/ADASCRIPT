@@ -7,20 +7,20 @@ the HTML, and only what must follow the mouse every frame runs in the browser. T
 holds what every such drag has in common; the app says what a drag means:
 
     from svg_drag import Hooks_T, Spot_T, draggable
-    def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T: ...   # during the drag
-    def dropped(node: Element_T, at: Spot_T): ...                           # when it is let go
-    draggable("g.node", "svg.graph", 580.0, Hooks_T(moved=moved, dropped=dropped, clicked=no_click))
+    def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T: ...   # during the drag
+    def dropped_cb(node: Element_T, at: Spot_T): ...                           # when it is let go
+    draggable("g.node", "svg.graph", 580.0, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=no_click_cb))
 
 A shape that can be dragged is an element (`g.node` above) carrying its centre, in the
 drawing's units, in the attributes data_x and data_y, as the server drew it. While it is
-dragged, `moved` is told where the mouse has taken that centre, and answers where the shape
-is (it may keep it inside the drawing, or not move it at all). When it is let go, `dropped`
+dragged, `moved_cb` is told where the mouse has taken that centre, and answers where the shape
+is (it may keep it inside the drawing, or not move it at all). When it is let go, `dropped_cb`
 is told where it ended; it usually fills in a hidden form and clicks its button, so that
 htmx sends the new place to the server, which draws the page again.
 
 A press that does not move is a click, and goes on to htmx. The click the browser sends
 after a drag is swallowed, so a shape is not clicked by being moved. Other clicks go to
-`clicked` first, as a Click_T (browser.ady): a shift-click, say, which it may stop.
+`clicked_cb` first, as a Click_T (browser.ady): a shift-click, say, which it may stop.
 
 Used by EXAMPLES/DIJKSTRA_HTMX and TOOLS/ACCOUNTING.
 
@@ -58,9 +58,9 @@ type Clicked_T is (Click_T) -> None                 # any click that is not the 
 
 # What the app says a drag means, as one value for draggable.
 type Hooks_T is record:
-    moved:   Moved_T
-    dropped: Dropped_T
-    clicked: Clicked_T
+    moved_cb:   Moved_T
+    dropped_cb: Dropped_T
+    clicked_cb: Clicked_T
 
 # What draggable was given: the shapes, the drawing, and the hooks.
 type Setup_T is record:
@@ -74,7 +74,7 @@ type Setup_T is record:
 #            mousedown on a shape           mousemove more than 4 px
 #   IDLE  ------------------------>  PRESSED  ---------------------->  DRAGGING
 #    ^  ^                               |                                 |
-#    |  +------- mouseup (a click) -----+                                 | mouseup: dropped(..)
+#    |  +------- mouseup (a click) -----+                                 | mouseup: dropped_cb(..)
 #    |                                                                    |
 #    +------------- click (the browser's, swallowed) ---- DROPPED  <-----+
 #
@@ -98,7 +98,7 @@ type Grip_T (phase: Phase_T) is record:
             node:   Element_T           # the shape held
             down:   Screen_T              # where the mouse went down
             centre: Spot_T                # the shape's centre then
-            now:    Spot_T                # and where it is now, as `moved` answered
+            now:    Spot_T                # and where it is now, as `moved_cb` answered
         when others:
             pass
 
@@ -161,7 +161,7 @@ def between(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
     return max(lo, min(hi, v))
 
 # For an app with nothing to do on a click.
-def no_click(c: Click_T):
+def no_click_cb(c: Click_T):
     pass
 
 # ---- The listeners: what each mouse event does, by phase ----
@@ -189,7 +189,7 @@ def on_move(e: Event):
                 return                  # not yet a drag: a hand shakes, and it may still be a click
             let k: Scale_T = scale()    # pixels * scale = drawing units
             let wanted: Spot_T = Spot_T(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
-            let now: Spot_T = setup.hooks.moved(grip.node, grip.centre, wanted)
+            let now: Spot_T = setup.hooks.moved_cb(grip.node, grip.centre, wanted)
             grip = DRAGGING(grip.node, grip.down, grip.centre, now)
         when others:
             pass                        # nothing held: an ordinary mouse move
@@ -202,7 +202,7 @@ def on_up(e: Event):
         when DRAGGING:
             # still DRAGGING while the app answers, so a click it makes (on a form's button)
             # goes through on_click
-            setup.hooks.dropped(grip.node, grip.now)
+            setup.hooks.dropped_cb(grip.node, grip.now)
             grip = DROPPED()
         when others:
             pass
@@ -215,7 +215,7 @@ def on_click(e: Event):
         grip = IDLE()
         e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
         return
-    setup.hooks.clicked(click_of(e))
+    setup.hooks.clicked_cb(click_of(e))
 
 # Make the shapes SHAPES (a CSS selector) of the drawing DRAWING (the <svg>, WIDTH units wide)
 # draggable: HOOKS say what a drag means (see the docstring).

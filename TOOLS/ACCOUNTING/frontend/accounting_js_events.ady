@@ -18,8 +18,8 @@ into the hidden field `target` before the same Redraw: the server answers with
 the popup that asks when, what and how much.
 The drag itself (the mouse, when a press becomes a drag, the click after it) is the standard
 library's svg_drag, and the page (finding elements, forms, clicks) its browser module, both
-in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved`, `dropped`, and
-`clicked` for the shift-click.
+in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`, `dropped_cb`, and
+`clicked_cb` for the shift-click.
 """
 from shared/routes import Point_T, Route_T, boxes, routes_of
 from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click_T, on, stop
@@ -131,7 +131,7 @@ def redraw():
 # While NODE is dragged. The frozen account (class "from") stays where it is: a line runs from
 # it to the mouse, the arrow being drawn. Any other account goes where the mouse takes it,
 # kept clear of the sides and the top, and the arrows follow.
-def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     if node.has_class("from"):
         rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
         return wanted                   # the arrow's tip
@@ -141,7 +141,7 @@ def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     return now
 
 # NODE let go at AT.
-def dropped(node: Element_T, at: Spot_T):
+def dropped_cb(node: Element_T, at: Spot_T):
     if node.has_class("from"):
         # the arrow: let go over another account, its name goes into the hidden field target,
         # and the server answers with the popup that asks when, what and how much. Let go over
@@ -158,7 +158,7 @@ def dropped(node: Element_T, at: Spot_T):
 
 # A click with shift held picks an account to merge with others, or lets it go: its name goes
 # into the hidden field pick, and the page is asked for again. Other clicks go on to htmx.
-def clicked(c: Click_T):
+def clicked_cb(c: Click_T):
     if not c.shift:
         return
     let node: ?Element_T = c.on("g.node")
@@ -168,4 +168,4 @@ def clicked(c: Click_T):
         redraw()
         page.fill("pick", "")           # htmx has read the form by now: the next redraw picks nothing
 
-draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved=moved, dropped=dropped, clicked=clicked))
+draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
