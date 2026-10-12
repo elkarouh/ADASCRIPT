@@ -23,7 +23,7 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, text, listen, listen_first
+from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, text, listen, listen_first
 from svg_drag import Unit_T, Spot, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
 
 const WIDTH: Unit_T = Unit_T(580.0)     # the drawing's size (the svg's viewBox)
@@ -127,16 +127,17 @@ def select_at(c: Click):
         selected_to = edge.data_to
         mark(edge, true)
 
-# A click that svg_drag did not take for a drag. On a node it chooses the route (the server
-# draws the page again, so nothing stays selected); on an edge it selects the edge; on the empty
-# space it selects nothing. A click outside the drawing (the toolbar, a menu) is none of this.
+# A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
+# it is chosen already (drawn as the start or the goal), takes it out of the route again. On an
+# edge it selects the edge; on the empty space it selects nothing. A click outside the drawing
+# (the toolbar, a menu) is none of this.
 def clicked(c: Click):
     if on(c, "svg.graph") == nil:
         return
     let node: Element_T = on(c, "g.node")
     if node != nil:
         clear_selection()
-        choose(node.data_name)
+        choose(node.data_name, has_class(node, "start") or has_class(node, "goal"))
         return
     select_at(c)
 
@@ -185,10 +186,12 @@ def remove_selected():
             form.fill("b", selected_to)
             page.press("#drop_edge")
 
-# Choose NAME for the route: the start, then the goal (the server decides which, and draws the way).
-def choose(name: str):
+# Choose NAME for the route: the start, then the goal (the server decides which, and draws the way);
+# or, with UNPICK, take a chosen node out of the route again.
+def choose(name: str, unpick: bool):
     let form: Element_T = gesture()
     form.fill("pick", name)
+    form.fill("act", ("unpick" if unpick else ""))
     page.press("#pick")
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----

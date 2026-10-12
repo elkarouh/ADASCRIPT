@@ -45,7 +45,9 @@ assert "A → H → E, cost 2." in answer("POST", "/edges", "start=A&goal=E&a=H&
 let moved: str = answer("PUT", "/nodes", "name=H&x=300&y=100")
 assert "data_x=\"300\"" in moved or "data-x=\"300\"" in moved
 assert "A → F → E, cost 23" in answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
-assert "Click a node to start from." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")   # the start went
+assert "Click a node to start from." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")
+assert "Click a node to start from." in answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
+assert "From C: click a node to go to." in answer("GET", "/all", "start=C&goal=B&pick=B&act=unpick")  # a chosen goal clicked again
 assert "A → C → F → E, cost 20" in answer("POST", "/reset", "start=A&goal=E")
 # the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
 let placed: str = answer("POST", "/nodes", "name=K&x=120&y=200")

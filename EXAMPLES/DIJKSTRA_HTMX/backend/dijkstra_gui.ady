@@ -7,7 +7,7 @@ and of what the reader has picked: the start and the goal, the fields of the for
 htmx swaps in. Reading is GET /all. The drawing's gestures and the menus (dijkstra_js_events.ady)
 fill in the hidden form `#gesture` and press one of its buttons, which sends POST, PUT or
 DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the start or the
-goal; `act` is clear.
+goal; `act` is clear, or unpick (a chosen node clicked again).
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
@@ -97,6 +97,13 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
         p.start = ""
     if p.goal not in names:
         p.goal = ""
+    if p.act == "unpick":                   # a chosen node clicked again: it is no longer chosen
+        if p.pick == p.start:
+            p.start = ""
+            p.goal = ""
+        elif p.pick == p.goal:
+            p.goal = ""
+        p.pick = ""
     if p.pick != "" and p.pick in names:    # a node clicked: the start, then the goal, then the start again
         if p.start == "" or p.goal != "":
             p.start = p.pick
@@ -131,6 +138,7 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 input type="hidden" name="x" value=""
                 input type="hidden" name="y" value=""
                 input type="hidden" name="pick" value=""
+                input type="hidden" name="act" value=""
                 button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
                 button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
                 button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
@@ -149,7 +157,7 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 for n in net.nodes:
                     + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
-            p class="hint": "Click a node to start from, then one to go to. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
+            p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
             + menus_html()
 
 const STYLE: str = """
