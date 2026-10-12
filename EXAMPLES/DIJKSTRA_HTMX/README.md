@@ -22,7 +22,7 @@ every change; Reset puts the sample back.
 
 | File | What it knows |
 |---|---|
-| `backend/dijkstra_model.ady` | the model, a placeholder: a `Network` of `Node_T`s and `Edge`s; what may be done to it (`add_node`, `move_node`, `remove_node`, `add_edge`, `set_cost`, `remove_edge`, each returning what was wrong, or `""`); keeping it in a text file (`load`, `save`); and `build_graph`, which makes of it the graph the library's `shortest_route` wants (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
+| `backend/dijkstra_model.ady` | the model, a placeholder: a `Network` of `Node_T`s (a name each) and `Edge`s; what may be done to it (`add_node`, `remove_node`, `add_edge`, `set_cost`, `remove_edge`, each returning what was wrong, or `""`); keeping it in a text file (`text_of`, `network_of`); and `build_graph`, which makes of it the graph the library's `shortest_route` wants (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
 | `backend/dijkstra_gui.ady` | how to draw it: the SVG, the tables and forms, the text. A function from the network and what is picked to HTML; `to_html` for a node or an edge in the drawing, `row_html` for one in a table. |
 | `backend/dijkstra_events.ady` | what each request does: `answer(method, path, fields)` calls the model, saves, and returns the page. Holds the network. No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to `answer`, and serves the two scripts. |

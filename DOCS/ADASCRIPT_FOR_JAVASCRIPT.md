@@ -142,9 +142,10 @@ record, which is declared with its fields and their types:
 ```python
 type Node_T is record:
     name: str
-    x:    float
-    y:    float
 ```
+
+A node has a name and nothing else. Where it is drawn is decided by the GUI,
+not the model, so the model stays the same whatever the layout does.
 
 A record is built by calling its type with the fields in order, or by name:
 
@@ -266,7 +267,7 @@ change it accepts:
 
 <!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-def add_node(net: Network_T, name: str, x: float, y: float) -> str:
+def add_node(net: Network_T, name: str) -> str:
     if len(name) == 0 or len(name) > 8:
         return "A name is 1 to 8 letters or digits."
 ```
@@ -275,8 +276,8 @@ The caller checks the result, and the tests in `test_dijkstra.ady` do the same:
 
 <!-- from: EXAMPLES/DIJKSTRA_HTMX/test_dijkstra.ady -->
 ```python
-assert add_node(net, "G", 10.0, 20.0) == ""
-assert add_node(net, "G", 10.0, 20.0) == "There is a node G already."
+assert add_node(net, "G") == ""
+assert add_node(net, "G") == "There is a node G already."
 ```
 
 Adascript also has a failure type, `T | !F`, for "a value or a failure" that

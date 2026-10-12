@@ -5,21 +5,16 @@ server.ady hands every request here as a method, a path and its fields, and send
 the page that comes out. The tests call answer() the same way, with no server running.
 The network is kept in a text file (keep_in), written after every change.
 """
-from backend/dijkstra_model import Network_T, add_edge, add_node, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of
-from backend/dijkstra_gui import all_text, field_of, new_spot, params_of
+from backend/dijkstra_model import Network_T, add_edge, add_node, names_of, network_of, remove_edge, remove_node, sample, set_cost, text_of
+from backend/dijkstra_gui import Place_T, all_text, field_of, layout_of, layout_text, new_spot, params_of, sample_layout
 
 var net: Network_T = sample()
+var layout: {str}Place_T = sample_layout()     # where each node is drawn: the GUI's, kept with the network
 var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
 
-# The network kept at PATH, or the sample when there is none yet.
-def load(path: Path) -> Network_T:
-    let text: str | !PathFailure_T = path.read_text()
-    if text is PathFailure_T:
-        return sample()
-    return network_of(text)
-
-def save(net: Network_T, path: Path) -> str:
-    let done: None | !PathFailure_T = path.write_text(text_of(net))
+# Network and layout, kept together in PATH: the node and edge lines, then the "at" lines.
+def save(net: Network_T, layout: {str}Place_T, path: Path) -> str:
+    let done: None | !PathFailure_T = path.write_text(text_of(net) + layout_text(net, layout))
     if done is PathFailure_T:
         return f"Could not write {path}."
     return ""
@@ -27,7 +22,14 @@ def save(net: Network_T, path: Path) -> str:
 # From now on the network is the one kept in PATH ("": the sample, kept nowhere).
 def keep_in(path: str):
     store = path
-    net = (load(Path(path)) if path != "" else sample())
+    net = sample()
+    layout = sample_layout()
+    if path != "":
+        let text: str | !PathFailure_T = Path(path).read_text()
+        if text is PathFailure_T:
+            return                      # no file yet: the sample
+        net = network_of(text)
+        layout = layout_of(text)
 
 def number_of(text: str) -> float:
     let n: float | !ParseFailure_T = parse_float(text)
@@ -47,15 +49,19 @@ def answer(method: str, path: str, fields: str) -> str:
     if method == "GET" and path == "/all":
         pass
     elif method == "POST" and path == "/nodes":
-        var x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
-        var y: float = number_of(field_of(fields, "y"))
-        if x < 0.0 or y < 0.0:                               # not given (-1): the next free place
-            let at: []float = new_spot(net)
-            x = at[0]
-            y = at[1]
-        problem = add_node(net, name, x, y)
+        let x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
+        let y: float = number_of(field_of(fields, "y"))
+        problem = add_node(net, name)
+        if problem == "":
+            if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
+                layout[name] = new_spot(len(net.nodes) - 1)
+            else:
+                layout[name] = Place_T(x, y)
     elif method == "PUT" and path == "/nodes":
-        problem = move_node(net, name, number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
+        if name in names_of(net):
+            layout[name] = Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
+        else:
+            problem = f"There is no node {name}."
     elif method == "DELETE" and path == "/nodes":
         problem = remove_node(net, name)
     elif method == "POST" and path == "/edges":
@@ -66,8 +72,9 @@ def answer(method: str, path: str, fields: str) -> str:
         problem = remove_edge(net, a, b)
     elif method == "POST" and path == "/reset":
         net = sample()
+        layout = sample_layout()
     else:
         return ""
     if method != "GET" and problem == "" and store != "":
-        problem = save(net, Path(store))
-    return all_text(net, params_of(fields), problem)
+        problem = save(net, layout, Path(store))
+    return all_text(net, layout, params_of(fields), problem)

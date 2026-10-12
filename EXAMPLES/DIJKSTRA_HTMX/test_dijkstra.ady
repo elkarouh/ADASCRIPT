@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network_T, add_edge, add_node, build_graph, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
+from backend/dijkstra_model import Edge_T, Network_T, add_edge, add_node, build_graph, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
 from backend/dijkstra_events import answer, keep_in
 
 # ---- the model ----
@@ -11,15 +11,14 @@ assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
 assert shortest_route[str](build_graph(net), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
 assert uses(w[1], Edge_T("C", "F", 2)) and not uses(w[1], Edge_T("A", "B", 7))
 
-assert add_node(net, "G", 10.0, 20.0) == ""
-assert add_node(net, "G", 10.0, 20.0) == "There is a node G already."
-assert add_node(net, "a b", 10.0, 20.0) != ""                    # letters and digits only
+assert add_node(net, "G") == ""
+assert add_node(net, "G") == "There is a node G already."
+assert add_node(net, "a b") != ""                    # letters and digits only
 assert add_edge(net, "G", "A", 3) == ""
 assert add_edge(net, "A", "G", 4) != ""                          # either way round, one edge
 assert add_edge(net, "G", "G", 4) != "" and add_edge(net, "G", "Z", 4) != ""
 assert set_cost(net, "A", "G", 5) == "" and set_cost(net, "A", "G", 0) != ""
-assert move_node(net, "G", 99.0, 88.0) == ""
-assert "node G 99 88" in text_of(net) and "edge G A 5" in text_of(net)
+assert "node G" in text_of(net) and "edge G A 5" in text_of(net)
 assert text_of(network_of(text_of(net))) == text_of(net)         # kept and read back, the same
 assert remove_edge(net, "G", "A") == "" and remove_edge(net, "G", "A") != ""
 assert remove_node(net, "C") == ""

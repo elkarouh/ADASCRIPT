@@ -36,9 +36,9 @@ const MARGIN: Unit_T = 30.0     # how near its edge a node may go
 
 # ---- The model's values, read off the drawing, and the drawing of each ----
 
-# The node a <g class="node"> draws: its name, and its centre as the server put it.
+# The node a <g class="node"> draws: its name. Where it is drawn is not the model's.
 def node_of(el: Element_T) -> Node_T:
-    return Node_T(el.data("name"), el.number("data_x"), el.number("data_y"))
+    return Node_T(el.data("name"))
 
 # The edge a <g data_from data_to data_cost> draws.
 def edge_of(el: Element_T) -> Edge_T:
@@ -323,7 +323,7 @@ def key_down(e: Event_T):
 # selection, and htmx does not see it.
 
 var linking: bool = false               # a wire is being drawn
-var from_node: Node_T = Node_T("", 0.0, 0.0)     # the node the wire starts at
+var from_node: Node_T = Node_T("")     # the node the wire starts at
 var swallow: bool = false               # the click after a wire is let go: not a click on a node
 
 def link_down(e: Event_T):
