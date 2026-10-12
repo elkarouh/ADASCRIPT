@@ -4,11 +4,12 @@
 the mouse, and an arrow drawn from one. Every other event is declared in the HTML (hx-*
 attributes, accounting_page.ady) and handled on the server (accounting_events.ady).
 
-A node is a <g class="node" data_id=".." data_x=".." data_y=".."> (its id and
-its centre in the drawing's units). Pressing on it and moving the mouse
-moves it, as a translation. While it moves, the arrows are routed again, in the browser, as the server will. Letting go writes the new centre into the form's
-hidden field `pos`, and clicks the hidden Redraw button, which asks the
-server for the page again, with the arrows drawn to the new place.
+The accounts and arrows are the page's own text (the hidden pre#books, see accounting_page.ady),
+read into a BooksView when htmx has drawn the page. Where each account is drawn is computed from
+them (shared/layout.ady), not read off the drawing: while one is dragged, every account is laid
+out again and every arrow routed again, here, by the same code the server uses (shared/routes.ady).
+Letting go writes the new centre into the form's hidden field `pos`, and clicks the hidden Redraw
+button, which asks the server for the page again, with the arrows drawn to the new place.
 A press that does not move is a click, and goes on to htmx; with the shift key
 held it picks the account, to be merged with others (the field `pick`).
 
@@ -22,100 +23,99 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`,
 `clicked_cb` for the shift-click.
 """
 from shared/routes import Point_T, Route_T, boxes, routes_of
-from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click_T, on, stop
-from svg_drag import Hooks_T, Unit_T, Spot_T, unit_of, spot_of, between, shift, trace, place_at, draggable
+from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position
+from browser import Element_T, Event_T, Click_T, page, text, field, on, stop, listen
+from svg_drag import Hooks_T, Unit_T, Spot_T, between, shift, draggable
 
 const WIDTH: Unit_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
 const HALF_W: Unit_T = 110.0    # half an account's box, as boxes() in shared/routes.ady
 const TOP: Unit_T = 20.0        # how near the top an account may go
 
-# ---- Reading the page ----
-
-# What the server wrote on an element, read as if it were a field: `node.data_name` is
-# data_name(node). An account carries its id, its name and half its height; an arrow the
-# names of the accounts it joins.
-def data_id(n: Element_T) -> str:
-    return n.data("id")
-
-def data_name(n: Element_T) -> str:
-    return n.data("name")
-
-def data_h(n: Element_T) -> Unit_T:
-    return unit_of(n, "data_h")
-
-def data_from(a: Element_T) -> str:
-    return a.data("from")
-
-def data_to(a: Element_T) -> str:
-    return a.data("to")
-
-# shared/routes.ady, which the server uses too, works in plain floats (its Point_T).
+# shared/routes.ady and shared/layout.ady work in plain floats (Point_T): these convert.
 def point_of(s: Spot_T) -> Point_T:
     return Point_T(float(s.x), float(s.y))
 
-def spot_at(p: Point_T) -> Spot_T:
+def spot_at_point(p: Point_T) -> Spot_T:
     return Spot_T(x=Unit_T(p.x), y=Unit_T(p.y))
 
-# The drawing's height: the last of the four numbers of its viewBox, "0 0 980 670".
-def height() -> Unit_T:
-    let r: float | !ParseFailure_T = parse_float(page.element("svg.graph").attr("viewBox").split(" ")[3])
-    if r is ParseFailure_T:
-        return 0.0
-    return Unit_T(r)
+# The account the element EL draws: its id (number and kind, as the server names it), and its name.
+def data_id(el: Element_T) -> str:
+    return el.data("id")
 
-# The name of the account (not a group) the point AT is over, other than FROM_NAME, or "".
-def account_at(at: Spot_T, from_name: str) -> str:
-    for n in page.all("g.node"):
-        if n.data_name != from_name and not n.has_class("group"):
-            let c: Spot_T = spot_of(n)
-            if abs(at.x - c.x) <= HALF_W and abs(at.y - c.y) <= n.data_h:
-                return n.data_name
-    return ""
+def data_name(el: Element_T) -> str:
+    return el.data("name")
 
-# ---- Changing the page ----
+# ---- The books as the page holds them ----
 
-# While NODE is dragged to AT, every arrow is routed again, here, by the same routes_of the
-# server uses (shared/routes.ady, compiled to JavaScript too), from what the page holds: the
-# accounts (data_name, data_x, data_y, data_h) and the arrows (<g data_from=".." data_to="..">,
-# each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
-# letting go asks the server, which draws the page again, and it comes out the same.
-def reroute_arrows(node: Element_T, at: Spot_T):
-    # the accounts: their names, centres (NODE's at AT) and half heights, in page order
-    var names: []str = []
-    var points: []Point_T = []
-    var tall: []float = []
-    for n in page.all("g.node"):
-        names.append(n.data_name)
-        points.append(point_of(at if n.data_name == node.data_name else spot_of(n)))
-        tall.append(float(n.data_h))
-    # the arrows: which accounts each joins, and the amount written on it
-    let arrows: []Element_T = page.all("g[data_from]")
-    var sources: []str = []
-    var targets: []str = []
-    var texts: []str = []
-    for a in arrows:
-        sources.append(a.data_from)
-        targets.append(a.data_to)
-        texts.append(a.element("text.amount").text)
-    let size: Spot_T = Spot_T(x=WIDTH, y=height())
-    let routes: []Route_T = routes_of(sources, targets, texts, names, points, tall, point_of(size), [], [], boxes())
-    # routes[k] is the way for arrows[k]: its curve and where its amount goes
-    for k in range(len(arrows)):
-        for p in arrows[k].all("path"):
-            p.trace(routes[k].d)
-        let label: ?Element_T = arrows[k].find("text.amount")
-        if label is not None:
-            label.place_at(spot_at(routes[k].label))
+# The accounts and arrows as the server keeps them (the hidden pre#books), and where each account
+# is drawn now: the layout of the accounts, with the reader's places (the field pos) and any
+# account dragged since, which is put into pos as the drag goes on. The views are built again each
+# time htmx draws the page (see page_drawn).
+class BooksView:
+    var slots: []Slot_T                 # the accounts, in the server's order
+    var arrows: []Arrow_T               # the arrows, each from one account to another
+    var pos: str                        # where the reader has dragged accounts: "id@x,y|..."
+    var layout: Layout_T                # where everything is drawn
 
-# The field pos holds every account the user has moved, "id@x,y|id@x,y": ID's entry replaced,
-# or added. The server lays the accounts out, then puts these where they were dropped.
-def with_position(pos: str, id: str, at: Spot_T) -> str:
-    var kept: []str = []
-    for entry in pos.split("|"):
-        if entry != "" and not entry.startswith(id + "@"):
-            kept.append(entry)
-    kept.append(f"{id}@{at.x:.1f},{at.y:.1f}")
-    return "|".join(kept)
+    def __init__(self):
+        var kept: str = ""
+        var pos: str = ""
+        let el: ?Element_T = page.find("pre#books")
+        if el is not None:                  # no page yet, the first time: an empty one
+            kept = el.text()
+            pos = page.field("pos")
+        self.slots = slots_of(kept)
+        self.arrows = arrows_of(kept)
+        self.pos = pos
+        self.layout = layout_of_slots(self.slots, self.pos)
+
+    # Where the account at index K is drawn, and what it is called.
+    def index_of(self, id: str) -> int:
+        for k in range(len(self.slots)):
+            if self.slots[k].id == id:
+                return k
+        return -1
+
+    # The name of the account AT is over, other than FROM_NAME, or "".
+    def account_at(self, at: Point_T, from_name: str) -> str:
+        for k in range(len(self.slots)):
+            let s: Slot_T = self.slots[k]
+            let c: Point_T = self.layout.points[k]
+            if s.name != from_name and not s.group:
+                if abs(at.x - c.x) <= float(HALF_W) and abs(at.y - c.y) <= s.tall:
+                    return s.name
+        return ""
+
+    # The account ID is dragged to AT: it is laid out there, and every arrow is routed again from the
+    # layout, as the server will route them when the page is drawn again.
+    def move(self, id: str, at: Point_T):
+        self.pos = with_position(self.pos, id, at)
+        self.layout = layout_of_slots(self.slots, self.pos)
+        var names: []str = []
+        var tall: []float = []
+        for s in self.slots:
+            names.append(s.name)
+            tall.append(s.tall)
+        var sources: []str = []
+        var targets: []str = []
+        var labels: []str = []
+        for a in self.arrows:
+            sources.append(a.source)
+            targets.append(a.target)
+            labels.append(a.label)
+        let size: Point_T = Point_T(float(WIDTH), self.layout.height)
+        let routes: []Route_T = routes_of(sources, targets, labels, names, self.layout.points, tall, size, [], [], boxes())
+        # routes[k] is the way for arrow k: its curve, and where its amount goes
+        for k in range(len(self.arrows)):
+            let el: ?Element_T = page.find(f"g[data_from=\"{self.arrows[k].source}\"][data_to=\"{self.arrows[k].target}\"]")
+            if el is not None:
+                for p in el.all("path"):
+                    p.trace(routes[k].d)
+                let label: ?Element_T = el.find("text.amount")
+                if label is not None:
+                    label.place_at(spot_at_point(routes[k].label))
+
+var books: BooksView = BooksView()       # the page is read again each time htmx draws it (page_drawn)
 
 # The red dashed line of an arrow being drawn, from the frozen account to the mouse ("" hides it).
 def rubber(d: str):
@@ -137,7 +137,7 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
         return wanted                   # the arrow's tip
     let now: Spot_T = Spot_T(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
     shift(node, centre, now)
-    reroute_arrows(node, now)
+    books.move(data_id(node), point_of(now))
     return now
 
 # NODE let go at AT.
@@ -147,13 +147,13 @@ def dropped_cb(node: Element_T, at: Spot_T):
         # and the server answers with the popup that asks when, what and how much. Let go over
         # nothing, the arrow is just dropped.
         rubber("")
-        let over: str = account_at(at, node.data_name)
+        let over: str = books.account_at(point_of(at), data_name(node))
         if over != "":
             page.fill("target", over)
             redraw()
         return
     # an account moved: its new place goes into the hidden field pos
-    page.fill("pos", with_position(page.field("pos"), node.data_id, at))
+    page.fill("pos", with_position(page.field("pos"), data_id(node), point_of(at)))
     redraw()
 
 # A click with shift held picks an account to merge with others, or lets it go: its name goes
@@ -164,8 +164,13 @@ def clicked_cb(c: Click_T):
     let node: ?Element_T = c.on("g.node")
     if node is not None and not node.has_class("group"):
         c.stop()                        # not an ordinary click: htmx must not see it
-        page.fill("pick", node.data_name)
+        page.fill("pick", data_name(node))
         redraw()
         page.fill("pick", "")           # htmx has read the form by now: the next redraw picks nothing
 
+# The page was drawn again by the server: the books are read off the new drawing's text.
+def page_drawn(e: Event_T):
+    books = BooksView()
+
+listen("htmx:afterSwap", page_drawn)
 draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))

@@ -15,7 +15,7 @@
 
 # backend/   compiled to C: the ledger, the server, the page it draws
 # frontend/  compiled to JavaScript: accounting_js_events.ady, and the vendored htmx.min.js
-# shared/    compiled both ways: the model, and the routing of the arrows, which accounting_js_events.ady redoes in the browser
+# shared/    compiled both ways: the routing of the arrows and the layout of the accounts, which accounting_js_events.ady redoes in the browser
 # tests/     the tests (native)
 
 # This checkout's own transpiler, so that its STDLIB (the db module the ledger
@@ -46,7 +46,7 @@ build/accounting_gui.html: backend/accounting_gui.ady shared/routes.ady backend/
 	@$(ADY2NIM) c -r $< > $@ 2> build/accounting_gui.log \
 	    || { cat build/accounting_gui.log; rm -f $@; exit 1; }
 
-build/accounting_js_events.js: frontend/accounting_js_events.ady shared/routes.ady
+build/accounting_js_events.js: frontend/accounting_js_events.ady shared/routes.ady shared/layout.ady
 	@mkdir -p build
 	@echo "building $@"
 	@$(ADY2NIM) js $< > build/drag.log 2>&1 || { cat build/drag.log; exit 1; }

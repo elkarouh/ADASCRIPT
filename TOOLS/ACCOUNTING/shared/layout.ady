@@ -1,0 +1,158 @@
+#!/usr/bin/env ady2nim
+"""layout -- where each account of the books is drawn, computed from the accounts alone.
+
+Compiled both ways, like routes.ady: natively by the server, which draws the page with it
+(backend/accounting_page.ady), and to JavaScript by frontend/accounting_js_events.ady, which
+lays the accounts out again in the browser while one is dragged. The two must agree, so they
+are the same code. Nothing here knows the books (the model is native only): an account is a
+Slot_T, and an arrow an Arrow_T, both plain text and numbers. No HTML in here.
+
+The page keeps the accounts and arrows as text in a hidden element (books_text below), and the
+browser reads them back with slots_of and arrows_of; where the reader dragged an account is kept
+in the form field pos ("id@x,y|id@x,y", see with_position).
+"""
+from shared/routes import Point_T
+
+const WIDTH: float = 980.0      # the drawing's width (the svg's viewBox); its height varies
+const GAP: float = 10.0         # between two accounts stacked in a quarter
+
+# An account as the layout needs it: its id in the page, the quarter of the balance sheet it
+# sits in (0 assets, 1 liabilities and equity, 2 expenses, 3 revenue), its number (which orders
+# the accounts of a quarter), half its height, and whether it is a group of accounts.
+type Slot_T is record:
+    id:     str
+    name:   str
+    quarter: int
+    number: str
+    tall:   float
+    group:  bool
+
+# An arrow: the names of the two accounts it joins, and the amount written on it.
+type Arrow_T is record:
+    source: str
+    target: str
+    label:  str
+
+# Where every account is drawn (in the order of the slots), the drawing's height, and the line
+# that splits the balance sheet from the profit and loss.
+type Layout_T is record:
+    points:  []Point_T
+    height:  float
+    split_y: float
+
+def number_before(a: str, b: str) -> bool:
+    return len(a) < len(b) or (len(a) == len(b) and a < b)
+
+# Where "id@x,y|..." puts account ID: its centre, or (-1, -1) when it does not say.
+def dragged_to(pos: str, id: str) -> Point_T:
+    for entry in pos.split("|"):
+        if entry.startswith(id + "@"):
+            let xy: []str = entry[len(id) + 1:].split(",")
+            if len(xy) == 2:
+                let x: float | !ParseFailure_T = parse_float(xy[0])
+                let y: float | !ParseFailure_T = parse_float(xy[1])
+                if x is ParseFailure_T:
+                    pass
+                else:
+                    if y is ParseFailure_T:
+                        pass
+                    else:
+                        return Point_T(x, y)
+    return Point_T(-1.0, -1.0)
+
+# The position of account ID in pos, put to AT: its entry replaced, or added. Written when the
+# reader lets an account go, and while it is dragged.
+def with_position(pos: str, id: str, at: Point_T) -> str:
+    var kept: []str = []
+    for entry in pos.split("|"):
+        if entry != "" and not entry.startswith(id + "@"):
+            kept.append(entry)
+    kept.append(f"{id}@{at.x:.1f},{at.y:.1f}")
+    return "|".join(kept)
+
+# Where every account is drawn: the four quarters of the balance sheet, stacked and in two columns
+# when there are many; then each account the reader dragged somewhere, where it was let go.
+def layout_of_slots(slots: []Slot_T, pos: str) -> Layout_T:
+    var points: []Point_T = []
+    for s in slots:
+        points.append(Point_T(0.0, 0.0))
+    var tops: []float = [60.0, 60.0, 0.0, 0.0]
+    var heights: []float = [0.0, 0.0, 0.0, 0.0]
+    for q in range(4):
+        var mine: []int = []
+        for i in range(len(slots)):
+            if slots[i].quarter == q:
+                mine.append(i)
+        for a in range(1, len(mine)):               # by number: an insertion sort
+            var j: int = a
+            while j > 0 and number_before(slots[mine[j]].number, slots[mine[j - 1]].number):
+                let t: int = mine[j]
+                mine[j] = mine[j - 1]
+                mine[j - 1] = t
+                j -= 1
+        let cols: int = (2 if len(mine) > 12 else 1)
+        var used: []float = []
+        for c in range(cols):
+            used.append(0.0)
+        for k in range(len(mine)):
+            let c: int = k % cols
+            let x0: float = (10.0 if q % 2 == 0 else WIDTH / 2.0 + 10.0)
+            let col_w: float = (WIDTH / 2.0 - 20.0) / float(cols)
+            points[mine[k]] = Point_T(x0 + col_w * (float(c) + 0.5), used[c] + slots[mine[k]].tall)
+            used[c] += 2.0 * slots[mine[k]].tall + GAP
+        var most: float = 0.0
+        for u in used:
+            most = max(most, u)
+        heights[q] = most
+    let top_h: float = max(heights[0], heights[1])
+    let split_y: float = 60.0 + top_h + 20.0
+    for i in range(len(slots)):
+        let q: int = slots[i].quarter
+        let base: float = (60.0 if q < 2 else split_y + 50.0)
+        points[i] = Point_T(points[i].x, points[i].y + base)
+    let bottom_h: float = max(heights[2], heights[3])
+    var height: float = split_y + 50.0 + bottom_h + 20.0
+    for i in range(len(slots)):                     # the ones dragged somewhere
+        let at: Point_T = dragged_to(pos, slots[i].id)
+        if at.x >= 0.0:
+            points[i] = at
+            height = max(height, at.y + slots[i].tall + 20.0)
+    return Layout_T(points, height, split_y)
+
+# The accounts and arrows as text, the way the page keeps them: a line an account
+# (tab-separated: "slot", id, quarter, number, half height, group 1 or 0, name), then a line an
+# arrow ("arrow", source, target, amount).
+def books_text(slots: []Slot_T, arrows: []Arrow_T) -> str:
+    var lines: []str = []
+    for s in slots:
+        let group: str = ("1" if s.group else "0")
+        lines.append(f"slot\t{s.id}\t{s.quarter}\t{s.number}\t{s.tall:.1f}\t{group}\t{s.name}")
+    for a in arrows:
+        lines.append(f"arrow\t{a.source}\t{a.target}\t{a.label}")
+    return "\n".join(lines) + "\n"
+
+# TEXT as a number: -1 when it is not one.
+def number_of(text: str) -> float:
+    let n: float | !ParseFailure_T = parse_float(text)
+    if n is ParseFailure_T:
+        return -1.0
+    else:
+        return n
+
+# The accounts of books_text TEXT, in their order.
+def slots_of(text: str) -> []Slot_T:
+    var slots: []Slot_T = []
+    for line in text.split("\n"):
+        let w: []str = line.split("\t")
+        if len(w) == 7 and w[0] == "slot":
+            slots.append(Slot_T(w[1], w[6], int(number_of(w[2])), w[3], number_of(w[4]), w[5] == "1"))
+    return slots
+
+# The arrows of books_text TEXT, in their order.
+def arrows_of(text: str) -> []Arrow_T:
+    var arrows: []Arrow_T = []
+    for line in text.split("\n"):
+        let w: []str = line.split("\t")
+        if len(w) == 4 and w[0] == "arrow":
+            arrows.append(Arrow_T(w[1], w[2], w[3]))
+    return arrows

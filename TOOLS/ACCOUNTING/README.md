@@ -193,14 +193,15 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `frontend/accounting_js_events.ady` | the events that stay in the browser: dragging accounts and drawing arrows; everything else is declared in the page and handled on the server |
 | `frontend/htmx.min.js` | htmx, vendored, copied to `build/` |
 | `shared/` (compiled both ways) | |
-| `shared/routes.ady` | where accounts are drawn and how the arrows run between them (`routes_of`, on plain names, points and texts, so the model stays in `backend/`): the server draws the page with it, and `accounting_js_events.js` runs the same code to route the arrows again while you drag |
+| `shared/routes.ady` | how the arrows run between accounts (`routes_of`, on plain names, points and texts, so the model stays in `backend/`): the server draws the page with it, and `accounting_js_events.js` runs the same code to route the arrows again while you drag |
+| `shared/layout.ady` | where each account is drawn (`layout_of_slots`), from the accounts alone: the server draws the page with it, and the browser lays the accounts out again while you drag one. The accounts and arrows travel to the browser as text in a hidden `pre#books`, read back with `slots_of` and `arrows_of`; where you dragged an account is kept in the form field `pos` |
 | `tests/` | the tests, one `test_*.ady` for each part (`make test`) |
 | `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`) |
 | `accounting.conf`, `scenarios/*.books` | the currency and chart a new scenario starts with, and the scenarios the page offers |
 
 **Why `shared/` exists.** Everything in `backend/` runs on the server, everything in `frontend/` in the browser,
-and `shared/` is the one thing both need: the arrow routing. The server uses it to draw the page; `accounting_js_events.js` uses
-it to route the arrows again, live, while you drag an account (a round trip to the server per mouse move would be
+and `shared/` is the one thing both need: the arrow routing and the layout of the accounts. Neither reads the drawing: the browser builds both from the text the page keeps. The server uses it to draw the page; `accounting_js_events.js` uses
+it to route the arrows again, live, while you drag an account, and the layout (`shared/layout.ady`) to place the accounts (a round trip to the server per mouse move would be
 too slow). Two implementations would make the arrows jump when you drop the account and every routing fix would
 have to be made twice, so it is one source (`routes.ady`), compiled natively and to JavaScript. It works on plain
 names, points and texts so that nothing else, the accounting model above all, has to come along into the browser.
