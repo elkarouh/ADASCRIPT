@@ -51,7 +51,7 @@ def gesture() -> Element_T:
 # ---- The drawing as objects: each node and edge keeps its own drawn parts ----
 #
 # A NodeView is a node as the page draws it: its Node_T, its element, and where it is drawn now.
-# An EdgeView is an edge as the page draws it: its Edge_T and its element. The Drawing holds them
+# An EdgeView is an edge as the page draws it: its Edge_T and its element. The NetworkView holds them
 # all, so that while a node is dragged its edges are redrawn from the views, not by reading the
 # page on every mouse move. The page is read once, when htmx has drawn it (see page_drawn).
 #
@@ -138,7 +138,7 @@ class EdgeView:
             line.draw_line(a, b)
         self.el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))
 
-class Drawing:
+class NetworkView:
     var nodes: {str}NodeView
     var edges: []EdgeView
 
@@ -158,14 +158,14 @@ class Drawing:
             if e.edge.a == name or e.edge.b == name:
                 e.redraw(self.nodes[e.edge.a].at, self.nodes[e.edge.b].at)
 
-var drawing: Drawing = Drawing()        # the page is read again each time htmx draws it (page_drawn)
+var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (page_drawn)
 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = Spot_T(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
     shift(node, centre, now)
-    drawing.move(node_of(node).name, now)
+    network.move(node_of(node).name, now)
     return now
 
 # NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
@@ -259,7 +259,7 @@ def clicked_cb(c: Click_T):
 # drawing's objects are read off the new one.
 def page_drawn(e: Event_T):
     selection.forget()
-    drawing = Drawing()
+    network = NetworkView()
 
 # ---- Asking the reader, and sending the answer ----
 
@@ -427,22 +427,10 @@ class Wire:
 
 var wire: Wire = Wire()
 
-def link_down(e: Event_T):
-    wire.down(e)
-
-def link_move(e: Event_T):
-    wire.move(e)
-
-def link_up(e: Event_T):
-    wire.up(e)
-
-def swallow_click(e: Event_T):
-    wire.swallow_click(e)
-
-listen_first("mousedown", link_down)
-listen("mousemove", link_move)
-listen("mouseup", link_up)
-listen_first("click", swallow_click)
+listen_first("mousedown", wire.down)
+listen("mousemove", wire.move)
+listen("mouseup", wire.up)
+listen_first("click", wire.swallow_click)
 listen("click", tool_click)
 listen("dblclick", double_click)
 listen("contextmenu", context)

@@ -3022,10 +3022,43 @@ def _scaled_conversion(node, name):
     return f"to_{name}{trailers[0]}" + "".join(trailers[1:])
 
 
+def _bare_method_ref(self, raw_name):
+    """obj.method used as a value (not called): a closure that passes obj on.
+
+    `listen("click", wire.down)` -- `wire.down` names no call, so it is the method
+    itself, and Nim would read it as a field. It becomes
+    `(proc (a0: T) = down(wire, a0))`, with the method's own parameter types
+    (ParserState.proc_param_types, self first) minus self.
+    """
+    if len(self.nodes) != 2 or not hasattr(self.nodes[1], "nodes") or len(self.nodes[1].nodes) != 1:
+        return None
+    tr = self.nodes[1].nodes[0]
+    if type(tr).__name__ != "attr_trailer":
+        return None
+    sym = ParserState.symbol_table.lookup(raw_name)
+    if not sym:
+        return None
+    import re as _re_ref
+    cls = _re_ref.sub(r"^(?:var|ref)\s+", "", sym.get("type", "") or "").strip()
+    meth = tr.nodes[0].to_nim()
+    if meth not in (getattr(ParserState, "_all_class_methods", None) or {}).get(cls, ()):
+        return None
+    ptypes = (getattr(ParserState, "proc_param_types", None) or {}).get(meth)
+    if not ptypes:
+        return None
+    params = list(ptypes)[1:]
+    names = [f"a{i}" for i in range(len(params))]
+    sig = ", ".join(f"{n}: {t}" for n, t in zip(names, params))
+    return f"(proc ({sig}) = {meth}({', '.join([raw_name] + names)}))"
+
+
 @method(primary)
 def to_nim(self, prec=None):
     """primary: atom trailer* -> Nim: base.trailer1.trailer2..."""
     result = self.nodes[0].to_nim()
+    _bare = _bare_method_ref(self, result)
+    if _bare is not None:
+        return _bare
     # Map Python builtin names to Nim equivalents
     raw_name = result
     result = _PY_IDENT_TO_NIM.get(result, result)
