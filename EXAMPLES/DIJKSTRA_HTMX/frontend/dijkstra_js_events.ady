@@ -52,43 +52,74 @@ def node_element(n: Node_T) -> Element_T:
 def edge_element(e: Edge_T) -> Element_T:
     return page.element(f"g[data_from=\"{e.a}\"][data_to=\"{e.b}\"]")
 
-# Where the node named NAME is drawn now: an end of an edge, when only its name is known.
-def end_spot(name: str) -> Spot_T:
-    for el in page.all("g.node"):
-        if node_of(el).name == name:
-            return spot_of(el)
-    return Spot_T(x=0.0, y=0.0)
-
 # The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
 def gesture() -> Element_T:
     return page.element("#gesture")
 
-# Redraw, in the browser, the edges that end at NODE, as if it stood at AT.
+# ---- The drawing as objects: each node and edge keeps its own drawn parts ----
 #
-# While a node is dragged, the server is not asked (it is told once, when the mouse is let
-# go); but the node's edges must not be left pointing at where it was. So on every mouse move
-# each edge of NODE is drawn again from AT to its other end, which has not moved, and its cost
-# is put back at the line's middle. Edges that do not touch NODE are left alone.
+# A NodeView is a node as the page draws it: its name, its element, and where it is now. An
+# EdgeView is an edge's element and the names of its two ends. The Drawing holds them all, so
+# that while a node is dragged its edges are redrawn from the views, not by reading the page
+# on every mouse move. The page is read once, when htmx has drawn it (see page_drawn).
 #
 # An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
 # point at) and a <text class="cost">.
-def redraw_edges_of(node: Node_T, at: Spot_T):
-    for el in page.all("g[data_from]"):
-        let edge: Edge_T = edge_of(el)
-        if node.name in [edge.a, edge.b]:
-            # the end that is NODE is at AT; the other end stays where it is
-            let a: Spot_T = (at if edge.a == node.name else end_spot(edge.a))
-            let b: Spot_T = (at if edge.b == node.name else end_spot(edge.b))
-            for line in el.all("path"):
-                line.draw_line(a, b)
-            el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))   # just above the line
+
+class NodeView:
+    var name: str
+    var el: Element_T
+    var at: Spot_T                      # where it is drawn now
+
+    def __init__(self, el: Element_T):
+        self.el = el
+        self.name = el.data("name")
+        self.at = spot_of(el)
+
+class EdgeView:
+    var a: str
+    var b: str
+    var el: Element_T
+
+    def __init__(self, el: Element_T):
+        self.el = el
+        self.a = el.data("from")
+        self.b = el.data("to")
+
+    # Draw the edge again, from A to B: its lines, and its cost just above the middle.
+    def redraw(self, a: Spot_T, b: Spot_T):
+        for line in self.el.all("path"):
+            line.draw_line(a, b)
+        self.el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))
+
+class Drawing:
+    var nodes: {str}NodeView
+    var edges: []EdgeView
+
+    def __init__(self):
+        self.nodes = {:}
+        self.edges = []
+        for el in page.all("g.node"):
+            let n: NodeView = NodeView(el)
+            self.nodes[n.name] = n
+        for el in page.all("g[data_from]"):
+            self.edges.append(EdgeView(el))
+
+    # The node NAME is now at AT. Each edge that ends at it is drawn again; the other end has not moved.
+    def move(self, name: str, at: Spot_T):
+        self.nodes[name].at = at
+        for e in self.edges:
+            if e.a == name or e.b == name:
+                e.redraw(self.nodes[e.a].at, self.nodes[e.b].at)
+
+var drawing: Drawing = Drawing()        # the page is read again each time htmx draws it (page_drawn)
 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = Spot_T(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
     shift(node, centre, now)
-    redraw_edges_of(node_of(node), now)
+    drawing.move(node_of(node).name, now)
     return now
 
 # NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
@@ -161,9 +192,11 @@ def clicked_cb(c: Click_T):
         return
     select_edge(edge)
 
-# The page was drawn again by the server: what was selected is gone with the old drawing.
-def forget_selection(e: Event_T):
+# The page was drawn again by the server: what was selected is gone with the old drawing, and the
+# drawing's objects are read off the new one.
+def page_drawn(e: Event_T):
     selection = NOTHING()
+    drawing = Drawing()
 
 # ---- Asking the reader, and sending the answer ----
 
@@ -350,5 +383,5 @@ listen("click", tool_click)
 listen("dblclick", double_click)
 listen("contextmenu", context)
 listen("keydown", key_down)
-listen("htmx:afterSwap", forget_selection)
+listen("htmx:afterSwap", page_drawn)
 draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
