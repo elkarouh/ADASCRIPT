@@ -58,33 +58,31 @@ def gesture() -> Element_T:
 
 # ---- The drawing as objects: each node and edge keeps its own drawn parts ----
 #
-# A NodeView is a node as the page draws it: its name, its element, and where it is now. An
-# EdgeView is an edge's element and the names of its two ends. The Drawing holds them all, so
-# that while a node is dragged its edges are redrawn from the views, not by reading the page
-# on every mouse move. The page is read once, when htmx has drawn it (see page_drawn).
+# A NodeView is a node as the page draws it: its Node_T, its element, and where it is drawn now.
+# An EdgeView is an edge as the page draws it: its Edge_T and its element. The Drawing holds them
+# all, so that while a node is dragged its edges are redrawn from the views, not by reading the
+# page on every mouse move. The page is read once, when htmx has drawn it (see page_drawn).
 #
 # An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
 # point at) and a <text class="cost">.
 
 class NodeView:
-    var name: str
+    var node: Node_T
     var el: Element_T
     var at: Spot_T                      # where it is drawn now
 
     def __init__(self, el: Element_T):
         self.el = el
-        self.name = el.data("name")
+        self.node = node_of(el)
         self.at = spot_of(el)
 
 class EdgeView:
-    var a: str
-    var b: str
+    var edge: Edge_T
     var el: Element_T
 
     def __init__(self, el: Element_T):
         self.el = el
-        self.a = el.data("from")
-        self.b = el.data("to")
+        self.edge = edge_of(el)
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -101,7 +99,7 @@ class Drawing:
         self.edges = []
         for el in page.all("g.node"):
             let n: NodeView = NodeView(el)
-            self.nodes[n.name] = n
+            self.nodes[n.node.name] = n
         for el in page.all("g[data_from]"):
             self.edges.append(EdgeView(el))
 
@@ -109,8 +107,8 @@ class Drawing:
     def move(self, name: str, at: Spot_T):
         self.nodes[name].at = at
         for e in self.edges:
-            if e.a == name or e.b == name:
-                e.redraw(self.nodes[e.a].at, self.nodes[e.b].at)
+            if e.edge.a == name or e.edge.b == name:
+                e.redraw(self.nodes[e.edge.a].at, self.nodes[e.edge.b].at)
 
 var drawing: Drawing = Drawing()        # the page is read again each time htmx draws it (page_drawn)
 
