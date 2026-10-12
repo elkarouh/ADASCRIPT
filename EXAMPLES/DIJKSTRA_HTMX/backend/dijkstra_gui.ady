@@ -11,7 +11,8 @@ goal; `act` is unpick (a chosen node clicked again).
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
-from backend/dijkstra_model import Edge, Network, Node_T, build_graph, names_of, uses
+from shared/network import Edge, Node_T
+from backend/dijkstra_model import Network, build_graph, names_of, uses
 
 const WIDTH: float = 580.0
 const HEIGHT: float = 380.0
@@ -56,7 +57,7 @@ def to_html(e: Edge, on_way: bool, net: Network) -> Html:
     let ly: str = f"{(p1[1] + p2[1]) / 2.0 - 6.0:.0f}"
     let label: str = str(e.cost)
     html:
-        g data_from=e.a data_to=e.b:
+        g data_from=e.a data_to=e.b data_cost=label:
             path class=css d=d
             path class="hit" d=d
             stext class="cost" x=lx y=ly: label

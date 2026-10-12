@@ -19,35 +19,45 @@ reader a question is here. The gestures, the usual ones of a diagram:
 A change the server must keep
 is written into the hidden form #gesture, whose button then sends it (see dijkstra_gui.ady).
 
+The nodes and edges here are the model's own (shared/network.ady): a node or an edge is read
+off the drawing as a Node_T or an Edge, and what a gesture does is said in those terms.
+
 The drag itself is the standard library's svg_drag; the page (finding elements, forms, menus,
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, text, listen, listen_first
+from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Unit_T, Spot, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
+from shared/network import Node_T, Edge
 
 const WIDTH: Unit_T = Unit_T(580.0)     # the drawing's size (the svg's viewBox)
 const HEIGHT: Unit_T = Unit_T(380.0)
 const MARGIN: Unit_T = Unit_T(30.0)     # how near its edge a node may go
 
-# What the server wrote on an element, read as if it were a field: `node.data_name` is
-# data_name(node). A node carries its name; an edge the names of its two ends.
-def data_name(n: Element_T) -> str:
-    return n.data("name")
+# ---- The model's values, read off the drawing, and the drawing of each ----
 
-def data_from(e: Element_T) -> str:
-    return e.data("from")
+# The node a <g class="node"> draws: its name, and its centre as the server put it.
+def node_of(el: Element_T) -> Node_T:
+    return Node_T(el.data("name"), el.number("data_x"), el.number("data_y"))
 
-def data_to(e: Element_T) -> str:
-    return e.data("to")
+# The edge a <g data_from data_to data_cost> draws.
+def edge_of(el: Element_T) -> Edge:
+    return Edge(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
-# The node with that name: the <g class="node"> whose data_name is NAME.
-def node_named(name: str) -> Element_T:
-    return page.element(f"g.node[data_name=\"{name}\"]")
+# The <g class="node"> that draws N.
+def node_element(n: Node_T) -> Element_T:
+    return page.element(f"g.node[data_name=\"{n.name}\"]")
 
-# The edge from A to B: the <g data_from=A data_to=B>.
-def edge_between(a: str, b: str) -> Element_T:
-    return page.element(f"g[data_from=\"{a}\"][data_to=\"{b}\"]")
+# The <g> that draws E.
+def edge_element(e: Edge) -> Element_T:
+    return page.element(f"g[data_from=\"{e.a}\"][data_to=\"{e.b}\"]")
+
+# Where the node named NAME is drawn now: an end of an edge, when only its name is known.
+def end_spot(name: str) -> Spot:
+    for el in page.all("g.node"):
+        if node_of(el).name == name:
+            return spot_of(el)
+    return Spot(x=Unit_T(0.0), y=Unit_T(0.0))
 
 # The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
 def gesture() -> Element_T:
@@ -62,23 +72,23 @@ def gesture() -> Element_T:
 #
 # An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
 # point at) and a <text class="cost">.
-def redraw_edges_of(node: Element_T, at: Spot):
-    let name: str = node.data_name
-    for edge in page.all("g[data_from]"):
-        if name in [edge.data_from, edge.data_to]:
+def redraw_edges_of(node: Node_T, at: Spot):
+    for el in page.all("g[data_from]"):
+        let edge: Edge = edge_of(el)
+        if node.name in [edge.a, edge.b]:
             # the end that is NODE is at AT; the other end stays where it is
-            let a: Spot = (at if edge.data_from == name else spot_of(node_named(edge.data_from)))
-            let b: Spot = (at if edge.data_to == name else spot_of(node_named(edge.data_to)))
-            for line in edge.all("path"):
+            let a: Spot = (at if edge.a == node.name else end_spot(edge.a))
+            let b: Spot = (at if edge.b == node.name else end_spot(edge.b))
+            for line in el.all("path"):
                 line.draw_line(a, b)
-            edge.element("text.cost").place_at(Spot(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))   # just above the line
+            el.element("text.cost").place_at(Spot(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))   # just above the line
 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
 def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
     let now: Spot = Spot(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
     shift(node, centre, now)
-    redraw_edges_of(node, now)
+    redraw_edges_of(node_of(node), now)
     return now
 
 # NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
@@ -86,7 +96,7 @@ def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
 # dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
 def dropped(node: Element_T, at: Spot):
     let form: Element_T = page.element("#move")
-    form.fill("name", node.data_name)
+    form.fill("name", node_of(node).name)
     form.fill("x", f"{at.x:.0f}")
     form.fill("y", f"{at.y:.0f}")
     page.press("#redraw")
@@ -94,8 +104,8 @@ def dropped(node: Element_T, at: Spot):
 # ---- The selection: the node or edge the reader last clicked ----
 
 var selected_kind: str = ""             # "node", "edge", or "" for none
-var selected_from: str = ""             # the node's name, or the edge's first end
-var selected_to: str = ""               # the edge's second end
+var selected_node: Node_T = Node_T("", 0.0, 0.0)
+var selected_edge: Edge = Edge("", "", 0)
 
 # Outline ELEMENT, or take the outline off it.
 def mark(el: Element_T, lit: bool):
@@ -109,8 +119,6 @@ def clear_selection():
     for el in page.all(".selected"):
         mark(el, false)
     selected_kind = ""
-    selected_from = ""
-    selected_to = ""
 
 # Select the node or edge under C, in place of what was selected (nothing, on the empty space).
 def select_at(c: Click):
@@ -119,12 +127,11 @@ def select_at(c: Click):
     let edge: ?Element_T = on(c, "g[data_from]")
     if node is not None:
         selected_kind = "node"
-        selected_from = node.data_name
+        selected_node = node_of(node)
         mark(node, true)
     elif edge is not None:
         selected_kind = "edge"
-        selected_from = edge.data_from
-        selected_to = edge.data_to
+        selected_edge = edge_of(edge)
         mark(edge, true)
 
 # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
@@ -137,15 +144,13 @@ def clicked(c: Click):
     let node: ?Element_T = on(c, "g.node")
     if node is not None:
         clear_selection()
-        choose(node.data_name, has_class(node, "start") or has_class(node, "goal"))
+        choose(node_of(node), has_class(node, "start") or has_class(node, "goal"))
         return
     select_at(c)
 
 # The page was drawn again by the server: what was selected is gone with the old drawing.
 def forget_selection(e: Event_T):
     selected_kind = ""
-    selected_from = ""
-    selected_to = ""
 
 # ---- Asking the reader, and sending the answer ----
 
@@ -161,15 +166,13 @@ def send_node(name: str, x: str, y: str):
     page.press("#make_node")
 
 # Ask the cost of EDGE, and send it.
-def change_cost(edge: Element_T):
-    let a: str = edge.data_from
-    let b: str = edge.data_to
-    let cost: str = ask(f"Cost of the edge {a} — {b}?", edge.element("text.cost").text)
+def change_cost(edge: Edge):
+    let cost: str = ask(f"Cost of the edge {edge.a} — {edge.b}?", str(edge.cost))
     if cost == "":
         return
     let form: Element_T = gesture()
-    form.fill("a", a)
-    form.fill("b", b)
+    form.fill("a", edge.a)
+    form.fill("b", edge.b)
     form.fill("cost", cost)
     page.press("#set_cost")
 
@@ -177,20 +180,20 @@ def change_cost(edge: Element_T):
 def remove_selected():
     let form: Element_T = gesture()
     if selected_kind == "node":
-        if ask_yes(f"Delete the node {selected_from} and its edges?"):
-            form.fill("name", selected_from)
+        if ask_yes(f"Delete the node {selected_node.name} and its edges?"):
+            form.fill("name", selected_node.name)
             page.press("#drop_node")
     elif selected_kind == "edge":
-        if ask_yes(f"Delete the edge {selected_from} — {selected_to}?"):
-            form.fill("a", selected_from)
-            form.fill("b", selected_to)
+        if ask_yes(f"Delete the edge {selected_edge.a} — {selected_edge.b}?"):
+            form.fill("a", selected_edge.a)
+            form.fill("b", selected_edge.b)
             page.press("#drop_edge")
 
-# Choose NAME for the route: the start, then the goal (the server decides which, and draws the way);
+# Choose NODE for the route: the start, then the goal (the server decides which, and draws the way);
 # or, with UNPICK, take a chosen node out of the route again.
-def choose(name: str, unpick: bool):
+def choose(node: Node_T, unpick: bool):
     let form: Element_T = gesture()
-    form.fill("pick", name)
+    form.fill("pick", node.name)
     form.fill("act", ("unpick" if unpick else ""))
     page.press("#pick")
 
@@ -200,7 +203,7 @@ def double_click(e: Event_T):
     let c: Click = click_of(e)
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is not None:
-        change_cost(edge)
+        change_cost(edge_of(edge))
         return
     if on(c, "svg.graph") is None or on(c, "g.node") is not None:
         return                          # outside the drawing, or on a node (which has no double-click)
@@ -251,7 +254,7 @@ def tool_click(e: Event_T):
             send_node(name, f"{menu_at.x:.0f}", f"{menu_at.y:.0f}")
     elif tool == "cost":
         if selected_kind == "edge":
-            change_cost(edge_between(selected_from, selected_to))
+            change_cost(selected_edge)
     elif tool == "delete-node" or tool == "delete-edge":
         remove_selected()
 
@@ -271,7 +274,8 @@ def key_down(e: Event_T):
 # sends the edge. The browser's click after the release belongs to the wire, so it is not a
 # selection, and htmx does not see it.
 
-var linking: str = ""                   # the node the wire starts at; "" when there is no wire
+var linking: bool = false               # a wire is being drawn
+var from_node: Node_T = Node_T("", 0.0, 0.0)     # the node the wire starts at
 var swallow: bool = false               # the click after a wire is let go: not a click on a node
 
 def link_down(e: Event_T):
@@ -282,35 +286,36 @@ def link_down(e: Event_T):
     if node is None:
         return
     stop(c)
-    linking = node.data_name
+    from_node = node_of(node)
+    linking = true
     swallow = false
     let wire: Element_T = page.element("path#wire")
     wire.set_attr("visibility", "visible")
     draw_line(wire, spot_of(node), spot_at(e))
 
 def link_move(e: Event_T):
-    if linking == "":
+    if not linking:
         return
-    draw_line(page.element("path#wire"), spot_of(node_named(linking)), spot_at(e))
+    draw_line(page.element("path#wire"), spot_of(node_element(from_node)), spot_at(e))
 
 def link_up(e: Event_T):
-    if linking == "":
+    if not linking:
         return
-    let from_name: str = linking
-    linking = ""
+    linking = false
     page.element("path#wire").set_attr("visibility", "hidden")
     swallow = true
     let target: ?Element_T = on(click_of(e), "g.node")
     if target is None:
         return
-    if target.data_name == from_name:
+    let to: Node_T = node_of(target)
+    if to.name == from_node.name:
         return
-    let cost: str = ask(f"Cost of the edge {from_name} — {target.data_name}?", "1")
+    let cost: str = ask(f"Cost of the edge {from_node.name} — {to.name}?", "1")
     if cost == "":
         return
     let form: Element_T = gesture()
-    form.fill("a", from_name)
-    form.fill("b", target.data_name)
+    form.fill("a", from_node.name)
+    form.fill("b", to.name)
     form.fill("cost", cost)
     page.press("#make_edge")
 

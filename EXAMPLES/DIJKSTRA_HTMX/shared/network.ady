@@ -1,0 +1,20 @@
+#!/usr/bin/env ady2nim
+"""network -- the concepts of the model, in plain values: a node and an edge.
+
+Compiled both ways. The server keeps and changes a network (backend/dijkstra_model.ady); the
+browser reads the same nodes and edges off the drawing (frontend/dijkstra_js_events.ady), so
+the two speak of one Node_T and one Edge. Only the types live here: anything that touches
+a file or the network stays in the model.
+"""
+
+# A node: its name, and its centre in the drawing (580 wide and 380 high).
+type Node_T is record:
+    name: str
+    x:    float
+    y:    float
+
+# An edge: the two nodes it joins, both ways, and its cost.
+type Edge is record:
+    a:    str
+    b:    str
+    cost: int

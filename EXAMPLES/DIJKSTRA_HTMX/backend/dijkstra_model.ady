@@ -11,17 +11,9 @@ one line a node or an edge. The shortest way itself is the library's
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
 
+from shared/network import Node_T, Edge
+
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-type Node_T is record:
-    name: str
-    x:    float                     # its centre in the drawing, 580 wide and 380 high
-    y:    float
-
-type Edge is record:
-    a:    str
-    b:    str
-    cost: int
 
 type Network is record:
     nodes: []Node_T
