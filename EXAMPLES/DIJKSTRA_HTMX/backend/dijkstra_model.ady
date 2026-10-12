@@ -11,40 +11,40 @@ one line a node or an edge. The shortest way itself is the library's
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
 
-from shared/network import Node_T, Edge
+from shared/network import Node_T, Edge_T
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-type Network is record:
+type Network_T is record:
     nodes: []Node_T
-    edges: []Edge
+    edges: []Edge_T
 
 # What there is to start with, and after Reset.
-def sample() -> Network:
+def sample() -> Network_T:
     let nodes: []Node_T = [Node_T("A", 60.0, 190.0), Node_T("B", 200.0, 60.0), Node_T("C", 200.0, 190.0),
                            Node_T("D", 380.0, 60.0), Node_T("E", 520.0, 190.0), Node_T("F", 330.0, 320.0)]
-    let edges: []Edge = [Edge("A", "B", 7), Edge("A", "C", 9), Edge("A", "F", 14), Edge("B", "C", 10),
-                         Edge("B", "D", 15), Edge("C", "D", 11), Edge("C", "F", 2), Edge("D", "E", 6),
-                         Edge("E", "F", 9)]
-    return Network(nodes, edges)
+    let edges: []Edge_T = [Edge_T("A", "B", 7), Edge_T("A", "C", 9), Edge_T("A", "F", 14), Edge_T("B", "C", 10),
+                         Edge_T("B", "D", 15), Edge_T("C", "D", 11), Edge_T("C", "F", 2), Edge_T("D", "E", 6),
+                         Edge_T("E", "F", 9)]
+    return Network_T(nodes, edges)
 
-def names_of(net: Network) -> []str:
+def names_of(net: Network_T) -> []str:
     var names: []str = []
     for n in net.nodes:
         names.append(n.name)
     return names
 
 # The edge between A and B, either way round: its index, or -1.
-def edge_at(net: Network, a: str, b: str) -> int:
+def edge_at(net: Network_T, a: str, b: str) -> int:
     for i in range(len(net.edges)):
-        let e: Edge = net.edges[i]
+        let e: Edge_T = net.edges[i]
         if (e.a == a and e.b == b) or (e.a == b and e.b == a):
             return i
     return -1
 
 # ---- create, update, delete: each returns what was wrong, or "" ----
 
-def add_node(net: Network, name: str, x: float, y: float) -> str:
+def add_node(net: Network_T, name: str, x: float, y: float) -> str:
     if len(name) == 0 or len(name) > 8:
         return "A name is 1 to 8 letters or digits."
     for c in name:
@@ -55,7 +55,7 @@ def add_node(net: Network, name: str, x: float, y: float) -> str:
     net.nodes.append(Node_T(name, x, y))
     return ""
 
-def move_node(net: Network, name: str, x: float, y: float) -> str:
+def move_node(net: Network_T, name: str, x: float, y: float) -> str:
     for i in range(len(net.nodes)):
         if net.nodes[i].name == name:
             net.nodes[i].x = x
@@ -64,7 +64,7 @@ def move_node(net: Network, name: str, x: float, y: float) -> str:
     return f"There is no node {name}."
 
 # The node goes, and every edge that ends at it.
-def remove_node(net: Network, name: str) -> str:
+def remove_node(net: Network_T, name: str) -> str:
     if name not in names_of(net):
         return f"There is no node {name}."
     var left: []Node_T = []
@@ -72,14 +72,14 @@ def remove_node(net: Network, name: str) -> str:
         if n.name != name:
             left.append(n)
     net.nodes = left
-    var kept: []Edge = []
+    var kept: []Edge_T = []
     for e in net.edges:
         if e.a != name and e.b != name:
             kept.append(e)
     net.edges = kept
     return ""
 
-def add_edge(net: Network, a: str, b: str, cost: int) -> str:
+def add_edge(net: Network_T, a: str, b: str, cost: int) -> str:
     if a not in names_of(net) or b not in names_of(net):
         return "Pick two nodes for the edge."
     if a == b:
@@ -88,10 +88,10 @@ def add_edge(net: Network, a: str, b: str, cost: int) -> str:
         return f"There is an edge {a} - {b} already."
     if cost < 1:
         return "A cost is 1 or more."
-    net.edges.append(Edge(a, b, cost))
+    net.edges.append(Edge_T(a, b, cost))
     return ""
 
-def set_cost(net: Network, a: str, b: str, cost: int) -> str:
+def set_cost(net: Network_T, a: str, b: str, cost: int) -> str:
     let i: int = edge_at(net, a, b)
     if i < 0:
         return f"There is no edge {a} - {b}."
@@ -100,11 +100,11 @@ def set_cost(net: Network, a: str, b: str, cost: int) -> str:
     net.edges[i].cost = cost
     return ""
 
-def remove_edge(net: Network, a: str, b: str) -> str:
+def remove_edge(net: Network_T, a: str, b: str) -> str:
     let i: int = edge_at(net, a, b)
     if i < 0:
         return f"There is no edge {a} - {b}."
-    var kept: []Edge = []
+    var kept: []Edge_T = []
     for k in range(len(net.edges)):
         if k != i:
             kept.append(net.edges[k])
@@ -113,7 +113,7 @@ def remove_edge(net: Network, a: str, b: str) -> str:
 
 # ---- kept in a text file: "node A 60 190" and "edge A B 7", a line each ----
 
-def text_of(net: Network) -> str:
+def text_of(net: Network_T) -> str:
     var lines: []str = []
     for n in net.nodes:
         lines.append(f"node {n.name} {n.x:.0f} {n.y:.0f}")
@@ -121,8 +121,8 @@ def text_of(net: Network) -> str:
         lines.append(f"edge {e.a} {e.b} {e.cost}")
     return "\n".join(lines) + "\n"
 
-def network_of(text: str) -> Network:
-    var net: Network = Network([], [])
+def network_of(text: str) -> Network_T:
+    var net: Network_T = Network_T([], [])
     for line in text.split("\n"):
         let w: []str = line.split()
         if len(w) == 4 and w[0] == "node":
@@ -141,13 +141,13 @@ def network_of(text: str) -> Network:
     return net
 
 # The network kept at PATH, or the sample when there is none yet.
-def load(path: Path) -> Network:
+def load(path: Path) -> Network_T:
     let text: str | !PathFailure_T = path.read_text()
     if text is PathFailure_T:
         return sample()
     return network_of(text)
 
-def save(net: Network, path: Path) -> str:
+def save(net: Network_T, path: Path) -> str:
     let done: None | !PathFailure_T = path.write_text(text_of(net))
     if done is PathFailure_T:
         return f"Could not write {path}."
@@ -157,7 +157,7 @@ def save(net: Network, path: Path) -> str:
 
 # The graph the library wants: each node to its (cost, neighbour) pairs. The edges are
 # undirected, so each one is entered both ways.
-def build_graph(net: Network) -> {str}[](float, str):
+def build_graph(net: Network_T) -> {str}[](float, str):
     var graph: {str}[](float, str)
     let none: [](float, str) = []
     for n in net.nodes:
@@ -168,7 +168,7 @@ def build_graph(net: Network) -> {str}[](float, str):
     return graph
 
 # Whether ROUTE runs along the edge E, in either direction: dijkstra_gui.ady draws those edges in orange.
-def uses(route: []str, e: Edge) -> bool:
+def uses(route: []str, e: Edge_T) -> bool:
     for i in range(len(route) - 1):
         if (route[i] == e.a and route[i + 1] == e.b) or (route[i] == e.b and route[i + 1] == e.a):
             return True

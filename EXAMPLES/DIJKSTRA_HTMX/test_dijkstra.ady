@@ -1,16 +1,16 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
-from shared/network import Edge
-from backend/dijkstra_model import Network, add_edge, add_node, build_graph, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
+from shared/network import Edge_T
+from backend/dijkstra_model import Network_T, add_edge, add_node, build_graph, move_node, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
 from backend/dijkstra_events import answer, keep_in
 
 # ---- the model ----
-var net: Network = sample()
+var net: Network_T = sample()
 let w: (float, []str) = shortest_route[str](build_graph(net), "A", "E")
 assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
 assert shortest_route[str](build_graph(net), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
-assert uses(w[1], Edge("C", "F", 2)) and not uses(w[1], Edge("A", "B", 7))
+assert uses(w[1], Edge_T("C", "F", 2)) and not uses(w[1], Edge_T("A", "B", 7))
 
 assert add_node(net, "G", 10.0, 20.0) == ""
 assert add_node(net, "G", 10.0, 20.0) == "There is a node G already."

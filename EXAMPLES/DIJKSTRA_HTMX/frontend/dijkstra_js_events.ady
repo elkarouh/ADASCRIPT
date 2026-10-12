@@ -20,7 +20,7 @@ A change the server must keep
 is written into the hidden form #gesture, whose button then sends it (see dijkstra_gui.ady).
 
 The nodes and edges here are the model's own (shared/network.ady): a node or an edge is read
-off the drawing as a Node_T or an Edge, and what a gesture does is said in those terms.
+off the drawing as a Node_T or an Edge_T, and what a gesture does is said in those terms.
 
 The drag itself is the standard library's svg_drag; the page (finding elements, forms, menus,
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
@@ -28,7 +28,7 @@ gesture means in this app.
 """
 from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Unit_T, Spot, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
-from shared/network import Node_T, Edge
+from shared/network import Node_T, Edge_T
 
 const WIDTH: Unit_T = Unit_T(580.0)     # the drawing's size (the svg's viewBox)
 const HEIGHT: Unit_T = Unit_T(380.0)
@@ -41,15 +41,15 @@ def node_of(el: Element_T) -> Node_T:
     return Node_T(el.data("name"), el.number("data_x"), el.number("data_y"))
 
 # The edge a <g data_from data_to data_cost> draws.
-def edge_of(el: Element_T) -> Edge:
-    return Edge(el.data("from"), el.data("to"), int(el.number("data_cost")))
+def edge_of(el: Element_T) -> Edge_T:
+    return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
 # The <g class="node"> that draws N.
 def node_element(n: Node_T) -> Element_T:
     return page.element(f"g.node[data_name=\"{n.name}\"]")
 
 # The <g> that draws E.
-def edge_element(e: Edge) -> Element_T:
+def edge_element(e: Edge_T) -> Element_T:
     return page.element(f"g[data_from=\"{e.a}\"][data_to=\"{e.b}\"]")
 
 # Where the node named NAME is drawn now: an end of an edge, when only its name is known.
@@ -74,7 +74,7 @@ def gesture() -> Element_T:
 # point at) and a <text class="cost">.
 def redraw_edges_of(node: Node_T, at: Spot):
     for el in page.all("g[data_from]"):
-        let edge: Edge = edge_of(el)
+        let edge: Edge_T = edge_of(el)
         if node.name in [edge.a, edge.b]:
             # the end that is NODE is at AT; the other end stays where it is
             let a: Spot = (at if edge.a == node.name else end_spot(edge.a))
@@ -105,7 +105,7 @@ def dropped(node: Element_T, at: Spot):
 
 var selected_kind: str = ""             # "node", "edge", or "" for none
 var selected_node: Node_T = Node_T("", 0.0, 0.0)
-var selected_edge: Edge = Edge("", "", 0)
+var selected_edge: Edge_T = Edge_T("", "", 0)
 
 # Outline ELEMENT, or take the outline off it.
 def mark(el: Element_T, lit: bool):
@@ -166,7 +166,7 @@ def send_node(name: str, x: str, y: str):
     page.press("#make_node")
 
 # Ask the cost of EDGE, and send it.
-def change_cost(edge: Edge):
+def change_cost(edge: Edge_T):
     let cost: str = ask(f"Cost of the edge {edge.a} — {edge.b}?", str(edge.cost))
     if cost == "":
         return

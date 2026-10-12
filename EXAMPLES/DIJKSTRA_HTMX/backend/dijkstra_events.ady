@@ -5,10 +5,10 @@ server.ady hands every request here as a method, a path and its fields, and send
 the page that comes out. The tests call answer() the same way, with no server running.
 The network is kept in a text file (keep_in), written after every change.
 """
-from backend/dijkstra_model import Network, add_edge, add_node, load, move_node, remove_edge, remove_node, sample, save, set_cost
+from backend/dijkstra_model import Network_T, add_edge, add_node, load, move_node, remove_edge, remove_node, sample, save, set_cost
 from backend/dijkstra_gui import all_text, field_of, new_spot, params_of
 
-var net: Network = sample()
+var net: Network_T = sample()
 var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
 
 # From now on the network is the one kept in PATH ("": the sample, kept nowhere).

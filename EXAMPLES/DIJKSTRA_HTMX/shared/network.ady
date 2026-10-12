@@ -3,7 +3,7 @@
 
 Compiled both ways. The server keeps and changes a network (backend/dijkstra_model.ady); the
 browser reads the same nodes and edges off the drawing (frontend/dijkstra_js_events.ady), so
-the two speak of one Node_T and one Edge. Only the types live here: anything that touches
+the two speak of one Node_T and one Edge_T. Only the types live here: anything that touches
 a file or the network stays in the model.
 """
 
@@ -14,7 +14,7 @@ type Node_T is record:
     y:    float
 
 # An edge: the two nodes it joins, both ways, and its cost.
-type Edge is record:
+type Edge_T is record:
     a:    str
     b:    str
     cost: int

@@ -11,13 +11,13 @@ goal; `act` is unpick (a chosen node clicked again).
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
-from shared/network import Edge, Node_T
-from backend/dijkstra_model import Network, build_graph, names_of, uses
+from shared/network import Edge_T, Node_T
+from backend/dijkstra_model import Network_T, build_graph, names_of, uses
 
 const WIDTH: float = 580.0
 const HEIGHT: float = 380.0
 
-type Params is record:
+type Params_T is record:
     start: str
     goal:  str
     pick:  str                      # the node clicked
@@ -31,24 +31,24 @@ def field_of(text: str, key: str) -> str:
             return decodeUrl(pair[at + 1:])
     return ""
 
-def params_of(text: str) -> Params:
-    return Params(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
+def params_of(text: str) -> Params_T:
+    return Params_T(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
 
 # Where node NAME is drawn.
-def spot(net: Network, name: str) -> []float:
+def spot(net: Network_T, name: str) -> []float:
     for n in net.nodes:
         if n.name == name:
             return [n.x, n.y]
     return [0.0, 0.0]
 
 # Where a new node goes: along the bottom, left to right, then again a row up.
-def new_spot(net: Network) -> []float:
+def new_spot(net: Network_T) -> []float:
     let k: int = len(net.nodes)
     return [40.0 + float((k * 70) % 500), HEIGHT - 30.0 - float((k * 70) // 500 % 4) * 60.0]
 
 # ---- the drawing ----
 
-def to_html(e: Edge, on_way: bool, net: Network) -> Html:
+def to_html(e: Edge_T, on_way: bool, net: Network_T) -> Html:
     let p1: []float = spot(net, e.a)
     let p2: []float = spot(net, e.b)
     let d: str = f"M {p1[0]:.0f} {p1[1]:.0f} L {p2[0]:.0f} {p2[1]:.0f}"
@@ -88,8 +88,8 @@ def menus_html() -> Html:
             div id="menu-space" class="menu":
                 button type="button" data_tool="add-here": "New node here"
 
-def all_html(net: Network, p0: Params, problem: str) -> Html:
-    var p: Params = p0
+def all_html(net: Network_T, p0: Params_T, problem: str) -> Html:
+    var p: Params_T = p0
     let names: []str = names_of(net)
     if p.start not in names:            # deleted since
         p.start = ""
@@ -221,5 +221,5 @@ def hyphens(text: str) -> str:
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
 
-def all_text(net: Network, p: Params, problem: str) -> str:
+def all_text(net: Network_T, p: Params_T, problem: str) -> str:
     return hyphens(str(all_html(net, p, problem)))
