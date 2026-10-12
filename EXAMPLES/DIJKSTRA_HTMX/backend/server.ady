@@ -4,7 +4,7 @@
     make app [PORT=n]  (or: ady2nim js frontend/dijkstra_js_events.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
 
     GET    /            the page: a script tag and a div that loads /all
-    GET    /all         the page again                      (start, goal, pick, act)
+    GET    /all         the page again                      (start, goal, pick, role, act)
     POST   /nodes       create a node, at x, y if given     (name, x, y)
     PUT    /nodes       move a node, after a drag           (name, x, y)
     DELETE /nodes       delete a node and its edges         (name)

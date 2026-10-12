@@ -4,9 +4,10 @@
 What the page shows is a function of the network (the model, which the server keeps)
 and of what the reader has picked: the start and the goal, the fields of the form
 `#state`. Every request sends that form along and gets the whole page back, which
-htmx swaps in. Reading is GET /all; the buttons and fields that change the network
-send POST, PUT or DELETE to /nodes or /edges (see server.ady). One-shot fields
-(`pick`, `act`) come with a click and are not in the form.
+htmx swaps in. Reading is GET /all. The drawing's gestures and the menus (dijkstra_js_events.ady)
+fill in the hidden form `#gesture` and press one of its buttons, which sends POST, PUT or
+DELETE to /nodes or /edges (see server.ady). `pick` and `role` (start or goal) say which node
+the reader chose for the start or the goal; `act` is clear.
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
@@ -18,7 +19,8 @@ const HEIGHT: float = 380.0
 type Params is record:
     start: str
     goal:  str
-    pick:  str                      # the node clicked
+    pick:  str                      # the node chosen
+    role:  str                      # start or goal: what it is chosen for
     act:   str                      # clear
 
 # The value of KEY in a query or a form body ("a=1&b=2"), or "".
@@ -30,7 +32,7 @@ def field_of(text: str, key: str) -> str:
     return ""
 
 def params_of(text: str) -> Params:
-    return Params(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
+    return Params(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "role"), field_of(text, "act"))
 
 # Where node NAME is drawn.
 def spot(net: Network, name: str) -> []float:
@@ -60,44 +62,33 @@ def to_html(e: Edge, on_way: bool, net: Network) -> Html:
             path class="hit" d=d
             stext class="cost" x=lx y=ly: label
 
+# A node: its circle and name, and a port (the dot on its right) from which a wire is drawn to another.
 def to_html(n: Node_T, role: str) -> Html:
     let cx: str = f"{n.x:.0f}"
     let cy: str = f"{n.y:.0f}"
     let ty: str = f"{n.y + 5.0:.0f}"
+    let px: str = f"{n.x + 24.0:.0f}"
     let css: str = "node " + role
-    let vals: str = "{\"pick\": \"" + n.name + "\"}"
     html:
-        g class=css data_name=n.name data_x=cx data_y=cy data_hx_get="/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+        g class=css data_name=n.name data_x=cx data_y=cy:
             circle cx=cx cy=cy r="24"
             stext class="name" x=cx y=ty: n.name
+            circle class="port" cx=px cy=cy r="6"
 
-# ---- the tables: a row for each node and each edge, with what can be done to it ----
-
-def row_html(n: Node_T) -> Html:
-    let vals: str = "{\"name\": \"" + n.name + "\"}"
-    let ask: str = f"Delete {n.name} and its edges?"
+# The menu of what a right click on a node, an edge or the space offers: the buttons carry
+# data_tool, which dijkstra_js_events.ady acts on for the thing that was right-clicked.
+def menus_html() -> Html:
     html:
-        span class="chip":
-            span: n.name
-            button type="button" class="delete" title="Delete" data_hx_delete="/nodes" data_hx_vals=vals data_hx_confirm=ask data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "✕"
-
-def row_html(e: Edge) -> Html:
-    let label: str = e.a + " — " + e.b
-    let value: str = str(e.cost)
-    let vals: str = "{\"a\": \"" + e.a + "\", \"b\": \"" + e.b + "\"}"
-    html:
-        tr:
-            td class="ends": label
-            td:
-                input type="number" name="cost" value=value min="1" max="999" data_hx_put="/edges" data_hx_trigger="change" data_hx_vals=vals data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML"
-            td class="end":
-                button type="button" class="delete" title="Delete" data_hx_delete="/edges" data_hx_vals=vals data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "✕"
-
-def choice_html(name: str, names: []str) -> Html:
-    html:
-        select name=name:
-            for n in names:
-                option value=n: n
+        div id="menus":
+            div id="menu-node" class="menu":
+                button type="button" data_tool="start": "Start here"
+                button type="button" data_tool="goal": "Go here"
+                button type="button" class="danger" data_tool="delete-node": "Delete node"
+            div id="menu-edge" class="menu":
+                button type="button" data_tool="cost": "Change cost…"
+                button type="button" class="danger" data_tool="delete-edge": "Delete edge"
+            div id="menu-space" class="menu":
+                button type="button" data_tool="add-here": "New node here"
 
 def all_html(net: Network, p0: Params, problem: str) -> Html:
     var p: Params = p0
@@ -109,22 +100,22 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
         p.start = ""
     if p.goal not in names:
         p.goal = ""
-    if p.pick != "" and p.pick in names:
-        if p.start == "" or p.goal != "":
+    if p.pick != "" and p.pick in names:    # the node chosen with the toolbar or a menu
+        if p.role == "start":
             p.start = p.pick
-            p.goal = ""
-        elif p.pick != p.start:
+            if p.goal == p.pick:
+                p.goal = ""
+        elif p.role == "goal" and p.start != "" and p.pick != p.start:
             p.goal = p.pick
     let found: (float, []str) = shortest_route[str](build_graph(net), p.start, p.goal)
     let way: []str = found[1]
-    let said: str = ("Click the node to start from." if p.start == "" else
-                     f"From {p.start}: click the node to go to." if p.goal == "" else
+    let said: str = ("Select a node, then Start here." if p.start == "" else
+                     f"From {p.start}: select a node, then Go here." if p.goal == "" else
                      f"No way from {p.start} to {p.goal}." if len(way) == 0 else
                      f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {found[0]:.0f}.")
     let clear_vals: str = "{\"act\": \"clear\"}"
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     let said_css: str = ("said found" if len(way) > 0 else "said")
-    # form#move: dijkstra_js_events.ady fills in its fields and clicks its button
     html:
         div id="all":
             form id="state":
@@ -135,7 +126,7 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 input type="hidden" name="x" value=""
                 input type="hidden" name="y" value=""
                 button type="button" id="redraw" class="redraw" data_hx_put="/nodes" data_hx_include="#move, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
-            # form#gesture: the drawing's gestures (dijkstra_js_events.ady) fill it in, then press one button
+            # form#gesture: the drawing and the menus (dijkstra_js_events.ady) fill it in, then press one button
             form id="gesture" class="gesture":
                 input type="hidden" name="name" value=""
                 input type="hidden" name="a" value=""
@@ -143,46 +134,31 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 input type="hidden" name="cost" value=""
                 input type="hidden" name="x" value=""
                 input type="hidden" name="y" value=""
+                input type="hidden" name="pick" value=""
+                input type="hidden" name="role" value=""
                 button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
                 button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
                 button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
                 button type="button" id="drop_node" data_hx_delete="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete node"
                 button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
-            div class="layout":
-                div class="board":
-                    p class=said_css: said
-                    if problem != "":
-                        p class="problem": problem
-                    svg viewBox=box class="graph":
-                        for e in net.edges:
-                            + to_html(e, uses(way, e), net)
-                        for n in net.nodes:
-                            + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
-                        path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
-                    p class="hint": "Click a node to start from, then one to go to. Drag a node to move it. Shift-drag from a node to another to join them. Double-click the space for a new node, or an edge to change its cost. Right-click a node or an edge to delete it."
-                div class="panel":
-                    div class="card":
-                        h2: "Nodes"
-                        div class="chips":
-                            for n in net.nodes:
-                                + row_html(n)
-                        form class="add" data_hx_post="/nodes" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML":
-                            input type="text" name="name" placeholder="New node" size="8" maxlength="8"
-                            button class="primary": "Add"
-                    div class="card":
-                        h2: "Edges"
-                        table class="edges":
-                            for e in net.edges:
-                                + row_html(e)
-                        form class="add" data_hx_post="/edges" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML":
-                            + choice_html("a", names)
-                            span class="dash": "—"
-                            + choice_html("b", names)
-                            input type="number" name="cost" value="1" min="1" max="999" title="Cost"
-                            button class="primary": "Add"
-                    div class="actions":
-                        button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear the way"
-                        button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
+                button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
+            div class="toolbar":
+                button type="button" data_tool="add": "New node"
+                button type="button" data_tool="start": "Start here"
+                button type="button" data_tool="goal": "Go here"
+                button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear the way"
+                button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
+            p class=said_css: said
+            if problem != "":
+                p class="problem": problem
+            svg viewBox=box class="graph":
+                for e in net.edges:
+                    + to_html(e, uses(way, e), net)
+                for n in net.nodes:
+                    + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
+                path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+            p class="hint": "Select a node or an edge to act on it; right-click for the menu. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Delete removes the selection."
+            + menus_html()
 
 const STYLE: str = """
 :root { --ink: #1f2933; --soft: #616e7c; --line: #e4e7eb; --bg: #f5f7fa; --card: #fff;
@@ -193,46 +169,27 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans
 header, #all { max-width: 68em; margin: 0 auto; }
 header h1 { font-size: 1.5em; margin: 0; }
 header p { color: var(--soft); margin: 0.2em 0 1.2em; }
-div.layout { display: grid; grid-template-columns: minmax(0, 1fr) 18em; gap: 1.2em; align-items: start; }
-@media (max-width: 820px) { div.layout { grid-template-columns: 1fr; } }
-div.board, div.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
-div.board { padding: 1em 1.2em; }
-div.panel { display: flex; flex-direction: column; gap: 1em; }
-div.card { padding: 0.8em 1em; }
-h2 { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--soft); margin: 0 0 0.6em; }
+div.board { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1em 1.2em; }
 p.said { font-weight: 600; margin: 0 0 0.4em; min-height: 1.4em; }
 p.said.found { color: var(--way); }
 p.problem { color: var(--bad); background: #fdecea; border-radius: 6px; padding: 0.4em 0.7em; margin: 0 0 0.4em; }
 p.hint { color: var(--soft); font-size: 0.85em; margin: 0.4em 0 0; }
-div.chips { display: flex; flex-wrap: wrap; gap: 0.35em; margin-bottom: 0.7em; }
-span.chip { display: inline-flex; align-items: center; gap: 0.15em; border: 1px solid var(--line); border-radius: 999px;
-            padding: 0.1em 0.2em 0.1em 0.7em; font-weight: 600; background: var(--bg); }
-table.edges { width: 100%; border-collapse: collapse; margin-bottom: 0.7em; }
-table.edges td { padding: 0.15em 0.2em; border-bottom: 1px solid var(--line); }
-td.ends { font-weight: 600; white-space: nowrap; }
-td.end { text-align: right; }
-form.add { display: flex; gap: 0.35em; align-items: center; }
-form.add input[type=text] { flex: 1; min-width: 0; }
-span.dash { color: var(--soft); }
-input, select, button { font: inherit; font-size: 0.9em; }
-input, select { border: 1px solid #cbd2d9; border-radius: 6px; padding: 0.25em 0.4em; background: #fff; }
-input[type=number] { width: 4.2em; }
+input, button { font: inherit; font-size: 0.9em; }
 button { border: 1px solid #cbd2d9; border-radius: 6px; padding: 0.3em 0.8em; background: #fff; cursor: pointer; }
 button:hover { background: var(--bg); }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.primary:hover { background: #2f55b8; }
-button.delete { border: none; background: none; color: #9aa5b1; padding: 0.1em 0.4em; border-radius: 999px; }
-button.delete:hover { color: var(--bad); background: #fdecea; }
-div.actions { display: flex; gap: 0.5em; }
-div.actions button { flex: 1; }
 button.quiet { color: var(--soft); }
-button.redraw { display: none; }
+button.danger { color: var(--bad); }
+div.toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 0.8em; }
+div.menu { position: fixed; z-index: 10; display: none; flex-direction: column; min-width: 10em; background: #fff;
+           border: 1px solid #cbd2d9; border-radius: 8px; box-shadow: 0 6px 18px rgba(31, 41, 51, 0.18); padding: 0.3em; }
+div.menu button { border: none; text-align: left; border-radius: 4px; padding: 0.4em 0.7em; }
+button.redraw, form.gesture { display: none; }
 svg.graph { width: 100%; height: auto; user-select: none; display: block; }
 path.edge { stroke: #b0b8c1; stroke-width: 2.5; fill: none; }
 path.edge.way { stroke: var(--way); stroke-width: 5; }
+g[data_from].selected path.edge { stroke: var(--accent); stroke-width: 5; }
 path.hit { stroke: transparent; stroke-width: 14px; fill: none; cursor: pointer; }
 path.wire { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
-form.gesture { display: none; }
 text.cost { font-size: 13px; fill: var(--soft); text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 4px; }
 g.node { cursor: grab; }
 g.node circle { fill: #fff; stroke: #7b8794; stroke-width: 2; }
@@ -240,6 +197,9 @@ g.node:hover circle { stroke: var(--ink); }
 g.node.way circle { stroke: var(--way); stroke-width: 4; }
 g.node.start circle { fill: #e3f2e5; stroke: var(--start); stroke-width: 4; }
 g.node.goal circle { fill: #e3eefb; stroke: var(--goal); stroke-width: 4; }
+g.node.selected circle { stroke: var(--accent); stroke-width: 4; }
+circle.port { fill: var(--accent); opacity: 0; cursor: crosshair; }
+g.node:hover circle.port, g.node.selected circle.port { opacity: 1; }
 text.name { font-size: 16px; font-weight: 700; text-anchor: middle; pointer-events: none; fill: var(--ink); }
 """
 

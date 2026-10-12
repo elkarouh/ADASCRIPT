@@ -30,7 +30,7 @@ What is underneath, for the curious: the page as the browser holds it is the DOM
 object model"), a tree of elements, one per HTML tag; `page` is its root. Strings cross into
 it as the browser's own cstring, which this module converts both ways.
 """
-from dom nimport Node, Element, InputElement, Event, MouseEvent, document, window, getAttribute, setAttribute, querySelector, querySelectorAll, click, closest, stopPropagation, preventDefault, addEventListener, prompt, confirm, value
+from dom nimport Node, Element, InputElement, Event, MouseEvent, document, window, getAttribute, setAttribute, querySelector, querySelectorAll, click, closest, stopPropagation, preventDefault, addEventListener, prompt, confirm, KeyboardEvent, value
 
 # An element of the page: a <g>, a <path>, a <form>, an <input>, the page itself.
 type Element_T is Node
@@ -51,7 +51,10 @@ def all(within: Element_T, css: str) -> []Element_T:
 
 # The text of attribute NAME of NODE ("" when it has none).
 def attr(node: Element_T, name: str) -> str:
-    return str(node.getAttribute(cstring(name)))
+    let v: cstring = node.getAttribute(cstring(name))
+    if v == nil:
+        return ""
+    return str(v)
 
 # Set attribute NAME of NODE to VALUE.
 def set_attr(node: Element_T, name: str, value: str):
@@ -112,6 +115,15 @@ def stop(c: Click):
 # Whether the click was made with the left button (the main one).
 def left(c: Click) -> bool:
     return MouseEvent(c.event).button == 0
+
+# The key the reader pressed: "Delete", "Escape", "a" ...
+def key_of(e: Event) -> str:
+    return str(KeyboardEvent(e).key)
+
+# Show MENU (an element of the page, hidden until now) where the mouse was when C happened.
+def show_at(menu: Element_T, c: Click):
+    let m: MouseEvent = MouseEvent(c.event)
+    menu.set_attr("style", f"display:block; left:{m.clientX}px; top:{m.clientY}px")
 
 # Whether the reader made the click (with the mouse or a key), not a script that pressed a button.
 def made_by_reader(c: Click) -> bool:
