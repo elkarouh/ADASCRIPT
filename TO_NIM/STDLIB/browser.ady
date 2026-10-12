@@ -30,7 +30,7 @@ What is underneath, for the curious: the page as the browser holds it is the DOM
 object model"), a tree of elements, one per HTML tag; `page` is its root. Strings cross into
 it as the browser's own cstring, which this module converts both ways.
 """
-from dom nimport Node, Element, InputElement, Event, MouseEvent, document, getAttribute, setAttribute, querySelector, querySelectorAll, click, closest, stopPropagation, value
+from dom nimport Node, Element, InputElement, Event, MouseEvent, document, window, getAttribute, setAttribute, querySelector, querySelectorAll, click, closest, stopPropagation, preventDefault, addEventListener, prompt, confirm, value
 
 # An element of the page: a <g>, a <path>, a <form>, an <input>, the page itself.
 type Element_T is Node
@@ -108,3 +108,44 @@ def on(c: Click, css: str) -> Element_T:
 
 def stop(c: Click):
     c.event.stopPropagation()
+
+# Whether the click was made with the left button (the main one).
+def left(c: Click) -> bool:
+    return MouseEvent(c.event).button == 0
+
+# Whether the reader made the click (with the mouse or a key), not a script that pressed a button.
+def made_by_reader(c: Click) -> bool:
+    return c.event.isTrusted
+
+# What the browser would do with the event itself: a right click's menu, say. It does not happen.
+def cancel(c: Click):
+    c.event.preventDefault()
+
+# ---- Events the page sends, and questions the page asks ----
+
+# What the page sends a listener: a click, a key, a move; a Click (above) says a click's part.
+type Event_T is Event
+
+# What a listener is: a function that is told of the event.
+type Listener_T is (Event_T) -> None
+
+# Call HANDLER for every EVENT the page sends, KIND being "mousemove", "dblclick", ... (after
+# the elements that are in the way have had theirs).
+def listen(kind: str, handler: Listener_T):
+    addEventListener(document, cstring(kind), handler)
+
+# As `listen`, but called first, before any element, and it may `stop` the event there.
+def listen_first(kind: str, handler: Listener_T):
+    addEventListener(document, cstring(kind), handler, true)
+
+# Ask the reader a question, with a box for the answer filled in with ANSWER; "" when they
+# cancel it, or leave it empty.
+def ask(question: str, answer: str) -> str:
+    let got: cstring = window.prompt(cstring(question), cstring(answer))
+    if got == nil:
+        return ""
+    return str(got)
+
+# Ask the reader to say yes or no to QUESTION.
+def ask_yes(question: str) -> bool:
+    return window.confirm(cstring(question))

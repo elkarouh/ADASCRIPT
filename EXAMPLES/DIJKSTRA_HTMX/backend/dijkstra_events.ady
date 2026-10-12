@@ -34,8 +34,13 @@ def answer(method: str, path: str, fields: str) -> str:
     if method == "GET" and path == "/all":
         pass
     elif method == "POST" and path == "/nodes":
-        let at: []float = new_spot(net)
-        problem = add_node(net, name, at[0], at[1])
+        var x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
+        var y: float = number_of(field_of(fields, "y"))
+        if x < 0.0 or y < 0.0:                               # not given (-1): the next free place
+            let at: []float = new_spot(net)
+            x = at[0]
+            y = at[1]
+        problem = add_node(net, name, x, y)
     elif method == "PUT" and path == "/nodes":
         problem = move_node(net, name, number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
     elif method == "DELETE" and path == "/nodes":

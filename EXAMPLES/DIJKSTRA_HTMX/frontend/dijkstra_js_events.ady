@@ -1,24 +1,30 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""dijkstra_js_events -- the events that stay in the browser: a node dragged with the mouse.
+"""dijkstra_js_events -- the events that stay in the browser: the drawing works like a node editor.
 
 Every other event is declared in the HTML (hx-* attributes, dijkstra_gui.ady) and handled
-on the server (dijkstra_events.ady); only what must follow the mouse every frame is here.
+on the server (dijkstra_events.ady); only what must follow the mouse, or ask the reader a
+question, is here. The gestures, all on the drawing:
+
+    drag a node            moves it; its edges follow, and where it is let go is kept
+    shift-drag node to node  draws a wire from the one to the other, and asks the cost
+    double-click the space   asks a name, and puts a new node where it was clicked
+    double-click an edge     asks its new cost
+    right-click a node or edge   asks, then deletes it (with its edges, for a node)
 
 A node is a <g class="node" data_name=".." data_x=".." data_y=".."> (its centre, in the
-drawing's units) and an edge a <g data_from=".." data_to=".."> holding a path and its
-cost. While a node is dragged it moves and its edges follow, here in the browser, at once.
-Letting go writes the node's name and new centre into the hidden form `#move` and clicks
-its button, which sends PUT /nodes: the server keeps the new place and draws the page again.
+drawing's units) and an edge a <g data_from=".." data_to=".."> holding its line (a visible
+<path> and a wider one, to point at) and its cost. Each change that the server must keep is
+written into the hidden form #gesture, whose button then sends it (see dijkstra_gui.ady).
 
 A press that does not move is a click, and goes on to htmx (it picks the node).
 
 The drag itself (the mouse, when a press becomes a drag, the click after it) is the standard
-library's svg_drag, and the page (finding elements, forms) its browser module, both in
-TO_NIM/STDLIB. This file says only what a drag means in this app: `moved` and `dropped`.
+library's svg_drag, and the page (finding elements, forms, questions) its browser module, both
+in TO_NIM/STDLIB. This file says only what each gesture means in this app.
 """
-from browser import Element_T, page, find, all, data, fill, press
-from svg_drag import Unit_T, Spot, spot_of, between, shift, draw_line, place_at, no_click, draggable
+from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, listen, listen_first, text, set_attr
+from svg_drag import Unit_T, Spot, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
 
 const WIDTH: Unit_T = Unit_T(580.0)     # the drawing's size (the svg's viewBox)
 const HEIGHT: Unit_T = Unit_T(380.0)
@@ -39,6 +45,10 @@ def data_to(e: Element_T) -> str:
 def node_named(name: str) -> Element_T:
     return page.find(f"g.node[data_name=\"{name}\"]")
 
+# The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
+def gesture() -> Element_T:
+    return page.find("#gesture")
+
 # Redraw, in the browser, the edges that end at NODE, as if it stood at AT.
 #
 # While a node is dragged, the server is not asked (it is told once, when the mouse is let
@@ -46,7 +56,8 @@ def node_named(name: str) -> Element_T:
 # each edge of NODE is drawn again from AT to its other end, which has not moved, and its cost
 # is put back at the line's middle. Edges that do not touch NODE are left alone.
 #
-# An edge is <g data_from="A" data_to="B"> holding a <path> (the line) and a <text class="cost">.
+# An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
+# point at) and a <text class="cost">.
 def redraw_edges_of(node: Element_T, at: Spot):
     let name: str = node.data_name
     for edge in page.all("g[data_from]"):
@@ -54,7 +65,8 @@ def redraw_edges_of(node: Element_T, at: Spot):
             # the end that is NODE is at AT; the other end stays where it is
             let a: Spot = (at if edge.data_from == name else spot_of(node_named(edge.data_from)))
             let b: Spot = (at if edge.data_to == name else spot_of(node_named(edge.data_to)))
-            edge.find("path").draw_line(a, b)
+            for line in edge.all("path"):
+                line.draw_line(a, b)
             edge.find("text.cost").place_at(Spot(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))   # just above the line
 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
@@ -75,4 +87,118 @@ def dropped(node: Element_T, at: Spot):
     form.fill("y", f"{at.y:.0f}")
     page.press("#redraw")
 
+# ---- Double-click: a new node in the space, or a new cost for an edge ----
+
+def double_click(e: Event_T):
+    let c: Click = click_of(e)
+    let edge: Element_T = on(c, "g[data_from]")
+    if edge != nil:
+        let a: str = edge.data_from
+        let b: str = edge.data_to
+        let cost: str = ask(f"Cost of the edge {a} — {b}?", edge.find("text.cost").text)
+        if cost == "":
+            return
+        let form: Element_T = gesture()
+        form.fill("a", a)
+        form.fill("b", b)
+        form.fill("cost", cost)
+        page.press("#set_cost")
+        return
+    if on(c, "svg.graph") == nil or on(c, "g.node") != nil:
+        return                          # outside the drawing, or on a node (which has no double-click)
+    let name: str = ask("Name of the new node (letters and digits)?", "")
+    if name == "":
+        return
+    let at: Spot = spot_at(e)
+    let form: Element_T = gesture()
+    form.fill("name", name)
+    form.fill("x", f"{between(at.x, MARGIN, WIDTH - MARGIN):.0f}")
+    form.fill("y", f"{between(at.y, MARGIN, HEIGHT - MARGIN):.0f}")
+    page.press("#make_node")
+
+# ---- Right-click: delete a node (with its edges), or an edge ----
+
+def context(e: Event_T):
+    let c: Click = click_of(e)
+    let node: Element_T = on(c, "g.node")
+    let edge: Element_T = on(c, "g[data_from]")
+    if node == nil and edge == nil:
+        return                          # not on the drawing's nodes or edges: the browser's own menu
+    cancel(c)
+    let form: Element_T = gesture()
+    if node != nil:
+        let name: str = node.data_name
+        if ask_yes(f"Delete the node {name} and its edges?"):
+            form.fill("name", name)
+            page.press("#drop_node")
+    else:
+        let a: str = edge.data_from
+        let b: str = edge.data_to
+        if ask_yes(f"Delete the edge {a} — {b}?"):
+            form.fill("a", a)
+            form.fill("b", b)
+            page.press("#drop_edge")
+
+# ---- Shift-drag: a wire from one node to another, which is the new edge ----
+#
+# Pressing with shift on a node holds it for a wire, not for a move: the press is stopped
+# before svg_drag sees it. While the mouse moves, a dashed line (path#wire, hidden until then)
+# runs from that node to the mouse. Letting go on another node asks the cost and sends the
+# edge; the browser's click after the release belongs to the wire, so htmx does not see it.
+
+var linking: str = ""                   # the node the wire starts at; "" when there is no wire
+var swallow: bool = false               # the click after a wire is let go: not a click on a node
+
+def link_down(e: Event_T):
+    let c: Click = click_of(e)
+    if not c.shift or not left(c):
+        return
+    let node: Element_T = on(c, "g.node")
+    if node == nil:
+        return
+    stop(c)
+    linking = node.data_name
+    swallow = false
+    let wire: Element_T = page.find("path#wire")
+    wire.set_attr("visibility", "visible")
+    draw_line(wire, spot_of(node), spot_at(e))
+
+def link_move(e: Event_T):
+    if linking == "":
+        return
+    draw_line(page.find("path#wire"), spot_of(node_named(linking)), spot_at(e))
+
+def link_up(e: Event_T):
+    if linking == "":
+        return
+    let from_name: str = linking
+    linking = ""
+    page.find("path#wire").set_attr("visibility", "hidden")
+    swallow = true
+    let target: Element_T = on(click_of(e), "g.node")
+    if target == nil or target.data_name == from_name:
+        return
+    let cost: str = ask(f"Cost of the edge {from_name} — {target.data_name}?", "1")
+    if cost == "":
+        return
+    let form: Element_T = gesture()
+    form.fill("a", from_name)
+    form.fill("b", target.data_name)
+    form.fill("cost", cost)
+    page.press("#make_edge")
+
+# The click after the release is the reader's, and goes no further. A click the script makes
+# itself (the button that sends the edge) is not the reader's, and is let through.
+def swallow_click(e: Event_T):
+    let c: Click = click_of(e)
+    if swallow and made_by_reader(c):
+        swallow = false
+        stop(c)
+
+listen_first("mousedown", link_down)
+listen("mousemove", link_move)
+listen("mouseup", link_up)
+listen_first("click", swallow_click)
+listen("dblclick", double_click)
+listen("contextmenu", context)
 draggable("g.node", "svg.graph", WIDTH, moved, dropped, no_click)

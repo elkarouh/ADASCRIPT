@@ -57,6 +57,7 @@ def to_html(e: Edge, on_way: bool, net: Network) -> Html:
     html:
         g data_from=e.a data_to=e.b:
             path class=css d=d
+            path class="hit" d=d
             stext class="cost" x=lx y=ly: label
 
 def to_html(n: Node_T, role: str) -> Html:
@@ -134,6 +135,19 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 input type="hidden" name="x" value=""
                 input type="hidden" name="y" value=""
                 button type="button" id="redraw" class="redraw" data_hx_put="/nodes" data_hx_include="#move, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
+            # form#gesture: the drawing's gestures (dijkstra_js_events.ady) fill it in, then press one button
+            form id="gesture" class="gesture":
+                input type="hidden" name="name" value=""
+                input type="hidden" name="a" value=""
+                input type="hidden" name="b" value=""
+                input type="hidden" name="cost" value=""
+                input type="hidden" name="x" value=""
+                input type="hidden" name="y" value=""
+                button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
+                button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
+                button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
+                button type="button" id="drop_node" data_hx_delete="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete node"
+                button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
             div class="layout":
                 div class="board":
                     p class=said_css: said
@@ -144,7 +158,8 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                             + to_html(e, uses(way, e), net)
                         for n in net.nodes:
                             + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
-                    p class="hint": "Click a node to start from, then one to go to. Drag a node to move it."
+                        path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+                    p class="hint": "Click a node to start from, then one to go to. Drag a node to move it. Shift-drag from a node to another to join them. Double-click the space for a new node, or an edge to change its cost. Right-click a node or an edge to delete it."
                 div class="panel":
                     div class="card":
                         h2: "Nodes"
@@ -215,6 +230,9 @@ button.redraw { display: none; }
 svg.graph { width: 100%; height: auto; user-select: none; display: block; }
 path.edge { stroke: #b0b8c1; stroke-width: 2.5; fill: none; }
 path.edge.way { stroke: var(--way); stroke-width: 5; }
+path.hit { stroke: transparent; stroke-width: 14px; fill: none; cursor: pointer; }
+path.wire { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
+form.gesture { display: none; }
 text.cost { font-size: 13px; fill: var(--soft); text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 4px; }
 g.node { cursor: grab; }
 g.node circle { fill: #fff; stroke: #7b8794; stroke-width: 2; }

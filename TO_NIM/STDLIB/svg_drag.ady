@@ -120,6 +120,14 @@ def scale() -> Scale_T:
     let box: BoundingRect = page.find(drawing).getBoundingClientRect()
     return drawing_width / Pixel_T(box.width)   # units / pixels: a Scale_T
 
+# Where the mouse was when event E happened, in the drawing's units: the drawing's own place
+# on the screen is taken off first, so the top left of the drawing is 0, 0.
+def spot_at(e: Event) -> Spot:
+    let m: MouseEvent = MouseEvent(e)
+    let box: BoundingRect = page.find(drawing).getBoundingClientRect()
+    let k: Scale_T = drawing_width / Pixel_T(box.width)
+    return Spot(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
+
 # ---- Changing the page ----
 
 # Draw NODE, whose centre the server put at CENTRE, at NOW instead: its picture is shifted by

@@ -47,4 +47,9 @@ assert "data_x=\"300\"" in moved or "data-x=\"300\"" in moved
 assert "A → F → E, cost 23" in answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
 assert "Click the node to start from." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")   # the start went
 assert "A → C → F → E, cost 20" in answer("POST", "/reset", "start=A&goal=E")
+# the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
+let placed: str = answer("POST", "/nodes", "name=K&x=120&y=200")
+assert "data_x=\"120\"" in placed or "data-x=\"120\"" in placed
+assert "There is a node K already." in answer("POST", "/nodes", "name=K&x=5&y=5")
+assert "id=\"gesture\"" in answer("GET", "/all", "") and "id=\"wire\"" in answer("GET", "/all", "")
 print "dijkstra: all checks passed"
