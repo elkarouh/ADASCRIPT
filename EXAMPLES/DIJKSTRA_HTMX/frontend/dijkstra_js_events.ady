@@ -91,7 +91,11 @@ class NodeView:
 
     # Outline this node, or take the outline off it.
     def mark(self, lit: bool):
-        mark_element(self.el, lit)
+        let cls: str = self.el.attr("class")
+        if lit:
+            self.el.set_attr("class", cls + " selected")
+        else:
+            self.el.set_attr("class", cls.replace(" selected", ""))
 
 class EdgeView:
     var edge: Edge_T
@@ -103,7 +107,11 @@ class EdgeView:
 
     # Outline this edge, or take the outline off it.
     def mark(self, lit: bool):
-        mark_element(self.el, lit)
+        let cls: str = self.el.attr("class")
+        if lit:
+            self.el.set_attr("class", cls + " selected")
+        else:
+            self.el.set_attr("class", cls.replace(" selected", ""))
 
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
@@ -181,37 +189,53 @@ type Selection_T (kind: Kind_T) is record:
         when others:
             pass
 
-var selection: Selection_T = NOTHING()
+# The reader's selection: what it holds, and what the gestures do with it.
+class Selection:
+    var what: Selection_T
 
-# Outline ELEMENT, or take the outline off it (the views say it; see NodeView.mark).
-def mark_element(el: Element_T, lit: bool):
-    let cls: str = el.attr("class")
-    if lit:
-        el.set_attr("class", cls + " selected")
-    else:
-        el.set_attr("class", cls.replace(" selected", ""))
+    def __init__(self):
+        self.what = NOTHING()
 
-def clear_selection():
-    for el in page.all(".selected"):
-        if has_class(el, "node"):
-            NodeView(el).mark(false)
-        else:
-            EdgeView(el).mark(false)
-    selection = NOTHING()
+    # Take the outline off everything selected, and forget it.
+    def clear(self):
+        for el in page.all(".selected"):
+            if has_class(el, "node"):
+                NodeView(el).mark(false)
+            else:
+                EdgeView(el).mark(false)
+        self.what = NOTHING()
 
-# Select NODE, in place of what was selected. Only the right click does this (see context).
-def select_node(node: Element_T):
-    clear_selection()
-    let view: NodeView = NodeView(node)
-    selection = NODE(view)
-    view.mark(true)
+    # Select the node EL, in place of what was selected. Only the right click does this (see context).
+    def select_node(self, el: Element_T):
+        self.clear()
+        let view: NodeView = NodeView(el)
+        self.what = NODE(view)
+        view.mark(true)
 
-# Select EDGE, in place of what was selected.
-def select_edge(edge: Element_T):
-    clear_selection()
-    let view: EdgeView = EdgeView(edge)
-    selection = EDGE(view)
-    view.mark(true)
+    # Select the edge EL, in place of what was selected.
+    def select_edge(self, el: Element_T):
+        self.clear()
+        let view: EdgeView = EdgeView(el)
+        self.what = EDGE(view)
+        view.mark(true)
+
+    # Ask the cost of the selected edge, if an edge is selected.
+    def change_cost(self):
+        if self.what.kind == EDGE:
+            self.what.edge.change_cost()
+
+    # Delete what is selected, after asking.
+    def remove(self):
+        if self.what.kind == NODE:
+            self.what.node.delete()
+        elif self.what.kind == EDGE:
+            self.what.edge.delete()
+
+    # Forget the selection without unmarking it: the page it was on has been drawn again.
+    def forget(self):
+        self.what = NOTHING()
+
+var selection: Selection = Selection()
 
 # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
 # it is chosen already (drawn as the start or the goal), takes it out of the route again. Anything
@@ -222,19 +246,19 @@ def clicked_cb(c: Click_T):
         return
     let node: ?Element_T = on(c, "g.node")
     if node is not None:
-        clear_selection()
+        selection.clear()
         NodeView(node).choose(has_class(node, "start") or has_class(node, "goal"))
         return
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is None:
-        clear_selection()
+        selection.clear()
         return
-    select_edge(edge)
+    selection.select_edge(edge)
 
 # The page was drawn again by the server: what was selected is gone with the old drawing, and the
 # drawing's objects are read off the new one.
 def page_drawn(e: Event_T):
-    selection = NOTHING()
+    selection.forget()
     drawing = Drawing()
 
 # ---- Asking the reader, and sending the answer ----
@@ -249,13 +273,6 @@ def send_node(name: str, x: str, y: str):
     form.fill("x", x)
     form.fill("y", y)
     page.press("#make_node")
-
-# Delete what is selected, after asking.
-def remove_selected():
-    if selection.kind == NODE:
-        selection.node.delete()
-    elif selection.kind == EDGE:
-        selection.edge.delete()
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
@@ -297,13 +314,13 @@ def context(e: Event_T):
     let node: ?Element_T = on(c, "g.node")
     let edge: ?Element_T = on(c, "g[data_from]")
     if node is not None:
-        select_node(node)
+        selection.select_node(node)
         show_at(page.element("#menu-node"), c)
     elif edge is not None:
-        select_edge(edge)
+        selection.select_edge(edge)
         show_at(page.element("#menu-edge"), c)
     else:
-        clear_selection()
+        selection.clear()
         menus.at = spot_at(e)
         show_at(page.element("#menu-space"), c)
 
@@ -322,10 +339,9 @@ def tool_click(e: Event_T):
         if name != "":
             send_node(name, f"{menus.at.x:.0f}", f"{menus.at.y:.0f}")
     elif tool == "cost":
-        if selection.kind == EDGE:
-            selection.edge.change_cost()
+        selection.change_cost()
     elif tool == "delete-node" or tool == "delete-edge":
-        remove_selected()
+        selection.remove()
 
 # Delete and Backspace remove what is selected; Escape closes the menus.
 def key_down(e: Event_T):
@@ -333,7 +349,7 @@ def key_down(e: Event_T):
     if key == "Escape":
         menus.hide()
     elif key == "Delete" or key == "Backspace":
-        remove_selected()
+        selection.remove()
 
 # ---- A drag from a node's dot: a wire, which is the new edge ----
 #
