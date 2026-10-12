@@ -3044,8 +3044,8 @@ def _bare_method_ref(self, raw_name):
     if meth not in (getattr(ParserState, "_all_class_methods", None) or {}).get(cls, ()):
         return None
     ptypes = (getattr(ParserState, "proc_param_types", None) or {}).get(meth)
-    if not ptypes:
-        return None
+    if not ptypes or len(ptypes) < 2:
+        return None                     # no parameters besides self: Nim calls it, as it always has
     params = list(ptypes)[1:]
     names = [f"a{i}" for i in range(len(params))]
     sig = ", ".join(f"{n}: {t}" for n, t in zip(names, params))
