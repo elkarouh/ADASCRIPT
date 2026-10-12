@@ -1,1 +1,0 @@
-/root/.cache/adascript/cache-26EDB15777B2843A/.accounting_js_events
