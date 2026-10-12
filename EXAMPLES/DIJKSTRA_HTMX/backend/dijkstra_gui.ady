@@ -129,6 +129,7 @@ def all_html(net: Network_T, layout: Layout, p0: Params_T, problem: str) -> Html
                 button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
                 button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
             div class="toolbar":
+                button type="button" class="quiet" data_hx_post="/relayout" data_hx_confirm="Put every node where the layout puts it? Nodes you moved go back to the layout." data_hx_target="#all" data_hx_swap="outerHTML": "Relayout"
                 button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
             p class=said_css: said
             if problem != "":

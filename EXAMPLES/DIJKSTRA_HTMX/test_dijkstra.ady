@@ -48,6 +48,9 @@ assert "Click a node to start from." in answer("DELETE", "/nodes", "start=A&goal
 assert "Click a node to start from." in answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
 assert "From C: click a node to go to." in answer("GET", "/all", "start=C&goal=B&pick=B&act=unpick")  # a chosen goal clicked again
 assert "A → C → F → E, cost 20" in answer("POST", "/reset", "start=A&goal=E")
+assert "at A " not in answer("POST", "/relayout", "")         # no kept places: the layout draws every node
+assert "data-hx-post=\"/relayout\"" in answer("GET", "/all", "")
+answer("POST", "/reset", "")                                   # the sample again, for the tests that follow
 # the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
 let placed: str = answer("POST", "/nodes", "name=K&x=120&y=200")
 assert "data_x=\"120\"" in placed or "data-x=\"120\"" in placed

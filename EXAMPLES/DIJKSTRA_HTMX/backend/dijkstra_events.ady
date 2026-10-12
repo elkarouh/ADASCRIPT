@@ -71,6 +71,9 @@ def answer(method: str, path: str, fields: str) -> str:
         problem = set_cost(net, a, b, cost)
     elif method == "DELETE" and path == "/edges":
         problem = remove_edge(net, a, b)
+    elif method == "POST" and path == "/relayout":
+        let none: {str}Place_T = {:}
+        layout = Layout(none)           # no node has a place of its own: the layout gives each one
     elif method == "POST" and path == "/reset":
         net = sample()
         layout = sample_layout()
