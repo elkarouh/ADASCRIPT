@@ -275,18 +275,25 @@ def double_click(e: Event_T):
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 
-var menu_at: Spot_T = Spot_T(x=0.0, y=0.0)     # where the menu of the space was opened
+# The menus of the drawing: which are shown, and where the space's menu was opened.
+class Menus:
+    var at: Spot_T
 
-def hide_menus():
-    for m in page.all(".menu"):
-        m.set_attr("style", "display:none")
+    def __init__(self):
+        self.at = Spot_T(x=0.0, y=0.0)
+
+    def hide(self):
+        for m in page.all(".menu"):
+            m.set_attr("style", "display:none")
+
+var menus: Menus = Menus()
 
 def context(e: Event_T):
     let c: Click_T = click_of(e)
     if on(c, "svg.graph") is None:
         return                          # the rest of the page keeps the browser's own menu
     cancel(c)
-    hide_menus()
+    menus.hide()
     let node: ?Element_T = on(c, "g.node")
     let edge: ?Element_T = on(c, "g[data_from]")
     if node is not None:
@@ -297,7 +304,7 @@ def context(e: Event_T):
         show_at(page.element("#menu-edge"), c)
     else:
         clear_selection()
-        menu_at = spot_at(e)
+        menus.at = spot_at(e)
         show_at(page.element("#menu-space"), c)
 
 # ---- The toolbar and the menus: a button with data_tool does that action ----
@@ -306,14 +313,14 @@ def tool_click(e: Event_T):
     let c: Click_T = click_of(e)
     let b: ?Element_T = on(c, "button[data_tool]")
     if b is None:
-        hide_menus()                    # a click elsewhere closes the menus
+        menus.hide()                    # a click elsewhere closes the menus
         return
-    hide_menus()
+    menus.hide()
     let tool: str = b.data("tool")
     if tool == "add-here":
         let name: str = ask_name()
         if name != "":
-            send_node(name, f"{menu_at.x:.0f}", f"{menu_at.y:.0f}")
+            send_node(name, f"{menus.at.x:.0f}", f"{menus.at.y:.0f}")
     elif tool == "cost":
         if selection.kind == EDGE:
             selection.edge.change_cost()
@@ -324,7 +331,7 @@ def tool_click(e: Event_T):
 def key_down(e: Event_T):
     let key: str = key_of(e)
     if key == "Escape":
-        hide_menus()
+        menus.hide()
     elif key == "Delete" or key == "Backspace":
         remove_selected()
 
@@ -336,60 +343,85 @@ def key_down(e: Event_T):
 # sends the edge. The browser's click after the release belongs to the wire, so it is not a
 # selection, and htmx does not see it.
 
-var linking: bool = false               # a wire is being drawn
-var from_node: Node_T = Node_T("")     # the node the wire starts at
-var from_at: Spot_T = Spot_T(x=0.0, y=0.0)     # and where it is drawn
-var swallow: bool = false               # the click after a wire is let go: not a click on a node
+# The wire's state, and what each gesture on it does.
+class Wire:
+    var linking: bool                  # a wire is being drawn
+    var from_node: Node_T              # the node the wire starts at
+    var from_at: Spot_T                # and where it is drawn
+    var swallow: bool                  # the click after a wire is let go: not a click on a node
+
+    def __init__(self):
+        self.linking = false
+        self.from_node = Node_T("")
+        self.from_at = Spot_T(x=0.0, y=0.0)
+        self.swallow = false
+
+    # The press: on a node's dot, the wire starts there.
+    def down(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        if not left(c) or on(c, "circle.port") is None:
+            return
+        let node: ?Element_T = on(c, "g.node")
+        if node is None:
+            return
+        stop(c)
+        let view: NodeView = NodeView(node)
+        self.from_node = view.node
+        self.from_at = view.at
+        self.linking = true
+        self.swallow = false
+        let el: Element_T = page.element("path#wire")
+        el.set_attr("visibility", "visible")
+        draw_line(el, self.from_at, spot_at(e))
+
+    # The mouse moves: the wire runs from its start to the mouse.
+    def move(self, e: Event_T):
+        if not self.linking:
+            return
+        draw_line(page.element("path#wire"), self.from_at, spot_at(e))
+
+    # The release: on another node, the edge is asked for and sent.
+    def up(self, e: Event_T):
+        if not self.linking:
+            return
+        self.linking = false
+        page.element("path#wire").set_attr("visibility", "hidden")
+        self.swallow = true
+        let target: ?Element_T = on(click_of(e), "g.node")
+        if target is None:
+            return
+        let to: Node_T = node_of(target)
+        if to.name == self.from_node.name:
+            return
+        let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
+        if cost == "":
+            return
+        let form: Element_T = gesture()
+        form.fill("a", self.from_node.name)
+        form.fill("b", to.name)
+        form.fill("cost", cost)
+        page.press("#make_edge")
+
+    # The click after the release belongs to the wire: it goes no further.
+    def swallow_click(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        if self.swallow and made_by_reader(c):
+            self.swallow = false
+            stop(c)
+
+var wire: Wire = Wire()
 
 def link_down(e: Event_T):
-    let c: Click_T = click_of(e)
-    if not left(c) or on(c, "circle.port") is None:
-        return
-    let node: ?Element_T = on(c, "g.node")
-    if node is None:
-        return
-    stop(c)
-    from_node = node_of(node)
-    from_at = spot_of(node)
-    linking = true
-    swallow = false
-    let wire: Element_T = page.element("path#wire")
-    wire.set_attr("visibility", "visible")
-    draw_line(wire, from_at, spot_at(e))
+    wire.down(e)
 
 def link_move(e: Event_T):
-    if not linking:
-        return
-    draw_line(page.element("path#wire"), from_at, spot_at(e))
+    wire.move(e)
 
 def link_up(e: Event_T):
-    if not linking:
-        return
-    linking = false
-    page.element("path#wire").set_attr("visibility", "hidden")
-    swallow = true
-    let target: ?Element_T = on(click_of(e), "g.node")
-    if target is None:
-        return
-    let to: Node_T = node_of(target)
-    if to.name == from_node.name:
-        return
-    let cost: str = ask(f"Cost of the edge {from_node.name} — {to.name}?", "1")
-    if cost == "":
-        return
-    let form: Element_T = gesture()
-    form.fill("a", from_node.name)
-    form.fill("b", to.name)
-    form.fill("cost", cost)
-    page.press("#make_edge")
+    wire.up(e)
 
-# The click after the release is the reader's, and goes no further. A click the script makes
-# itself (the button that sends the edge) is not the reader's, and is let through.
 def swallow_click(e: Event_T):
-    let c: Click_T = click_of(e)
-    if swallow and made_by_reader(c):
-        swallow = false
-        stop(c)
+    wire.swallow_click(e)
 
 listen_first("mousedown", link_down)
 listen("mousemove", link_move)
