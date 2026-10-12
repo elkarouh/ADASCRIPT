@@ -28,8 +28,8 @@ The page itself (finding elements, reading what the server wrote, forms, clicks)
 browser module's, in plain words; this one adds the drawing: its units, a drag, and moving
 what is drawn.
 """
-from browser import Element_T, page, find, attr, set_attr, number, Click, click_of
-from dom nimport Event, MouseEvent, BoundingRect, Node, document, getBoundingClientRect, addEventListener, preventDefault, stopPropagation, closest
+from browser import Element_T, page, set_attr, number, Click, click_of, on
+from dom nimport Event, MouseEvent, BoundingRect, document, getBoundingClientRect, addEventListener, preventDefault, stopPropagation
 
 # ---- Two units: the mouse's and the drawing's ----
 #
@@ -54,7 +54,16 @@ const MOVED: Pixel_T = 4.0              # how far a press goes before it is a dr
 # What the app says a drag means (see the docstring).
 type Moved_T is (Element_T, Spot, Spot) -> Spot   # the shape, its centre when pressed, where the mouse has taken it -> where it is
 type Dropped_T is (Element_T, Spot) -> None       # the shape, where it was let go
-type Clicked_T is (Click) -> None            # any click that is not the end of a drag
+type Clicked_T is (Click) -> None                 # any click that is not the end of a drag
+
+# What draggable was given: the shapes, the drawing, and what a drag means.
+type Setup_T is record:
+    shapes:  str                        # the CSS selector of the shapes that can be dragged
+    svg:     str                        # the CSS selector of the <svg>
+    width:   Unit_T                     # its width, in its own units
+    moved:   Moved_T
+    dropped: Dropped_T
+    clicked: Clicked_T
 
 # ---- The drag, as a small state machine ----
 #
@@ -82,7 +91,7 @@ type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
 type Grip_T (phase: Phase_T) is record:
     case phase is
         when PRESSED | DRAGGING:
-            node:   Element_T                # the shape held
+            node:   Element_T           # the shape held
             down:   Screen              # where the mouse went down
             centre: Spot                # the shape's centre then
             now:    Spot                # and where it is now, as `moved` answered
@@ -90,14 +99,7 @@ type Grip_T (phase: Phase_T) is record:
             pass
 
 var grip: Grip_T = IDLE()               # the one drag there is; nothing held at first
-
-# What draggable was given.
-var shapes: str = ""                    # the CSS selector of the shapes that can be dragged
-var drawing: str = ""                   # the CSS selector of the <svg>
-var drawing_width: Unit_T = 0.0               # its width, in its own units
-var moved_hook: Moved_T
-var dropped_hook: Dropped_T
-var clicked_hook: Clicked_T
+var setup: Setup_T                      # what draggable was given; set before any mouse event
 
 # ---- Reading the page ----
 
@@ -109,23 +111,25 @@ def unit_of(node: Element_T, name: str) -> Unit_T:
 def spot_of(node: Element_T) -> Spot:
     return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
 
-# Where the mouse was when event M happened.
+# Where the mouse was when event M happened, on the screen.
 def screen_of(m: MouseEvent) -> Screen:
     return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
 
-# How many drawing units a pixel is: the drawing is scaled to fit the page, so this is asked
-# each time (the window may have been resized). getBoundingClientRect is the element's size
-# and place on the screen, in pixels.
+# The drawing's size and place on the screen, in pixels. It is asked each time: the window may
+# have been resized, and the drawing is scaled to fit the page.
+def svg_box() -> BoundingRect:
+    return page.element(setup.svg).getBoundingClientRect()
+
+# How many drawing units a pixel is.
 def scale() -> Scale_T:
-    let box: BoundingRect = page.element(drawing).getBoundingClientRect()
-    return drawing_width / Pixel_T(box.width)   # units / pixels: a Scale_T
+    return setup.width / Pixel_T(svg_box().width)   # units / pixels: a Scale_T
 
 # Where the mouse was when event E happened, in the drawing's units: the drawing's own place
 # on the screen is taken off first, so the top left of the drawing is 0, 0.
 def spot_at(e: Event) -> Spot:
     let m: MouseEvent = MouseEvent(e)
-    let box: BoundingRect = page.element(drawing).getBoundingClientRect()
-    let k: Scale_T = drawing_width / Pixel_T(box.width)
+    let box: BoundingRect = svg_box()
+    let k: Scale_T = setup.width / Pixel_T(box.width)
     return Spot(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
 
 # ---- Changing the page ----
@@ -163,7 +167,7 @@ def on_down(e: Event):
     let m: MouseEvent = MouseEvent(e)
     if m.button != 0:
         return
-    let node: Element_T = e.target.closest(cstring(shapes))   # the press may be on a part of the shape
+    let node: ?Element_T = on(click_of(e), setup.shapes)   # the press may be on a part of the shape
     if node is None:
         return                          # not on a shape: leave the event to htmx
     let centre: Spot = spot_of(node)
@@ -181,7 +185,7 @@ def on_move(e: Event):
                 return                  # not yet a drag: a hand shakes, and it may still be a click
             let k: Scale_T = scale()    # pixels * scale = drawing units
             let wanted: Spot = Spot(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
-            let now: Spot = moved_hook(grip.node, grip.centre, wanted)
+            let now: Spot = setup.moved(grip.node, grip.centre, wanted)
             grip = DRAGGING(grip.node, grip.down, grip.centre, now)
         when others:
             pass                        # nothing held: an ordinary mouse move
@@ -194,7 +198,7 @@ def on_up(e: Event):
         when DRAGGING:
             # still DRAGGING while the app answers, so a click it makes (on a form's button)
             # goes through on_click
-            dropped_hook(grip.node, grip.now)
+            setup.dropped(grip.node, grip.now)
             grip = DROPPED()
         when others:
             pass
@@ -207,21 +211,16 @@ def on_click(e: Event):
         grip = IDLE()
         e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
         return
-    clicked_hook(click_of(e))
+    setup.clicked(click_of(e))
 
-# Make the shapes SHAPES (a CSS selector) of the drawing DRAWING (the <svg>, WIDE units wide)
-# draggable: MOVED, DROPPED and CLICKED say what a drag means (see the docstring).
+# Make the shapes SHAPE_CSS (a CSS selector) of the drawing DRAWING_CSS (the <svg>, WIDE units
+# wide) draggable: MOVED, DROPPED and CLICKED say what a drag means (see the docstring).
 #
 # The listeners are on the whole document, so a drag goes on when the mouse leaves the
 # shape. The click listener gets True ("capture"): it is called on the way down the tree,
 # before htmx, which listens on the way up.
 def draggable(shape_css: str, drawing_css: str, wide: Unit_T, moved: Moved_T, dropped: Dropped_T, clicked: Clicked_T):
-    shapes = shape_css
-    drawing = drawing_css
-    drawing_width = wide
-    moved_hook = moved
-    dropped_hook = dropped
-    clicked_hook = clicked
+    setup = Setup_T(shapes=shape_css, svg=drawing_css, width=wide, moved=moved, dropped=dropped, clicked=clicked)
     document.addEventListener("mousedown", on_down)
     document.addEventListener("mousemove", on_move)
     document.addEventListener("mouseup", on_up)
