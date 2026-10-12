@@ -1,0 +1,47 @@
+# scenarios/complex_sample.books, read from gnucash_examples/complex_sample.gnucash.
+title	GnuCash: complex_sample
+about	Read from the GnuCash file complex_sample: 9 accounts, 11 transactions.
+currency	EUR
+account	550000	asset	Cash
+account	550010	asset	Checking
+account	600000	expense	Expense
+account	550020	asset	Foo stock
+account	550030	asset	House
+account	700000	revenue	Income
+account	480000	liability	Liability
+account	100000	equity	Opening Balances - EUR
+account	550040	asset	Savings
+entry	2014-12-24	income 1
+posting	Cash	15000
+posting	Income	-15000
+entry	2014-12-24	initial load
+posting	Checking	100000
+posting	Liability	-100000
+entry	2014-12-24	expense 1
+posting	Expense	20000
+posting	Checking	-20000
+entry	2014-12-24	loan payment
+posting	Liability	10000
+posting	Expense	3000
+posting	Checking	-13000
+entry	2018-02-20	Transfer current
+posting	Cash	10000
+posting	Checking	-10000
+entry	2018-02-20	Purchase
+posting	Expense	3000
+posting	Cash	-3000
+entry	2018-02-20	transfer intra
+posting	Checking	25000
+posting	Savings	-25000
+entry	2018-02-20	Opening Balance
+posting	Savings	250000
+posting	Opening Balances - EUR	-250000
+entry	2018-02-20	house load
+posting	House	2000000
+posting	Liability	-2000000
+entry	2018-02-21	buy foo
+posting	Foo stock	120000
+posting	Savings	-120000
+entry	2018-02-21	Opening Balance
+posting	Savings	250000
+posting	Opening Balances - EUR	-250000

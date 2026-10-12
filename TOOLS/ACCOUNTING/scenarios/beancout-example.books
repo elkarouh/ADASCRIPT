@@ -1,0 +1,4707 @@
+# scenarios/beancout-example.books, read from gnucash_examples/example.beancount.
+title	Beancount: example
+about	Read from the Beancount file example: 51 accounts, 1226 transactions, in USD. 86 transaction(s) with several debits and several credits go through a Clearing account, in two entries.
+currency	USD
+account	550000	asset	Checking
+account	100000	equity	Opening-Balances
+account	600000	expense	Fees
+account	600010	expense	Rent
+account	600020	expense	Electricity
+account	600030	expense	Phone
+account	600040	expense	Internet
+account	550010	asset	ETrade:Cash
+account	480000	liability	Slate
+account	600050	expense	Restaurant
+account	600060	expense	Groceries
+account	600070	expense	Tram
+account	600080	expense	Coffee
+account	600090	expense	Alcohol
+account	550020	asset	VHT
+account	600100	expense	Commissions
+account	550030	asset	VEA
+account	550040	asset	ITOT
+account	700000	revenue	Dividends
+account	700010	revenue	Gains
+account	480010	liability	Clearing
+account	550050	asset	GLD
+account	550060	asset	Vanguard:Cash
+account	700020	revenue	Match401k
+account	550070	asset	VBMPX
+account	550080	asset	RGAGX
+account	700030	revenue	Salary
+account	700040	revenue	Hoogle:GroupTermLife
+account	600110	expense	Life:GroupTermLife
+account	600120	expense	Dental:Insurance
+account	600130	expense	Medical:Insurance
+account	600140	expense	Vision:Insurance
+account	600150	expense	Y2013:US:Medicare
+account	600160	expense	Y2013:US:Federal
+account	600170	expense	Y2013:US:State
+account	600180	expense	Y2013:US:CityNYC
+account	600190	expense	Y2013:US:SDI
+account	600200	expense	Y2013:US:SocSec
+account	600210	expense	Y2014:US:Medicare
+account	600220	expense	Y2014:US:Federal
+account	600230	expense	Y2014:US:State
+account	600240	expense	Y2014:US:CityNYC
+account	600250	expense	Y2014:US:SDI
+account	600260	expense	Y2014:US:SocSec
+account	600270	expense	Y2015:US:Medicare
+account	600280	expense	Y2015:US:Federal
+account	600290	expense	Y2015:US:State
+account	600300	expense	Y2015:US:CityNYC
+account	600310	expense	Y2015:US:SDI
+account	600320	expense	Y2015:US:SocSec
+account	480020	liability	AccountsPayable
+entry	2013-01-01	Opening Balance for checking account
+posting	Checking	321917
+posting	Opening-Balances	-321917
+entry	2013-01-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-01-06	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-01-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-01-20	Verizon Wireless
+posting	Checking	-6982
+posting	Phone	6982
+entry	2013-01-22	Wine-Tarner Cable
+posting	Checking	-7985
+posting	Internet	7985
+entry	2013-02-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-02-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-02-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-02-20	Verizon Wireless
+posting	Checking	-4632
+posting	Phone	4632
+entry	2013-02-22	Wine-Tarner Cable
+posting	Checking	-7997
+posting	Internet	7997
+entry	2013-03-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-03-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-03-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-03-19	Verizon Wireless
+posting	Checking	-7681
+posting	Phone	7681
+entry	2013-03-22	Wine-Tarner Cable
+posting	Checking	-8000
+posting	Internet	8000
+entry	2013-04-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-04-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-04-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-04-18	Verizon Wireless
+posting	Checking	-6351
+posting	Phone	6351
+entry	2013-04-22	Wine-Tarner Cable
+posting	Checking	-8019
+posting	Internet	8019
+entry	2013-05-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-05-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-05-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-05-19	Verizon Wireless
+posting	Checking	-5607
+posting	Phone	5607
+entry	2013-05-22	Wine-Tarner Cable
+posting	Checking	-7993
+posting	Internet	7993
+entry	2013-06-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-06-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-06-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-06-19	Verizon Wireless
+posting	Checking	-5921
+posting	Phone	5921
+entry	2013-06-22	Wine-Tarner Cable
+posting	Checking	-7986
+posting	Internet	7986
+entry	2013-07-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-07-06	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-07-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-07-18	Verizon Wireless
+posting	Checking	-5068
+posting	Phone	5068
+entry	2013-07-23	Wine-Tarner Cable
+posting	Checking	-8017
+posting	Internet	8017
+entry	2013-08-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-08-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-08-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-08-16	Transfering accumulated savings to other account
+posting	Checking	-300000
+posting	ETrade:Cash	300000
+entry	2013-08-20	Verizon Wireless
+posting	Checking	-6129
+posting	Phone	6129
+entry	2013-08-21	Wine-Tarner Cable
+posting	Checking	-7998
+posting	Internet	7998
+entry	2013-09-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-09-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-09-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-09-19	Verizon Wireless
+posting	Checking	-8185
+posting	Phone	8185
+entry	2013-09-22	Wine-Tarner Cable
+posting	Checking	-8002
+posting	Internet	8002
+entry	2013-10-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-10-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-10-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-10-11	Transfering accumulated savings to other account
+posting	Checking	-450000
+posting	ETrade:Cash	450000
+entry	2013-10-18	Verizon Wireless
+posting	Checking	-7678
+posting	Phone	7678
+entry	2013-10-21	Wine-Tarner Cable
+posting	Checking	-7997
+posting	Internet	7997
+entry	2013-11-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-11-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-11-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-11-19	Verizon Wireless
+posting	Checking	-8968
+posting	Phone	8968
+entry	2013-11-23	Wine-Tarner Cable
+posting	Checking	-7983
+posting	Internet	7983
+entry	2013-12-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2013-12-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2013-12-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2013-12-20	Verizon Wireless
+posting	Checking	-3970
+posting	Phone	3970
+entry	2013-12-23	Wine-Tarner Cable
+posting	Checking	-7990
+posting	Internet	7990
+entry	2014-01-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-01-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-01-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-01-20	Verizon Wireless
+posting	Checking	-3685
+posting	Phone	3685
+entry	2014-01-22	Wine-Tarner Cable
+posting	Checking	-8010
+posting	Internet	8010
+entry	2014-02-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-02-06	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-02-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-02-19	Verizon Wireless
+posting	Checking	-8003
+posting	Phone	8003
+entry	2014-02-21	Wine-Tarner Cable
+posting	Checking	-7987
+posting	Internet	7987
+entry	2014-03-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-03-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-03-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-03-18	Verizon Wireless
+posting	Checking	-6152
+posting	Phone	6152
+entry	2014-03-22	Wine-Tarner Cable
+posting	Checking	-8001
+posting	Internet	8001
+entry	2014-04-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-04-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-04-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-04-18	Verizon Wireless
+posting	Checking	-4697
+posting	Phone	4697
+entry	2014-04-23	Wine-Tarner Cable
+posting	Checking	-7995
+posting	Internet	7995
+entry	2014-05-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-05-06	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-05-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-05-19	Verizon Wireless
+posting	Checking	-6808
+posting	Phone	6808
+entry	2014-05-23	Wine-Tarner Cable
+posting	Checking	-7999
+posting	Internet	7999
+entry	2014-06-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-06-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-06-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-06-20	Verizon Wireless
+posting	Checking	-7450
+posting	Phone	7450
+entry	2014-06-22	Wine-Tarner Cable
+posting	Checking	-8018
+posting	Internet	8018
+entry	2014-07-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-07-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-07-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-07-18	Verizon Wireless
+posting	Checking	-6157
+posting	Phone	6157
+entry	2014-07-18	Transfering accumulated savings to other account
+posting	Checking	-350000
+posting	ETrade:Cash	350000
+entry	2014-07-23	Wine-Tarner Cable
+posting	Checking	-8002
+posting	Internet	8002
+entry	2014-08-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-08-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-08-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-08-18	Verizon Wireless
+posting	Checking	-6439
+posting	Phone	6439
+entry	2014-08-22	Wine-Tarner Cable
+posting	Checking	-8014
+posting	Internet	8014
+entry	2014-09-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-09-06	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-09-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-09-12	Transfering accumulated savings to other account
+posting	Checking	-400000
+posting	ETrade:Cash	400000
+entry	2014-09-20	Verizon Wireless
+posting	Checking	-5803
+posting	Phone	5803
+entry	2014-09-22	Wine-Tarner Cable
+posting	Checking	-7992
+posting	Internet	7992
+entry	2014-10-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-10-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-10-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-10-18	Verizon Wireless
+posting	Checking	-5854
+posting	Phone	5854
+entry	2014-10-21	Wine-Tarner Cable
+posting	Checking	-8014
+posting	Internet	8014
+entry	2014-11-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-11-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-11-07	Transfering accumulated savings to other account
+posting	Checking	-400000
+posting	ETrade:Cash	400000
+entry	2014-11-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-11-18	Verizon Wireless
+posting	Checking	-5839
+posting	Phone	5839
+entry	2014-11-23	Wine-Tarner Cable
+posting	Checking	-8007
+posting	Internet	8007
+entry	2014-12-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2014-12-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2014-12-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2014-12-18	Verizon Wireless
+posting	Checking	-5709
+posting	Phone	5709
+entry	2014-12-21	Wine-Tarner Cable
+posting	Checking	-8003
+posting	Internet	8003
+entry	2015-01-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-01-06	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-01-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-01-18	Verizon Wireless
+posting	Checking	-5957
+posting	Phone	5957
+entry	2015-01-21	Wine-Tarner Cable
+posting	Checking	-7997
+posting	Internet	7997
+entry	2015-02-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-02-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-02-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-02-19	Verizon Wireless
+posting	Checking	-6414
+posting	Phone	6414
+entry	2015-02-21	Wine-Tarner Cable
+posting	Checking	-8012
+posting	Internet	8012
+entry	2015-03-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-03-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-03-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-03-18	Verizon Wireless
+posting	Checking	-3893
+posting	Phone	3893
+entry	2015-03-22	Wine-Tarner Cable
+posting	Checking	-8001
+posting	Internet	8001
+entry	2015-04-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-04-04	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-04-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-04-19	Verizon Wireless
+posting	Checking	-5370
+posting	Phone	5370
+entry	2015-04-23	Wine-Tarner Cable
+posting	Checking	-8010
+posting	Internet	8010
+entry	2015-05-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-05-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-05-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-05-20	Verizon Wireless
+posting	Checking	-6602
+posting	Phone	6602
+entry	2015-05-23	Wine-Tarner Cable
+posting	Checking	-8009
+posting	Internet	8009
+entry	2015-06-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-06-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-06-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-06-20	Verizon Wireless
+posting	Checking	-6758
+posting	Phone	6758
+entry	2015-06-23	Wine-Tarner Cable
+posting	Checking	-8012
+posting	Internet	8012
+entry	2015-07-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-07-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-07-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-07-18	Verizon Wireless
+posting	Checking	-5863
+posting	Phone	5863
+entry	2015-07-22	Wine-Tarner Cable
+posting	Checking	-8002
+posting	Internet	8002
+entry	2015-08-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-08-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-08-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-08-14	Transfering accumulated savings to other account
+posting	Checking	-350000
+posting	ETrade:Cash	350000
+entry	2015-08-19	Verizon Wireless
+posting	Checking	-5551
+posting	Phone	5551
+entry	2015-08-21	Wine-Tarner Cable
+posting	Checking	-7989
+posting	Internet	7989
+entry	2015-09-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-09-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-09-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-09-19	Verizon Wireless
+posting	Checking	-3127
+posting	Phone	3127
+entry	2015-09-22	Wine-Tarner Cable
+posting	Checking	-7994
+posting	Internet	7994
+entry	2015-10-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-10-05	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-10-09	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-10-09	Transfering accumulated savings to other account
+posting	Checking	-400000
+posting	ETrade:Cash	400000
+entry	2015-10-20	Verizon Wireless
+posting	Checking	-6286
+posting	Phone	6286
+entry	2015-10-22	Wine-Tarner Cable
+posting	Checking	-8011
+posting	Internet	8011
+entry	2015-11-03	RiverBank Properties - Paying the rent
+posting	Checking	-240000
+posting	Rent	240000
+entry	2015-11-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-11-08	EDISON POWER
+posting	Checking	-6500
+posting	Electricity	6500
+entry	2015-11-18	Verizon Wireless
+posting	Checking	-4373
+posting	Phone	4373
+entry	2015-11-20	Transfering accumulated savings to other account
+posting	Checking	-400000
+posting	ETrade:Cash	400000
+entry	2015-11-22	Wine-Tarner Cable
+posting	Checking	-7997
+posting	Internet	7997
+entry	2015-12-04	BANK FEES - Monthly bank fee
+posting	Checking	-400
+posting	Fees	400
+entry	2015-12-04	Transfering accumulated savings to other account
+posting	Checking	-300000
+posting	ETrade:Cash	300000
+entry	2013-01-05	Kin Soy - Eating out with Bill
+posting	Slate	-4088
+posting	Restaurant	4088
+entry	2013-01-08	Rose Flower - Eating out alone
+posting	Slate	-2305
+posting	Restaurant	2305
+entry	2013-01-09	Jewel of Morroco - Eating out with Bill
+posting	Slate	-3528
+posting	Restaurant	3528
+entry	2013-01-09	Chase:Slate - Paying off credit card
+posting	Slate	9921
+posting	Checking	-9921
+entry	2013-01-14	Kin Soy - Eating out
+posting	Slate	-2584
+posting	Restaurant	2584
+entry	2013-01-15	Farmer Fresh - Buying groceries
+posting	Slate	-8222
+posting	Groceries	8222
+entry	2013-01-17	Jewel of Morroco - Eating out with Joe
+posting	Slate	-3673
+posting	Restaurant	3673
+entry	2013-01-21	Cafe Modagor - Eating out with Bill
+posting	Slate	-2811
+posting	Restaurant	2811
+entry	2013-01-21	Onion Market - Buying groceries
+posting	Slate	-7358
+posting	Groceries	7358
+entry	2013-01-22	Chichipotle - Eating out alone
+posting	Slate	-2112
+posting	Restaurant	2112
+entry	2013-01-24	Chichipotle - Eating out after work
+posting	Slate	-4163
+posting	Restaurant	4163
+entry	2013-01-27	Good Moods Market - Buying groceries
+posting	Slate	-8550
+posting	Groceries	8550
+entry	2013-01-29	Cafe Modagor - Eating out
+posting	Slate	-1889
+posting	Restaurant	1889
+entry	2013-01-31	Chichipotle - Eating out with Joe
+posting	Slate	-1294
+posting	Restaurant	1294
+entry	2013-01-31	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-02-02	Uncle Boons - Eating out with Bill
+posting	Slate	-1637
+posting	Restaurant	1637
+entry	2013-02-06	Kin Soy - Eating out alone
+posting	Slate	-3936
+posting	Restaurant	3936
+entry	2013-02-09	Rose Flower - Eating out with Joe
+posting	Slate	-3295
+posting	Restaurant	3295
+entry	2013-02-10	Chase:Slate - Paying off credit card
+posting	Slate	65097
+posting	Checking	-65097
+entry	2013-02-12	Chichipotle - Eating out with Natasha
+posting	Slate	-1573
+posting	Restaurant	1573
+entry	2013-02-15	Cafe Modagor - Eating out with Joe
+posting	Slate	-1361
+posting	Restaurant	1361
+entry	2013-02-16	Cafe Modagor - Eating out with Julie
+posting	Slate	-4020
+posting	Restaurant	4020
+entry	2013-02-16	Good Moods Market - Buying groceries
+posting	Slate	-9409
+posting	Groceries	9409
+entry	2013-02-18	Kin Soy - Eating out with Natasha
+posting	Slate	-2519
+posting	Restaurant	2519
+entry	2013-02-22	Uncle Boons - Eating out
+posting	Slate	-6008
+posting	Restaurant	6008
+entry	2013-02-24	Farmer Fresh - Buying groceries
+posting	Slate	-9212
+posting	Groceries	9212
+entry	2013-02-25	Cafe Modagor - Eating out alone
+posting	Slate	-3170
+posting	Restaurant	3170
+entry	2013-03-01	China Garden - Eating out
+posting	Slate	-3229
+posting	Restaurant	3229
+entry	2013-03-04	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-03-05	China Garden - Eating out
+posting	Slate	-2044
+posting	Restaurant	2044
+entry	2013-03-06	Rose Flower - Eating out with Julie
+posting	Slate	-2867
+posting	Restaurant	2867
+entry	2013-03-07	Cafe Modagor - Eating out with Natasha
+posting	Slate	-2543
+posting	Restaurant	2543
+entry	2013-03-07	Chase:Slate - Paying off credit card
+posting	Slate	58382
+posting	Checking	-58382
+entry	2013-03-11	Goba Goba - Eating out with work buddies
+posting	Slate	-7120
+posting	Restaurant	7120
+entry	2013-03-13	Jewel of Morroco - Eating out with Bill
+posting	Slate	-1803
+posting	Restaurant	1803
+entry	2013-03-14	Good Moods Market - Buying groceries
+posting	Slate	-5588
+posting	Groceries	5588
+entry	2013-03-16	Goba Goba - Eating out
+posting	Slate	-1766
+posting	Restaurant	1766
+entry	2013-03-18	Chichipotle - Eating out after work
+posting	Slate	-3058
+posting	Restaurant	3058
+entry	2013-03-22	Kin Soy - Eating out
+posting	Slate	-2716
+posting	Restaurant	2716
+entry	2013-03-22	Good Moods Market - Buying groceries
+posting	Slate	-6171
+posting	Groceries	6171
+entry	2013-03-24	Rose Flower - Eating out with Julie
+posting	Slate	-3196
+posting	Restaurant	3196
+entry	2013-03-25	Goba Goba - Eating out with Julie
+posting	Slate	-4500
+posting	Restaurant	4500
+entry	2013-03-29	Farmer Fresh - Buying groceries
+posting	Slate	-10089
+posting	Groceries	10089
+entry	2013-03-30	Uncle Boons - Eating out after work
+posting	Slate	-2571
+posting	Restaurant	2571
+entry	2013-04-02	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-04-03	Jewel of Morroco - Eating out
+posting	Slate	-2773
+posting	Restaurant	2773
+entry	2013-04-07	Uncle Boons - Eating out with Joe
+posting	Slate	-2167
+posting	Restaurant	2167
+entry	2013-04-08	Rose Flower - Eating out with Bill
+posting	Slate	-1859
+posting	Restaurant	1859
+entry	2013-04-09	Jewel of Morroco - Eating out with Julie
+posting	Slate	-5600
+posting	Restaurant	5600
+entry	2013-04-11	Chase:Slate - Paying off credit card
+posting	Slate	74716
+posting	Checking	-74716
+entry	2013-04-13	Cafe Modagor - Eating out after work
+posting	Slate	-1739
+posting	Restaurant	1739
+entry	2013-04-14	Farmer Fresh - Buying groceries
+posting	Slate	-8154
+posting	Groceries	8154
+entry	2013-04-16	Rose Flower - Eating out with Joe
+posting	Slate	-3793
+posting	Restaurant	3793
+entry	2013-04-18	China Garden - Eating out with Julie
+posting	Slate	-2673
+posting	Restaurant	2673
+entry	2013-04-20	Uncle Boons - Eating out alone
+posting	Slate	-1584
+posting	Restaurant	1584
+entry	2013-04-23	Rose Flower - Eating out with work buddies
+posting	Slate	-2722
+posting	Restaurant	2722
+entry	2013-04-28	Rose Flower - Eating out alone
+posting	Slate	-1728
+posting	Restaurant	1728
+entry	2013-04-28	Farmer Fresh - Buying groceries
+posting	Slate	-5479
+posting	Groceries	5479
+entry	2013-05-02	Kin Soy - Eating out with Natasha
+posting	Slate	-2908
+posting	Restaurant	2908
+entry	2013-05-02	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-05-04	Cafe Modagor - Eating out alone
+posting	Slate	-1431
+posting	Restaurant	1431
+entry	2013-05-09	Goba Goba - Eating out with Julie
+posting	Slate	-8476
+posting	Restaurant	8476
+entry	2013-05-11	Chase:Slate - Paying off credit card
+posting	Slate	53314
+posting	Checking	-53314
+entry	2013-05-13	Cafe Modagor - Eating out with work buddies
+posting	Slate	-2366
+posting	Restaurant	2366
+entry	2013-05-14	Good Moods Market - Buying groceries
+posting	Slate	-8020
+posting	Groceries	8020
+entry	2013-05-18	Chichipotle - Eating out
+posting	Slate	-3109
+posting	Restaurant	3109
+entry	2013-05-23	Cafe Modagor - Eating out with Natasha
+posting	Slate	-3411
+posting	Restaurant	3411
+entry	2013-05-25	Rose Flower - Eating out alone
+posting	Slate	-3722
+posting	Restaurant	3722
+entry	2013-05-26	China Garden - Eating out with Julie
+posting	Slate	-1429
+posting	Restaurant	1429
+entry	2013-05-27	Good Moods Market - Buying groceries
+posting	Slate	-11381
+posting	Groceries	11381
+entry	2013-05-31	Cafe Modagor - Eating out with work buddies
+posting	Slate	-3463
+posting	Restaurant	3463
+entry	2013-06-03	Goba Goba - Eating out with Bill
+posting	Slate	-1822
+posting	Restaurant	1822
+entry	2013-06-04	Rose Flower - Eating out with Bill
+posting	Slate	-3170
+posting	Restaurant	3170
+entry	2013-06-04	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-06-06	Good Moods Market - Buying groceries
+posting	Slate	-5701
+posting	Groceries	5701
+entry	2013-06-08	Goba Goba - Eating out with Julie
+posting	Slate	-2242
+posting	Restaurant	2242
+entry	2013-06-09	Chase:Slate - Paying off credit card
+posting	Slate	62987
+posting	Checking	-62987
+entry	2013-06-12	Kin Soy - Eating out with Bill
+posting	Slate	-3517
+posting	Restaurant	3517
+entry	2013-06-14	Goba Goba - Eating out
+posting	Slate	-3968
+posting	Restaurant	3968
+entry	2013-06-15	China Garden - Eating out
+posting	Slate	-3259
+posting	Restaurant	3259
+entry	2013-06-19	Bar Crudo
+posting	Slate	-7298
+posting	Restaurant	7298
+entry	2013-06-19	Waterbar
+posting	Slate	-5203
+posting	Restaurant	5203
+entry	2013-06-19	Starbucks
+posting	Slate	-598
+posting	Coffee	598
+entry	2013-06-20	Pizza Delfina
+posting	Slate	-1765
+posting	Restaurant	1765
+entry	2013-06-20	Mission Chinese Food
+posting	Slate	-3097
+posting	Restaurant	3097
+entry	2013-06-22	Pizza Delfina
+posting	Slate	-1534
+posting	Restaurant	1534
+entry	2013-06-23	Mission Chinese Food
+posting	Slate	-3437
+posting	Restaurant	3437
+entry	2013-06-23	Starbucks
+posting	Slate	-695
+posting	Coffee	695
+entry	2013-06-25	Starbucks
+posting	Slate	-558
+posting	Coffee	558
+entry	2013-06-26	Bar Crudo
+posting	Slate	-6504
+posting	Restaurant	6504
+entry	2013-06-27	Pizza Delfina
+posting	Slate	-2125
+posting	Restaurant	2125
+entry	2013-06-28	Mission Chinese Food
+posting	Slate	-1347
+posting	Restaurant	1347
+entry	2013-06-28	Starbucks
+posting	Slate	-677
+posting	Coffee	677
+entry	2013-06-29	Waterbar
+posting	Slate	-4150
+posting	Restaurant	4150
+entry	2013-06-30	Pizza Delfina
+posting	Slate	-2161
+posting	Restaurant	2161
+entry	2013-06-30	Waterbar
+posting	Slate	-5185
+posting	Restaurant	5185
+entry	2013-07-01	Bar Crudo
+posting	Slate	-7754
+posting	Restaurant	7754
+entry	2013-07-03	Mission Chinese Food
+posting	Slate	-1854
+posting	Restaurant	1854
+entry	2013-07-03	Starbucks
+posting	Slate	-573
+posting	Coffee	573
+entry	2013-07-04	Farmer Fresh - Buying groceries
+posting	Slate	-5539
+posting	Groceries	5539
+entry	2013-07-04	Pizza Delfina
+posting	Slate	-1967
+posting	Restaurant	1967
+entry	2013-07-04	Starbucks
+posting	Slate	-720
+posting	Coffee	720
+entry	2013-07-07	Goba Goba - Eating out after work
+posting	Slate	-2878
+posting	Restaurant	2878
+entry	2013-07-09	Chase:Slate - Paying off credit card
+posting	Slate	18257
+posting	Checking	-18257
+entry	2013-07-11	Chichipotle - Eating out with Joe
+posting	Slate	-2613
+posting	Restaurant	2613
+entry	2013-07-13	Onion Market - Buying groceries
+posting	Slate	-8733
+posting	Groceries	8733
+entry	2013-07-16	Goba Goba - Eating out with Joe
+posting	Slate	-4927
+posting	Restaurant	4927
+entry	2013-07-21	Cafe Modagor - Eating out after work
+posting	Slate	-3111
+posting	Restaurant	3111
+entry	2013-07-23	Goba Goba - Eating out with Natasha
+posting	Slate	-3877
+posting	Restaurant	3877
+entry	2013-07-25	Corner Deli - Buying groceries
+posting	Slate	-7163
+posting	Groceries	7163
+entry	2013-07-27	Chichipotle - Eating out with Bill
+posting	Slate	-6286
+posting	Restaurant	6286
+entry	2013-08-01	Rose Flower - Eating out with Joe
+posting	Slate	-3299
+posting	Restaurant	3299
+entry	2013-08-04	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-08-05	Chichipotle - Eating out with Julie
+posting	Slate	-2004
+posting	Restaurant	2004
+entry	2013-08-09	Chase:Slate - Paying off credit card
+posting	Slate	53453
+posting	Checking	-53453
+entry	2013-08-10	China Garden - Eating out with work buddies
+posting	Slate	-2053
+posting	Restaurant	2053
+entry	2013-08-11	Good Moods Market - Buying groceries
+posting	Slate	-8216
+posting	Groceries	8216
+entry	2013-08-14	Rose Flower - Eating out with work buddies
+posting	Slate	-3090
+posting	Restaurant	3090
+entry	2013-08-15	China Garden - Eating out
+posting	Slate	-2687
+posting	Restaurant	2687
+entry	2013-08-16	Kin Soy - Eating out after work
+posting	Slate	-3870
+posting	Restaurant	3870
+entry	2013-08-20	Kin Soy - Eating out after work
+posting	Slate	-1882
+posting	Restaurant	1882
+entry	2013-08-22	Rose Flower - Eating out with Bill
+posting	Slate	-1882
+posting	Restaurant	1882
+entry	2013-08-25	Chichipotle - Eating out alone
+posting	Slate	-2327
+posting	Restaurant	2327
+entry	2013-08-28	Corner Deli - Buying groceries
+posting	Slate	-8626
+posting	Groceries	8626
+entry	2013-08-30	Rose Flower - Eating out
+posting	Slate	-2831
+posting	Restaurant	2831
+entry	2013-08-31	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-09-01	Kin Soy - Eating out with Natasha
+posting	Slate	-4210
+posting	Restaurant	4210
+entry	2013-09-03	Corner Deli - Buying groceries
+posting	Slate	-9297
+posting	Groceries	9297
+entry	2013-09-06	Goba Goba - Eating out with Natasha
+posting	Slate	-4568
+posting	Restaurant	4568
+entry	2013-09-08	Jewel of Morroco - Eating out alone
+posting	Slate	-7757
+posting	Restaurant	7757
+entry	2013-09-11	China Garden - Eating out after work
+posting	Slate	-2442
+posting	Restaurant	2442
+entry	2013-09-11	Chase:Slate - Paying off credit card
+posting	Slate	75685
+posting	Checking	-75685
+entry	2013-09-13	Rose Flower - Eating out with Bill
+posting	Slate	-3858
+posting	Restaurant	3858
+entry	2013-09-18	Jewel of Morroco - Eating out with Julie
+posting	Slate	-2581
+posting	Restaurant	2581
+entry	2013-09-19	Chichipotle - Eating out with Joe
+posting	Slate	-2234
+posting	Restaurant	2234
+entry	2013-09-21	Jewel of Morroco - Eating out with Natasha
+posting	Slate	-3204
+posting	Restaurant	3204
+entry	2013-09-21	Onion Market - Buying groceries
+posting	Slate	-9072
+posting	Groceries	9072
+entry	2013-09-26	Cafe Modagor - Eating out with Julie
+posting	Slate	-2606
+posting	Restaurant	2606
+entry	2013-09-28	Jewel of Morroco - Eating out with work buddies
+posting	Slate	-2870
+posting	Restaurant	2870
+entry	2013-09-28	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-10-01	China Garden - Eating out with Natasha
+posting	Slate	-2505
+posting	Restaurant	2505
+entry	2013-10-01	Onion Market - Buying groceries
+posting	Slate	-7928
+posting	Groceries	7928
+entry	2013-10-04	Jewel of Morroco - Eating out alone
+posting	Slate	-1446
+posting	Restaurant	1446
+entry	2013-10-05	Goba Goba - Eating out with work buddies
+posting	Slate	-3280
+posting	Restaurant	3280
+entry	2013-10-08	Goba Goba - Eating out with Joe
+posting	Slate	-4352
+posting	Restaurant	4352
+entry	2013-10-09	Cafe Modagor - Eating out with Julie
+posting	Slate	-3218
+posting	Restaurant	3218
+entry	2013-10-09	Chase:Slate - Paying off credit card
+posting	Slate	61154
+posting	Checking	-61154
+entry	2013-10-10	Rose Flower - Eating out after work
+posting	Slate	-3759
+posting	Restaurant	3759
+entry	2013-10-14	Goba Goba - Eating out alone
+posting	Slate	-3868
+posting	Restaurant	3868
+entry	2013-10-17	Chichipotle - Eating out with Joe
+posting	Slate	-3029
+posting	Restaurant	3029
+entry	2013-10-19	Corner Deli - Buying groceries
+posting	Slate	-5834
+posting	Groceries	5834
+entry	2013-10-22	Jewel of Morroco - Eating out with Bill
+posting	Slate	-1470
+posting	Restaurant	1470
+entry	2013-10-24	Good Moods Market - Buying groceries
+posting	Slate	-3985
+posting	Groceries	3985
+entry	2013-10-25	Kin Soy - Eating out with work buddies
+posting	Slate	-2107
+posting	Restaurant	2107
+entry	2013-10-28	Chichipotle - Eating out with Bill
+posting	Slate	-3616
+posting	Restaurant	3616
+entry	2013-10-30	Farmer Fresh - Buying groceries
+posting	Slate	-10381
+posting	Groceries	10381
+entry	2013-10-31	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-11-01	Goba Goba - Eating out with Joe
+posting	Slate	-3117
+posting	Restaurant	3117
+entry	2013-11-04	Chichipotle - Eating out with Bill
+posting	Slate	-3628
+posting	Restaurant	3628
+entry	2013-11-07	Cafe Modagor - Eating out with Natasha
+posting	Slate	-1643
+posting	Restaurant	1643
+entry	2013-11-07	Chase:Slate - Paying off credit card
+posting	Slate	58437
+posting	Checking	-58437
+entry	2013-11-11	Jewel of Morroco - Eating out after work
+posting	Slate	-3570
+posting	Restaurant	3570
+entry	2013-11-12	Kin Soy - Eating out with Joe
+posting	Slate	-2331
+posting	Restaurant	2331
+entry	2013-11-16	Rose Flower - Eating out with Bill
+posting	Slate	-4197
+posting	Restaurant	4197
+entry	2013-11-18	Onion Market - Buying groceries
+posting	Slate	-11010
+posting	Groceries	11010
+entry	2013-11-19	Uncle Boons - Eating out with work buddies
+posting	Slate	-2676
+posting	Restaurant	2676
+entry	2013-11-24	Rose Flower - Eating out
+posting	Slate	-4679
+posting	Restaurant	4679
+entry	2013-11-27	Cafe Modagor - Eating out with Natasha
+posting	Slate	-2111
+posting	Restaurant	2111
+entry	2013-11-28	Rose Flower - Eating out after work
+posting	Slate	-2645
+posting	Restaurant	2645
+entry	2013-12-02	Chichipotle - Eating out with Natasha
+posting	Slate	-6652
+posting	Restaurant	6652
+entry	2013-12-02	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2013-12-03	Rose Flower - Eating out with Natasha
+posting	Slate	-3127
+posting	Restaurant	3127
+entry	2013-12-04	Uncle Boons - Eating out with Joe
+posting	Slate	-2939
+posting	Restaurant	2939
+entry	2013-12-05	Goba Goba - Eating out with Bill
+posting	Slate	-2710
+posting	Restaurant	2710
+entry	2013-12-06	Farmer Fresh - Buying groceries
+posting	Slate	-7110
+posting	Groceries	7110
+entry	2013-12-07	China Garden - Eating out with Joe
+posting	Slate	-3780
+posting	Restaurant	3780
+entry	2013-12-09	Chase:Slate - Paying off credit card
+posting	Slate	74274
+posting	Checking	-74274
+entry	2013-12-11	Uncle Boons - Eating out after work
+posting	Slate	-2737
+posting	Restaurant	2737
+entry	2013-12-11	Farmer Fresh - Buying groceries
+posting	Slate	-8859
+posting	Groceries	8859
+entry	2013-12-13	Jewel of Morroco - Eating out
+posting	Slate	-4949
+posting	Restaurant	4949
+entry	2013-12-16	Rose Flower - Eating out with Bill
+posting	Slate	-4065
+posting	Restaurant	4065
+entry	2013-12-21	Goba Goba - Eating out with Joe
+posting	Slate	-1707
+posting	Restaurant	1707
+entry	2013-12-21	Good Moods Market - Buying groceries
+posting	Slate	-6090
+posting	Groceries	6090
+entry	2013-12-22	Rose Flower - Eating out with Natasha
+posting	Slate	-4753
+posting	Restaurant	4753
+entry	2013-12-27	Rose Flower - Eating out alone
+posting	Slate	-4256
+posting	Restaurant	4256
+entry	2013-12-31	Goba Goba - Eating out after work
+posting	Slate	-3489
+posting	Restaurant	3489
+entry	2014-01-01	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-01-03	Farmer Fresh - Buying groceries
+posting	Slate	-6462
+posting	Groceries	6462
+entry	2014-01-05	Jewel of Morroco - Eating out after work
+posting	Slate	-2160
+posting	Restaurant	2160
+entry	2014-01-06	Jewel of Morroco - Eating out with Julie
+posting	Slate	-2757
+posting	Restaurant	2757
+entry	2014-01-07	Chase:Slate - Paying off credit card
+posting	Slate	63664
+posting	Checking	-63664
+entry	2014-01-10	Cafe Modagor - Eating out with work buddies
+posting	Slate	-2117
+posting	Restaurant	2117
+entry	2014-01-13	Chichipotle - Eating out with Julie
+posting	Slate	-4595
+posting	Restaurant	4595
+entry	2014-01-16	Cafe Modagor - Eating out with Joe
+posting	Slate	-1873
+posting	Restaurant	1873
+entry	2014-01-16	Farmer Fresh - Buying groceries
+posting	Slate	-8222
+posting	Groceries	8222
+entry	2014-01-18	Jewel of Morroco - Eating out with Natasha
+posting	Slate	-1965
+posting	Restaurant	1965
+entry	2014-01-22	Chichipotle - Eating out alone
+posting	Slate	-3271
+posting	Restaurant	3271
+entry	2014-01-24	China Garden - Eating out with Bill
+posting	Slate	-2216
+posting	Restaurant	2216
+entry	2014-01-27	Laut
+posting	Slate	-3265
+posting	Restaurant	3265
+entry	2014-01-27	Gimme! Coffee
+posting	Slate	-516
+posting	Coffee	516
+entry	2014-01-28	Cafe Select
+posting	Slate	-2835
+posting	Restaurant	2835
+entry	2014-01-28	Laut
+posting	Slate	-2937
+posting	Restaurant	2937
+entry	2014-01-29	Uncle Boons
+posting	Slate	-5275
+posting	Restaurant	5275
+entry	2014-01-29	Takahachi
+posting	Slate	-6339
+posting	Restaurant	6339
+entry	2014-01-30	Cafe Select
+posting	Slate	-2966
+posting	Restaurant	2966
+entry	2014-01-30	Gimme! Coffee
+posting	Slate	-668
+posting	Coffee	668
+entry	2014-01-31	Uncle Boons
+posting	Slate	-4042
+posting	Restaurant	4042
+entry	2014-01-31	Cafe Select
+posting	Slate	-2909
+posting	Restaurant	2909
+entry	2014-01-31	Laut
+posting	Slate	-3021
+posting	Restaurant	3021
+entry	2014-01-31	La Colombe
+posting	Slate	-604
+posting	Coffee	604
+entry	2014-01-31	Gimme! Coffee
+posting	Slate	-489
+posting	Coffee	489
+entry	2014-02-01	Cafe Select
+posting	Slate	-3340
+posting	Restaurant	3340
+entry	2014-02-01	La Colombe
+posting	Slate	-527
+posting	Coffee	527
+entry	2014-02-02	Takahachi
+posting	Slate	-5261
+posting	Restaurant	5261
+entry	2014-02-02	Gimme! Coffee
+posting	Slate	-776
+posting	Coffee	776
+entry	2014-02-03	Cafe Select
+posting	Slate	-2894
+posting	Restaurant	2894
+entry	2014-02-03	Laut
+posting	Slate	-3848
+posting	Restaurant	3848
+entry	2014-02-04	Uncle Boons
+posting	Slate	-4130
+posting	Restaurant	4130
+entry	2014-02-04	La Colombe
+posting	Slate	-550
+posting	Coffee	550
+entry	2014-02-04	Gimme! Coffee
+posting	Slate	-733
+posting	Coffee	733
+entry	2014-02-05	Cafe Select
+posting	Slate	-3230
+posting	Restaurant	3230
+entry	2014-02-05	Gimme! Coffee
+posting	Slate	-403
+posting	Coffee	403
+entry	2014-02-06	Uncle Boons
+posting	Slate	-3707
+posting	Restaurant	3707
+entry	2014-02-06	Takahachi
+posting	Slate	-5573
+posting	Restaurant	5573
+entry	2014-02-06	La Colombe
+posting	Slate	-555
+posting	Coffee	555
+entry	2014-02-06	Gimme! Coffee
+posting	Slate	-824
+posting	Coffee	824
+entry	2014-02-07	Cafe Select
+posting	Slate	-3145
+posting	Restaurant	3145
+entry	2014-02-08	Gimme! Coffee
+posting	Slate	-798
+posting	Coffee	798
+entry	2014-02-09	Takahachi
+posting	Slate	-4852
+posting	Restaurant	4852
+entry	2014-02-09	Laut
+posting	Slate	-3857
+posting	Restaurant	3857
+entry	2014-02-09	Gimme! Coffee
+posting	Slate	-821
+posting	Coffee	821
+entry	2014-02-10	Laut
+posting	Slate	-3184
+posting	Restaurant	3184
+entry	2014-02-10	Chase:Slate - Paying off credit card
+posting	Slate	26024
+posting	Checking	-26024
+entry	2014-02-11	Laut
+posting	Slate	-3480
+posting	Restaurant	3480
+entry	2014-02-11	La Colombe
+posting	Slate	-738
+posting	Coffee	738
+entry	2014-02-12	Laut
+posting	Slate	-2945
+posting	Restaurant	2945
+entry	2014-02-12	Gimme! Coffee
+posting	Slate	-536
+posting	Coffee	536
+entry	2014-02-13	Laut
+posting	Slate	-3224
+posting	Restaurant	3224
+entry	2014-02-13	La Colombe
+posting	Slate	-742
+posting	Coffee	742
+entry	2014-02-14	Cafe Select
+posting	Slate	-3118
+posting	Restaurant	3118
+entry	2014-02-14	Takahachi
+posting	Slate	-5128
+posting	Restaurant	5128
+entry	2014-02-14	La Colombe
+posting	Slate	-621
+posting	Coffee	621
+entry	2014-02-15	Laut
+posting	Slate	-2222
+posting	Restaurant	2222
+entry	2014-02-15	La Colombe
+posting	Slate	-696
+posting	Coffee	696
+entry	2014-02-16	China Garden - Eating out after work
+posting	Slate	-3882
+posting	Restaurant	3882
+entry	2014-02-18	Onion Market - Buying groceries
+posting	Slate	-9386
+posting	Groceries	9386
+entry	2014-02-21	China Garden - Eating out alone
+posting	Slate	-966
+posting	Restaurant	966
+entry	2014-02-25	Cafe Modagor - Eating out with Bill
+posting	Slate	-3765
+posting	Restaurant	3765
+entry	2014-02-27	Kin Soy - Eating out with Natasha
+posting	Slate	-3120
+posting	Restaurant	3120
+entry	2014-03-02	Cafe Modagor - Eating out with Joe
+posting	Slate	-4215
+posting	Restaurant	4215
+entry	2014-03-03	China Garden - Eating out with Natasha
+posting	Slate	-1972
+posting	Restaurant	1972
+entry	2014-03-04	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-03-07	Kin Soy - Eating out with Bill
+posting	Slate	-2222
+posting	Restaurant	2222
+entry	2014-03-10	Good Moods Market - Buying groceries
+posting	Slate	-11992
+posting	Groceries	11992
+entry	2014-03-11	Chase:Slate - Paying off credit card
+posting	Slate	53857
+posting	Checking	-53857
+entry	2014-03-12	Goba Goba - Eating out with Joe
+posting	Slate	-4219
+posting	Restaurant	4219
+entry	2014-03-14	Kin Soy - Eating out
+posting	Slate	-5176
+posting	Restaurant	5176
+entry	2014-03-18	Goba Goba - Eating out
+posting	Slate	-2016
+posting	Restaurant	2016
+entry	2014-03-23	Jewel of Morroco - Eating out after work
+posting	Slate	-1825
+posting	Restaurant	1825
+entry	2014-03-25	Cafe Modagor - Eating out with work buddies
+posting	Slate	-3026
+posting	Restaurant	3026
+entry	2014-03-28	Onion Market - Buying groceries
+posting	Slate	-5938
+posting	Groceries	5938
+entry	2014-03-30	Uncle Boons - Eating out with Bill
+posting	Slate	-2943
+posting	Restaurant	2943
+entry	2014-04-01	Goba Goba - Eating out
+posting	Slate	-3104
+posting	Restaurant	3104
+entry	2014-04-02	Jewel of Morroco - Eating out with Natasha
+posting	Slate	-5556
+posting	Restaurant	5556
+entry	2014-04-02	Onion Market - Buying groceries
+posting	Slate	-7670
+posting	Groceries	7670
+entry	2014-04-03	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-04-05	Goba Goba - Eating out after work
+posting	Slate	-2807
+posting	Restaurant	2807
+entry	2014-04-06	Kin Soy - Eating out with Joe
+posting	Slate	-3892
+posting	Restaurant	3892
+entry	2014-04-07	Chichipotle - Eating out with Natasha
+posting	Slate	-5305
+posting	Restaurant	5305
+entry	2014-04-07	Corner Deli - Buying groceries
+posting	Slate	-7865
+posting	Groceries	7865
+entry	2014-04-08	Chase:Slate - Paying off credit card
+posting	Slate	73298
+posting	Checking	-73298
+entry	2014-04-11	Cafe Modagor - Eating out with Joe
+posting	Slate	-4175
+posting	Restaurant	4175
+entry	2014-04-13	China Garden - Eating out after work
+posting	Slate	-2533
+posting	Restaurant	2533
+entry	2014-04-14	China Garden - Eating out alone
+posting	Slate	-1506
+posting	Restaurant	1506
+entry	2014-04-16	Uncle Boons - Eating out alone
+posting	Slate	-4152
+posting	Restaurant	4152
+entry	2014-04-21	Kin Soy - Eating out after work
+posting	Slate	-2615
+posting	Restaurant	2615
+entry	2014-04-24	Uncle Boons - Eating out with Natasha
+posting	Slate	-2786
+posting	Restaurant	2786
+entry	2014-04-27	Farmer Fresh - Buying groceries
+posting	Slate	-8196
+posting	Groceries	8196
+entry	2014-04-28	Jewel of Morroco - Eating out
+posting	Slate	-2592
+posting	Restaurant	2592
+entry	2014-05-03	Kin Soy - Eating out alone
+posting	Slate	-1983
+posting	Restaurant	1983
+entry	2014-05-03	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-05-07	Corner Deli - Buying groceries
+posting	Slate	-14033
+posting	Groceries	14033
+entry	2014-05-08	Rose Flower - Eating out with Natasha
+posting	Slate	-2528
+posting	Restaurant	2528
+entry	2014-05-09	Chase:Slate - Paying off credit card
+posting	Slate	55858
+posting	Checking	-55858
+entry	2014-05-12	Jewel of Morroco - Eating out with Joe
+posting	Slate	-934
+posting	Restaurant	934
+entry	2014-05-17	Kin Soy - Eating out after work
+posting	Slate	-4123
+posting	Restaurant	4123
+entry	2014-05-18	Good Moods Market - Buying groceries
+posting	Slate	-7292
+posting	Groceries	7292
+entry	2014-05-19	Rose Flower - Eating out alone
+posting	Slate	-2652
+posting	Restaurant	2652
+entry	2014-05-24	Cafe Modagor - Eating out
+posting	Slate	-9185
+posting	Restaurant	9185
+entry	2014-05-26	Jewel of Morroco - Eating out with Natasha
+posting	Slate	-4967
+posting	Restaurant	4967
+entry	2014-05-31	Jewel of Morroco - Eating out
+posting	Slate	-2237
+posting	Restaurant	2237
+entry	2014-06-01	Uncle Boons - Eating out with Joe
+posting	Slate	-2791
+posting	Restaurant	2791
+entry	2014-06-04	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-06-06	Chichipotle - Eating out with Bill
+posting	Slate	-2536
+posting	Restaurant	2536
+entry	2014-06-06	Good Moods Market - Buying groceries
+posting	Slate	-7933
+posting	Groceries	7933
+entry	2014-06-11	Cafe Modagor - Eating out with work buddies
+posting	Slate	-3048
+posting	Restaurant	3048
+entry	2014-06-11	Chase:Slate - Paying off credit card
+posting	Slate	58764
+posting	Checking	-58764
+entry	2014-06-12	Jewel of Morroco - Eating out with Julie
+posting	Slate	-4269
+posting	Restaurant	4269
+entry	2014-06-17	Cafe Modagor - Eating out with Natasha
+posting	Slate	-4880
+posting	Restaurant	4880
+entry	2014-06-21	Goba Goba - Eating out alone
+posting	Slate	-2887
+posting	Restaurant	2887
+entry	2014-06-24	Kin Soy - Eating out
+posting	Slate	-2465
+posting	Restaurant	2465
+entry	2014-06-26	Rose Flower - Eating out
+posting	Slate	-1892
+posting	Restaurant	1892
+entry	2014-06-26	Good Moods Market - Buying groceries
+posting	Slate	-7892
+posting	Groceries	7892
+entry	2014-06-27	Kin Soy - Eating out alone
+posting	Slate	-7240
+posting	Restaurant	7240
+entry	2014-06-29	Chichipotle - Eating out with work buddies
+posting	Slate	-2163
+posting	Restaurant	2163
+entry	2014-07-02	Cafe Modagor - Eating out with Julie
+posting	Slate	-3915
+posting	Restaurant	3915
+entry	2014-07-02	Onion Market - Buying groceries
+posting	Slate	-7038
+posting	Groceries	7038
+entry	2014-07-05	Goba Goba - Eating out
+posting	Slate	-2546
+posting	Restaurant	2546
+entry	2014-07-06	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-07-09	Goba Goba - Eating out alone
+posting	Slate	-3701
+posting	Restaurant	3701
+entry	2014-07-09	Chase:Slate - Paying off credit card
+posting	Slate	62888
+posting	Checking	-62888
+entry	2014-07-10	Kin Soy - Eating out after work
+posting	Slate	-8218
+posting	Restaurant	8218
+entry	2014-07-12	Jewel of Morroco - Eating out with Bill
+posting	Slate	-3089
+posting	Restaurant	3089
+entry	2014-07-16	Onion Market - Buying groceries
+posting	Slate	-11440
+posting	Groceries	11440
+entry	2014-07-17	Chichipotle - Eating out with Joe
+posting	Slate	-2960
+posting	Restaurant	2960
+entry	2014-07-19	Kin Soy - Eating out with Joe
+posting	Slate	-2936
+posting	Restaurant	2936
+entry	2014-07-20	Kin Soy - Eating out with Natasha
+posting	Slate	-2007
+posting	Restaurant	2007
+entry	2014-07-25	China Garden - Eating out
+posting	Slate	-2592
+posting	Restaurant	2592
+entry	2014-07-27	Chichipotle - Eating out alone
+posting	Slate	-1767
+posting	Restaurant	1767
+entry	2014-07-31	Cafe Modagor - Eating out with Bill
+posting	Slate	-4943
+posting	Restaurant	4943
+entry	2014-07-31	Good Moods Market - Buying groceries
+posting	Slate	-7758
+posting	Groceries	7758
+entry	2014-08-02	Chichipotle - Eating out with Julie
+posting	Slate	-6113
+posting	Restaurant	6113
+entry	2014-08-05	Kin Soy - Eating out with Joe
+posting	Slate	-4807
+posting	Restaurant	4807
+entry	2014-08-07	Jewel of Morroco - Eating out with Natasha
+posting	Slate	-3773
+posting	Restaurant	3773
+entry	2014-08-08	Kin Soy - Eating out alone
+posting	Slate	-3932
+posting	Restaurant	3932
+entry	2014-08-08	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-08-09	Chase:Slate - Paying off credit card
+posting	Slate	82226
+posting	Checking	-82226
+entry	2014-08-13	Kin Soy - Eating out with Joe
+posting	Slate	-3891
+posting	Restaurant	3891
+entry	2014-08-18	Chichipotle - Eating out with work buddies
+posting	Slate	-5041
+posting	Restaurant	5041
+entry	2014-08-19	Jewel of Morroco - Eating out alone
+posting	Slate	-3283
+posting	Restaurant	3283
+entry	2014-08-19	Corner Deli - Buying groceries
+posting	Slate	-8538
+posting	Groceries	8538
+entry	2014-08-24	Uncle Boons - Eating out with Natasha
+posting	Slate	-4410
+posting	Restaurant	4410
+entry	2014-08-25	Chichipotle - Eating out with Natasha
+posting	Slate	-1576
+posting	Restaurant	1576
+entry	2014-08-30	Cafe Modagor - Eating out alone
+posting	Slate	-2938
+posting	Restaurant	2938
+entry	2014-09-04	Uncle Boons - Eating out with work buddies
+posting	Slate	-1885
+posting	Restaurant	1885
+entry	2014-09-04	Corner Deli - Buying groceries
+posting	Slate	-8975
+posting	Groceries	8975
+entry	2014-09-08	Kin Soy - Eating out with Joe
+posting	Slate	-2056
+posting	Restaurant	2056
+entry	2014-09-10	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-09-10	Chase:Slate - Paying off credit card
+posting	Slate	50702
+posting	Checking	-50702
+entry	2014-09-11	Rose Flower - Eating out with work buddies
+posting	Slate	-3033
+posting	Restaurant	3033
+entry	2014-09-14	Uncle Boons - Eating out with Natasha
+posting	Slate	-1589
+posting	Restaurant	1589
+entry	2014-09-14	Farmer Fresh - Buying groceries
+posting	Slate	-11411
+posting	Groceries	11411
+entry	2014-09-19	Kin Soy - Eating out with Bill
+posting	Slate	-4070
+posting	Restaurant	4070
+entry	2014-09-21	China Garden - Eating out with Bill
+posting	Slate	-2507
+posting	Restaurant	2507
+entry	2014-09-24	Goba Goba - Eating out with work buddies
+posting	Slate	-2032
+posting	Restaurant	2032
+entry	2014-09-29	China Garden - Eating out with work buddies
+posting	Slate	-4929
+posting	Restaurant	4929
+entry	2014-10-01	Farmer Fresh - Buying groceries
+posting	Slate	-8544
+posting	Groceries	8544
+entry	2014-10-02	Kin Soy - Eating out after work
+posting	Slate	-2549
+posting	Restaurant	2549
+entry	2014-10-06	Cafe Modagor - Eating out with Natasha
+posting	Slate	-1688
+posting	Restaurant	1688
+entry	2014-10-07	Chase:Slate - Paying off credit card
+posting	Slate	44577
+posting	Checking	-44577
+entry	2014-10-11	Uncle Boons - Eating out with Joe
+posting	Slate	-2225
+posting	Restaurant	2225
+entry	2014-10-12	Cafe Modagor - Eating out after work
+posting	Slate	-5720
+posting	Restaurant	5720
+entry	2014-10-13	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-10-15	Goba Goba - Eating out with work buddies
+posting	Slate	-1516
+posting	Restaurant	1516
+entry	2014-10-19	Farmer Fresh - Buying groceries
+posting	Slate	-15694
+posting	Groceries	15694
+entry	2014-10-20	Kin Soy - Eating out with work buddies
+posting	Slate	-1810
+posting	Restaurant	1810
+entry	2014-10-23	Cafe Modagor - Eating out alone
+posting	Slate	-5528
+posting	Restaurant	5528
+entry	2014-10-26	Kin Soy - Eating out with Natasha
+posting	Slate	-3947
+posting	Restaurant	3947
+entry	2014-10-29	Chichipotle - Eating out with Joe
+posting	Slate	-2132
+posting	Restaurant	2132
+entry	2014-10-30	Corner Deli - Buying groceries
+posting	Slate	-10984
+posting	Groceries	10984
+entry	2014-11-01	Chichipotle - Eating out with work buddies
+posting	Slate	-3061
+posting	Restaurant	3061
+entry	2014-11-04	Goba Goba - Eating out after work
+posting	Slate	-2645
+posting	Restaurant	2645
+entry	2014-11-06	Goba Goba - Eating out with Bill
+posting	Slate	-2398
+posting	Restaurant	2398
+entry	2014-11-06	Corner Deli - Buying groceries
+posting	Slate	-10378
+posting	Groceries	10378
+entry	2014-11-10	Chase:Slate - Paying off credit card
+posting	Slate	81366
+posting	Checking	-81366
+entry	2014-11-11	Goba Goba - Eating out with Bill
+posting	Slate	-3553
+posting	Restaurant	3553
+entry	2014-11-13	Chichipotle - Eating out with Julie
+posting	Slate	-3230
+posting	Restaurant	3230
+entry	2014-11-14	Kin Soy - Eating out alone
+posting	Slate	-2718
+posting	Restaurant	2718
+entry	2014-11-14	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-11-19	Rose Flower - Eating out with Natasha
+posting	Slate	-3061
+posting	Restaurant	3061
+entry	2014-11-20	Jewel of Morroco - Eating out after work
+posting	Slate	-4094
+posting	Restaurant	4094
+entry	2014-11-24	Kin Soy - Eating out with Julie
+posting	Slate	-2501
+posting	Restaurant	2501
+entry	2014-11-25	Chichipotle - Eating out with Bill
+posting	Slate	-6045
+posting	Restaurant	6045
+entry	2014-11-25	Corner Deli - Buying groceries
+posting	Slate	-7355
+posting	Groceries	7355
+entry	2014-11-30	Goba Goba - Eating out after work
+posting	Slate	-3592
+posting	Restaurant	3592
+entry	2014-12-03	Rose Flower - Eating out
+posting	Slate	-3012
+posting	Restaurant	3012
+entry	2014-12-05	Chichipotle - Eating out with Bill
+posting	Slate	-3363
+posting	Restaurant	3363
+entry	2014-12-07	Farmer Fresh - Buying groceries
+posting	Slate	-7989
+posting	Groceries	7989
+entry	2014-12-08	Chase:Slate - Paying off credit card
+posting	Slate	62658
+posting	Checking	-62658
+entry	2014-12-09	Jewel of Morroco - Eating out alone
+posting	Slate	-3698
+posting	Restaurant	3698
+entry	2014-12-12	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2014-12-14	Kin Soy - Eating out with Julie
+posting	Slate	-1557
+posting	Restaurant	1557
+entry	2014-12-18	Goba Goba - Eating out
+posting	Slate	-1998
+posting	Restaurant	1998
+entry	2014-12-21	Rose Flower - Eating out with Julie
+posting	Slate	-2360
+posting	Restaurant	2360
+entry	2014-12-22	Corner Deli - Buying groceries
+posting	Slate	-5191
+posting	Groceries	5191
+entry	2014-12-24	Cafe Modagor - Eating out with work buddies
+posting	Slate	-2909
+posting	Restaurant	2909
+entry	2014-12-25	Goba Goba - Eating out after work
+posting	Slate	-4005
+posting	Restaurant	4005
+entry	2014-12-30	Kin Soy - Eating out alone
+posting	Slate	-8537
+posting	Restaurant	8537
+entry	2015-01-03	Rose Flower - Eating out with Bill
+posting	Slate	-1811
+posting	Restaurant	1811
+entry	2015-01-04	Jewel of Morroco - Eating out with Julie
+posting	Slate	-3282
+posting	Restaurant	3282
+entry	2015-01-07	Jewel of Morroco - Eating out with Julie
+posting	Slate	-2296
+posting	Restaurant	2296
+entry	2015-01-07	Corner Deli - Buying groceries
+posting	Slate	-6185
+posting	Groceries	6185
+entry	2015-01-08	Uncle Boons - Eating out after work
+posting	Slate	-5479
+posting	Restaurant	5479
+entry	2015-01-08	Chase:Slate - Paying off credit card
+posting	Slate	57610
+posting	Checking	-57610
+entry	2015-01-09	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-01-13	Chichipotle - Eating out
+posting	Slate	-4846
+posting	Restaurant	4846
+entry	2015-01-18	Cafe Modagor - Eating out
+posting	Slate	-4445
+posting	Restaurant	4445
+entry	2015-01-20	Jewel of Morroco - Eating out
+posting	Slate	-5293
+posting	Restaurant	5293
+entry	2015-01-22	Good Moods Market - Buying groceries
+posting	Slate	-5367
+posting	Groceries	5367
+entry	2015-01-24	Goba Goba - Eating out with Natasha
+posting	Slate	-4061
+posting	Restaurant	4061
+entry	2015-01-29	Jewel of Morroco - Eating out with work buddies
+posting	Slate	-4179
+posting	Restaurant	4179
+entry	2015-02-01	Cafe Modagor - Eating out with Joe
+posting	Slate	-5168
+posting	Restaurant	5168
+entry	2015-02-01	Onion Market - Buying groceries
+posting	Slate	-9637
+posting	Groceries	9637
+entry	2015-02-02	Rose Flower - Eating out after work
+posting	Slate	-2232
+posting	Restaurant	2232
+entry	2015-02-04	Kin Soy - Eating out with Joe
+posting	Slate	-1866
+posting	Restaurant	1866
+entry	2015-02-06	Rose Flower - Eating out alone
+posting	Slate	-1406
+posting	Restaurant	1406
+entry	2015-02-08	Jewel of Morroco - Eating out with Joe
+posting	Slate	-3455
+posting	Restaurant	3455
+entry	2015-02-08	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-02-09	Chase:Slate - Paying off credit card
+posting	Slate	80037
+posting	Checking	-80037
+entry	2015-02-12	Kin Soy - Eating out with Bill
+posting	Slate	-4082
+posting	Restaurant	4082
+entry	2015-02-13	Kin Soy - Eating out alone
+posting	Slate	-3233
+posting	Restaurant	3233
+entry	2015-02-15	Argo Tea
+posting	Slate	-626
+posting	Coffee	626
+entry	2015-02-16	Another Sports Pub
+posting	Slate	-1578
+posting	Alcohol	1578
+entry	2015-02-16	Argo Tea
+posting	Slate	-669
+posting	Coffee	669
+entry	2015-02-17	Mercadito
+posting	Slate	-4643
+posting	Restaurant	4643
+entry	2015-02-18	Star of Siam
+posting	Slate	-2337
+posting	Restaurant	2337
+entry	2015-02-19	25 Degrees Burger Bar
+posting	Slate	-1763
+posting	Restaurant	1763
+entry	2015-02-20	25 Degrees Burger Bar
+posting	Slate	-2004
+posting	Restaurant	2004
+entry	2015-02-20	Argo Tea
+posting	Slate	-531
+posting	Coffee	531
+entry	2015-02-21	Mercadito
+posting	Slate	-4353
+posting	Restaurant	4353
+entry	2015-02-21	25 Degrees Burger Bar
+posting	Slate	-2276
+posting	Restaurant	2276
+entry	2015-02-21	Another Sports Pub
+posting	Slate	-1057
+posting	Alcohol	1057
+entry	2015-02-21	Argo Tea
+posting	Slate	-612
+posting	Coffee	612
+entry	2015-02-23	25 Degrees Burger Bar
+posting	Slate	-2244
+posting	Restaurant	2244
+entry	2015-02-25	25 Degrees Burger Bar
+posting	Slate	-2086
+posting	Restaurant	2086
+entry	2015-02-25	Argo Tea
+posting	Slate	-611
+posting	Coffee	611
+entry	2015-02-26	Eataly Chicago
+posting	Slate	-3100
+posting	Restaurant	3100
+entry	2015-02-26	Another Sports Pub
+posting	Slate	-1307
+posting	Alcohol	1307
+entry	2015-02-27	Eataly Chicago
+posting	Slate	-3861
+posting	Restaurant	3861
+entry	2015-02-27	Another Sports Pub
+posting	Slate	-1714
+posting	Alcohol	1714
+entry	2015-02-27	Argo Tea
+posting	Slate	-494
+posting	Coffee	494
+entry	2015-02-28	Star of Siam
+posting	Slate	-2660
+posting	Restaurant	2660
+entry	2015-02-28	25 Degrees Burger Bar
+posting	Slate	-2333
+posting	Restaurant	2333
+entry	2015-03-01	Star of Siam
+posting	Slate	-2852
+posting	Restaurant	2852
+entry	2015-03-01	Eataly Chicago
+posting	Slate	-3089
+posting	Restaurant	3089
+entry	2015-03-01	Argo Tea
+posting	Slate	-705
+posting	Coffee	705
+entry	2015-03-02	Chichipotle - Eating out alone
+posting	Slate	-3119
+posting	Restaurant	3119
+entry	2015-03-02	25 Degrees Burger Bar
+posting	Slate	-2372
+posting	Restaurant	2372
+entry	2015-03-03	Corner Deli - Buying groceries
+posting	Slate	-11746
+posting	Groceries	11746
+entry	2015-03-07	Chichipotle - Eating out after work
+posting	Slate	-7057
+posting	Restaurant	7057
+entry	2015-03-08	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-03-08	Chase:Slate - Paying off credit card
+posting	Slate	37155
+posting	Checking	-37155
+entry	2015-03-09	Cafe Modagor - Eating out
+posting	Slate	-2396
+posting	Restaurant	2396
+entry	2015-03-10	Rose Flower - Eating out with Natasha
+posting	Slate	-2024
+posting	Restaurant	2024
+entry	2015-03-10	Corner Deli - Buying groceries
+posting	Slate	-8313
+posting	Groceries	8313
+entry	2015-03-11	Goba Goba - Eating out after work
+posting	Slate	-3156
+posting	Restaurant	3156
+entry	2015-03-14	Rose Flower - Eating out with Julie
+posting	Slate	-2883
+posting	Restaurant	2883
+entry	2015-03-18	Rose Flower - Eating out
+posting	Slate	-6915
+posting	Restaurant	6915
+entry	2015-03-23	Chichipotle - Eating out with Julie
+posting	Slate	-6418
+posting	Restaurant	6418
+entry	2015-03-24	China Garden - Eating out alone
+posting	Slate	-1997
+posting	Restaurant	1997
+entry	2015-03-27	Corner Deli - Buying groceries
+posting	Slate	-11768
+posting	Groceries	11768
+entry	2015-03-29	China Garden - Eating out alone
+posting	Slate	-1944
+posting	Restaurant	1944
+entry	2015-04-01	China Garden - Eating out
+posting	Slate	-2355
+posting	Restaurant	2355
+entry	2015-04-03	China Garden - Eating out with Julie
+posting	Slate	-3605
+posting	Restaurant	3605
+entry	2015-04-05	Cafe Modagor - Eating out
+posting	Slate	-4140
+posting	Restaurant	4140
+entry	2015-04-05	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-04-07	Chase:Slate - Paying off credit card
+posting	Slate	72248
+posting	Checking	-72248
+entry	2015-04-09	Kin Soy - Eating out with Natasha
+posting	Slate	-2334
+posting	Restaurant	2334
+entry	2015-04-11	Corner Deli - Buying groceries
+posting	Slate	-9401
+posting	Groceries	9401
+entry	2015-04-14	Uncle Boons - Eating out with Julie
+posting	Slate	-2991
+posting	Restaurant	2991
+entry	2015-04-17	Rose Flower - Eating out with Julie
+posting	Slate	-4255
+posting	Restaurant	4255
+entry	2015-04-19	Chichipotle - Eating out with Natasha
+posting	Slate	-3271
+posting	Restaurant	3271
+entry	2015-04-21	Corner Deli - Buying groceries
+posting	Slate	-4784
+posting	Groceries	4784
+entry	2015-04-22	China Garden - Eating out alone
+posting	Slate	-3010
+posting	Restaurant	3010
+entry	2015-04-23	Chichipotle - Eating out with work buddies
+posting	Slate	-4824
+posting	Restaurant	4824
+entry	2015-04-28	Cafe Modagor - Eating out with Natasha
+posting	Slate	-2951
+posting	Restaurant	2951
+entry	2015-05-03	Cafe Modagor - Eating out with Julie
+posting	Slate	-3269
+posting	Restaurant	3269
+entry	2015-05-04	Jewel of Morroco - Eating out with Bill
+posting	Slate	-4649
+posting	Restaurant	4649
+entry	2015-05-06	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-05-07	Chase:Slate - Paying off credit card
+posting	Slate	58926
+posting	Checking	-58926
+entry	2015-05-09	Uncle Boons - Eating out with work buddies
+posting	Slate	-3521
+posting	Restaurant	3521
+entry	2015-05-10	Corner Deli - Buying groceries
+posting	Slate	-13015
+posting	Groceries	13015
+entry	2015-05-11	Goba Goba - Eating out with Bill
+posting	Slate	-6005
+posting	Restaurant	6005
+entry	2015-05-13	Uncle Boons - Eating out with Julie
+posting	Slate	-1353
+posting	Restaurant	1353
+entry	2015-05-14	Rose Flower - Eating out after work
+posting	Slate	-773
+posting	Restaurant	773
+entry	2015-05-19	Cafe Modagor - Eating out with work buddies
+posting	Slate	-4225
+posting	Restaurant	4225
+entry	2015-05-24	Rose Flower - Eating out alone
+posting	Slate	-2194
+posting	Restaurant	2194
+entry	2015-05-26	China Garden - Eating out with Julie
+posting	Slate	-1758
+posting	Restaurant	1758
+entry	2015-05-28	Kin Soy - Eating out with work buddies
+posting	Slate	-2742
+posting	Restaurant	2742
+entry	2015-05-28	Good Moods Market - Buying groceries
+posting	Slate	-7844
+posting	Groceries	7844
+entry	2015-05-30	Uncle Boons - Eating out with Julie
+posting	Slate	-1739
+posting	Restaurant	1739
+entry	2015-06-02	Cafe Modagor - Eating out with Natasha
+posting	Slate	-3119
+posting	Restaurant	3119
+entry	2015-06-03	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-06-07	Goba Goba - Eating out alone
+posting	Slate	-7107
+posting	Restaurant	7107
+entry	2015-06-10	Cafe Modagor - Eating out with work buddies
+posting	Slate	-5434
+posting	Restaurant	5434
+entry	2015-06-10	Chase:Slate - Paying off credit card
+posting	Slate	69308
+posting	Checking	-69308
+entry	2015-06-14	China Garden - Eating out alone
+posting	Slate	-5091
+posting	Restaurant	5091
+entry	2015-06-17	Farmer Fresh - Buying groceries
+posting	Slate	-6815
+posting	Groceries	6815
+entry	2015-06-18	Goba Goba - Eating out with Joe
+posting	Slate	-3490
+posting	Restaurant	3490
+entry	2015-06-21	Jewel of Morroco - Eating out with Julie
+posting	Slate	-3548
+posting	Restaurant	3548
+entry	2015-06-25	Chichipotle - Eating out with Bill
+posting	Slate	-1878
+posting	Restaurant	1878
+entry	2015-06-26	Jewel of Morroco - Eating out alone
+posting	Slate	-2282
+posting	Restaurant	2282
+entry	2015-06-27	Kin Soy - Eating out with Julie
+posting	Slate	-5446
+posting	Restaurant	5446
+entry	2015-06-30	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-07-01	Jewel of Morroco - Eating out alone
+posting	Slate	-1818
+posting	Restaurant	1818
+entry	2015-07-04	Rose Flower - Eating out after work
+posting	Slate	-3765
+posting	Restaurant	3765
+entry	2015-07-05	Corner Deli - Buying groceries
+posting	Slate	-6570
+posting	Groceries	6570
+entry	2015-07-07	Chichipotle - Eating out with Julie
+posting	Slate	-3470
+posting	Restaurant	3470
+entry	2015-07-10	Chase:Slate - Paying off credit card
+posting	Slate	62377
+posting	Checking	-62377
+entry	2015-07-12	Kin Soy - Eating out
+posting	Slate	-6204
+posting	Restaurant	6204
+entry	2015-07-16	Uncle Boons - Eating out alone
+posting	Slate	-2026
+posting	Restaurant	2026
+entry	2015-07-19	Cafe Modagor - Eating out
+posting	Slate	-4446
+posting	Restaurant	4446
+entry	2015-07-22	Goba Goba - Eating out alone
+posting	Slate	-3762
+posting	Restaurant	3762
+entry	2015-07-24	China Garden - Eating out with Bill
+posting	Slate	-4858
+posting	Restaurant	4858
+entry	2015-07-25	China Garden - Eating out with Julie
+posting	Slate	-3024
+posting	Restaurant	3024
+entry	2015-07-25	Farmer Fresh - Buying groceries
+posting	Slate	-11879
+posting	Groceries	11879
+entry	2015-07-27	Jewel of Morroco - Eating out with Joe
+posting	Slate	-2473
+posting	Restaurant	2473
+entry	2015-07-29	Kin Soy - Eating out
+posting	Slate	-2832
+posting	Restaurant	2832
+entry	2015-08-01	Jewel of Morroco - Eating out with work buddies
+posting	Slate	-2264
+posting	Restaurant	2264
+entry	2015-08-02	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-08-03	Jewel of Morroco - Eating out with Bill
+posting	Slate	-2186
+posting	Restaurant	2186
+entry	2015-08-04	China Garden - Eating out with Natasha
+posting	Slate	-2304
+posting	Restaurant	2304
+entry	2015-08-05	Cafe Modagor - Eating out
+posting	Slate	-2975
+posting	Restaurant	2975
+entry	2015-08-07	Onion Market - Buying groceries
+posting	Slate	-6512
+posting	Groceries	6512
+entry	2015-08-08	Jewel of Morroco - Eating out with Bill
+posting	Slate	-3746
+posting	Restaurant	3746
+entry	2015-08-10	Goba Goba - Eating out
+posting	Slate	-3935
+posting	Restaurant	3935
+entry	2015-08-10	Chase:Slate - Paying off credit card
+posting	Slate	71222
+posting	Checking	-71222
+entry	2015-08-12	Goba Goba - Eating out with Bill
+posting	Slate	-4056
+posting	Restaurant	4056
+entry	2015-08-13	Jewel of Morroco - Eating out with Joe
+posting	Slate	-3673
+posting	Restaurant	3673
+entry	2015-08-14	Jewel of Morroco - Eating out alone
+posting	Slate	-1893
+posting	Restaurant	1893
+entry	2015-08-15	Kin Soy - Eating out with Julie
+posting	Slate	-2408
+posting	Restaurant	2408
+entry	2015-08-19	Jewel of Morroco - Eating out with Bill
+posting	Slate	-1102
+posting	Restaurant	1102
+entry	2015-08-21	Farmer Fresh - Buying groceries
+posting	Slate	-7760
+posting	Groceries	7760
+entry	2015-08-22	Kin Soy - Eating out with work buddies
+posting	Slate	-4639
+posting	Restaurant	4639
+entry	2015-08-23	Uncle Boons - Eating out with work buddies
+posting	Slate	-2702
+posting	Restaurant	2702
+entry	2015-08-24	Chichipotle - Eating out with Joe
+posting	Slate	-2539
+posting	Restaurant	2539
+entry	2015-08-27	Kin Soy - Eating out with Bill
+posting	Slate	-3097
+posting	Restaurant	3097
+entry	2015-08-28	Kin Soy - Eating out
+posting	Slate	-1090
+posting	Restaurant	1090
+entry	2015-08-31	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-09-01	Chichipotle - Eating out with work buddies
+posting	Slate	-2280
+posting	Restaurant	2280
+entry	2015-09-03	Cafe Modagor - Eating out with Joe
+posting	Slate	-3557
+posting	Restaurant	3557
+entry	2015-09-07	China Garden - Eating out alone
+posting	Slate	-2115
+posting	Restaurant	2115
+entry	2015-09-08	Corner Deli - Buying groceries
+posting	Slate	-5348
+posting	Groceries	5348
+entry	2015-09-09	Chichipotle - Eating out with Bill
+posting	Slate	-2103
+posting	Restaurant	2103
+entry	2015-09-11	Chase:Slate - Paying off credit card
+posting	Slate	65106
+posting	Checking	-65106
+entry	2015-09-12	Cafe Modagor - Eating out with Natasha
+posting	Slate	-2744
+posting	Restaurant	2744
+entry	2015-09-17	Jewel of Morroco - Eating out
+posting	Slate	-3817
+posting	Restaurant	3817
+entry	2015-09-19	Rose Flower - Eating out with work buddies
+posting	Slate	-2300
+posting	Restaurant	2300
+entry	2015-09-24	China Garden - Eating out with Joe
+posting	Slate	-2183
+posting	Restaurant	2183
+entry	2015-09-26	China Garden - Eating out
+posting	Slate	-1435
+posting	Restaurant	1435
+entry	2015-09-28	Farmer Fresh - Buying groceries
+posting	Slate	-4502
+posting	Groceries	4502
+entry	2015-09-29	Rose Flower - Eating out with Natasha
+posting	Slate	-4999
+posting	Restaurant	4999
+entry	2015-09-30	Cafe Modagor - Eating out with Natasha
+posting	Slate	-2589
+posting	Restaurant	2589
+entry	2015-10-01	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-10-05	Cafe Modagor - Eating out with Bill
+posting	Slate	-4100
+posting	Restaurant	4100
+entry	2015-10-07	Good Moods Market - Buying groceries
+posting	Slate	-11565
+posting	Groceries	11565
+entry	2015-10-07	Chase:Slate - Paying off credit card
+posting	Slate	49490
+posting	Checking	-49490
+entry	2015-10-09	Chichipotle - Eating out with Joe
+posting	Slate	-1942
+posting	Restaurant	1942
+entry	2015-10-14	Kin Soy - Eating out
+posting	Slate	-3799
+posting	Restaurant	3799
+entry	2015-10-17	Corner Deli - Buying groceries
+posting	Slate	-10560
+posting	Groceries	10560
+entry	2015-10-19	Jewel of Morroco - Eating out with Joe
+posting	Slate	-3060
+posting	Restaurant	3060
+entry	2015-10-24	Uncle Boons - Eating out after work
+posting	Slate	-1064
+posting	Restaurant	1064
+entry	2015-10-29	Uncle Boons - Eating out after work
+posting	Slate	-2116
+posting	Restaurant	2116
+entry	2015-11-01	Chichipotle - Eating out after work
+posting	Slate	-3797
+posting	Restaurant	3797
+entry	2015-11-02	Kin Soy - Eating out with Joe
+posting	Slate	-2372
+posting	Restaurant	2372
+entry	2015-11-03	Kin Soy - Eating out alone
+posting	Slate	-2829
+posting	Restaurant	2829
+entry	2015-11-03	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-11-04	Good Moods Market - Buying groceries
+posting	Slate	-5020
+posting	Groceries	5020
+entry	2015-11-08	Jewel of Morroco - Eating out
+posting	Slate	-2621
+posting	Restaurant	2621
+entry	2015-11-09	Good Moods Market - Buying groceries
+posting	Slate	-6746
+posting	Groceries	6746
+entry	2015-11-09	Chase:Slate - Paying off credit card
+posting	Slate	57926
+posting	Checking	-57926
+entry	2015-11-12	Cafe Modagor - Eating out
+posting	Slate	-2675
+posting	Restaurant	2675
+entry	2015-11-14	Jewel of Morroco - Eating out with work buddies
+posting	Slate	-4455
+posting	Restaurant	4455
+entry	2015-11-16	Kin Soy - Eating out with work buddies
+posting	Slate	-2820
+posting	Restaurant	2820
+entry	2015-11-20	Cafe Modagor - Eating out with Joe
+posting	Slate	-2788
+posting	Restaurant	2788
+entry	2015-11-21	Kin Soy - Eating out with work buddies
+posting	Slate	-2222
+posting	Restaurant	2222
+entry	2015-11-24	Farmer Fresh - Buying groceries
+posting	Slate	-10046
+posting	Groceries	10046
+entry	2015-11-25	Goba Goba - Eating out alone
+posting	Slate	-3829
+posting	Restaurant	3829
+entry	2015-11-29	Uncle Boons - Eating out
+posting	Slate	-4850
+posting	Restaurant	4850
+entry	2015-12-04	Goba Goba - Eating out after work
+posting	Slate	-2567
+posting	Restaurant	2567
+entry	2015-12-04	Metro Transport Authority - Tram tickets
+posting	Slate	-12000
+posting	Tram	12000
+entry	2015-12-05	Cafe Modagor - Eating out with Julie
+posting	Slate	-842
+posting	Restaurant	842
+entry	2015-12-08	Cafe Modagor - Eating out with Natasha
+posting	Slate	-2615
+posting	Restaurant	2615
+entry	2015-12-10	Jewel of Morroco - Eating out alone
+posting	Slate	-3404
+posting	Restaurant	3404
+entry	2015-12-12	Rose Flower - Eating out with Bill
+posting	Slate	-2309
+posting	Restaurant	2309
+entry	2015-12-14	Farmer Fresh - Buying groceries
+posting	Slate	-7206
+posting	Groceries	7206
+entry	2015-12-16	Uncle Boons - Eating out with work buddies
+posting	Slate	-3711
+posting	Restaurant	3711
+entry	2015-12-20	Uncle Boons - Eating out with Julie
+posting	Slate	-2414
+posting	Restaurant	2414
+entry	2013-09-18	Buy shares of VHT
+posting	ETrade:Cash	-86655
+posting	VHT	85760
+posting	Commissions	895
+entry	2013-09-18	Buy shares of VEA
+posting	ETrade:Cash	-90131
+posting	VEA	89236
+posting	Commissions	895
+entry	2013-09-18	Buy shares of ITOT
+posting	ETrade:Cash	-81855
+posting	ITOT	80960
+posting	Commissions	895
+entry	2013-09-18	Dividends on portfolio
+posting	ETrade:Cash	1024
+posting	Dividends	-1024
+entry	2013-10-21	Sell shares of ITOT
+posting	ITOT	-80960
+posting	Gains	-3640
+posting	Clearing	84600
+entry	2013-10-21	Sell shares of ITOT
+posting	ETrade:Cash	83705
+posting	Commissions	895
+posting	Clearing	-84600
+entry	2013-10-23	Buy shares of VHT
+posting	ETrade:Cash	-140095
+posting	VHT	139200
+posting	Commissions	895
+entry	2013-10-23	Buy shares of GLD
+posting	ETrade:Cash	-127867
+posting	GLD	126972
+posting	Commissions	895
+entry	2013-10-23	Buy shares of ITOT
+posting	ETrade:Cash	-138370
+posting	ITOT	137475
+posting	Commissions	895
+entry	2013-10-23	Buy shares of VEA
+posting	ETrade:Cash	-136273
+posting	VEA	135378
+posting	Commissions	895
+entry	2013-11-04	Sell shares of ITOT
+posting	ITOT	-137475
+posting	Gains	-2535
+posting	Clearing	140010
+entry	2013-11-04	Sell shares of ITOT
+posting	ETrade:Cash	139115
+posting	Commissions	895
+posting	Clearing	-140010
+entry	2013-11-06	Buy shares of VHT
+posting	ETrade:Cash	-168481
+posting	VHT	167586
+posting	Commissions	895
+entry	2013-12-17	Dividends on portfolio
+posting	ETrade:Cash	3850
+posting	Dividends	-3850
+entry	2014-03-18	Dividends on portfolio
+posting	ETrade:Cash	3850
+posting	Dividends	-3850
+entry	2014-04-23	Sell shares of GLD
+posting	GLD	-126972
+posting	ETrade:Cash	124331
+posting	Commissions	895
+posting	Gains	1746
+entry	2014-05-10	Sell shares of VHT
+posting	VHT	-139200
+posting	ETrade:Cash	124280
+posting	Commissions	895
+posting	Gains	14025
+entry	2014-05-14	Sell shares of VEA
+posting	VEA	-89236
+posting	ETrade:Cash	75825
+posting	Commissions	895
+posting	Gains	12516
+entry	2014-05-23	Buy shares of GLD
+posting	ETrade:Cash	-70360
+posting	GLD	69465
+posting	Commissions	895
+entry	2014-05-23	Buy shares of VEA
+posting	ETrade:Cash	-79253
+posting	VEA	78358
+posting	Commissions	895
+entry	2014-05-23	Buy shares of VHT
+posting	ETrade:Cash	-79855
+posting	VHT	78960
+posting	Commissions	895
+entry	2014-05-23	Buy shares of ITOT
+posting	ETrade:Cash	-73100
+posting	ITOT	72205
+posting	Commissions	895
+entry	2014-05-24	Sell shares of VHT
+posting	VHT	-167586
+posting	ETrade:Cash	152090
+posting	Commissions	895
+posting	Gains	14601
+entry	2014-05-28	Buy shares of GLD
+posting	ETrade:Cash	-42574
+posting	GLD	41679
+posting	Commissions	895
+entry	2014-05-28	Buy shares of ITOT
+posting	ETrade:Cash	-42155
+posting	ITOT	41260
+posting	Commissions	895
+entry	2014-05-28	Buy shares of VEA
+posting	ETrade:Cash	-45671
+posting	VEA	44776
+posting	Commissions	895
+entry	2014-06-18	Dividends on portfolio
+posting	ETrade:Cash	5557
+posting	Dividends	-5557
+entry	2014-08-01	Buy shares of VHT
+posting	ETrade:Cash	-126688
+posting	VHT	125793
+posting	Commissions	895
+entry	2014-08-01	Buy shares of ITOT
+posting	ETrade:Cash	-120223
+posting	ITOT	119328
+posting	Commissions	895
+entry	2014-08-01	Buy shares of GLD
+posting	ETrade:Cash	-128092
+posting	GLD	127197
+posting	Commissions	895
+entry	2014-08-21	Sell shares of VHT
+posting	VHT	-85760
+posting	ETrade:Cash	72993
+posting	Commissions	895
+posting	Gains	11872
+entry	2014-09-18	Dividends on portfolio
+posting	ETrade:Cash	7046
+posting	Dividends	-7046
+entry	2014-09-29	Buy shares of GLD
+posting	ETrade:Cash	-236111
+posting	GLD	235216
+posting	Commissions	895
+entry	2014-09-29	Buy shares of ITOT
+posting	ETrade:Cash	-236641
+posting	ITOT	235746
+posting	Commissions	895
+entry	2014-11-13	Sell shares of VHT
+posting	VHT	-78960
+posting	ETrade:Cash	69457
+posting	Commissions	895
+posting	Gains	8608
+entry	2014-11-28	Sell shares of ITOT
+posting	ITOT	-113465
+posting	Gains	-15917
+posting	Clearing	129382
+entry	2014-11-28	Sell shares of ITOT
+posting	ETrade:Cash	128487
+posting	Commissions	895
+posting	Clearing	-129382
+entry	2014-12-10	Buy shares of ITOT
+posting	ETrade:Cash	-143347
+posting	ITOT	142452
+posting	Commissions	895
+entry	2014-12-10	Buy shares of GLD
+posting	ETrade:Cash	-150795
+posting	GLD	149900
+posting	Commissions	895
+entry	2014-12-10	Buy shares of VHT
+posting	ETrade:Cash	-147615
+posting	VHT	146720
+posting	Commissions	895
+entry	2014-12-10	Buy shares of VEA
+posting	ETrade:Cash	-148367
+posting	VEA	147472
+posting	Commissions	895
+entry	2014-12-17	Dividends on portfolio
+posting	ETrade:Cash	11276
+posting	Dividends	-11276
+entry	2015-01-25	Sell shares of ITOT
+posting	ITOT	-235746
+posting	Gains	-19404
+posting	Clearing	255150
+entry	2015-01-25	Sell shares of ITOT
+posting	ETrade:Cash	254255
+posting	Commissions	895
+posting	Clearing	-255150
+entry	2015-02-05	Buy shares of VEA
+posting	ETrade:Cash	-138720
+posting	VEA	137825
+posting	Commissions	895
+entry	2015-02-05	Buy shares of VHT
+posting	ETrade:Cash	-137915
+posting	VHT	137020
+posting	Commissions	895
+entry	2015-03-18	Dividends on portfolio
+posting	ETrade:Cash	12376
+posting	Dividends	-12376
+entry	2015-05-08	Sell shares of ITOT
+posting	ITOT	-119328
+posting	Gains	-24662
+posting	Clearing	143990
+entry	2015-05-08	Sell shares of ITOT
+posting	ETrade:Cash	143095
+posting	Commissions	895
+posting	Clearing	-143990
+entry	2015-05-10	Buy shares of GLD
+posting	ETrade:Cash	-38929
+posting	GLD	38034
+posting	Commissions	895
+entry	2015-05-10	Buy shares of VHT
+posting	ETrade:Cash	-40738
+posting	VHT	39843
+posting	Commissions	895
+entry	2015-05-10	Buy shares of VEA
+posting	ETrade:Cash	-38947
+posting	VEA	38052
+posting	Commissions	895
+entry	2015-06-18	Dividends on portfolio
+posting	ETrade:Cash	12839
+posting	Dividends	-12839
+entry	2015-07-08	Sell shares of ITOT
+posting	ITOT	-142452
+posting	Gains	-24288
+posting	Clearing	166740
+entry	2015-07-08	Sell shares of ITOT
+posting	ETrade:Cash	165845
+posting	Commissions	895
+posting	Clearing	-166740
+entry	2015-07-10	Buy shares of VEA
+posting	ETrade:Cash	-87183
+posting	VEA	86288
+posting	Commissions	895
+entry	2015-07-10	Buy shares of VHT
+posting	ETrade:Cash	-90835
+posting	VHT	89940
+posting	Commissions	895
+entry	2015-08-16	Buy shares of ITOT
+posting	ETrade:Cash	-112247
+posting	ITOT	111352
+posting	Commissions	895
+entry	2015-08-16	Buy shares of GLD
+posting	ETrade:Cash	-117787
+posting	GLD	116892
+posting	Commissions	895
+entry	2015-08-16	Buy shares of VHT
+posting	ETrade:Cash	-117193
+posting	VHT	116298
+posting	Commissions	895
+entry	2015-09-18	Dividends on portfolio
+posting	ETrade:Cash	14923
+posting	Dividends	-14923
+entry	2015-11-18	Buy shares of VHT
+posting	ETrade:Cash	-97449
+posting	VHT	96554
+posting	Commissions	895
+entry	2015-11-18	Buy shares of ITOT
+posting	ETrade:Cash	-99077
+posting	ITOT	98182
+posting	Commissions	895
+entry	2015-11-18	Buy shares of VEA
+posting	ETrade:Cash	-97573
+posting	VEA	96678
+posting	Commissions	895
+entry	2015-11-18	Buy shares of GLD
+posting	ETrade:Cash	-97705
+posting	GLD	96810
+posting	Commissions	895
+entry	2015-11-19	Sell shares of GLD
+posting	GLD	-116892
+posting	Gains	-7578
+posting	Clearing	124470
+entry	2015-11-19	Sell shares of GLD
+posting	ETrade:Cash	123575
+posting	Commissions	895
+posting	Clearing	-124470
+entry	2015-11-26	Sell shares of GLD
+posting	GLD	-235216
+posting	ETrade:Cash	215905
+posting	Commissions	895
+posting	Gains	18416
+entry	2015-12-02	Buy shares of GLD
+posting	ETrade:Cash	-189839
+posting	GLD	188944
+posting	Commissions	895
+entry	2015-12-02	Buy shares of VHT
+posting	ETrade:Cash	-189310
+posting	VHT	188415
+posting	Commissions	895
+entry	2015-12-02	Buy shares of VEA
+posting	ETrade:Cash	-187445
+posting	VEA	186550
+posting	Commissions	895
+entry	2015-12-02	Buy shares of ITOT
+posting	ETrade:Cash	-184312
+posting	ITOT	183417
+posting	Commissions	895
+entry	2015-12-04	Sell shares of VHT
+posting	VHT	-137020
+posting	Gains	-4998
+posting	Clearing	142018
+entry	2015-12-04	Sell shares of VHT
+posting	ETrade:Cash	141123
+posting	Commissions	895
+posting	Clearing	-142018
+entry	2015-12-17	Dividends on portfolio
+posting	ETrade:Cash	19465
+posting	Dividends	-19465
+entry	2013-01-04	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-01-07	Investing 40% of cash in VBMPX
+posting	VBMPX	47997
+posting	Vanguard:Cash	-47997
+entry	2013-01-07	Investing 60% of cash in RGAGX
+posting	RGAGX	72005
+posting	Vanguard:Cash	-72005
+entry	2013-01-07	Investing 40% of cash in VBMPX
+posting	VBMPX	24002
+posting	Vanguard:Cash	-24002
+entry	2013-01-07	Investing 60% of cash in RGAGX
+posting	RGAGX	35995
+posting	Vanguard:Cash	-35995
+entry	2013-01-18	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-01-21	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2013-01-21	Investing 60% of cash in RGAGX
+posting	RGAGX	72000
+posting	Vanguard:Cash	-72000
+entry	2013-01-21	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2013-01-21	Investing 60% of cash in RGAGX
+posting	RGAGX	36000
+posting	Vanguard:Cash	-36000
+entry	2013-02-01	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-02-04	Investing 40% of cash in VBMPX
+posting	VBMPX	48002
+posting	Vanguard:Cash	-48002
+entry	2013-02-04	Investing 60% of cash in RGAGX
+posting	RGAGX	71997
+posting	Vanguard:Cash	-71997
+entry	2013-02-04	Investing 40% of cash in VBMPX
+posting	VBMPX	24005
+posting	Vanguard:Cash	-24005
+entry	2013-02-04	Investing 60% of cash in RGAGX
+posting	RGAGX	36006
+posting	Vanguard:Cash	-36006
+entry	2013-02-15	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-02-18	Investing 40% of cash in VBMPX
+posting	VBMPX	47994
+posting	Vanguard:Cash	-47994
+entry	2013-02-18	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2013-02-18	Investing 40% of cash in VBMPX
+posting	VBMPX	24004
+posting	Vanguard:Cash	-24004
+entry	2013-02-18	Investing 60% of cash in RGAGX
+posting	RGAGX	36005
+posting	Vanguard:Cash	-36005
+entry	2013-03-01	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-03-04	Investing 40% of cash in VBMPX
+posting	VBMPX	47997
+posting	Vanguard:Cash	-47997
+entry	2013-03-04	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2013-03-04	Investing 40% of cash in VBMPX
+posting	VBMPX	23998
+posting	Vanguard:Cash	-23998
+entry	2013-03-04	Investing 60% of cash in RGAGX
+posting	RGAGX	35998
+posting	Vanguard:Cash	-35998
+entry	2013-03-15	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-03-18	Investing 40% of cash in VBMPX
+posting	VBMPX	48003
+posting	Vanguard:Cash	-48003
+entry	2013-03-18	Investing 60% of cash in RGAGX
+posting	RGAGX	72005
+posting	Vanguard:Cash	-72005
+entry	2013-03-18	Investing 40% of cash in VBMPX
+posting	VBMPX	23998
+posting	Vanguard:Cash	-23998
+entry	2013-03-18	Investing 60% of cash in RGAGX
+posting	RGAGX	36003
+posting	Vanguard:Cash	-36003
+entry	2013-03-29	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-04-01	Investing 40% of cash in VBMPX
+posting	VBMPX	48000
+posting	Vanguard:Cash	-48000
+entry	2013-04-01	Investing 60% of cash in RGAGX
+posting	RGAGX	71998
+posting	Vanguard:Cash	-71998
+entry	2013-04-01	Investing 40% of cash in VBMPX
+posting	VBMPX	23997
+posting	Vanguard:Cash	-23997
+entry	2013-04-01	Investing 60% of cash in RGAGX
+posting	RGAGX	35991
+posting	Vanguard:Cash	-35991
+entry	2013-04-12	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-04-15	Investing 40% of cash in VBMPX
+posting	VBMPX	48007
+posting	Vanguard:Cash	-48007
+entry	2013-04-15	Investing 60% of cash in RGAGX
+posting	RGAGX	72009
+posting	Vanguard:Cash	-72009
+entry	2013-04-15	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2013-04-15	Investing 60% of cash in RGAGX
+posting	RGAGX	35990
+posting	Vanguard:Cash	-35990
+entry	2013-04-26	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-04-29	Investing 40% of cash in VBMPX
+posting	VBMPX	48000
+posting	Vanguard:Cash	-48000
+entry	2013-04-29	Investing 60% of cash in RGAGX
+posting	RGAGX	71999
+posting	Vanguard:Cash	-71999
+entry	2013-04-29	Investing 40% of cash in VBMPX
+posting	VBMPX	24004
+posting	Vanguard:Cash	-24004
+entry	2013-04-29	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2013-05-10	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-05-13	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2013-05-13	Investing 60% of cash in RGAGX
+posting	RGAGX	71989
+posting	Vanguard:Cash	-71989
+entry	2013-05-13	Investing 40% of cash in VBMPX
+posting	VBMPX	24003
+posting	Vanguard:Cash	-24003
+entry	2013-05-13	Investing 60% of cash in RGAGX
+posting	RGAGX	36002
+posting	Vanguard:Cash	-36002
+entry	2013-05-24	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-05-27	Investing 40% of cash in VBMPX
+posting	VBMPX	48000
+posting	Vanguard:Cash	-48000
+entry	2013-05-27	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2013-05-27	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2013-05-27	Investing 60% of cash in RGAGX
+posting	RGAGX	35998
+posting	Vanguard:Cash	-35998
+entry	2013-06-07	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-06-10	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2013-06-10	Investing 60% of cash in RGAGX
+posting	RGAGX	72001
+posting	Vanguard:Cash	-72001
+entry	2013-06-10	Investing 40% of cash in VBMPX
+posting	VBMPX	24003
+posting	Vanguard:Cash	-24003
+entry	2013-06-10	Investing 60% of cash in RGAGX
+posting	RGAGX	36008
+posting	Vanguard:Cash	-36008
+entry	2013-06-21	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-06-24	Investing 40% of cash in VBMPX
+posting	VBMPX	47995
+posting	Vanguard:Cash	-47995
+entry	2013-06-24	Investing 60% of cash in RGAGX
+posting	RGAGX	71993
+posting	Vanguard:Cash	-71993
+entry	2013-06-24	Investing 40% of cash in VBMPX
+posting	VBMPX	24001
+posting	Vanguard:Cash	-24001
+entry	2013-06-24	Investing 60% of cash in RGAGX
+posting	RGAGX	36011
+posting	Vanguard:Cash	-36011
+entry	2013-07-05	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2013-07-08	Investing 40% of cash in VBMPX
+posting	VBMPX	48000
+posting	Vanguard:Cash	-48000
+entry	2013-07-08	Investing 60% of cash in RGAGX
+posting	RGAGX	72004
+posting	Vanguard:Cash	-72004
+entry	2013-07-08	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2013-07-08	Investing 60% of cash in RGAGX
+posting	RGAGX	36002
+posting	Vanguard:Cash	-36002
+entry	2013-07-19	Employer match for contribution
+posting	Vanguard:Cash	35000
+posting	Match401k	-35000
+entry	2013-07-22	Investing 40% of cash in VBMPX
+posting	VBMPX	27995
+posting	Vanguard:Cash	-27995
+entry	2013-07-22	Investing 60% of cash in RGAGX
+posting	RGAGX	41994
+posting	Vanguard:Cash	-41994
+entry	2013-07-22	Investing 40% of cash in VBMPX
+posting	VBMPX	14001
+posting	Vanguard:Cash	-14001
+entry	2013-07-22	Investing 60% of cash in RGAGX
+posting	RGAGX	20997
+posting	Vanguard:Cash	-20997
+entry	2014-01-03	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-01-06	Investing 40% of cash in VBMPX
+posting	VBMPX	47997
+posting	Vanguard:Cash	-47997
+entry	2014-01-06	Investing 60% of cash in RGAGX
+posting	RGAGX	71998
+posting	Vanguard:Cash	-71998
+entry	2014-01-06	Investing 40% of cash in VBMPX
+posting	VBMPX	24002
+posting	Vanguard:Cash	-24002
+entry	2014-01-06	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2014-01-17	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-01-20	Investing 40% of cash in VBMPX
+posting	VBMPX	47998
+posting	Vanguard:Cash	-47998
+entry	2014-01-20	Investing 60% of cash in RGAGX
+posting	RGAGX	71995
+posting	Vanguard:Cash	-71995
+entry	2014-01-20	Investing 40% of cash in VBMPX
+posting	VBMPX	23999
+posting	Vanguard:Cash	-23999
+entry	2014-01-20	Investing 60% of cash in RGAGX
+posting	RGAGX	36005
+posting	Vanguard:Cash	-36005
+entry	2014-01-31	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-02-03	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2014-02-03	Investing 60% of cash in RGAGX
+posting	RGAGX	72004
+posting	Vanguard:Cash	-72004
+entry	2014-02-03	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2014-02-03	Investing 60% of cash in RGAGX
+posting	RGAGX	35994
+posting	Vanguard:Cash	-35994
+entry	2014-02-14	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-02-17	Investing 40% of cash in VBMPX
+posting	VBMPX	48003
+posting	Vanguard:Cash	-48003
+entry	2014-02-17	Investing 60% of cash in RGAGX
+posting	RGAGX	72001
+posting	Vanguard:Cash	-72001
+entry	2014-02-17	Investing 40% of cash in VBMPX
+posting	VBMPX	23998
+posting	Vanguard:Cash	-23998
+entry	2014-02-17	Investing 60% of cash in RGAGX
+posting	RGAGX	36001
+posting	Vanguard:Cash	-36001
+entry	2014-02-28	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-03-03	Investing 40% of cash in VBMPX
+posting	VBMPX	48004
+posting	Vanguard:Cash	-48004
+entry	2014-03-03	Investing 60% of cash in RGAGX
+posting	RGAGX	72000
+posting	Vanguard:Cash	-72000
+entry	2014-03-03	Investing 40% of cash in VBMPX
+posting	VBMPX	24002
+posting	Vanguard:Cash	-24002
+entry	2014-03-03	Investing 60% of cash in RGAGX
+posting	RGAGX	36000
+posting	Vanguard:Cash	-36000
+entry	2014-03-14	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-03-17	Investing 40% of cash in VBMPX
+posting	VBMPX	47995
+posting	Vanguard:Cash	-47995
+entry	2014-03-17	Investing 60% of cash in RGAGX
+posting	RGAGX	72004
+posting	Vanguard:Cash	-72004
+entry	2014-03-17	Investing 40% of cash in VBMPX
+posting	VBMPX	24001
+posting	Vanguard:Cash	-24001
+entry	2014-03-17	Investing 60% of cash in RGAGX
+posting	RGAGX	36002
+posting	Vanguard:Cash	-36002
+entry	2014-03-28	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-03-31	Investing 40% of cash in VBMPX
+posting	VBMPX	47997
+posting	Vanguard:Cash	-47997
+entry	2014-03-31	Investing 60% of cash in RGAGX
+posting	RGAGX	71997
+posting	Vanguard:Cash	-71997
+entry	2014-03-31	Investing 40% of cash in VBMPX
+posting	VBMPX	24002
+posting	Vanguard:Cash	-24002
+entry	2014-03-31	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2014-04-11	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-04-14	Investing 40% of cash in VBMPX
+posting	VBMPX	47995
+posting	Vanguard:Cash	-47995
+entry	2014-04-14	Investing 60% of cash in RGAGX
+posting	RGAGX	71992
+posting	Vanguard:Cash	-71992
+entry	2014-04-14	Investing 40% of cash in VBMPX
+posting	VBMPX	24001
+posting	Vanguard:Cash	-24001
+entry	2014-04-14	Investing 60% of cash in RGAGX
+posting	RGAGX	36004
+posting	Vanguard:Cash	-36004
+entry	2014-04-25	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-04-28	Investing 40% of cash in VBMPX
+posting	VBMPX	47998
+posting	Vanguard:Cash	-47998
+entry	2014-04-28	Investing 60% of cash in RGAGX
+posting	RGAGX	72003
+posting	Vanguard:Cash	-72003
+entry	2014-04-28	Investing 40% of cash in VBMPX
+posting	VBMPX	23995
+posting	Vanguard:Cash	-23995
+entry	2014-04-28	Investing 60% of cash in RGAGX
+posting	RGAGX	36001
+posting	Vanguard:Cash	-36001
+entry	2014-05-09	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-05-12	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2014-05-12	Investing 60% of cash in RGAGX
+posting	RGAGX	71993
+posting	Vanguard:Cash	-71993
+entry	2014-05-12	Investing 40% of cash in VBMPX
+posting	VBMPX	24003
+posting	Vanguard:Cash	-24003
+entry	2014-05-12	Investing 60% of cash in RGAGX
+posting	RGAGX	36005
+posting	Vanguard:Cash	-36005
+entry	2014-05-23	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-05-26	Investing 40% of cash in VBMPX
+posting	VBMPX	48000
+posting	Vanguard:Cash	-48000
+entry	2014-05-26	Investing 60% of cash in RGAGX
+posting	RGAGX	72005
+posting	Vanguard:Cash	-72005
+entry	2014-05-26	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2014-05-26	Investing 60% of cash in RGAGX
+posting	RGAGX	35994
+posting	Vanguard:Cash	-35994
+entry	2014-06-06	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-06-09	Investing 40% of cash in VBMPX
+posting	VBMPX	48003
+posting	Vanguard:Cash	-48003
+entry	2014-06-09	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2014-06-09	Investing 40% of cash in VBMPX
+posting	VBMPX	23998
+posting	Vanguard:Cash	-23998
+entry	2014-06-09	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2014-06-20	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-06-23	Investing 40% of cash in VBMPX
+posting	VBMPX	48003
+posting	Vanguard:Cash	-48003
+entry	2014-06-23	Investing 60% of cash in RGAGX
+posting	RGAGX	72003
+posting	Vanguard:Cash	-72003
+entry	2014-06-23	Investing 40% of cash in VBMPX
+posting	VBMPX	23997
+posting	Vanguard:Cash	-23997
+entry	2014-06-23	Investing 60% of cash in RGAGX
+posting	RGAGX	35993
+posting	Vanguard:Cash	-35993
+entry	2014-07-04	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2014-07-07	Investing 40% of cash in VBMPX
+posting	VBMPX	48004
+posting	Vanguard:Cash	-48004
+entry	2014-07-07	Investing 60% of cash in RGAGX
+posting	RGAGX	72006
+posting	Vanguard:Cash	-72006
+entry	2014-07-07	Investing 40% of cash in VBMPX
+posting	VBMPX	23994
+posting	Vanguard:Cash	-23994
+entry	2014-07-07	Investing 60% of cash in RGAGX
+posting	RGAGX	36003
+posting	Vanguard:Cash	-36003
+entry	2014-07-18	Employer match for contribution
+posting	Vanguard:Cash	35000
+posting	Match401k	-35000
+entry	2014-07-21	Investing 40% of cash in VBMPX
+posting	VBMPX	27997
+posting	Vanguard:Cash	-27997
+entry	2014-07-21	Investing 60% of cash in RGAGX
+posting	RGAGX	42003
+posting	Vanguard:Cash	-42003
+entry	2014-07-21	Investing 40% of cash in VBMPX
+posting	VBMPX	13995
+posting	Vanguard:Cash	-13995
+entry	2014-07-21	Investing 60% of cash in RGAGX
+posting	RGAGX	21001
+posting	Vanguard:Cash	-21001
+entry	2015-01-02	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-01-05	Investing 40% of cash in VBMPX
+posting	VBMPX	48001
+posting	Vanguard:Cash	-48001
+entry	2015-01-05	Investing 60% of cash in RGAGX
+posting	RGAGX	72001
+posting	Vanguard:Cash	-72001
+entry	2015-01-05	Investing 40% of cash in VBMPX
+posting	VBMPX	24001
+posting	Vanguard:Cash	-24001
+entry	2015-01-05	Investing 60% of cash in RGAGX
+posting	RGAGX	36001
+posting	Vanguard:Cash	-36001
+entry	2015-01-16	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-01-19	Investing 40% of cash in VBMPX
+posting	VBMPX	48002
+posting	Vanguard:Cash	-48002
+entry	2015-01-19	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2015-01-19	Investing 40% of cash in VBMPX
+posting	VBMPX	23997
+posting	Vanguard:Cash	-23997
+entry	2015-01-19	Investing 60% of cash in RGAGX
+posting	RGAGX	35998
+posting	Vanguard:Cash	-35998
+entry	2015-01-30	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-02-02	Investing 40% of cash in VBMPX
+posting	VBMPX	47998
+posting	Vanguard:Cash	-47998
+entry	2015-02-02	Investing 60% of cash in RGAGX
+posting	RGAGX	72005
+posting	Vanguard:Cash	-72005
+entry	2015-02-02	Investing 40% of cash in VBMPX
+posting	VBMPX	23999
+posting	Vanguard:Cash	-23999
+entry	2015-02-02	Investing 60% of cash in RGAGX
+posting	RGAGX	35993
+posting	Vanguard:Cash	-35993
+entry	2015-02-13	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-02-16	Investing 40% of cash in VBMPX
+posting	VBMPX	48006
+posting	Vanguard:Cash	-48006
+entry	2015-02-16	Investing 60% of cash in RGAGX
+posting	RGAGX	72002
+posting	Vanguard:Cash	-72002
+entry	2015-02-16	Investing 40% of cash in VBMPX
+posting	VBMPX	23999
+posting	Vanguard:Cash	-23999
+entry	2015-02-16	Investing 60% of cash in RGAGX
+posting	RGAGX	35991
+posting	Vanguard:Cash	-35991
+entry	2015-02-27	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-03-02	Investing 40% of cash in VBMPX
+posting	VBMPX	48007
+posting	Vanguard:Cash	-48007
+entry	2015-03-02	Investing 60% of cash in RGAGX
+posting	RGAGX	72008
+posting	Vanguard:Cash	-72008
+entry	2015-03-02	Investing 40% of cash in VBMPX
+posting	VBMPX	23995
+posting	Vanguard:Cash	-23995
+entry	2015-03-02	Investing 60% of cash in RGAGX
+posting	RGAGX	35994
+posting	Vanguard:Cash	-35994
+entry	2015-03-13	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-03-16	Investing 40% of cash in VBMPX
+posting	VBMPX	48003
+posting	Vanguard:Cash	-48003
+entry	2015-03-16	Investing 60% of cash in RGAGX
+posting	RGAGX	72008
+posting	Vanguard:Cash	-72008
+entry	2015-03-16	Investing 40% of cash in VBMPX
+posting	VBMPX	23997
+posting	Vanguard:Cash	-23997
+entry	2015-03-16	Investing 60% of cash in RGAGX
+posting	RGAGX	36004
+posting	Vanguard:Cash	-36004
+entry	2015-03-27	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-03-30	Investing 40% of cash in VBMPX
+posting	VBMPX	48000
+posting	Vanguard:Cash	-48000
+entry	2015-03-30	Investing 60% of cash in RGAGX
+posting	RGAGX	71992
+posting	Vanguard:Cash	-71992
+entry	2015-03-30	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2015-03-30	Investing 60% of cash in RGAGX
+posting	RGAGX	36006
+posting	Vanguard:Cash	-36006
+entry	2015-04-10	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-04-13	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2015-04-13	Investing 60% of cash in RGAGX
+posting	RGAGX	72004
+posting	Vanguard:Cash	-72004
+entry	2015-04-13	Investing 40% of cash in VBMPX
+posting	VBMPX	24000
+posting	Vanguard:Cash	-24000
+entry	2015-04-13	Investing 60% of cash in RGAGX
+posting	RGAGX	35992
+posting	Vanguard:Cash	-35992
+entry	2015-04-24	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-04-27	Investing 40% of cash in VBMPX
+posting	VBMPX	47996
+posting	Vanguard:Cash	-47996
+entry	2015-04-27	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2015-04-27	Investing 40% of cash in VBMPX
+posting	VBMPX	24002
+posting	Vanguard:Cash	-24002
+entry	2015-04-27	Investing 60% of cash in RGAGX
+posting	RGAGX	36008
+posting	Vanguard:Cash	-36008
+entry	2015-05-08	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-05-11	Investing 40% of cash in VBMPX
+posting	VBMPX	47997
+posting	Vanguard:Cash	-47997
+entry	2015-05-11	Investing 60% of cash in RGAGX
+posting	RGAGX	71994
+posting	Vanguard:Cash	-71994
+entry	2015-05-11	Investing 40% of cash in VBMPX
+posting	VBMPX	24007
+posting	Vanguard:Cash	-24007
+entry	2015-05-11	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2015-05-22	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-05-25	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2015-05-25	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2015-05-25	Investing 40% of cash in VBMPX
+posting	VBMPX	23995
+posting	Vanguard:Cash	-23995
+entry	2015-05-25	Investing 60% of cash in RGAGX
+posting	RGAGX	35998
+posting	Vanguard:Cash	-35998
+entry	2015-06-05	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-06-08	Investing 40% of cash in VBMPX
+posting	VBMPX	48002
+posting	Vanguard:Cash	-48002
+entry	2015-06-08	Investing 60% of cash in RGAGX
+posting	RGAGX	71996
+posting	Vanguard:Cash	-71996
+entry	2015-06-08	Investing 40% of cash in VBMPX
+posting	VBMPX	24005
+posting	Vanguard:Cash	-24005
+entry	2015-06-08	Investing 60% of cash in RGAGX
+posting	RGAGX	35998
+posting	Vanguard:Cash	-35998
+entry	2015-06-19	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-06-22	Investing 40% of cash in VBMPX
+posting	VBMPX	48005
+posting	Vanguard:Cash	-48005
+entry	2015-06-22	Investing 60% of cash in RGAGX
+posting	RGAGX	71993
+posting	Vanguard:Cash	-71993
+entry	2015-06-22	Investing 40% of cash in VBMPX
+posting	VBMPX	24006
+posting	Vanguard:Cash	-24006
+entry	2015-06-22	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2015-07-03	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-07-06	Investing 40% of cash in VBMPX
+posting	VBMPX	47993
+posting	Vanguard:Cash	-47993
+entry	2015-07-06	Investing 60% of cash in RGAGX
+posting	RGAGX	71992
+posting	Vanguard:Cash	-71992
+entry	2015-07-06	Investing 40% of cash in VBMPX
+posting	VBMPX	24001
+posting	Vanguard:Cash	-24001
+entry	2015-07-06	Investing 60% of cash in RGAGX
+posting	RGAGX	36007
+posting	Vanguard:Cash	-36007
+entry	2015-07-17	Employer match for contribution
+posting	Vanguard:Cash	60000
+posting	Match401k	-60000
+entry	2015-07-20	Investing 40% of cash in VBMPX
+posting	VBMPX	47999
+posting	Vanguard:Cash	-47999
+entry	2015-07-20	Investing 60% of cash in RGAGX
+posting	RGAGX	72009
+posting	Vanguard:Cash	-72009
+entry	2015-07-20	Investing 40% of cash in VBMPX
+posting	VBMPX	23999
+posting	Vanguard:Cash	-23999
+entry	2015-07-20	Investing 60% of cash in RGAGX
+posting	RGAGX	36005
+posting	Vanguard:Cash	-36005
+entry	2013-01-03	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-01-03	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-01-17	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-01-17	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-01-31	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-01-31	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-02-14	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-02-14	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-02-28	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-02-28	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-03-14	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-03-14	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-03-28	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-03-28	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-04-11	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-04-11	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-04-25	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-04-25	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-05-09	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-05-09	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-05-23	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-05-23	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-06-06	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-06-06	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-06-20	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-06-20	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-07-04	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-07-04	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-07-18	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-07-18	Hoogle - Payroll
+posting	Checking	185060
+posting	Vanguard:Cash	70000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-08-01	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-08-01	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-08-15	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-08-15	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-08-29	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-08-29	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-09-12	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-09-12	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-09-26	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-09-26	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-10-10	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-10-10	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-10-24	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-10-24	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-11-07	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-11-07	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-11-21	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-11-21	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	28154
+posting	Clearing	-463970
+entry	2013-12-05	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-12-05	Hoogle - Payroll
+posting	Checking	258906
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Y2013:US:SocSec	24308
+posting	Clearing	-463970
+entry	2013-12-19	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2013-12-19	Hoogle - Payroll
+posting	Checking	283214
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2013:US:Medicare	10662
+posting	Y2013:US:Federal	106292
+posting	Y2013:US:State	36508
+posting	Y2013:US:CityNYC	17492
+posting	Y2013:US:SDI	112
+posting	Clearing	-463970
+entry	2014-01-02	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-01-02	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-01-16	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-01-16	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-01-30	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-01-30	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-02-13	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-02-13	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-02-27	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-02-27	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-03-13	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-03-13	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-03-27	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-03-27	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-04-10	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-04-10	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-04-24	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-04-24	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-05-08	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-05-08	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-05-22	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-05-22	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-06-05	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-06-05	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-06-19	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-06-19	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-07-03	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-07-03	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-07-17	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-07-17	Hoogle - Payroll
+posting	Checking	185060
+posting	Vanguard:Cash	70000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-07-31	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-07-31	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-08-14	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-08-14	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-08-28	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-08-28	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-09-11	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-09-11	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-09-25	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-09-25	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-10-09	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-10-09	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-10-23	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-10-23	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-11-06	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-11-06	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-11-20	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-11-20	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	28154
+posting	Clearing	-463970
+entry	2014-12-04	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-12-04	Hoogle - Payroll
+posting	Checking	258906
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Y2014:US:SocSec	24308
+posting	Clearing	-463970
+entry	2014-12-18	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2014-12-18	Hoogle - Payroll
+posting	Checking	283214
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2014:US:Medicare	10662
+posting	Y2014:US:Federal	106292
+posting	Y2014:US:State	36508
+posting	Y2014:US:CityNYC	17492
+posting	Y2014:US:SDI	112
+posting	Clearing	-463970
+entry	2015-01-01	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-01-01	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-01-15	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-01-15	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-01-29	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-01-29	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-02-12	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-02-12	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-02-26	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-02-26	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-03-12	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-03-12	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-03-26	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-03-26	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-04-09	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-04-09	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-04-23	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-04-23	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-05-07	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-05-07	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-05-21	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-05-21	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-06-04	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-06-04	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-06-18	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-06-18	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-07-02	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-07-02	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-07-16	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-07-16	Hoogle - Payroll
+posting	Checking	135060
+posting	Vanguard:Cash	120000
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-07-30	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-07-30	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-08-13	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-08-13	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-08-27	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-08-27	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-09-10	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-09-10	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-09-24	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-09-24	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-10-08	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-10-08	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-10-22	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-10-22	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-11-05	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-11-05	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-11-19	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-11-19	Hoogle - Payroll
+posting	Checking	255060
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	28154
+posting	Clearing	-463970
+entry	2015-12-03	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-12-03	Hoogle - Payroll
+posting	Checking	258906
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Y2015:US:SocSec	24308
+posting	Clearing	-463970
+entry	2015-12-17	Hoogle - Payroll
+posting	Salary	-461538
+posting	Hoogle:GroupTermLife	-2432
+posting	Clearing	463970
+entry	2015-12-17	Hoogle - Payroll
+posting	Checking	283214
+posting	Life:GroupTermLife	2432
+posting	Dental:Insurance	290
+posting	Medical:Insurance	2738
+posting	Vision:Insurance	4230
+posting	Y2015:US:Medicare	10662
+posting	Y2015:US:Federal	106292
+posting	Y2015:US:State	36508
+posting	Y2015:US:CityNYC	17492
+posting	Y2015:US:SDI	112
+posting	Clearing	-463970
+entry	2014-03-25	Filing taxes for 2013
+posting	Y2013:US:Federal	42568
+posting	Y2013:US:State	37664
+posting	AccountsPayable	-80232
+entry	2014-03-25	FEDERAL TAXPYMT
+posting	Checking	-42568
+posting	AccountsPayable	42568
+entry	2014-03-28	STATE TAX & FINANC PYMT
+posting	Checking	-37664
+posting	AccountsPayable	37664
+entry	2015-03-20	Filing taxes for 2014
+posting	Y2014:US:Federal	45336
+posting	Y2014:US:State	37837
+posting	AccountsPayable	-83173
+entry	2015-03-20	STATE TAX & FINANC PYMT
+posting	Checking	-37837
+posting	AccountsPayable	37837
+entry	2015-03-22	FEDERAL TAXPYMT
+posting	Checking	-45336
+posting	AccountsPayable	45336

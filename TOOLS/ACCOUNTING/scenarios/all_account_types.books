@@ -1,0 +1,53 @@
+# scenarios/all_account_types.books, read from gnucash_examples/all_account_types.gnucash.
+title	GnuCash: all_account_types
+about	Read from the GnuCash file all_account_types: 13 accounts, 12 transactions.
+currency	EUR
+account	550000	asset	ASSET
+account	550010	asset	BANK
+account	550020	asset	CASH
+account	480000	liability	CREDIT
+account	100000	equity	EQUITY
+account	600000	expense	EXPENSE
+account	700000	revenue	INCOME
+account	550030	asset	Imbalance-EUR
+account	480010	liability	LIABILITY
+account	550040	asset	MUTUAL
+account	480020	liability	PAYABLE
+account	550050	asset	RECEIVABLE
+account	550060	asset	STOCK
+entry	2014-12-24	
+posting	EQUITY	-50000
+posting	ASSET	50000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	BANK	5000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	CASH	5000
+entry	2014-12-24	
+posting	ASSET	5000
+posting	CREDIT	-5000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	EXPENSE	5000
+entry	2014-12-24	
+posting	ASSET	5000
+posting	INCOME	-5000
+entry	2014-12-24	
+posting	ASSET	5000
+posting	LIABILITY	-5000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	MUTUAL	5000
+entry	2014-12-24	
+posting	ASSET	5000
+posting	PAYABLE	-5000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	RECEIVABLE	5000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	STOCK	5000
+entry	2014-12-24	
+posting	ASSET	-5000
+posting	Imbalance-EUR	5000
