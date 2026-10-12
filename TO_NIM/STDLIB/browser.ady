@@ -96,7 +96,7 @@ def press(within: Element_T, css: str):
 # ---- A click, as the script is told of it ----
 
 # What a click is to a script: whether shift was held, and the element clicked. `on(css)`
-# is the element CSS matches that the click was on or inside (nil when none), and `stop()`
+# is the element CSS matches that the click was on or inside (None when none), and `stop()`
 # keeps the click from going any further: nothing else on the page (htmx) hears of it.
 type Click is record:
     shift:  bool
@@ -106,8 +106,11 @@ type Click is record:
 def click_of(e: Event) -> Click:
     return Click(MouseEvent(e).shiftKey, e.target, e)
 
-def on(c: Click, css: str) -> Element_T:
-    return c.target.closest(cstring(css))
+def on(c: Click, css: str) -> ?Element_T:
+    let found: Element_T = c.target.closest(cstring(css))
+    if found == nil:
+        return None
+    return found
 
 def stop(c: Click):
     c.event.stopPropagation()

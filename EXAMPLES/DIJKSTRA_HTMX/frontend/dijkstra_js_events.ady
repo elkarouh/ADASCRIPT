@@ -115,13 +115,13 @@ def clear_selection():
 # Select the node or edge under C, in place of what was selected (nothing, on the empty space).
 def select_at(c: Click):
     clear_selection()
-    let node: Element_T = on(c, "g.node")
-    let edge: Element_T = on(c, "g[data_from]")
-    if node != nil:
+    let node: ?Element_T = on(c, "g.node")
+    let edge: ?Element_T = on(c, "g[data_from]")
+    if node is not None:
         selected_kind = "node"
         selected_from = node.data_name
         mark(node, true)
-    elif edge != nil:
+    elif edge is not None:
         selected_kind = "edge"
         selected_from = edge.data_from
         selected_to = edge.data_to
@@ -132,10 +132,10 @@ def select_at(c: Click):
 # edge it selects the edge; on the empty space it selects nothing. A click outside the drawing
 # (the toolbar, a menu) is none of this.
 def clicked(c: Click):
-    if on(c, "svg.graph") == nil:
+    if on(c, "svg.graph") is None:
         return
-    let node: Element_T = on(c, "g.node")
-    if node != nil:
+    let node: ?Element_T = on(c, "g.node")
+    if node is not None:
         clear_selection()
         choose(node.data_name, has_class(node, "start") or has_class(node, "goal"))
         return
@@ -198,11 +198,11 @@ def choose(name: str, unpick: bool):
 
 def double_click(e: Event_T):
     let c: Click = click_of(e)
-    let edge: Element_T = on(c, "g[data_from]")
-    if edge != nil:
+    let edge: ?Element_T = on(c, "g[data_from]")
+    if edge is not None:
         change_cost(edge)
         return
-    if on(c, "svg.graph") == nil or on(c, "g.node") != nil:
+    if on(c, "svg.graph") is None or on(c, "g.node") is not None:
         return                          # outside the drawing, or on a node (which has no double-click)
     let name: str = ask_name()
     if name == "":
@@ -220,14 +220,14 @@ def hide_menus():
 
 def context(e: Event_T):
     let c: Click = click_of(e)
-    if on(c, "svg.graph") == nil:
+    if on(c, "svg.graph") is None:
         return                          # the rest of the page keeps the browser's own menu
     cancel(c)
     hide_menus()
-    if on(c, "g.node") != nil:
+    if on(c, "g.node") is not None:
         select_at(c)
         show_at(page.find("#menu-node"), c)
-    elif on(c, "g[data_from]") != nil:
+    elif on(c, "g[data_from]") is not None:
         select_at(c)
         show_at(page.find("#menu-edge"), c)
     else:
@@ -239,8 +239,8 @@ def context(e: Event_T):
 
 def tool_click(e: Event_T):
     let c: Click = click_of(e)
-    let b: Element_T = on(c, "button[data_tool]")
-    if b == nil:
+    let b: ?Element_T = on(c, "button[data_tool]")
+    if b is None:
         hide_menus()                    # a click elsewhere closes the menus
         return
     hide_menus()
@@ -276,10 +276,10 @@ var swallow: bool = false               # the click after a wire is let go: not 
 
 def link_down(e: Event_T):
     let c: Click = click_of(e)
-    if not left(c) or on(c, "circle.port") == nil:
+    if not left(c) or on(c, "circle.port") is None:
         return
-    let node: Element_T = on(c, "g.node")
-    if node == nil:
+    let node: ?Element_T = on(c, "g.node")
+    if node is None:
         return
     stop(c)
     linking = node.data_name
@@ -300,8 +300,10 @@ def link_up(e: Event_T):
     linking = ""
     page.find("path#wire").set_attr("visibility", "hidden")
     swallow = true
-    let target: Element_T = on(click_of(e), "g.node")
-    if target == nil or target.data_name == from_name:
+    let target: ?Element_T = on(click_of(e), "g.node")
+    if target is None:
+        return
+    if target.data_name == from_name:
         return
     let cost: str = ask(f"Cost of the edge {from_name} — {target.data_name}?", "1")
     if cost == "":
