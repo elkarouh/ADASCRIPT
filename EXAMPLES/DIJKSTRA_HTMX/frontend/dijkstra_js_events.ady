@@ -6,7 +6,8 @@ Every other event is declared in the HTML (hx-* attributes, dijkstra_gui.ady) an
 on the server (dijkstra_events.ady); only what must follow the mouse, select, or ask the
 reader a question is here. The gestures, the usual ones of a diagram:
 
-    click a node or an edge      selects it (it is outlined); the space deselects
+    click a node                 chooses the route: the start, then the goal
+    click an edge                selects it (it is outlined); the space deselects
     drag a node                  moves it; its edges follow, and where it is let go is kept
     drag from a node's dot       draws a wire to another node: the edge, after its cost is asked
     double-click the space       a new node there (asks the name)
@@ -15,7 +16,7 @@ reader a question is here. The gestures, the usual ones of a diagram:
     Delete, Backspace            removes the selection (asks first)
     Escape                       closes the menu
 
-The toolbar's Start here and Go here act on the selected node. A change the server must keep
+A change the server must keep
 is written into the hidden form #gesture, whose button then sends it (see dijkstra_gui.ady).
 
 The drag itself is the standard library's svg_drag; the page (finding elements, forms, menus,
@@ -126,10 +127,16 @@ def select_at(c: Click):
         selected_to = edge.data_to
         mark(edge, true)
 
-# A click that svg_drag did not take for a drag: it selects. A click outside the drawing
-# (the toolbar, a menu, the text) selects nothing.
+# A click that svg_drag did not take for a drag. On a node it chooses the route (the server
+# draws the page again, so nothing stays selected); on an edge it selects the edge; on the empty
+# space it selects nothing. A click outside the drawing (the toolbar, a menu) is none of this.
 def clicked(c: Click):
     if on(c, "svg.graph") == nil:
+        return
+    let node: Element_T = on(c, "g.node")
+    if node != nil:
+        clear_selection()
+        choose(node.data_name)
         return
     select_at(c)
 
@@ -178,11 +185,10 @@ def remove_selected():
             form.fill("b", selected_to)
             page.press("#drop_edge")
 
-# Make NAME the start or the goal (ROLE), as the server draws the route from it.
-def choose(name: str, role: str):
+# Choose NAME for the route: the start, then the goal (the server decides which, and draws the way).
+def choose(name: str):
     let form: Element_T = gesture()
     form.fill("pick", name)
-    form.fill("role", role)
     page.press("#pick")
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
@@ -244,9 +250,6 @@ def tool_click(e: Event_T):
         let name: str = ask_name()
         if name != "":
             send_node(name, f"{menu_at.x:.0f}", f"{menu_at.y:.0f}")
-    elif tool == "start" or tool == "goal":
-        if selected_kind == "node":
-            choose(selected_from, tool)
     elif tool == "cost":
         if selected_kind == "edge":
             change_cost(edge_between(selected_from, selected_to))

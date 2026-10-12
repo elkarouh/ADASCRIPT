@@ -6,8 +6,8 @@ and of what the reader has picked: the start and the goal, the fields of the for
 `#state`. Every request sends that form along and gets the whole page back, which
 htmx swaps in. Reading is GET /all. The drawing's gestures and the menus (dijkstra_js_events.ady)
 fill in the hidden form `#gesture` and press one of its buttons, which sends POST, PUT or
-DELETE to /nodes or /edges (see server.ady). `pick` and `role` (start or goal) say which node
-the reader chose for the start or the goal; `act` is clear.
+DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the start or the
+goal; `act` is clear.
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
@@ -19,8 +19,7 @@ const HEIGHT: float = 380.0
 type Params is record:
     start: str
     goal:  str
-    pick:  str                      # the node chosen
-    role:  str                      # start or goal: what it is chosen for
+    pick:  str                      # the node clicked
     act:   str                      # clear
 
 # The value of KEY in a query or a form body ("a=1&b=2"), or "".
@@ -32,7 +31,7 @@ def field_of(text: str, key: str) -> str:
     return ""
 
 def params_of(text: str) -> Params:
-    return Params(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "role"), field_of(text, "act"))
+    return Params(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
 
 # Where node NAME is drawn.
 def spot(net: Network, name: str) -> []float:
@@ -81,8 +80,6 @@ def menus_html() -> Html:
     html:
         div id="menus":
             div id="menu-node" class="menu":
-                button type="button" data_tool="start": "Start here"
-                button type="button" data_tool="goal": "Go here"
                 button type="button" class="danger" data_tool="delete-node": "Delete node"
             div id="menu-edge" class="menu":
                 button type="button" data_tool="cost": "Change cost…"
@@ -100,17 +97,16 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
         p.start = ""
     if p.goal not in names:
         p.goal = ""
-    if p.pick != "" and p.pick in names:    # the node chosen with the toolbar or a menu
-        if p.role == "start":
+    if p.pick != "" and p.pick in names:    # a node clicked: the start, then the goal, then the start again
+        if p.start == "" or p.goal != "":
             p.start = p.pick
-            if p.goal == p.pick:
-                p.goal = ""
-        elif p.role == "goal" and p.start != "" and p.pick != p.start:
+            p.goal = ""
+        elif p.pick != p.start:
             p.goal = p.pick
     let found: (float, []str) = shortest_route[str](build_graph(net), p.start, p.goal)
     let way: []str = found[1]
-    let said: str = ("Select a node, then Start here." if p.start == "" else
-                     f"From {p.start}: select a node, then Go here." if p.goal == "" else
+    let said: str = ("Click a node to start from." if p.start == "" else
+                     f"From {p.start}: click a node to go to." if p.goal == "" else
                      f"No way from {p.start} to {p.goal}." if len(way) == 0 else
                      f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {found[0]:.0f}.")
     let clear_vals: str = "{\"act\": \"clear\"}"
@@ -135,7 +131,6 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 input type="hidden" name="x" value=""
                 input type="hidden" name="y" value=""
                 input type="hidden" name="pick" value=""
-                input type="hidden" name="role" value=""
                 button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
                 button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
                 button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
@@ -144,8 +139,6 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
             div class="toolbar":
                 button type="button" data_tool="add": "New node"
-                button type="button" data_tool="start": "Start here"
-                button type="button" data_tool="goal": "Go here"
                 button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear the way"
                 button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
             p class=said_css: said
@@ -157,7 +150,7 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 for n in net.nodes:
                     + to_html(n, ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
-            p class="hint": "Select a node or an edge to act on it; right-click for the menu. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Delete removes the selection."
+            p class="hint": "Click a node to start from, then one to go to. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
             + menus_html()
 
 const STYLE: str = """

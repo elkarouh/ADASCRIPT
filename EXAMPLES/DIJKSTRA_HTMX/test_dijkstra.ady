@@ -27,10 +27,10 @@ assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edge
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
 keep_in("")
-assert "Select a node, then Start here." in answer("GET", "/all", "")
-assert "From A: select a node, then Go here." in answer("GET", "/all", "pick=A&role=start")
+assert "Click a node to start from." in answer("GET", "/all", "")
+assert "click a node to go to." in answer("GET", "/all", "start=A&pick=A")
 assert "Shortest way from A to E: A → C → F → E, cost 20." in answer("GET", "/all", "start=A&goal=E")
-assert "name=\"start\" value=\"C\"" in answer("GET", "/all", "start=A&goal=B&pick=C&role=start")    # chosen to start again
+assert "name=\"start\" value=\"C\"" in answer("GET", "/all", "start=A&goal=B&pick=C")    # a third click starts again
 assert "data-hx-get=\"/all\"" in answer("GET", "/all", "")
 assert answer("GET", "/nowhere", "") == ""
 
@@ -45,7 +45,7 @@ assert "A → H → E, cost 2." in answer("POST", "/edges", "start=A&goal=E&a=H&
 let moved: str = answer("PUT", "/nodes", "name=H&x=300&y=100")
 assert "data_x=\"300\"" in moved or "data-x=\"300\"" in moved
 assert "A → F → E, cost 23" in answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
-assert "Select a node, then Start here." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")   # the start went
+assert "Click a node to start from." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")   # the start went
 assert "A → C → F → E, cost 20" in answer("POST", "/reset", "start=A&goal=E")
 # the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
 let placed: str = answer("POST", "/nodes", "name=K&x=120&y=200")
