@@ -54,4 +54,5 @@ assert "data_x=\"120\"" in placed or "data-x=\"120\"" in placed
 assert "There is a node K already." in answer("POST", "/nodes", "name=K&x=5&y=5")
 assert "id=\"gesture\"" in answer("GET", "/all", "") and "id=\"wire\"" in answer("GET", "/all", "")
 assert "id=\"menu-node\"" in answer("GET", "/all", "") and "data_tool=\"delete-node\"" in answer("GET", "/all", "")
+assert "<pre id=\"network\">node A\n" in answer("GET", "/all", "") and "at A 60 190\n" in answer("GET", "/all", "")   # what the browser builds its NetworkView from
 print "dijkstra: all checks passed"

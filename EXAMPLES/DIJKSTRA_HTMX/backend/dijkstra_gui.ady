@@ -11,7 +11,8 @@ goal; `act` is unpick (a chosen node clicked again).
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network_T, Node_T, build_graph, names_of, uses
+from backend/dijkstra_model import Edge_T, Network_T, Node_T, build_graph, names_of, text_of, uses
+from backend/dijkstra_layout import Layout, Place_T
 
 const WIDTH: float = 580.0
 const HEIGHT: float = 380.0
@@ -32,53 +33,6 @@ def field_of(text: str, key: str) -> str:
 
 def params_of(text: str) -> Params_T:
     return Params_T(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
-
-# Where a node is drawn: its centre in the drawing. The model does not know this; the GUI does.
-type Place_T is record:
-    x: float
-    y: float
-
-# The places the sample network is drawn at, by node name.
-def sample_layout() -> {str}Place_T:
-    return {"A": Place_T(60.0, 190.0), "B": Place_T(200.0, 60.0), "C": Place_T(200.0, 190.0),
-            "D": Place_T(380.0, 60.0), "E": Place_T(520.0, 190.0), "F": Place_T(330.0, 320.0)}
-
-# The place of the K-th node of a network, when it has none yet: along the bottom, left to right,
-# then again a row up.
-def new_spot(k: int) -> Place_T:
-    return Place_T(40.0 + float((k * 70) % 500), HEIGHT - 30.0 - float((k * 70) // 500 % 4) * 60.0)
-
-# Where node NAME is drawn: its place in LAYOUT, or a new spot if it has none yet.
-def place_of(layout: {str}Place_T, net: Network_T, name: str) -> Place_T:
-    if name in layout:
-        return layout[name]
-    for i in range(len(net.nodes)):
-        if net.nodes[i].name == name:
-            return new_spot(i)
-    return Place_T(0.0, 0.0)
-
-# The places as text, "at A 60 190", a line a node that has one; nodes that are gone are left out.
-def layout_text(net: Network_T, layout: {str}Place_T) -> str:
-    var lines: []str = []
-    for n in net.nodes:
-        if n.name in layout:
-            let p: Place_T = layout[n.name]
-            lines.append(f"at {n.name} {p.x:.0f} {p.y:.0f}")
-    return "\n".join(lines) + "\n"
-
-def layout_of(text: str) -> {str}Place_T:
-    var layout: {str}Place_T = {:}
-    for line in text.split("\n"):
-        let w: []str = line.split()
-        if len(w) == 4 and w[0] == "at":
-            let x: float | !ParseFailure_T = parse_float(w[2])
-            let y: float | !ParseFailure_T = parse_float(w[3])
-            if x is ParseFailure_T:
-                continue
-            if y is ParseFailure_T:
-                continue
-            layout[w[1]] = Place_T(x, y)
-    return layout
 
 # ---- the drawing ----
 
@@ -120,7 +74,7 @@ def menus_html() -> Html:
             div id="menu-space" class="menu":
                 button type="button" data_tool="add-here": "New node here"
 
-def all_html(net: Network_T, layout: {str}Place_T, p0: Params_T, problem: str) -> Html:
+def all_html(net: Network_T, layout: Layout, p0: Params_T, problem: str) -> Html:
     var p: Params_T = p0
     let names: []str = names_of(net)
     if p.start not in names:            # deleted since
@@ -181,10 +135,12 @@ def all_html(net: Network_T, layout: {str}Place_T, p0: Params_T, problem: str) -
                 p class="problem": problem
             svg viewBox=box class="graph":
                 for e in net.edges:
-                    + to_html(e, uses(way, e), place_of(layout, net, e.a), place_of(layout, net, e.b))
+                    + to_html(e, uses(way, e), layout.place_of(net, e.a), layout.place_of(net, e.b))
                 for n in net.nodes:
-                    + to_html(n, place_of(layout, net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
+                    + to_html(n, layout.place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+            # the network and its layout as the server keeps them, for the browser's NetworkView to draw from
+            pre id="network": text_of(net) + layout.text_of(net)
             p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
             + menus_html()
 
@@ -211,7 +167,7 @@ div.toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 0.8em; 
 div.menu { position: fixed; z-index: 10; display: none; flex-direction: column; min-width: 10em; background: #fff;
            border: 1px solid #cbd2d9; border-radius: 8px; box-shadow: 0 6px 18px rgba(31, 41, 51, 0.18); padding: 0.3em; }
 div.menu button { border: none; text-align: left; border-radius: 4px; padding: 0.4em 0.7em; }
-button.redraw, form.gesture { display: none; }
+button.redraw, form.gesture, pre#network { display: none; }
 svg.graph { width: 100%; height: auto; user-select: none; display: block; }
 path.edge { stroke: #b0b8c1; stroke-width: 2.5; fill: none; }
 path.edge.way { stroke: var(--way); stroke-width: 5; }
@@ -253,5 +209,5 @@ def hyphens(text: str) -> str:
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
 
-def all_text(net: Network_T, layout: {str}Place_T, p: Params_T, problem: str) -> str:
+def all_text(net: Network_T, layout: Layout, p: Params_T, problem: str) -> str:
     return hyphens(str(all_html(net, layout, p, problem)))

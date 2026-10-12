@@ -1,0 +1,81 @@
+#!/usr/bin/env ady2nim
+"""dijkstra_layout -- the layout: where each node of the network is drawn.
+
+The model (dijkstra_model.ady) says what the network is; the layout says where its nodes go.
+It is computed from the model, never read off a page: the server draws the page with it
+(dijkstra_gui.ady), and the browser moves nodes with it (frontend/dijkstra_js_events.ady),
+so both find the same places from the same network. Like the model, it is compiled both
+ways: no HTML, no HTTP, no DOM.
+
+A node the reader has put somewhere stays there; those places are kept with the network, as
+"at" lines beside its node and edge lines. Any other node goes where the layout puts it
+(new_spot). A layout algorithm would replace new_spot, and nothing else.
+"""
+from backend/dijkstra_model import Network_T
+
+const HEIGHT: float = 380.0             # the drawing's height (580 wide)
+
+# Where a node is drawn: its centre in the drawing.
+type Place_T is record:
+    x: float
+    y: float
+
+# The place of the K-th node of a network that nobody has put anywhere: along the bottom, left
+# to right, then again a row up.
+def new_spot(k: int) -> Place_T:
+    return Place_T(40.0 + float((k * 70) % 500), HEIGHT - 30.0 - float((k * 70) // 500 % 4) * 60.0)
+
+class Layout:
+    var places: {str}Place_T            # where the reader put a node, by name
+
+    def __init__(self, places: {str}Place_T):
+        self.places = places
+
+    # Where the node NAME of NET is drawn: where the reader put it, else where the layout puts it.
+    def place_of(self, net: Network_T, name: str) -> Place_T:
+        if name in self.places:
+            return self.places[name]
+        for i in range(len(net.nodes)):
+            if net.nodes[i].name == name:
+                return new_spot(i)
+        return Place_T(0.0, 0.0)
+
+    # The reader put the node NAME at AT.
+    def put(self, name: str, at: Place_T):
+        self.places[name] = at
+
+    # The places of NET's nodes as text, "at A 60 190", a line each; nodes that are gone are left out.
+    def text_of(self, net: Network_T) -> str:
+        var lines: []str = []
+        for n in net.nodes:
+            if n.name in self.places:
+                let p: Place_T = self.places[n.name]
+                lines.append(f"at {n.name} {p.x:.0f} {p.y:.0f}")
+        return "\n".join(lines) + "\n"
+
+# The layout kept in TEXT: its "at" lines (the other lines are the model's).
+def layout_of(text: str) -> Layout:
+    var places: {str}Place_T = {:}
+    for line in text.split("\n"):
+        let w: []str = line.split()
+        if len(w) == 4 and w[0] == "at":
+            let x: float | !ParseFailure_T = parse_float(w[2])
+            let y: float | !ParseFailure_T = parse_float(w[3])
+            if x is ParseFailure_T:
+                continue
+            if y is ParseFailure_T:
+                continue
+            places[w[1]] = Place_T(x, y)
+    return Layout(places)
+
+# Where the sample network is drawn.
+def sample_layout() -> Layout:
+    let none: {str}Place_T = {:}
+    var layout: Layout = Layout(none)
+    layout.put("A", Place_T(60.0, 190.0))
+    layout.put("B", Place_T(200.0, 60.0))
+    layout.put("C", Place_T(200.0, 190.0))
+    layout.put("D", Place_T(380.0, 60.0))
+    layout.put("E", Place_T(520.0, 190.0))
+    layout.put("F", Place_T(330.0, 320.0))
+    return layout

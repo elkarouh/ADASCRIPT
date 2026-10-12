@@ -6,15 +6,16 @@ the page that comes out. The tests call answer() the same way, with no server ru
 The network is kept in a text file (keep_in), written after every change.
 """
 from backend/dijkstra_model import Network_T, add_edge, add_node, names_of, network_of, remove_edge, remove_node, sample, set_cost, text_of
-from backend/dijkstra_gui import Place_T, all_text, field_of, layout_of, layout_text, new_spot, params_of, sample_layout
+from backend/dijkstra_layout import Layout, Place_T, layout_of, new_spot, sample_layout
+from backend/dijkstra_gui import all_text, field_of, params_of
 
 var net: Network_T = sample()
-var layout: {str}Place_T = sample_layout()     # where each node is drawn: the GUI's, kept with the network
+var layout: Layout = sample_layout()   # where each node is drawn (dijkstra_layout.ady), kept with the network
 var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
 
 # Network and layout, kept together in PATH: the node and edge lines, then the "at" lines.
-def save(net: Network_T, layout: {str}Place_T, path: Path) -> str:
-    let done: None | !PathFailure_T = path.write_text(text_of(net) + layout_text(net, layout))
+def save(net: Network_T, layout: Layout, path: Path) -> str:
+    let done: None | !PathFailure_T = path.write_text(text_of(net) + layout.text_of(net))
     if done is PathFailure_T:
         return f"Could not write {path}."
     return ""
@@ -54,12 +55,12 @@ def answer(method: str, path: str, fields: str) -> str:
         problem = add_node(net, name)
         if problem == "":
             if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
-                layout[name] = new_spot(len(net.nodes) - 1)
+                layout.put(name, new_spot(len(net.nodes) - 1))
             else:
-                layout[name] = Place_T(x, y)
+                layout.put(name, Place_T(x, y))
     elif method == "PUT" and path == "/nodes":
         if name in names_of(net):
-            layout[name] = Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
+            layout.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
         else:
             problem = f"There is no node {name}."
     elif method == "DELETE" and path == "/nodes":

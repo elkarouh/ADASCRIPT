@@ -23,6 +23,7 @@ every change; Reset puts the sample back.
 | File | What it knows |
 |---|---|
 | `backend/dijkstra_model.ady` | the model, a placeholder: a `Network` of `Node_T`s (a name each) and `Edge`s; what may be done to it (`add_node`, `remove_node`, `add_edge`, `set_cost`, `remove_edge`, each returning what was wrong, or `""`); keeping it in a text file (`text_of`, `network_of`); and `build_graph`, which makes of it the graph the library's `shortest_route` wants (`TO_NIM/STDLIB/graphs.ady`). Replace it with your own; no HTML, no HTTP. |
+| `backend/dijkstra_layout.ady` | where each node is drawn: a `Layout` computed from the model. A node the reader put somewhere stays there (kept in the network file as `at A 60 190` lines); any other goes where `new_spot` puts it, which is where a layout algorithm would go. Compiled both ways, like the model: the server draws the page with it, and the browser's `NetworkView` moves nodes with it. |
 | `backend/dijkstra_gui.ady` | how to draw it: the SVG, the tables and forms, the text. A function from the network and what is picked to HTML; `to_html` for a node or an edge in the drawing, `row_html` for one in a table. |
 | `backend/dijkstra_events.ady` | what each request does: `answer(method, path, fields)` calls the model, saves, and returns the page. Holds the network. No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to `answer`, and serves the two scripts. |
@@ -30,7 +31,7 @@ every change; Reset puts the sample back.
 | `test_dijkstra.ady` | tests of the model, and of the page through `answer`, as the browser would ask; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
-`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). Nothing is compiled both ways here, so there is no `shared/`; the accounting tool has one, for the arrow routing that the server and `dijkstra_js_events.ady` must agree on.
+`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). The model and its layout are compiled both ways: the page carries the network as the server keeps it (a hidden `pre#network`), and `dijkstra_js_events.ady` builds its `NetworkView` from that with the same `network_of` and `layout_of`, so where a node is drawn is computed from the model, never read off the drawing.
 
 ## How it works
 
