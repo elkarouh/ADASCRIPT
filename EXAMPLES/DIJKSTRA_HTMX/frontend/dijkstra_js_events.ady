@@ -120,24 +120,33 @@ def clear_selection():
         mark(el, false)
     selected_kind = ""
 
-# Select the node or edge under C, in place of what was selected (nothing, on the empty space).
-def select_at(c: Click_T):
+# Select NODE, in place of what was selected. Only the right click does this (see context).
+def select_node(node: Element_T):
     clear_selection()
-    let node: ?Element_T = on(c, "g.node")
+    selected_kind = "node"
+    selected_node = node_of(node)
+    mark(node, true)
+
+# Select EDGE, in place of what was selected.
+def select_edge(edge: Element_T):
+    clear_selection()
+    selected_kind = "edge"
+    selected_edge = edge_of(edge)
+    mark(edge, true)
+
+# A left click on the space or an edge: select the edge under C, or nothing on the empty space.
+# A left click on a node is not a selection; it chooses the node for the route (see clicked).
+def select_at(c: Click_T):
     let edge: ?Element_T = on(c, "g[data_from]")
-    if node is not None:
-        selected_kind = "node"
-        selected_node = node_of(node)
-        mark(node, true)
-    elif edge is not None:
-        selected_kind = "edge"
-        selected_edge = edge_of(edge)
-        mark(edge, true)
+    if edge is None:
+        clear_selection()
+        return
+    select_edge(edge)
 
 # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
-# it is chosen already (drawn as the start or the goal), takes it out of the route again. On an
-# edge it selects the edge; on the empty space it selects nothing. A click outside the drawing
-# (the toolbar, a menu) is none of this.
+# it is chosen already (drawn as the start or the goal), takes it out of the route again. Anything
+# else is select_at's: an edge is selected, the empty space clears the selection. A click outside
+# the drawing (the toolbar, a menu) is none of this.
 def clicked(c: Click_T):
     if on(c, "svg.graph") is None:
         return
@@ -227,11 +236,13 @@ def context(e: Event_T):
         return                          # the rest of the page keeps the browser's own menu
     cancel(c)
     hide_menus()
-    if on(c, "g.node") is not None:
-        select_at(c)
+    let node: ?Element_T = on(c, "g.node")
+    let edge: ?Element_T = on(c, "g[data_from]")
+    if node is not None:
+        select_node(node)
         show_at(page.element("#menu-node"), c)
-    elif on(c, "g[data_from]") is not None:
-        select_at(c)
+    elif edge is not None:
+        select_edge(edge)
         show_at(page.element("#menu-edge"), c)
     else:
         clear_selection()
