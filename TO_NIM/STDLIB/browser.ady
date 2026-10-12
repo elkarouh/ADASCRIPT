@@ -124,25 +124,25 @@ def press(within: Element_T, css: str):
 # What a click is to a script: whether shift was held, and the element clicked. `on(css)`
 # is the element CSS matches that the click was on or inside (None when none), and `stop()`
 # keeps the click from going any further: nothing else on the page (htmx) hears of it.
-type Click is record:
+type Click_T is record:
     shift:  bool
     target: Element_T
     event:  Event
 
-def click_of(e: Event) -> Click:
-    return Click(MouseEvent(e).shiftKey, e.target, e)
+def click_of(e: Event) -> Click_T:
+    return Click_T(MouseEvent(e).shiftKey, e.target, e)
 
-def on(c: Click, css: str) -> ?Element_T:
+def on(c: Click_T, css: str) -> ?Element_T:
     let found: Element_T = c.target.closest(cstring(css))
     if found is None:
         return None
     return found
 
-def stop(c: Click):
+def stop(c: Click_T):
     c.event.stopPropagation()
 
 # Whether the click was made with the left button (the main one).
-def left(c: Click) -> bool:
+def left(c: Click_T) -> bool:
     return MouseEvent(c.event).button == 0
 
 # The key the reader pressed: "Delete", "Escape", "a" ...
@@ -150,21 +150,21 @@ def key_of(e: Event) -> str:
     return str(KeyboardEvent(e).key)
 
 # Show MENU (an element of the page, hidden until now) where the mouse was when C happened.
-def show_at(menu: Element_T, c: Click):
+def show_at(menu: Element_T, c: Click_T):
     let m: MouseEvent = MouseEvent(c.event)
     menu.set_attr("style", f"display:block; left:{m.clientX}px; top:{m.clientY}px")
 
 # Whether the reader made the click (with the mouse or a key), not a script that pressed a button.
-def made_by_reader(c: Click) -> bool:
+def made_by_reader(c: Click_T) -> bool:
     return c.event.isTrusted
 
 # What the browser would do with the event itself: a right click's menu, say. It does not happen.
-def cancel(c: Click):
+def cancel(c: Click_T):
     c.event.preventDefault()
 
 # ---- Events the page sends, and questions the page asks ----
 
-# What the page sends a listener: a click, a key, a move; a Click (above) says a click's part.
+# What the page sends a listener: a click, a key, a move; a Click_T (above) says a click's part.
 type Event_T is Event
 
 # What a listener is: a function that is told of the event.

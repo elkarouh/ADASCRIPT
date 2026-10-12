@@ -21,9 +21,9 @@ library's svg_drag, and the page (finding elements, forms, clicks) its browser m
 in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved`, `dropped`, and
 `clicked` for the shift-click.
 """
-from shared/routes import Point, Route, boxes, routes_of
-from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click, on, stop
-from svg_drag import Unit_T, Spot, unit_of, spot_of, between, shift, trace, place_at, draggable
+from shared/routes import Point_T, Route_T, boxes, routes_of
+from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click_T, on, stop
+from svg_drag import Unit_T, Spot_T, unit_of, spot_of, between, shift, trace, place_at, draggable
 
 const WIDTH: Unit_T = Unit_T(980.0)     # the drawing's width (the svg's viewBox); its height varies
 const HALF_W: Unit_T = Unit_T(110.0)    # half an account's box, as boxes() in shared/routes.ady
@@ -49,12 +49,12 @@ def data_from(a: Element_T) -> str:
 def data_to(a: Element_T) -> str:
     return a.data("to")
 
-# shared/routes.ady, which the server uses too, works in plain floats (its Point).
-def point_of(s: Spot) -> Point:
-    return Point(float(s.x), float(s.y))
+# shared/routes.ady, which the server uses too, works in plain floats (its Point_T).
+def point_of(s: Spot_T) -> Point_T:
+    return Point_T(float(s.x), float(s.y))
 
-def spot_at(p: Point) -> Spot:
-    return Spot(x=Unit_T(p.x), y=Unit_T(p.y))
+def spot_at(p: Point_T) -> Spot_T:
+    return Spot_T(x=Unit_T(p.x), y=Unit_T(p.y))
 
 # The drawing's height: the last of the four numbers of its viewBox, "0 0 980 670".
 def height() -> Unit_T:
@@ -64,10 +64,10 @@ def height() -> Unit_T:
     return Unit_T(r)
 
 # The name of the account (not a group) the point AT is over, other than FROM_NAME, or "".
-def account_at(at: Spot, from_name: str) -> str:
+def account_at(at: Spot_T, from_name: str) -> str:
     for n in page.all("g.node"):
         if n.data_name != from_name and not n.has_class("group"):
-            let c: Spot = spot_of(n)
+            let c: Spot_T = spot_of(n)
             if abs(at.x - c.x) <= HALF_W and abs(at.y - c.y) <= n.data_h:
                 return n.data_name
     return ""
@@ -79,10 +79,10 @@ def account_at(at: Spot, from_name: str) -> str:
 # accounts (data_name, data_x, data_y, data_h) and the arrows (<g data_from=".." data_to="..">,
 # each holding its <path>s and a <text class="amount">). Only the browser's copy changes;
 # letting go asks the server, which draws the page again, and it comes out the same.
-def reroute_arrows(node: Element_T, at: Spot):
+def reroute_arrows(node: Element_T, at: Spot_T):
     # the accounts: their names, centres (NODE's at AT) and half heights, in page order
     var names: []str = []
-    var points: []Point = []
+    var points: []Point_T = []
     var tall: []float = []
     for n in page.all("g.node"):
         names.append(n.data_name)
@@ -97,8 +97,8 @@ def reroute_arrows(node: Element_T, at: Spot):
         sources.append(a.data_from)
         targets.append(a.data_to)
         texts.append(a.element("text.amount").text)
-    let size: Spot = Spot(x=WIDTH, y=height())
-    let routes: []Route = routes_of(sources, targets, texts, names, points, tall, point_of(size), [], [], boxes())
+    let size: Spot_T = Spot_T(x=WIDTH, y=height())
+    let routes: []Route_T = routes_of(sources, targets, texts, names, points, tall, point_of(size), [], [], boxes())
     # routes[k] is the way for arrows[k]: its curve and where its amount goes
     for k in range(len(arrows)):
         for p in arrows[k].all("path"):
@@ -109,7 +109,7 @@ def reroute_arrows(node: Element_T, at: Spot):
 
 # The field pos holds every account the user has moved, "id@x,y|id@x,y": ID's entry replaced,
 # or added. The server lays the accounts out, then puts these where they were dropped.
-def with_position(pos: str, id: str, at: Spot) -> str:
+def with_position(pos: str, id: str, at: Spot_T) -> str:
     var kept: []str = []
     for entry in pos.split("|"):
         if entry != "" and not entry.startswith(id + "@"):
@@ -131,17 +131,17 @@ def redraw():
 # While NODE is dragged. The frozen account (class "from") stays where it is: a line runs from
 # it to the mouse, the arrow being drawn. Any other account goes where the mouse takes it,
 # kept clear of the sides and the top, and the arrows follow.
-def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
+def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     if node.has_class("from"):
         rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
         return wanted                   # the arrow's tip
-    let now: Spot = Spot(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
+    let now: Spot_T = Spot_T(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
     shift(node, centre, now)
     reroute_arrows(node, now)
     return now
 
 # NODE let go at AT.
-def dropped(node: Element_T, at: Spot):
+def dropped(node: Element_T, at: Spot_T):
     if node.has_class("from"):
         # the arrow: let go over another account, its name goes into the hidden field target,
         # and the server answers with the popup that asks when, what and how much. Let go over
@@ -158,7 +158,7 @@ def dropped(node: Element_T, at: Spot):
 
 # A click with shift held picks an account to merge with others, or lets it go: its name goes
 # into the hidden field pick, and the page is asked for again. Other clicks go on to htmx.
-def clicked(c: Click):
+def clicked(c: Click_T):
     if not c.shift:
         return
     let node: ?Element_T = c.on("g.node")

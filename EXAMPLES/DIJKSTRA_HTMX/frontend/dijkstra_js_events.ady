@@ -26,8 +26,8 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
-from svg_drag import Unit_T, Spot, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
+from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
+from svg_drag import Unit_T, Spot_T, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
 from shared/network import Node_T, Edge_T
 
 const WIDTH: Unit_T = Unit_T(580.0)     # the drawing's size (the svg's viewBox)
@@ -53,11 +53,11 @@ def edge_element(e: Edge_T) -> Element_T:
     return page.element(f"g[data_from=\"{e.a}\"][data_to=\"{e.b}\"]")
 
 # Where the node named NAME is drawn now: an end of an edge, when only its name is known.
-def end_spot(name: str) -> Spot:
+def end_spot(name: str) -> Spot_T:
     for el in page.all("g.node"):
         if node_of(el).name == name:
             return spot_of(el)
-    return Spot(x=Unit_T(0.0), y=Unit_T(0.0))
+    return Spot_T(x=Unit_T(0.0), y=Unit_T(0.0))
 
 # The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
 def gesture() -> Element_T:
@@ -72,21 +72,21 @@ def gesture() -> Element_T:
 #
 # An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
 # point at) and a <text class="cost">.
-def redraw_edges_of(node: Node_T, at: Spot):
+def redraw_edges_of(node: Node_T, at: Spot_T):
     for el in page.all("g[data_from]"):
         let edge: Edge_T = edge_of(el)
         if node.name in [edge.a, edge.b]:
             # the end that is NODE is at AT; the other end stays where it is
-            let a: Spot = (at if edge.a == node.name else end_spot(edge.a))
-            let b: Spot = (at if edge.b == node.name else end_spot(edge.b))
+            let a: Spot_T = (at if edge.a == node.name else end_spot(edge.a))
+            let b: Spot_T = (at if edge.b == node.name else end_spot(edge.b))
             for line in el.all("path"):
                 line.draw_line(a, b)
-            el.element("text.cost").place_at(Spot(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))   # just above the line
+            el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))   # just above the line
 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
-def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
-    let now: Spot = Spot(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
+def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+    let now: Spot_T = Spot_T(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
     shift(node, centre, now)
     redraw_edges_of(node_of(node), now)
     return now
@@ -94,7 +94,7 @@ def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot:
 # NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
 # node's name and new centre, and its button #redraw sends it (hx-put="/nodes", see
 # dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
-def dropped(node: Element_T, at: Spot):
+def dropped(node: Element_T, at: Spot_T):
     let form: Element_T = page.element("#move")
     form.fill("name", node_of(node).name)
     form.fill("x", f"{at.x:.0f}")
@@ -121,7 +121,7 @@ def clear_selection():
     selected_kind = ""
 
 # Select the node or edge under C, in place of what was selected (nothing, on the empty space).
-def select_at(c: Click):
+def select_at(c: Click_T):
     clear_selection()
     let node: ?Element_T = on(c, "g.node")
     let edge: ?Element_T = on(c, "g[data_from]")
@@ -138,7 +138,7 @@ def select_at(c: Click):
 # it is chosen already (drawn as the start or the goal), takes it out of the route again. On an
 # edge it selects the edge; on the empty space it selects nothing. A click outside the drawing
 # (the toolbar, a menu) is none of this.
-def clicked(c: Click):
+def clicked(c: Click_T):
     if on(c, "svg.graph") is None:
         return
     let node: ?Element_T = on(c, "g.node")
@@ -200,7 +200,7 @@ def choose(node: Node_T, unpick: bool):
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
 def double_click(e: Event_T):
-    let c: Click = click_of(e)
+    let c: Click_T = click_of(e)
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is not None:
         change_cost(edge_of(edge))
@@ -210,19 +210,19 @@ def double_click(e: Event_T):
     let name: str = ask_name()
     if name == "":
         return
-    let at: Spot = spot_at(e)
+    let at: Spot_T = spot_at(e)
     send_node(name, f"{between(at.x, MARGIN, WIDTH - MARGIN):.0f}", f"{between(at.y, MARGIN, HEIGHT - MARGIN):.0f}")
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 
-var menu_at: Spot = Spot(x=Unit_T(0.0), y=Unit_T(0.0))     # where the menu of the space was opened
+var menu_at: Spot_T = Spot_T(x=Unit_T(0.0), y=Unit_T(0.0))     # where the menu of the space was opened
 
 def hide_menus():
     for m in page.all(".menu"):
         m.set_attr("style", "display:none")
 
 def context(e: Event_T):
-    let c: Click = click_of(e)
+    let c: Click_T = click_of(e)
     if on(c, "svg.graph") is None:
         return                          # the rest of the page keeps the browser's own menu
     cancel(c)
@@ -241,7 +241,7 @@ def context(e: Event_T):
 # ---- The toolbar and the menus: a button with data_tool does that action ----
 
 def tool_click(e: Event_T):
-    let c: Click = click_of(e)
+    let c: Click_T = click_of(e)
     let b: ?Element_T = on(c, "button[data_tool]")
     if b is None:
         hide_menus()                    # a click elsewhere closes the menus
@@ -279,7 +279,7 @@ var from_node: Node_T = Node_T("", 0.0, 0.0)     # the node the wire starts at
 var swallow: bool = false               # the click after a wire is let go: not a click on a node
 
 def link_down(e: Event_T):
-    let c: Click = click_of(e)
+    let c: Click_T = click_of(e)
     if not left(c) or on(c, "circle.port") is None:
         return
     let node: ?Element_T = on(c, "g.node")
@@ -322,7 +322,7 @@ def link_up(e: Event_T):
 # The click after the release is the reader's, and goes no further. A click the script makes
 # itself (the button that sends the edge) is not the reader's, and is let through.
 def swallow_click(e: Event_T):
-    let c: Click = click_of(e)
+    let c: Click_T = click_of(e)
     if swallow and made_by_reader(c):
         swallow = false
         stop(c)

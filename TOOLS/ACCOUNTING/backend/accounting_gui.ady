@@ -14,7 +14,7 @@ https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html)
 Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
-from shared/routes import NODE_RADIUS, Point, Route, Shape, boxes, circles, covers, px, rim, routes_of, toward
+from shared/routes import NODE_RADIUS, Point_T, Route_T, Shape, boxes, circles, covers, px, rim, routes_of, toward
 from backend/accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
 
 # 1234567 cents -> "12,345.67": Dollars_T converts, the format groups.
@@ -22,7 +22,7 @@ def money(c: Cents_T) -> str:
     return f"{Dollars_T(c):,.2f}"
 
 # The arrows of G routed by shared/routes.ady, which knows only names, points and texts.
-def routes_for(g: Graph, names: []str, points: []Point, tall: []float, size: Point, shape: Shape) -> []Route:
+def routes_for(g: Graph, names: []str, points: []Point_T, tall: []float, size: Point_T, shape: Shape) -> []Route_T:
     var sources: []str = []
     var targets: []str = []
     var texts: []str = []
@@ -77,48 +77,48 @@ def css_of(a: Account) -> str:
 
 # Where account A is drawn: the example's accounts each have a place;
 # another is at (-1, -1), and the page that shows it finds it one.
-def place(a: Account) -> Point:
+def place(a: Account) -> Point_T:
     case a.name:
         when "VAT payable":
-            return Point(80.0, 50.0)
+            return Point_T(80.0, 50.0)
         when "Sales":
-            return Point(80.0, 190.0)
+            return Point_T(80.0, 190.0)
         when "Trade receivables":
-            return Point(270.0, 50.0)
+            return Point_T(270.0, 50.0)
         when "Share capital":
-            return Point(80.0, 330.0)
+            return Point_T(80.0, 330.0)
         when "Credit card":
-            return Point(480.0, 50.0)
+            return Point_T(480.0, 50.0)
         when "Bank":
-            return Point(480.0, 190.0)
+            return Point_T(480.0, 190.0)
         when "VAT receivable":
-            return Point(270.0, 330.0)
+            return Point_T(270.0, 330.0)
         when "Furniture and equipment":
-            return Point(480.0, 330.0)
+            return Point_T(480.0, 330.0)
         when "Wages and salaries":
-            return Point(700.0, 190.0)
+            return Point_T(700.0, 190.0)
         when "Food":
-            return Point(700.0, 50.0)
+            return Point_T(700.0, 50.0)
         when "Trade payables":
-            return Point(270.0, 470.0)
+            return Point_T(270.0, 470.0)
         when "Goods for resale":
-            return Point(480.0, 470.0)
+            return Point_T(480.0, 470.0)
         when "Bank loans":
-            return Point(700.0, 470.0)
+            return Point_T(700.0, 470.0)
         when "Purchases":
-            return Point(480.0, 610.0)
+            return Point_T(480.0, 610.0)
         when "Change in stock":
-            return Point(270.0, 610.0)
+            return Point_T(270.0, 610.0)
         when "Interest expense":
-            return Point(900.0, 50.0)
+            return Point_T(900.0, 50.0)
         when "Own work capitalised":
-            return Point(900.0, 190.0)
+            return Point_T(900.0, 190.0)
         when "Software":
-            return Point(900.0, 330.0)
+            return Point_T(900.0, 330.0)
         when "Depreciation":
-            return Point(700.0, 330.0)
+            return Point_T(700.0, 330.0)
         when others:
-            return Point(-1.0, -1.0)          # no place of its own: the page finds one
+            return Point_T(-1.0, -1.0)          # no place of its own: the page finds one
 
 # ---------------------------------------------------------------------
 # Rendering: a to_html for each thing of the model that is drawn, called as
@@ -155,7 +155,7 @@ def label_lines(name: str) -> []str:
 
 # An account as a node at P: a circle with its name in it. TIP shows when the
 # mouse is over it, as for an arrow below.
-def to_html(a: Account, p: Point, tip: str) -> Html:
+def to_html(a: Account, p: Point_T, tip: str) -> Html:
     let cx: str = px(p.x)
     let cy: str = px(p.y)
     let css: str = css_of(a)
@@ -183,7 +183,7 @@ def fit_name(name: str, room: float) -> str:
         return name
     return name[:chars - 1] + "\u2026"
 
-def box_html(a: Account, p: Point, shape: Shape) -> Html:
+def box_html(a: Account, p: Point_T, shape: Shape) -> Html:
     let left: str = px(p.x - shape.half_w)
     let top: str = px(p.y - shape.half_h)
     let w: str = px(2.0 * shape.half_w)
@@ -212,7 +212,7 @@ def tip_of(g: Graph, f: Flow) -> str:
 # shows when the mouse is over it, as the browser's tooltip (the live page,
 # which cannot, passes "" and shows its own): a wider invisible path under
 # the arrow makes it easy to point at.
-def to_html(f: Flow, route: Route, tip: str) -> Html:
+def to_html(f: Flow, route: Route_T, tip: str) -> Html:
     let d: str = route.d
     let lx: str = px(route.label.x)
     let ly: str = px(route.label.y)
@@ -226,13 +226,13 @@ def to_html(f: Flow, route: Route, tip: str) -> Html:
 
 def to_html(g: Graph) -> Html:
     var names: []str = []
-    var points: []Point = []
+    var points: []Point_T = []
     var tall: []float = []
     for a in g.accounts:
         names.append(a.name)
         points.append(place(a))
         tall.append(NODE_RADIUS)
-    let routes: []Route = routes_for(g, names, points, tall, Point(980.0, 670.0), circles())
+    let routes: []Route_T = routes_for(g, names, points, tall, Point_T(980.0, 670.0), circles())
     html:
         svg viewBox="0 0 980 670" class="graph":
             defs:

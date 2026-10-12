@@ -6,9 +6,9 @@ For a page drawn on the server and kept up to date by htmx: everything else is d
 the HTML, and only what must follow the mouse every frame runs in the browser. This module
 holds what every such drag has in common; the app says what a drag means:
 
-    from svg_drag import Spot, draggable, ...
-    def moved(node: Element_T, centre: Spot, wanted: Spot) -> Spot: ...   # during the drag
-    def dropped(node: Element_T, at: Spot): ...                           # when it is let go
+    from svg_drag import Spot_T, draggable, ...
+    def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T: ...   # during the drag
+    def dropped(node: Element_T, at: Spot_T): ...                           # when it is let go
     draggable("g.node", "svg.graph", Unit_T(580.0), moved, dropped, no_click)
 
 A shape that can be dragged is an element (`g.node` above) carrying its centre, in the
@@ -20,7 +20,7 @@ htmx sends the new place to the server, which draws the page again.
 
 A press that does not move is a click, and goes on to htmx. The click the browser sends
 after a drag is swallowed, so a shape is not clicked by being moved. Other clicks go to
-`clicked` first, as a Click (browser.ady): a shift-click, say, which it may stop.
+`clicked` first, as a Click_T (browser.ady): a shift-click, say, which it may stop.
 
 Used by EXAMPLES/DIJKSTRA_HTMX and TOOLS/ACCOUNTING.
 
@@ -28,7 +28,7 @@ The page itself (finding elements, reading what the server wrote, forms, clicks)
 browser module's, in plain words; this one adds the drawing: its units, a drag, and moving
 what is drawn.
 """
-from browser import Element_T, page, set_attr, number, Click, click_of, on
+from browser import Element_T, page, set_attr, number, Click_T, click_of, on
 from dom nimport Event, MouseEvent, BoundingRect, document, getBoundingClientRect, addEventListener, preventDefault, stopPropagation
 
 # ---- Two units: the mouse's and the drawing's ----
@@ -41,20 +41,20 @@ type Pixel_T is distinct float          # on the screen, as the mouse reports it
 type Unit_T is distinct float           # in the drawing, as the server keeps a shape's place
 type Scale_T is Unit_T / Pixel_T        # drawing units a pixel: pixels * scale = units
 
-type Screen is tuple:                   # a place on the screen
+type Screen_T is tuple:                   # a place on the screen
     x: Pixel_T
     y: Pixel_T
 
-type Spot is tuple:                     # a place in the drawing
+type Spot_T is tuple:                     # a place in the drawing
     x: Unit_T
     y: Unit_T
 
 const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
 
 # What the app says a drag means (see the docstring).
-type Moved_T is (Element_T, Spot, Spot) -> Spot   # the shape, its centre when pressed, where the mouse has taken it -> where it is
-type Dropped_T is (Element_T, Spot) -> None       # the shape, where it was let go
-type Clicked_T is (Click) -> None                 # any click that is not the end of a drag
+type Moved_T is (Element_T, Spot_T, Spot_T) -> Spot_T   # the shape, its centre when pressed, where the mouse has taken it -> where it is
+type Dropped_T is (Element_T, Spot_T) -> None       # the shape, where it was let go
+type Clicked_T is (Click_T) -> None                 # any click that is not the end of a drag
 
 # What draggable was given: the shapes, the drawing, and what a drag means.
 type Setup_T is record:
@@ -92,9 +92,9 @@ type Grip_T (phase: Phase_T) is record:
     case phase is
         when PRESSED | DRAGGING:
             node:   Element_T           # the shape held
-            down:   Screen              # where the mouse went down
-            centre: Spot                # the shape's centre then
-            now:    Spot                # and where it is now, as `moved` answered
+            down:   Screen_T              # where the mouse went down
+            centre: Spot_T                # the shape's centre then
+            now:    Spot_T                # and where it is now, as `moved` answered
         when others:
             pass
 
@@ -108,12 +108,12 @@ def unit_of(node: Element_T, name: str) -> Unit_T:
     return Unit_T(node.number(name))
 
 # Where a shape's centre is, as the server last drew it.
-def spot_of(node: Element_T) -> Spot:
-    return Spot(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
+def spot_of(node: Element_T) -> Spot_T:
+    return Spot_T(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
 
 # Where the mouse was when event M happened, on the screen.
-def screen_of(m: MouseEvent) -> Screen:
-    return Screen(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
+def screen_of(m: MouseEvent) -> Screen_T:
+    return Screen_T(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
 
 # The drawing's size and place on the screen, in pixels. It is asked each time: the window may
 # have been resized, and the drawing is scaled to fit the page.
@@ -126,21 +126,21 @@ def scale() -> Scale_T:
 
 # Where the mouse was when event E happened, in the drawing's units: the drawing's own place
 # on the screen is taken off first, so the top left of the drawing is 0, 0.
-def spot_at(e: Event) -> Spot:
+def spot_at(e: Event) -> Spot_T:
     let m: MouseEvent = MouseEvent(e)
     let box: BoundingRect = svg_box()
     let k: Scale_T = setup.width / Pixel_T(box.width)
-    return Spot(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
+    return Spot_T(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
 
 # ---- Changing the page ----
 
 # Draw NODE, whose centre the server put at CENTRE, at NOW instead: its picture is shifted by
 # the difference. Its data_x/data_y stay CENTRE until the server draws the page again.
-def shift(node: Element_T, centre: Spot, now: Spot):
+def shift(node: Element_T, centre: Spot_T, now: Spot_T):
     node.set_attr("transform", f"translate({now.x - centre.x:.1f},{now.y - centre.y:.1f})")
 
 # Draw the <path> LINE as a straight line from A to B.
-def draw_line(line: Element_T, a: Spot, b: Spot):
+def draw_line(line: Element_T, a: Spot_T, b: Spot_T):
     line.set_attr("d", f"M {a.x:.1f} {a.y:.1f} L {b.x:.1f} {b.y:.1f}")
 
 # Give the <path> PATH the curve D, as SVG writes one ("M x y C ...").
@@ -148,7 +148,7 @@ def trace(path: Element_T, d: str):
     path.set_attr("d", d)
 
 # Put the <text> LABEL at AT.
-def place_at(label: Element_T, at: Spot):
+def place_at(label: Element_T, at: Spot_T):
     label.set_attr("x", f"{at.x:.1f}")
     label.set_attr("y", f"{at.y:.1f}")
 
@@ -157,7 +157,7 @@ def between(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
     return max(lo, min(hi, v))
 
 # For an app with nothing to do on a click.
-def no_click(c: Click):
+def no_click(c: Click_T):
     pass
 
 # ---- The listeners: what each mouse event does, by phase ----
@@ -170,7 +170,7 @@ def on_down(e: Event):
     let node: ?Element_T = on(click_of(e), setup.shapes)   # the press may be on a part of the shape
     if node is None:
         return                          # not on a shape: leave the event to htmx
-    let centre: Spot = spot_of(node)
+    let centre: Spot_T = spot_of(node)
     grip = PRESSED(node, screen_of(m), centre, centre)
     e.preventDefault()                  # stop the browser's own drag, which selects text
 
@@ -178,14 +178,14 @@ def on_down(e: Event):
 def on_move(e: Event):
     case grip.phase:
         when PRESSED | DRAGGING:
-            let at: Screen = screen_of(MouseEvent(e))
+            let at: Screen_T = screen_of(MouseEvent(e))
             let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
             let dy: Pixel_T = at.y - grip.down.y
             if grip.phase == PRESSED and abs(dx) < MOVED and abs(dy) < MOVED:
                 return                  # not yet a drag: a hand shakes, and it may still be a click
             let k: Scale_T = scale()    # pixels * scale = drawing units
-            let wanted: Spot = Spot(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
-            let now: Spot = setup.moved(grip.node, grip.centre, wanted)
+            let wanted: Spot_T = Spot_T(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
+            let now: Spot_T = setup.moved(grip.node, grip.centre, wanted)
             grip = DRAGGING(grip.node, grip.down, grip.centre, now)
         when others:
             pass                        # nothing held: an ordinary mouse move
