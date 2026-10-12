@@ -41,6 +41,7 @@ DOCS = {
     "DOCS/ADASCRIPT_FOR_AWK.md":    3,
     "DOCS/ADASCRIPT_FOR_SHELL.md":  4,
     "DOCS/WHY_ADASCRIPT.md":        2,
+    "DOCS/ADASCRIPT_FOR_JAVASCRIPT.md": 0,
 }
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
