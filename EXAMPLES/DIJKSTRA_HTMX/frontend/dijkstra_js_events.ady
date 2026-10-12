@@ -28,7 +28,7 @@ gesture means in this app.
 """
 from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_of, spot_at, between, shift, draw_line, place_at, no_click_cb, draggable
-from backend/dijkstra_model import Node_T, Edge_T
+from backend/dijkstra_model import Network_T, Node_T, Edge_T
 
 const WIDTH: Unit_T = 580.0     # the drawing's size (the svg's viewBox)
 const HEIGHT: Unit_T = 380.0
@@ -63,10 +63,10 @@ class NodeView:
     var el: Element_T
     var at: Spot_T                      # where it is drawn now
 
-    def __init__(self, el: Element_T):
+    def __init__(self, node: Node_T, el: Element_T, at: Spot_T):
+        self.node = node
         self.el = el
-        self.node = node_of(el)
-        self.at = spot_of(el)
+        self.at = at
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
@@ -101,9 +101,9 @@ class EdgeView:
     var edge: Edge_T
     var el: Element_T
 
-    def __init__(self, el: Element_T):
+    def __init__(self, edge: Edge_T, el: Element_T):
+        self.edge = edge
         self.el = el
-        self.edge = edge_of(el)
 
     # Outline this edge, or take the outline off it.
     def mark(self, lit: bool):
@@ -138,18 +138,37 @@ class EdgeView:
             line.draw_line(a, b)
         self.el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))
 
+# The network as the page draws it: its Network_T, the view of each node and edge derived from
+# it, and where each is drawn. It decides the placement; the views only draw what it tells them.
 class NetworkView:
-    var nodes: {str}NodeView
+    var network: Network_T
+    var nodes: {str}NodeView            # by name
+    var edge_views: {str}EdgeView       # by "A-B", the ends as the edge names them
     var edges: []EdgeView
 
     def __init__(self):
+        self.network = Network_T([], [])
         self.nodes = {:}
+        self.edge_views = {:}
         self.edges = []
         for el in page.all("g.node"):
-            let n: NodeView = NodeView(el)
-            self.nodes[n.node.name] = n
+            let n: Node_T = node_of(el)
+            self.network.nodes.append(n)
+            self.nodes[n.name] = NodeView(n, el, spot_of(el))
         for el in page.all("g[data_from]"):
-            self.edges.append(EdgeView(el))
+            let e: Edge_T = edge_of(el)
+            self.network.edges.append(e)
+            let view: EdgeView = EdgeView(e, el)
+            self.edge_views[f"{e.a}-{e.b}"] = view
+            self.edges.append(view)
+
+    # The view of the node drawn as EL, and of the edge drawn as EL.
+    def view_of_node(self, el: Element_T) -> NodeView:
+        return self.nodes[node_of(el).name]
+
+    def view_of_edge(self, el: Element_T) -> EdgeView:
+        let e: Edge_T = edge_of(el)
+        return self.edge_views[f"{e.a}-{e.b}"]
 
     # The node NAME is now at AT. Each edge that ends at it is drawn again; the other end has not moved.
     def move(self, name: str, at: Spot_T):
@@ -172,7 +191,7 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
 # node's name and new centre, and its button #redraw sends it (hx-put="/nodes", see
 # dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
 def dropped_cb(node: Element_T, at: Spot_T):
-    NodeView(node).drop_at(at)
+    network.view_of_node(node).drop_at(at)
 
 # ---- The selection: the node or edge the reader last clicked ----
 
@@ -200,22 +219,22 @@ class Selection:
     def clear(self):
         for el in page.all(".selected"):
             if has_class(el, "node"):
-                NodeView(el).mark(false)
+                network.view_of_node(el).mark(false)
             else:
-                EdgeView(el).mark(false)
+                network.view_of_edge(el).mark(false)
         self.what = NOTHING()
 
     # Select the node EL, in place of what was selected. Only the right click does this (see context).
     def select_node(self, el: Element_T):
         self.clear()
-        let view: NodeView = NodeView(el)
+        let view: NodeView = network.view_of_node(el)
         self.what = NODE(view)
         view.mark(true)
 
     # Select the edge EL, in place of what was selected.
     def select_edge(self, el: Element_T):
         self.clear()
-        let view: EdgeView = EdgeView(el)
+        let view: EdgeView = network.view_of_edge(el)
         self.what = EDGE(view)
         view.mark(true)
 
@@ -247,7 +266,7 @@ def clicked_cb(c: Click_T):
     let node: ?Element_T = on(c, "g.node")
     if node is not None:
         selection.clear()
-        NodeView(node).choose(has_class(node, "start") or has_class(node, "goal"))
+        network.view_of_node(node).choose(has_class(node, "start") or has_class(node, "goal"))
         return
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is None:
@@ -280,7 +299,7 @@ def double_click(e: Event_T):
     let c: Click_T = click_of(e)
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is not None:
-        EdgeView(edge).change_cost()
+        network.view_of_edge(edge).change_cost()
         return
     if on(c, "svg.graph") is None or on(c, "g.node") is not None:
         return                          # outside the drawing, or on a node (which has no double-click)
@@ -381,7 +400,7 @@ class Wire:
         if node is None:
             return
         stop(c)
-        let view: NodeView = NodeView(node)
+        let view: NodeView = network.view_of_node(node)
         self.from_node = view.node
         self.from_at = view.at
         self.linking = true
