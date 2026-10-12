@@ -134,19 +134,10 @@ def select_edge(edge: Element_T):
     selected_edge = edge_of(edge)
     mark(edge, true)
 
-# A left click on the space or an edge: select the edge under C, or nothing on the empty space.
-# A left click on a node is not a selection; it chooses the node for the route (see clicked_cb).
-def select_at(c: Click_T):
-    let edge: ?Element_T = on(c, "g[data_from]")
-    if edge is None:
-        clear_selection()
-        return
-    select_edge(edge)
-
 # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
 # it is chosen already (drawn as the start or the goal), takes it out of the route again. Anything
-# else is select_at's: an edge is selected, the empty space clears the selection. A click outside
-# the drawing (the toolbar, a menu) is none of this.
+# else is a selection: the edge under the click is selected, and the empty space clears it. A click
+# outside the drawing (the toolbar, a menu) is none of this.
 def clicked_cb(c: Click_T):
     if on(c, "svg.graph") is None:
         return
@@ -155,7 +146,11 @@ def clicked_cb(c: Click_T):
         clear_selection()
         choose(node_of(node), has_class(node, "start") or has_class(node, "goal"))
         return
-    select_at(c)
+    let edge: ?Element_T = on(c, "g[data_from]")
+    if edge is None:
+        clear_selection()
+        return
+    select_edge(edge)
 
 # The page was drawn again by the server: what was selected is gone with the old drawing.
 def forget_selection(e: Event_T):
