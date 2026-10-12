@@ -7,7 +7,7 @@ and of what the reader has picked: the start and the goal, the fields of the for
 htmx swaps in. Reading is GET /all. The drawing's gestures and the menus (dijkstra_js_events.ady)
 fill in the hidden form `#gesture` and press one of its buttons, which sends POST, PUT or
 DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the start or the
-goal; `act` is clear, or unpick (a chosen node clicked again).
+goal; `act` is unpick (a chosen node clicked again).
 """
 from uri nimport decodeUrl
 from graphs import shortest_route
@@ -20,7 +20,7 @@ type Params is record:
     start: str
     goal:  str
     pick:  str                      # the node clicked
-    act:   str                      # clear
+    act:   str                      # unpick
 
 # The value of KEY in a query or a form body ("a=1&b=2"), or "".
 def field_of(text: str, key: str) -> str:
@@ -90,9 +90,6 @@ def menus_html() -> Html:
 def all_html(net: Network, p0: Params, problem: str) -> Html:
     var p: Params = p0
     let names: []str = names_of(net)
-    if p.act == "clear":
-        p.start = ""
-        p.goal = ""
     if p.start not in names:            # deleted since
         p.start = ""
     if p.goal not in names:
@@ -116,7 +113,6 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                      f"From {p.start}: click a node to go to." if p.goal == "" else
                      f"No way from {p.start} to {p.goal}." if len(way) == 0 else
                      f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {found[0]:.0f}.")
-    let clear_vals: str = "{\"act\": \"clear\"}"
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     let said_css: str = ("said found" if len(way) > 0 else "said")
     html:
@@ -146,7 +142,6 @@ def all_html(net: Network, p0: Params, problem: str) -> Html:
                 button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
                 button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
             div class="toolbar":
-                button type="button" data_hx_get="/all" data_hx_include="#state" data_hx_vals=clear_vals data_hx_target="#all" data_hx_swap="outerHTML": "Clear the way"
                 button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
             p class=said_css: said
             if problem != "":
