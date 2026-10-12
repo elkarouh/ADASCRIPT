@@ -15,7 +15,8 @@ from backend/dijkstra_model import Network_T
 
 const HEIGHT: float = 380.0             # the drawing's height (580 wide)
 
-# Where a node is drawn: its centre in the drawing.
+# Where a node is drawn: its centre in the drawing. Each of x and y is a Unit_T (the drawing's units,
+# as svg_drag reads them); it is a float here because Unit_T is in the stdlib's svg_drag, which the server cannot import.
 type Place_T is record:
     x: float
     y: float
