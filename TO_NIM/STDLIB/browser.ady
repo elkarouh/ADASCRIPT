@@ -12,7 +12,7 @@ button. svg_drag builds on it; an app script imports what it uses:
 Everything here is called with a dot on what it works on (Nim allows any function to be
 called on its first argument that way):
 
-    let form: Element_T = page.find("#move")    # the first element the CSS selector matches
+    let form: Element_T = page.element("#move")    # the first element the CSS selector matches
     for edge in page.all("g.edge"): ...         # all of them
     node.data("name")                           # data_name="C" -> "C"  (what the server wrote)
     node.number("data_x")                       # an attribute, as a number (0.0 if it is not one)
@@ -38,9 +38,19 @@ type Element_T is Node
 # The whole page: what `find` and `all` search when nothing narrower is given.
 let page: Element_T = document
 
-# The first element below WITHIN that the CSS selector CSS matches, or nil when there is none.
-def find(within: Element_T, css: str) -> Element_T:
-    return within.querySelector(cstring(css))
+# The first element below WITHIN that the CSS selector CSS matches, or None when there is none.
+def find(within: Element_T, css: str) -> ?Element_T:
+    let found: Element_T = within.querySelector(cstring(css))
+    if found is None:
+        return None
+    return found
+
+# The first element below WITHIN that CSS matches, which must be there: the script stops if it is not
+# (for an element the page is always drawn with). Use `find` when it may be missing.
+def element(within: Element_T, css: str) -> Element_T:
+    let found: Element_T = within.querySelector(cstring(css))
+    assert found is not None, f"no element matches {css}"
+    return found
 
 # All the elements below WITHIN that CSS matches, in the order of the page.
 def all(within: Element_T, css: str) -> []Element_T:
@@ -83,15 +93,15 @@ def has_class(node: Element_T, word: str) -> bool:
 
 # The value of the input named NAME within FORM (or within the whole page).
 def field(form: Element_T, name: str) -> str:
-    return str(InputElement(form.find(f"input[name={name}]")).value)
+    return str(InputElement(form.element(f"input[name={name}]")).value)
 
 # Put VALUE in the input named NAME within FORM (or within the whole page).
 def fill(form: Element_T, name: str, value: str):
-    InputElement(form.find(f"input[name={name}]")).value = cstring(value)
+    InputElement(form.element(f"input[name={name}]")).value = cstring(value)
 
 # Click the element CSS matches within WITHIN, as the user would: a button sends its form.
 def press(within: Element_T, css: str):
-    Element(within.find(css)).click()
+    Element(within.element(css)).click()
 
 # ---- A click, as the script is told of it ----
 

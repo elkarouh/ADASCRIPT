@@ -117,14 +117,14 @@ def screen_of(m: MouseEvent) -> Screen:
 # each time (the window may have been resized). getBoundingClientRect is the element's size
 # and place on the screen, in pixels.
 def scale() -> Scale_T:
-    let box: BoundingRect = page.find(drawing).getBoundingClientRect()
+    let box: BoundingRect = page.element(drawing).getBoundingClientRect()
     return drawing_width / Pixel_T(box.width)   # units / pixels: a Scale_T
 
 # Where the mouse was when event E happened, in the drawing's units: the drawing's own place
 # on the screen is taken off first, so the top left of the drawing is 0, 0.
 def spot_at(e: Event) -> Spot:
     let m: MouseEvent = MouseEvent(e)
-    let box: BoundingRect = page.find(drawing).getBoundingClientRect()
+    let box: BoundingRect = page.element(drawing).getBoundingClientRect()
     let k: Scale_T = drawing_width / Pixel_T(box.width)
     return Spot(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
 

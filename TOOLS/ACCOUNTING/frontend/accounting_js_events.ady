@@ -58,7 +58,7 @@ def spot_at(p: Point) -> Spot:
 
 # The drawing's height: the last of the four numbers of its viewBox, "0 0 980 670".
 def height() -> Unit_T:
-    let r: float | !ParseFailure_T = parse_float(page.find("svg.graph").attr("viewBox").split(" ")[3])
+    let r: float | !ParseFailure_T = parse_float(page.element("svg.graph").attr("viewBox").split(" ")[3])
     if r is ParseFailure_T:
         return Unit_T(0.0)
     return Unit_T(r)
@@ -96,14 +96,14 @@ def reroute_arrows(node: Element_T, at: Spot):
     for a in arrows:
         sources.append(a.data_from)
         targets.append(a.data_to)
-        texts.append(a.find("text.amount").text)
+        texts.append(a.element("text.amount").text)
     let size: Spot = Spot(x=WIDTH, y=height())
     let routes: []Route = routes_of(sources, targets, texts, names, points, tall, point_of(size), [], [], boxes())
     # routes[k] is the way for arrows[k]: its curve and where its amount goes
     for k in range(len(arrows)):
         for p in arrows[k].all("path"):
             p.trace(routes[k].d)
-        let label: Element_T = arrows[k].find("text.amount")
+        let label: ?Element_T = arrows[k].find("text.amount")
         if label is not None:
             label.place_at(spot_at(routes[k].label))
 
@@ -119,7 +119,7 @@ def with_position(pos: str, id: str, at: Spot) -> str:
 
 # The red dashed line of an arrow being drawn, from the frozen account to the mouse ("" hides it).
 def rubber(d: str):
-    page.find("#rubber").trace(d)
+    page.element("#rubber").trace(d)
 
 # Ask the server for the page again: the button #redraw sends the page's form (hx-get="/h/all",
 # see accounting_page.ady), hidden fields included, and htmx puts the answer in place.
