@@ -242,11 +242,7 @@ def tool_click(e: Event_T):
         return
     hide_menus()
     let tool: str = b.data("tool")
-    if tool == "add":
-        let name: str = ask_name()
-        if name != "":
-            send_node(name, "", "")     # no place given: the server puts it
-    elif tool == "add-here":
+    if tool == "add-here":
         let name: str = ask_name()
         if name != "":
             send_node(name, f"{menu_at.x:.0f}", f"{menu_at.y:.0f}")
