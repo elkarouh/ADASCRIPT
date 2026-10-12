@@ -146,6 +146,11 @@ books.close()
 
 # Every scenario loads into an empty ledger, balances, and comes back out as
 # it went in.
+# Counted first, so that the check is that the loop visits every scenario, whatever
+# their number: a scenario added to scenarios/ is checked with no edit here.
+var expected: int = 0
+for file in walkFiles("scenarios/*.books"):
+    expected += 1
 var scenarios: int = 0
 for file in walkFiles("scenarios/*.books"):
     let text: str | !PathFailure_T = Path(file).read_text()
@@ -193,7 +198,7 @@ for file in walkFiles("scenarios/*.books"):
                         assert ratios[3].value == "76.0%", ratios[3].value            # solvency: 45,280 of 59,600
                         assert ratios[4].value == "42.1%", ratios[4].value            # net margin: 25,280 of 60,000
                     scenarios += 1
-assert scenarios == 14
+assert scenarios == expected and scenarios > 0, f"{scenarios} of {expected} scenarios"
 
 # A scenario made and deleted: its files gone, and refused the second time.
 removeDir("/tmp/test_ledger_scenarios")

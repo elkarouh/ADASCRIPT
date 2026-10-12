@@ -90,10 +90,11 @@ def start(program, path, term="xterm"):
     """Run PROGRAM on PATH in a pty of 24 by 80; returns (pid, fd)."""
     pid, fd = pty.fork()
     if pid == 0:
+        # the size is set before exec: a program that reads it at start must not see 0 by 0
+        fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
         os.chdir(os.path.dirname(path))
         os.environ["TERM"] = term
         os.execv(program, [program, os.path.basename(path)])      # as the user types it
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     return pid, fd
 
 
