@@ -9,7 +9,7 @@ holds what every such drag has in common; the app says what a drag means:
     from svg_drag import Spot_T, draggable, ...
     def moved(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T: ...   # during the drag
     def dropped(node: Element_T, at: Spot_T): ...                           # when it is let go
-    draggable("g.node", "svg.graph", Unit_T(580.0), moved, dropped, no_click)
+    draggable("g.node", "svg.graph", 580.0, moved, dropped, no_click)
 
 A shape that can be dragged is an element (`g.node` above) carrying its centre, in the
 drawing's units, in the attributes data_x and data_y, as the server drew it. While it is

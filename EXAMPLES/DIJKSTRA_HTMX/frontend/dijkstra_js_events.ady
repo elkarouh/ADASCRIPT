@@ -30,9 +30,9 @@ from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data
 from svg_drag import Unit_T, Spot_T, spot_of, spot_at, between, shift, draw_line, place_at, no_click, draggable
 from backend/dijkstra_model import Node_T, Edge_T
 
-const WIDTH: Unit_T = Unit_T(580.0)     # the drawing's size (the svg's viewBox)
-const HEIGHT: Unit_T = Unit_T(380.0)
-const MARGIN: Unit_T = Unit_T(30.0)     # how near its edge a node may go
+const WIDTH: Unit_T = 580.0     # the drawing's size (the svg's viewBox)
+const HEIGHT: Unit_T = 380.0
+const MARGIN: Unit_T = 30.0     # how near its edge a node may go
 
 # ---- The model's values, read off the drawing, and the drawing of each ----
 
@@ -57,7 +57,7 @@ def end_spot(name: str) -> Spot_T:
     for el in page.all("g.node"):
         if node_of(el).name == name:
             return spot_of(el)
-    return Spot_T(x=Unit_T(0.0), y=Unit_T(0.0))
+    return Spot_T(x=0.0, y=0.0)
 
 # The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
 def gesture() -> Element_T:
@@ -215,7 +215,7 @@ def double_click(e: Event_T):
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 
-var menu_at: Spot_T = Spot_T(x=Unit_T(0.0), y=Unit_T(0.0))     # where the menu of the space was opened
+var menu_at: Spot_T = Spot_T(x=0.0, y=0.0)     # where the menu of the space was opened
 
 def hide_menus():
     for m in page.all(".menu"):

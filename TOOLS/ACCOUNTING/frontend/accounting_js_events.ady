@@ -25,9 +25,9 @@ from shared/routes import Point_T, Route_T, boxes, routes_of
 from browser import Element_T, page, find, all, attr, data, text, has_class, fill, field, press, Click_T, on, stop
 from svg_drag import Unit_T, Spot_T, unit_of, spot_of, between, shift, trace, place_at, draggable
 
-const WIDTH: Unit_T = Unit_T(980.0)     # the drawing's width (the svg's viewBox); its height varies
-const HALF_W: Unit_T = Unit_T(110.0)    # half an account's box, as boxes() in shared/routes.ady
-const TOP: Unit_T = Unit_T(20.0)        # how near the top an account may go
+const WIDTH: Unit_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
+const HALF_W: Unit_T = 110.0    # half an account's box, as boxes() in shared/routes.ady
+const TOP: Unit_T = 20.0        # how near the top an account may go
 
 # ---- Reading the page ----
 
@@ -60,7 +60,7 @@ def spot_at(p: Point_T) -> Spot_T:
 def height() -> Unit_T:
     let r: float | !ParseFailure_T = parse_float(page.element("svg.graph").attr("viewBox").split(" ")[3])
     if r is ParseFailure_T:
-        return Unit_T(0.0)
+        return 0.0
     return Unit_T(r)
 
 # The name of the account (not a group) the point AT is over, other than FROM_NAME, or "".

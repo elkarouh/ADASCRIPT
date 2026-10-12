@@ -25,8 +25,8 @@ from browser import Element_T, page, find, all, data, number, fill, press
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from svg_drag import Unit_T, Spot_T, spot_of, between, shift, trace, no_click, draggable
 
-const WIDTH: Unit_T = Unit_T(3000.0)    # the drawing's size (the svg's viewBox, and its size on the page)
-const HEIGHT: Unit_T = Unit_T(2000.0)
+const WIDTH: Unit_T = 3000.0    # the drawing's size (the svg's viewBox, and its size on the page)
+const HEIGHT: Unit_T = 2000.0
 
 # What the server wrote on an element, read as if it were a field: `rect.data_name`.
 def data_name(n: Element_T) -> str:
