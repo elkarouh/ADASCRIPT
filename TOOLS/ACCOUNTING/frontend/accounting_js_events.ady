@@ -104,7 +104,7 @@ def reroute_arrows(node: Element_T, at: Spot):
         for p in arrows[k].all("path"):
             p.trace(routes[k].d)
         let label: Element_T = arrows[k].find("text.amount")
-        if label != nil:
+        if label is not None:
             label.place_at(spot_at(routes[k].label))
 
 # The field pos holds every account the user has moved, "id@x,y|id@x,y": ID's entry replaced,
@@ -161,8 +161,8 @@ def dropped(node: Element_T, at: Spot):
 def clicked(c: Click):
     if not c.shift:
         return
-    let node: Element_T = c.on("g.node")
-    if node != nil and not node.has_class("group"):
+    let node: ?Element_T = c.on("g.node")
+    if node is not None and not node.has_class("group"):
         c.stop()                        # not an ordinary click: htmx must not see it
         page.fill("pick", node.data_name)
         redraw()

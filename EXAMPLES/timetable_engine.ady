@@ -204,12 +204,12 @@ def db_load(conn: DB, name: str) -> str:
 
 
 def _jstr(node: JsonNode, key: str, default_val: str = "") -> str:
-    if node == nil or not node.hasKey(key):
+    if node is None or not node.hasKey(key):
         return default_val
     return node[key].getStr(default_val)
 
 def _jint(node: JsonNode, key: str, default_val: int = 0) -> int:
-    if node == nil or not node.hasKey(key):
+    if node is None or not node.hasKey(key):
         return default_val
     return node[key].getInt(default_val)
 
@@ -863,7 +863,7 @@ def validate_to_json(payload: JsonNode) -> str:
     let new_viols: []str = all_viols(schedule)
 
     var introduced: []str = []
-    if original == nil or len(original) == 0:
+    if original is None or len(original) == 0:
         introduced = new_viols
     else:
         let orig_viols: []str = all_viols(original)

@@ -164,7 +164,7 @@ def on_down(e: Event):
     if m.button != 0:
         return
     let node: Element_T = e.target.closest(cstring(shapes))   # the press may be on a part of the shape
-    if node == nil:
+    if node is None:
         return                          # not on a shape: leave the event to htmx
     let centre: Spot = spot_of(node)
     grip = PRESSED(node, screen_of(m), centre, centre)

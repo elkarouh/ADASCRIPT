@@ -52,7 +52,7 @@ def all(within: Element_T, css: str) -> []Element_T:
 # The text of attribute NAME of NODE ("" when it has none).
 def attr(node: Element_T, name: str) -> str:
     let v: cstring = node.getAttribute(cstring(name))
-    if v == nil:
+    if v is None:
         return ""
     return str(v)
 
@@ -73,7 +73,7 @@ def number(node: Element_T, name: str) -> float:
 
 # The text inside NODE ("" for no element at all).
 def text(node: Element_T) -> str:
-    if node == nil:
+    if node is None:
         return ""
     return str(node.textContent)
 
@@ -108,7 +108,7 @@ def click_of(e: Event) -> Click:
 
 def on(c: Click, css: str) -> ?Element_T:
     let found: Element_T = c.target.closest(cstring(css))
-    if found == nil:
+    if found is None:
         return None
     return found
 
@@ -157,7 +157,7 @@ def listen_first(kind: str, handler: Listener_T):
 # cancel it, or leave it empty.
 def ask(question: str, answer: str) -> str:
     let got: cstring = window.prompt(cstring(question), cstring(answer))
-    if got == nil:
+    if got is None:
         return ""
     return str(got)
 
