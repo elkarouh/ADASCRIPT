@@ -55,7 +55,7 @@ def answer(method: str, path: str, fields: str) -> str:
         problem = add_node(net, name)
         if problem == "":
             if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
-                layout.put(name, new_spot(len(net.nodes) - 1))
+                layout.put(name, new_spot(len(net.nodes) - 1, len(net.nodes)))
             else:
                 layout.put(name, Place_T(x, y))
     elif method == "PUT" and path == "/nodes":

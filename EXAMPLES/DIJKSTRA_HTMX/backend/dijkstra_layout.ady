@@ -9,9 +9,10 @@ ways: no HTML, no HTTP, no DOM.
 
 A node the reader has put somewhere stays there; those places are kept with the network, as
 "at" lines beside its node and edge lines. Any other node goes where the layout puts it
-(new_spot). A layout algorithm would replace new_spot, and nothing else.
+(new_spot), which is the layout algorithm: the nodes in a ring, in the order the model keeps them.
 """
 from backend/dijkstra_model import Network_T
+nimport math
 
 const HEIGHT: float = 380.0             # the drawing's height (580 wide)
 
@@ -21,10 +22,12 @@ type Place_T is record:
     x: float
     y: float
 
-# The place of the K-th node of a network that nobody has put anywhere: along the bottom, left
-# to right, then again a row up.
-def new_spot(k: int) -> Place_T:
-    return Place_T(40.0 + float((k * 70) % 500), HEIGHT - 30.0 - float((k * 70) // 500 % 4) * 60.0)
+# The place of the K-th of N nodes that nobody has put anywhere: the nodes sit on an ellipse
+# that fills the drawing, evenly spaced, in the order the model keeps them. Deterministic, so the
+# same network is drawn the same way on the server and in the browser.
+def new_spot(k: int, n: int) -> Place_T:
+    let angle: float = 6.283185307179586 * float(k) / float(max(n, 1))
+    return Place_T(290.0 + 230.0 * math.cos(angle), HEIGHT / 2.0 + 150.0 * math.sin(angle))
 
 class Layout:
     var places: {str}Place_T            # where the reader put a node, by name
@@ -38,7 +41,7 @@ class Layout:
             return self.places[name]
         for i in range(len(net.nodes)):
             if net.nodes[i].name == name:
-                return new_spot(i)
+                return new_spot(i, len(net.nodes))
         return Place_T(0.0, 0.0)
 
     # The reader put the node NAME at AT.
