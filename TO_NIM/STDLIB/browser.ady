@@ -7,12 +7,12 @@ something. This module says what a script needs in the words of the page itself:
 element, read what the server wrote on it, change where it is drawn, fill in a form, press a
 button. svg_drag builds on it; an app script imports what it uses:
 
-    from browser import Element_T, page, find, all, data, number, has_class, set_attr, fill, field, press
+    from browser import Element_T, page, find, element, all, data, number, has_class, set_attr, fill, field, press
 
 Everything here is called with a dot on what it works on (Nim allows any function to be
 called on its first argument that way):
 
-    let form: Element_T = page.element("#move")    # the first element the CSS selector matches
+    let form: Element_T = page.element("#move")    # the element the CSS selector matches (must be there)
     for edge in page.all("g.edge"): ...         # all of them
     node.data("name")                           # data_name="C" -> "C"  (what the server wrote)
     node.number("data_x")                       # an attribute, as a number (0.0 if it is not one)
@@ -25,6 +25,22 @@ called on its first argument that way):
 A CSS selector names elements the way the page's stylesheet does: "g.node" is a <g> of class
 node, "#move" the element with id="move", "g[data_from]" a <g> that has a data_from
 attribute, "input[name=pos]" the <input> named pos.
+
+Finding an element, two ways, by whether it may be missing:
+
+    let maybe: ?Element_T = page.find("#note")     # None when there is no such element
+    if maybe is None:
+        return                                     # test it before using it, as here
+    maybe.set_attr("hidden", "")
+    let form: Element_T = page.element("#move")    # must be there: the script stops if it is not
+
+`find` answers None when nothing matches; test it with `is None` or `is not None`, or with an
+early return, before you use it. `element` is for the page's own elements, which the server
+always draws: when one is missing, the script stops with an assertion that names the selector
+(it shows in the browser's console), and nothing else on the page stops. `on(c, css)`, for a
+click, is like `find`: None when the click was not on such an element.
+
+Compare with None, not nil: nil is the Nim spelling of the same thing, and Adascript writes None.
 
 What is underneath, for the curious: the page as the browser holds it is the DOM ("document
 object model"), a tree of elements, one per HTML tag; `page` is its root. Strings cross into
