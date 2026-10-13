@@ -13,6 +13,13 @@ history of this file if the reasoning behind one of them is ever wanted.
       `JsonNode` indexing did not translate. The fix is a stdlib piece: typed accessors
       over the parsed value in `browser.ady`, tested on both backends. Then the page
       writes the records as JSON and the browser reads them by name.
+- [ ] a direct request from the browser. The Dijkstra gestures send their changes by
+      filling the hidden form `#gesture` and pressing a button (`Change` in
+      `EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady`). A call such as
+      `htmx.ajax(method, url, values)` would skip the form. The browser build cannot reach
+      a JavaScript global like `htmx` yet: `js/jsffi` has no way to fetch one, and Adascript
+      has no way to declare an external JavaScript global. Needs a stdlib binding or a
+      transpiler feature.
 - [ ] an imported function named like a builtin is read as the builtin. A
       same-file `def run` overrides the builtin `run([...])` (the tutorial says
       so), but `from loop import run` does not: the call is the builtin's, and the

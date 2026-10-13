@@ -48,9 +48,20 @@ def node_of(el: Element_T) -> Node_T:
 def edge_of(el: Element_T) -> Edge_T:
     return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
-# The hidden form whose fields a gesture fills in, and whose buttons send them (dijkstra_gui.ady).
-def gesture() -> Element_T:
-    return page.element("#gesture")
+# A change to send to the server: its fields, filled in by name in the form FORM (a CSS selector, one of
+# the page's forms in dijkstra_gui.ady), and then sent by pressing the form's button BUTTON. Every gesture
+# sends its change this way, so the names of the fields and the buttons are written once each.
+class Change:
+    var form: Element_T
+
+    def __init__(self, form: str):
+        self.form = page.element(form)
+
+    def set(self, name: str, value: str):
+        self.form.fill(name, value)
+
+    def send(self, button: str):
+        page.press(button)
 
 # ---- The drawing as objects: each node and edge keeps its own drawn parts ----
 #
@@ -72,24 +83,25 @@ class NodeView:
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        let form: Element_T = gesture()
-        form.fill("pick", self.node.name)
-        form.fill("act", ("unpick" if unpick else ""))
-        page.press("#pick")
+        let change: Change = Change("#gesture")
+        change.set("pick", self.node.name)
+        change.set("act", ("unpick" if unpick else ""))
+        change.send("#pick")
 
     # Let it go at AT: the form #move gets its name and new centre, and #redraw sends them (see dijkstra_gui.ady).
     def drop_at(self, at: Spot_T):
-        let form: Element_T = page.element("#move")
-        form.fill("name", self.node.name)
-        form.fill("x", f"{at.x:.0f}")
-        form.fill("y", f"{at.y:.0f}")
-        page.press("#redraw")
+        let change: Change = Change("#move")
+        change.set("name", self.node.name)
+        change.set("x", f"{at.x:.0f}")
+        change.set("y", f"{at.y:.0f}")
+        change.send("#redraw")
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.node.name} and its edges?"):
-            gesture().fill("name", self.node.name)
-            page.press("#drop_node")
+            let change: Change = Change("#gesture")
+            change.set("name", self.node.name)
+            change.send("#drop_node")
 
     # Outline this node, or take the outline off it.
     def mark(self, lit: bool):
@@ -118,21 +130,21 @@ class EdgeView:
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
-            let form: Element_T = gesture()
-            form.fill("a", self.edge.a)
-            form.fill("b", self.edge.b)
-            page.press("#drop_edge")
+            let change: Change = Change("#gesture")
+            change.set("a", self.edge.a)
+            change.set("b", self.edge.b)
+            change.send("#drop_edge")
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
         if cost == "":
             return
-        let form: Element_T = gesture()
-        form.fill("a", self.edge.a)
-        form.fill("b", self.edge.b)
-        form.fill("cost", cost)
-        page.press("#set_cost")
+        let change: Change = Change("#gesture")
+        change.set("a", self.edge.a)
+        change.set("b", self.edge.b)
+        change.set("cost", cost)
+        change.send("#set_cost")
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -306,11 +318,11 @@ def ask_name() -> str:
 
 # Send a new node NAME: placed at X, Y (drawing units, as text) when given, else where the server puts it.
 def send_node(name: str, x: str, y: str):
-    let form: Element_T = gesture()
-    form.fill("name", name)
-    form.fill("x", x)
-    form.fill("y", y)
-    page.press("#make_node")
+    let change: Change = Change("#gesture")
+    change.set("name", name)
+    change.set("x", x)
+    change.set("y", y)
+    change.send("#make_node")
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
@@ -449,11 +461,11 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
         if cost == "":
             return
-        let form: Element_T = gesture()
-        form.fill("a", self.from_node.name)
-        form.fill("b", to.name)
-        form.fill("cost", cost)
-        page.press("#make_edge")
+        let change: Change = Change("#gesture")
+        change.set("a", self.from_node.name)
+        change.set("b", to.name)
+        change.set("cost", cost)
+        change.send("#make_edge")
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
