@@ -41,24 +41,11 @@ td.green { background: #d6f0d6; }
 td.blue { background: #d6e6f8; }
 td.pink { background: #f8d6e6; }
 svg.graph { width: 100%; height: auto; margin: 1em 0; }
-path.edge { fill: none; stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
-path.hit { fill: none; stroke: transparent; stroke-width: 12; }
-g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
-polygon { fill: #555; }
-circle.green, rect.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
-circle.liability, rect.liability { fill: #e3d6f5; stroke: #7a52b0; stroke-width: 1.5; }
-circle.revenue, rect.revenue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 1.5; }
-circle.expense, rect.expense { fill: #fbd29c; stroke: #c06a00; stroke-width: 1.5; }
-circle.untouched, rect.untouched { fill: #fff; stroke: #999; stroke-width: 1.5; }
 td.untouched { background: #fff; }
-circle.pink, rect.pink { fill: #f8d6e6; stroke: #b05a85; stroke-width: 1.5; }
-text.label { text-anchor: middle; dominant-baseline: middle; font-size: 11px; }
-text.boxname { text-anchor: start; dominant-baseline: middle; font-size: 12px; }
-text.boxbalance { text-anchor: end; dominant-baseline: middle; font-size: 12px; font-variant-numeric: tabular-nums; }
-text.amount { text-anchor: middle; font-size: 11px; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
 table.statement { min-width: 22em; }
 tr.total td { font-weight: bold; border-top: 2px solid #333; }
 """
+
 
 def css_of(a: Account) -> str:
     case a.colour:
@@ -153,6 +140,26 @@ def label_lines(name: str) -> []str:
         return [name]
     return [name[:best], name[best + 1:]]
 
+# The look of an account as a node (see to_html and box_html): its colour by kind, its name and balance,
+# and how it looks when it is frozen, picked, grouped or on the way of a transaction.
+const NODE_STYLE: str = """
+circle.green, rect.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
+circle.liability, rect.liability { fill: #e3d6f5; stroke: #7a52b0; stroke-width: 1.5; }
+circle.revenue, rect.revenue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 1.5; }
+circle.expense, rect.expense { fill: #fbd29c; stroke: #c06a00; stroke-width: 1.5; }
+circle.untouched, rect.untouched { fill: #fff; stroke: #999; stroke-width: 1.5; }
+circle.pink, rect.pink { fill: #f8d6e6; stroke: #b05a85; stroke-width: 1.5; }
+text.label { text-anchor: middle; dominant-baseline: middle; font-size: 11px; }
+text.boxname { text-anchor: start; dominant-baseline: middle; font-size: 12px; }
+text.boxbalance { text-anchor: end; dominant-baseline: middle; font-size: 12px; font-variant-numeric: tabular-nums; }
+g.node { cursor: grab; }
+g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
+g.from { cursor: crosshair; }
+g.group { cursor: pointer; }
+g.picked rect, g.picked circle { stroke: #1565c0; stroke-width: 6; stroke-dasharray: 3 3; }
+g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
+"""
+
 # An account as a node at P: a circle with its name in it. TIP shows when the
 # mouse is over it, as for an arrow below.
 def to_html(a: Account, p: Point_T, tip: str) -> Html:
@@ -199,6 +206,19 @@ def box_html(a: Account, p: Point_T, shape: Shape) -> Html:
             rect class=css x=left y=top width=w height=h rx="5"
             stext class="boxname" x=nx y=cy: shown_name
             stext class="boxbalance" x=bx y=cy: balance
+
+# The look of an arrow (see to_html): its line, its head, its amount, and the one of a transaction being drawn.
+const EDGE_STYLE: str = """
+path.edge { fill: none; stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
+path.hit { fill: none; stroke: transparent; stroke-width: 12; }
+g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
+polygon { fill: #555; }
+text.amount { text-anchor: middle; font-size: 11px; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+path.rubber { stroke: #c62828; stroke-width: 3; stroke-dasharray: 8 4; fill: none; marker-end: url(#arrow); }
+g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }
+polygon.now { fill: #e65100; }
+g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
+"""
 
 # What hovering over F's arrow shows: each of its transactions, one a line,
 # with its date and amount.
@@ -296,7 +316,7 @@ def page_html(title: str, text: str, sections: []Html) -> Html:
             head:
                 meta charset="utf-8"
                 title: title
-                style: STYLE
+                style: STYLE + NODE_STYLE + EDGE_STYLE
             body:
                 h1: title
                 p: text
