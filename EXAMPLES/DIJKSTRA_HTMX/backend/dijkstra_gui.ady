@@ -10,8 +10,8 @@ DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the
 goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Node_T, uses
-from backend/dijkstra_layout import Layout, Place_T, WIDTH, HEIGHT
+from backend/dijkstra_model import Edge_T, Network, Node_T, Place_T, uses
+from backend/dijkstra_layout import WIDTH, HEIGHT, place_of
 from backend/dijkstra_request import Params_T
 
 # ---- the drawing ----
@@ -153,17 +153,17 @@ def said_of(p: Params_T, way: []str, cost: float) -> str:
 
 # The drawing of the network: the svg with each edge (the way found in orange) and each node (the start,
 # the goal, the way), and the wire the browser draws while an edge is made (see dijkstra_js_events.ady).
-def to_html(net: Network, layout: Layout, p: Params_T, way: []str) -> Html:
+def to_html(net: Network, p: Params_T, way: []str) -> Html:
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     html:
         svg viewBox=box class="graph":
             for e in net.edges:
-                + to_html(e, uses(way, e), layout.place_of(net, e.a), layout.place_of(net, e.b))
+                + to_html(e, uses(way, e), place_of(net, e.a), place_of(net, e.b))
             for n in net.nodes:
-                + to_html(n, layout.place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
+                + to_html(n, place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
             path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 
-def all_html(net: Network, layout: Layout, p0: Params_T, problem: str) -> Html:
+def all_html(net: Network, p0: Params_T, problem: str) -> Html:
     let p: Params_T = picked(p0, net.names())
     let found: (float, []str) = shortest_route[str](net.build_graph(), p.start, p.goal)
     let way: []str = found[1]
@@ -189,9 +189,9 @@ def all_html(net: Network, layout: Layout, p0: Params_T, problem: str) -> Html:
             p class=said_css: said
             if problem != "":
                 p class="problem": problem
-            + to_html(net, layout, p, way)
-            # the network and its layout as the server keeps them, for the browser's NetworkView to draw from
-            pre id="network": net.text() + layout.text_of(net)
+            + to_html(net, p, way)
+            # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
+            pre id="network": net.text()
             p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
             + menus_html()
 
@@ -246,5 +246,5 @@ def hyphens(text: str) -> str:
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
 
-def all_text(net: Network, layout: Layout, p: Params_T, problem: str) -> str:
-    return hyphens(str(all_html(net, layout, p, problem)))
+def all_text(net: Network, p: Params_T, problem: str) -> str:
+    return hyphens(str(all_html(net, p, problem)))

@@ -5,18 +5,17 @@ server.ady hands every request here as a method, a path and its fields, and send
 the page that comes out. The tests call answer() the same way, with no server running.
 The network is kept in a text file (keep_in), written after every change.
 """
-from backend/dijkstra_model import Network, network_of, sample
-from backend/dijkstra_layout import Layout, Place_T, layout_of, new_spot, sample_layout
+from backend/dijkstra_model import Network, Place_T, network_of, sample
+from backend/dijkstra_layout import new_spot
 from backend/dijkstra_gui import all_text
 from backend/dijkstra_request import field_of, number_of, params_of
 
 var net: Network = sample()
-var layout: Layout = sample_layout()   # where each node is drawn (dijkstra_layout.ady), kept with the network
 var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
 
-# Network and layout, kept together in PATH: the node and edge lines, then the "at" lines.
-def save(net: Network, layout: Layout, path: Path) -> str:
-    let done: None | !PathFailure_T = path.write_text(net.text() + layout.text_of(net))
+# The network, with its places, kept in PATH: the node, edge and "at" lines.
+def save(net: Network, path: Path) -> str:
+    let done: None | !PathFailure_T = path.write_text(net.text())
     if done is PathFailure_T:
         return f"Could not write {path}."
     return ""
@@ -25,13 +24,11 @@ def save(net: Network, layout: Layout, path: Path) -> str:
 def keep_in(path: str):
     store = path
     net = sample()
-    layout = sample_layout()
     if path != "":
         let text: str | !PathFailure_T = Path(path).read_text()
         if text is PathFailure_T:
             return                      # no file yet: the sample
         net = network_of(text)
-        layout = layout_of(text)
 
 # The routes, all answered by answer below: each is a whole page, sent back to htmx to swap in.
 #
@@ -61,12 +58,12 @@ def answer(method: str, path: str, fields: str) -> str:
         problem = net.add_node(name)
         if problem == "":
             if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
-                layout.put(name, new_spot(len(net.nodes) - 1, len(net.nodes)))
+                net.put(name, new_spot(len(net.nodes) - 1, len(net.nodes)))
             else:
-                layout.put(name, Place_T(x, y))
+                net.put(name, Place_T(x, y))
     elif method == "PUT" and path == "/nodes":
         if name in net.names():
-            layout.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
+            net.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
         else:
             problem = f"There is no node {name}."
     elif method == "DELETE" and path == "/nodes":
@@ -78,13 +75,11 @@ def answer(method: str, path: str, fields: str) -> str:
     elif method == "DELETE" and path == "/edges":
         problem = net.remove_edge(a, b)
     elif method == "POST" and path == "/relayout":
-        let none: {str}Place_T = {:}
-        layout = Layout(none)           # no node has a place of its own: the layout gives each one
+        net.forget_places()             # no node keeps a place of its own: the layout gives each one
     elif method == "POST" and path == "/reset":
         net = sample()
-        layout = sample_layout()
     else:
         return ""
     if method != "GET" and problem == "" and store != "":
-        problem = save(net, layout, Path(store))
-    return all_text(net, layout, params_of(fields), problem)
+        problem = save(net, Path(store))
+    return all_text(net, params_of(fields), problem)

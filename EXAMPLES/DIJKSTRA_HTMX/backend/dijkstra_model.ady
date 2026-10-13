@@ -2,12 +2,12 @@
 """dijkstra_model -- the model: a network of nodes and edges, what may be done to it, and
 where it is kept.
 
-A node has a name; an edge joins two nodes, both ways, at a cost. Where a node is drawn is
-not the model's business: the layout decides it (dijkstra_layout.ady). The network is a
-Network, a class: it is changed only through its methods (create, update, delete), each of
-which says what was wrong, or "" when it was done. It is kept in a text file, one line a node
-or an edge (Network.text and network_of; the file itself is read and written by
-dijkstra_events_gui.ady). The shortest way itself is the library's (TO_NIM/STDLIB/graphs.ady):
+A node has a name; an edge joins two nodes, both ways, at a cost. The network is a Network,
+a class: it is changed only through its methods (create, update, delete), each of which says
+what was wrong, or "" when it was done. It also keeps where the reader has put each node (put),
+as data; a node without a place is laid out by dijkstra_layout.ady. It is kept in a text file,
+one line a node, an edge or a place (Network.text and network_of; the file itself is read and
+written by dijkstra_events_gui.ady). The shortest way itself is the library's (TO_NIM/STDLIB/graphs.ady):
 build_graph turns the network into the graph it wants.
 
 A placeholder: replace this file with your own model. No HTML, no HTTP.
@@ -25,13 +25,30 @@ type Edge_T is record:
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
+# Where a node is drawn: its centre in the drawing. Each of x and y is a Unit_T in the browser (the
+# drawing's units, as svg_drag reads them); it is a float here, because the server cannot import svg_drag.
+type Place_T is record:
+    x: float
+    y: float
+
 class Network:
     var nodes: []Node_T                 # in the order they were made
     var edges: []Edge_T                 # each edge once
+    var places: {str}Place_T            # where the reader put a node, by name; the others are laid out
 
-    def __init__(self, nodes: []Node_T, edges: []Edge_T):
+    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Place_T):
         self.nodes = nodes
         self.edges = edges
+        self.places = places
+
+    # The reader puts the node NAME at AT.
+    def put(self, name: str, at: Place_T):
+        self.places[name] = at
+
+    # Every node goes back to the layout: no node keeps a place of its own.
+    def forget_places(self):
+        let none: {str}Place_T = {:}
+        self.places = none
 
     # The names of the nodes, in order.
     def names(self) -> []str:
@@ -117,6 +134,10 @@ class Network:
             lines.append(f"node {n.name}")
         for e in self.edges:
             lines.append(f"edge {e.a} {e.b} {e.cost}")
+        for n in self.nodes:
+            if n.name in self.places:
+                let p: Place_T = self.places[n.name]
+                lines.append(f"at {n.name} {p.x:.0f} {p.y:.0f}")
         return "\n".join(lines) + "\n"
 
     # ---- for the library ----
@@ -139,11 +160,20 @@ def sample() -> Network:
     let edges: []Edge_T = [Edge_T("A", "B", 7), Edge_T("A", "C", 9), Edge_T("A", "F", 14), Edge_T("B", "C", 10),
                          Edge_T("B", "D", 15), Edge_T("C", "D", 11), Edge_T("C", "F", 2), Edge_T("D", "E", 6),
                          Edge_T("E", "F", 9)]
-    return Network(nodes, edges)
+    let none: {str}Place_T = {:}
+    var net: Network = Network(nodes, edges, none)
+    net.put("A", Place_T(60.0, 190.0))
+    net.put("B", Place_T(200.0, 60.0))
+    net.put("C", Place_T(200.0, 190.0))
+    net.put("D", Place_T(380.0, 60.0))
+    net.put("E", Place_T(520.0, 190.0))
+    net.put("F", Place_T(330.0, 320.0))
+    return net
 
-# The network kept in TEXT (Network.text): its node and edge lines, in order.
+# The network kept in TEXT (Network.text): its node, edge and "at" lines, in order.
 def network_of(text: str) -> Network:
-    var net: Network = Network([], [])
+    let none: {str}Place_T = {:}
+    var net: Network = Network([], [], none)
     for line in text.split("\n"):
         let w: []str = line.split()
         if len(w) == 2 and w[0] == "node":
@@ -153,6 +183,14 @@ def network_of(text: str) -> Network:
             if c is ParseFailure_T:
                 continue
             let joined: str = net.add_edge(w[1], w[2], c)
+        elif len(w) == 4 and w[0] == "at":
+            let x: float | !ParseFailure_T = parse_float(w[2])
+            let y: float | !ParseFailure_T = parse_float(w[3])
+            if x is ParseFailure_T:
+                continue
+            if y is ParseFailure_T:
+                continue
+            net.put(w[1], Place_T(x, y))
     return net
 
 # Whether ROUTE runs along the edge E, in either direction: dijkstra_gui.ady draws those edges in orange.
