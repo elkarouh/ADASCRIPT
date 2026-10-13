@@ -14,13 +14,19 @@ A node the reader has put somewhere stays there; those places are kept with the 
 from backend/dijkstra_model import Network_T
 nimport math
 
-const HEIGHT: float = 380.0             # the drawing's height (580 wide)
+const WIDTH: float = 580.0             # the drawing's width
+const HEIGHT: float = 380.0             # the drawing's height
+const MARGIN: float = 30.0              # how near its edge a node may go
 
 # Where a node is drawn: its centre in the drawing. Each of x and y is a Unit_T (the drawing's units,
 # as svg_drag reads them); it is a float here because Unit_T is in the stdlib's svg_drag, which the server cannot import.
 type Place_T is record:
     x: float
     y: float
+
+# P, kept inside the drawing: a node may not go nearer its edge than MARGIN.
+def inside(p: Place_T) -> Place_T:
+    return Place_T(max(MARGIN, min(WIDTH - MARGIN, p.x)), max(MARGIN, min(HEIGHT - MARGIN, p.y)))
 
 # The place of the K-th of N nodes that nobody has put anywhere: the nodes sit on an ellipse
 # that fills the drawing, evenly spaced, in the order the model keeps them. Deterministic, so the

@@ -29,14 +29,13 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
+from browser import Element_T, Event_T, Click_T, Change, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, between, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network_T, Node_T, Edge_T, network_of
-from backend/dijkstra_layout import Layout, Place_T, layout_of
+from backend/dijkstra_layout import Layout, Place_T, inside, layout_of
 
 const WIDTH: Unit_T = 580.0     # the drawing's size (the svg's viewBox)
 const HEIGHT: Unit_T = 380.0
-const MARGIN: Unit_T = 30.0     # how near its edge a node may go
 
 # ---- The model's values, read off the drawing, and the drawing of each ----
 
@@ -48,20 +47,12 @@ def node_of(el: Element_T) -> Node_T:
 def edge_of(el: Element_T) -> Edge_T:
     return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
-# A change to send to the server: its fields, filled in by name in the form FORM (a CSS selector, one of
-# the page's forms in dijkstra_gui.ady), and then sent by pressing the form's button BUTTON. Every gesture
-# sends its change this way, so the names of the fields and the buttons are written once each.
-class Change:
-    var form: Element_T
+# Where a drawn spot is in the layout's terms (a Place_T, a float pair), and back.
+def place_of_spot(s: Spot_T) -> Place_T:
+    return Place_T(float(s.x), float(s.y))
 
-    def __init__(self, form: str):
-        self.form = page.element(form)
-
-    def set(self, name: str, value: str):
-        self.form.fill(name, value)
-
-    def send(self, button: str):
-        page.press(button)
+def spot_of_place(p: Place_T) -> Spot_T:
+    return Spot_T(x=Unit_T(p.x), y=Unit_T(p.y))
 
 # ---- The drawing as objects: each node and edge keeps its own drawn parts ----
 #
@@ -213,7 +204,7 @@ var network: NetworkView = NetworkView()     # the page is read again each time 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = Spot_T(x=between(wanted.x, MARGIN, WIDTH - MARGIN), y=between(wanted.y, MARGIN, HEIGHT - MARGIN))
+    let now: Spot_T = spot_of_place(inside(place_of_spot(wanted)))
     shift(node, centre, now)
     network.move(node_of(node).name, now)
     return now
@@ -338,7 +329,8 @@ def double_click(e: Event_T):
     if name == "":
         return
     let at: Spot_T = spot_at(e)
-    send_node(name, f"{between(at.x, MARGIN, WIDTH - MARGIN):.0f}", f"{between(at.y, MARGIN, HEIGHT - MARGIN):.0f}")
+    let kept: Place_T = inside(place_of_spot(at))
+    send_node(name, f"{kept.x:.0f}", f"{kept.y:.0f}")
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 

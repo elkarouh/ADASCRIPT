@@ -119,6 +119,23 @@ def fill(form: Element_T, name: str, value: str):
 def press(within: Element_T, css: str):
     Element(within.element(css)).click()
 
+# A change sent to the server through a form of the page: its fields are filled in by name, then a
+# button is pressed, which sends them (htmx sends the form the button is in). FORM is a CSS selector for
+# the form, BUTTON one for the button; the fields are looked for within the form.
+class Change:
+    var form: Element_T
+
+    def __init__(self, form: str):
+        self.form = page.element(form)
+
+    # Put VALUE in the field NAME of the form.
+    def set(self, name: str, value: str):
+        self.form.fill(name, value)
+
+    # Press the button BUTTON, which sends the form.
+    def send(self, button: str):
+        page.press(button)
+
 # ---- A click, as the script is told of it ----
 
 # What a click is to a script: whether shift was held, and the element clicked. `on(css)`
