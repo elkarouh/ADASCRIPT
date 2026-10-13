@@ -326,6 +326,10 @@ def grouped(b: Books, detail: int, fold: int, opened: []str, merges: []str) -> G
 # The graph: four quarters, an account a box, stacked in number order
 # ---------------------------------------------------------------------
 
+# -------------------------------------------------------------------
+# The accounts: the nodes of the drawing, each a box in its quarter
+# -------------------------------------------------------------------
+
 def quarter_of(k: Kind_T) -> int:
     if k == ASSET:
         return 0
@@ -345,35 +349,23 @@ def tall_of(g: Graph, name: str) -> float:
             outs += 1
     return max(15.0, 4.5 * float(max(ins, outs)) + 8.0)
 
-type Placed is record:
-    names:  []str
-    points: []Point_T
-    tall:   []float
-    height: float
-    split_y: float
-    slots:  []Slot_T
-
 # An account's id in the page: its number and kind, which group rows have too.
 def id_of(r: AccountRow) -> str:
     return r.number + "/" + str(int(r.kind))
 
-# Where the accounts of the books are drawn (shared/layout.ady lays them out, in the browser too):
-# each account as a slot, and the placement of all of them, with the ones dragged where they were let go.
-def placed(g: Graph, rows: []AccountRow, gr: Grouped, pos: str) -> Placed:
-    var names: []str = []
-    var slots: []Slot_T = []
-    var tall: []float = []
-    for r in rows:
-        names.append(r.name)
-        let half: float = tall_of(g, r.name)
-        tall.append(half)
-        slots.append(Slot_T(id_of(r), r.name, quarter_of(r.kind), r.number, half, group_key(gr, r.name) != ""))
-    let at: Layout_T = layout_of_slots(slots, pos)
-    return Placed(names, at.points, tall, at.height, at.split_y, slots)
-
 # A string as a JSON string, for hx-vals.
 def json_quote(s: str) -> str:
     return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+# The account's own look: its box, the arrow being drawn from it, the group and the picked (see node_html).
+const NODE_STYLE: str = """
+g.node { cursor: grab; }
+g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
+g.from { cursor: crosshair; }
+g.group { cursor: pointer; }
+g.picked rect, g.picked circle { stroke: #1565c0; stroke-width: 6; stroke-dasharray: 3 3; }
+g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
+"""
 
 def node_html(a: Account, p: Point_T, tall: float, id: str, key: str, tip: str, frozen: bool, now: bool, picked: bool) -> Html:
     let shape: Shape = Shape(True, boxes().half_w, tall)
@@ -396,12 +388,62 @@ def node_html(a: Account, p: Point_T, tall: float, id: str, key: str, tip: str, 
                 title: tip
                 + box_html(a, p, shape)
 
+def group_key(gr: Grouped, name: str) -> str:
+    for i in range(len(gr.names)):
+        if gr.names[i] == name:
+            return gr.keys[i]
+    return ""
+
+def node_tip(g: Graph, gr: Grouped, a: Account) -> str:
+    for i in range(len(gr.names)):
+        if gr.names[i] == a.name:
+            return f"{a.name}: balance {money(a.balance)}\n{gr.members[i]}\nClick to open the group"
+    return account_tip(g, a)
+
+# -------------------------------------------------------------------
+# The arrows: the edges of the drawing, each from one account to another
+# -------------------------------------------------------------------
+
+# The arrow's own look: its line, the rubber band drawn while one is made, the amount (see arrow_html).
+const EDGE_STYLE: str = """
+path.rubber { stroke: #c62828; stroke-width: 3; stroke-dasharray: 8 4; fill: none; marker-end: url(#arrow); }
+g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }
+polygon.now { fill: #e65100; }
+g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
+"""
+
 def arrow_html(g: Graph, f: Flow, route: Route_T, now: bool) -> Html:
     let css: str = ("now" if now else "")
     let tip: str = tip_of(g, f)
     html:
         g class=css data_from=f.source.name data_to=f.target.name:
             + to_html(f, route, tip)
+
+# -------------------------------------------------------------------
+# The drawing as a whole: the layout of the accounts and the page
+# -------------------------------------------------------------------
+
+type Placed is record:
+    names:  []str
+    points: []Point_T
+    tall:   []float
+    height: float
+    split_y: float
+    slots:  []Slot_T
+
+# Where the accounts of the books are drawn (shared/layout.ady lays them out, in the browser too):
+# each account as a slot, and the placement of all of them, with the ones dragged where they were let go.
+def placed(g: Graph, rows: []AccountRow, gr: Grouped, pos: str) -> Placed:
+    var names: []str = []
+    var slots: []Slot_T = []
+    var tall: []float = []
+    for r in rows:
+        names.append(r.name)
+        let half: float = tall_of(g, r.name)
+        tall.append(half)
+        slots.append(Slot_T(id_of(r), r.name, quarter_of(r.kind), r.number, half, group_key(gr, r.name) != ""))
+    let at: Layout_T = layout_of_slots(slots, pos)
+    return Placed(names, at.points, tall, at.height, at.split_y, slots)
 
 def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str, picked: []str) -> Html:
     let rows: []AccountRow = gr.books.accounts
@@ -438,18 +480,6 @@ def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_a
             # the accounts and arrows as the server keeps them, for the browser to lay out and route again
             # (outside the svg: a <pre> inside it would end the drawing)
             pre id="books": books_text(at.slots, arrows)
-
-def group_key(gr: Grouped, name: str) -> str:
-    for i in range(len(gr.names)):
-        if gr.names[i] == name:
-            return gr.keys[i]
-    return ""
-
-def node_tip(g: Graph, gr: Grouped, a: Account) -> str:
-    for i in range(len(gr.names)):
-        if gr.names[i] == a.name:
-            return f"{a.name}: balance {money(a.balance)}\n{gr.members[i]}\nClick to open the group"
-    return account_tip(g, a)
 
 # ---------------------------------------------------------------------
 # The replay: the transactions one at a time, the books as they stood after each
@@ -1232,26 +1262,16 @@ text.side { font-size: 14px; font-weight: bold; fill: #666; }
 button.redraw { display: none; }
 svg.graph { user-select: none; }
 pre#books { display: none; }
-g.node { cursor: grab; }
-g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
-g.from { cursor: crosshair; }
-path.rubber { stroke: #c62828; stroke-width: 3; stroke-dasharray: 8 4; fill: none; marker-end: url(#arrow); }
 form.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #333; border-radius: 6px; padding: 1em 1.5em; box-shadow: 0 4px 24px #0006; z-index: 10; min-width: 24em; }
 form.popup label { display: block; margin-top: 0.6em; font-weight: bold; }
 form.popup input, form.popup select { width: 100%; box-sizing: border-box; }
 form.popup button { margin: 1em 0.5em 0 0; }
 p.refused { color: #b71c1c; font-weight: bold; }
 p.note { background: #e8f5e9; padding: 0.3em 0.8em; border-radius: 4px; }
-g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }
-polygon.now { fill: #e65100; }
-g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
-g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
 tr.now td { background: #ffe0b2; font-weight: bold; }
 p.replay { margin: 0.5em 0 0 0; }
 p.caption { margin: 0.3em 0 0 0; }
 input[type=range] { vertical-align: middle; width: 16em; }
-g.group { cursor: pointer; }
-g.picked rect, g.picked circle { stroke: #1565c0; stroke-width: 6; stroke-dasharray: 3 3; }
 tr.later td { color: #bbb; }
 tbody.now td { background: #ffe0b2; font-weight: bold; }
 tbody.later td { color: #bbb; }
@@ -1283,7 +1303,7 @@ def shell() -> Html:
             head:
                 meta charset="utf-8"
                 title: "Accounting, as graph theory"
-                style: STYLE + EXTRA
+                style: STYLE + NODE_STYLE + EDGE_STYLE + EXTRA
                 script src="/htmx.min.js"
                 script src="/accounting_js_events.js"
             body:
