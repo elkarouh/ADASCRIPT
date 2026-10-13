@@ -11,7 +11,7 @@ goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network_T, Node_T, build_graph, names_of, text_of, uses
-from backend/dijkstra_layout_gui import Layout, Place_T, WIDTH, HEIGHT
+from backend/dijkstra_layout import Layout, Place_T, WIDTH, HEIGHT
 from backend/dijkstra_request import Params_T
 
 # ---- the drawing ----

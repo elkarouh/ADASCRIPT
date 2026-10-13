@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""dijkstra_layout_gui -- the layout: where each node of the network is drawn.
+"""dijkstra_layout -- the layout: where each node of the network is drawn.
 
 The model (dijkstra_model.ady) says what the network is; the layout says where its nodes go.
 It is computed from the model, never read off a page: the server draws the page with it

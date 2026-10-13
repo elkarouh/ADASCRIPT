@@ -6,12 +6,12 @@ the page that comes out. The tests call answer() the same way, with no server ru
 The network is kept in a text file (keep_in), written after every change.
 """
 from backend/dijkstra_model import Network_T, add_edge, add_node, names_of, network_of, remove_edge, remove_node, sample, set_cost, text_of
-from backend/dijkstra_layout_gui import Layout, Place_T, layout_of, new_spot, sample_layout
+from backend/dijkstra_layout import Layout, Place_T, layout_of, new_spot, sample_layout
 from backend/dijkstra_gui import all_text
 from backend/dijkstra_request import field_of, number_of, params_of
 
 var net: Network_T = sample()
-var layout: Layout = sample_layout()   # where each node is drawn (dijkstra_layout_gui.ady), kept with the network
+var layout: Layout = sample_layout()   # where each node is drawn (dijkstra_layout.ady), kept with the network
 var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
 
 # Network and layout, kept together in PATH: the node and edge lines, then the "at" lines.
