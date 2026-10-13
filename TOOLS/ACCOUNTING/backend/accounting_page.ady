@@ -417,25 +417,27 @@ def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_a
     let by: str = px(at.split_y + 30.0)
     let down: str = f"M {px(WIDTH / 2.0)} 8 L {px(WIDTH / 2.0)} {px(at.height - 8.0)}"
     html:
-        svg viewBox=box class="graph":
-            defs:
-                marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
-                    polygon points="0 0, 10 3.5, 0 7"
-                marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
-                    polygon class="now" points="0 0, 4.3 1.5, 0 3"
-            path class="split" d=down
-            path class="split" d=across
-            stext class="side" x="20" y="30": "Assets"
-            stext class="side" x=rx y="30": "Liabilities and equity"
-            stext class="side" x="20" y=by: "Expenses"
-            stext class="side" x=rx y=by: "Revenue"
-            for i in range(len(g.flows)):
-                + arrow_html(g, g.flows[i], routes[i], (g.flows[i].source.name + "\t" + g.flows[i].target.name) in now_arrows)
-            path id="rubber" class="rubber" d=""
+        div class="drawing":
+            svg viewBox=box class="graph":
+                defs:
+                    marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                        polygon points="0 0, 10 3.5, 0 7"
+                    marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
+                        polygon class="now" points="0 0, 4.3 1.5, 0 3"
+                path class="split" d=down
+                path class="split" d=across
+                stext class="side" x="20" y="30": "Assets"
+                stext class="side" x=rx y="30": "Liabilities and equity"
+                stext class="side" x="20" y=by: "Expenses"
+                stext class="side" x=rx y=by: "Revenue"
+                for i in range(len(g.flows)):
+                    + arrow_html(g, g.flows[i], routes[i], (g.flows[i].source.name + "\t" + g.flows[i].target.name) in now_arrows)
+                path id="rubber" class="rubber" d=""
+                for i in range(len(g.accounts)):
+                    + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source, g.accounts[i].name in now_accounts, g.accounts[i].name in picked)
             # the accounts and arrows as the server keeps them, for the browser to lay out and route again
+            # (outside the svg: a <pre> inside it would end the drawing)
             pre id="books": books_text(at.slots, arrows)
-            for i in range(len(g.accounts)):
-                + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source, g.accounts[i].name in now_accounts, g.accounts[i].name in picked)
 
 def group_key(gr: Grouped, name: str) -> str:
     for i in range(len(gr.names)):
@@ -1229,6 +1231,7 @@ path.split { stroke: #999; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none;
 text.side { font-size: 14px; font-weight: bold; fill: #666; }
 button.redraw { display: none; }
 svg.graph { user-select: none; }
+pre#books { display: none; }
 g.node { cursor: grab; }
 g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
 g.from { cursor: crosshair; }
