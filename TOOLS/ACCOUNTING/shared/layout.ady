@@ -147,10 +147,18 @@ def books_text(slots: []Slot_T, arrows: []Arrow_T) -> str:
     var lines: []str = []
     for s in slots:
         let group: str = ("1" if s.group else "0")
-        lines.append(f"slot\t{s.id}\t{s.quarter}\t{s.number}\t{s.tall:.1f}\t{group}\t{s.name}")
+        lines.append("\t".join(["slot", field_out(s.id), str(s.quarter), field_out(s.number), f"{s.tall:.1f}", group, field_out(s.name)]))
     for a in arrows:
-        lines.append(f"arrow\t{a.source}\t{a.target}\t{a.label}")
+        lines.append("\t".join(["arrow", field_out(a.source), field_out(a.target), field_out(a.label)]))
     return "\n".join(lines) + "\n"
+
+# A field of a line of books_text, written so that no tab, newline or % in it can break the line:
+# each of those becomes %09, %0A or %25. field_in undoes it.
+def field_out(text: str) -> str:
+    return text.replace("%", "%25").replace("\t", "%09").replace("\n", "%0A")
+
+def field_in(text: str) -> str:
+    return text.replace("%0A", "\n").replace("%09", "\t").replace("%25", "%")
 
 # TEXT as a number: -1 when it is not one.
 def number_of(text: str) -> float:
@@ -166,7 +174,7 @@ def slots_of(text: str) -> []Slot_T:
     for line in text.split("\n"):
         let w: []str = line.split("\t")
         if len(w) == 7 and w[0] == "slot":
-            slots.append(Slot_T(w[1], w[6], int(number_of(w[2])), w[3], number_of(w[4]), w[5] == "1"))
+            slots.append(Slot_T(field_in(w[1]), field_in(w[6]), int(number_of(w[2])), field_in(w[3]), number_of(w[4]), w[5] == "1"))
     return slots
 
 # The arrows of books_text TEXT, in their order.
@@ -175,5 +183,5 @@ def arrows_of(text: str) -> []Arrow_T:
     for line in text.split("\n"):
         let w: []str = line.split("\t")
         if len(w) == 4 and w[0] == "arrow":
-            arrows.append(Arrow_T(w[1], w[2], w[3]))
+            arrows.append(Arrow_T(field_in(w[1]), field_in(w[2]), field_in(w[3])))
     return arrows

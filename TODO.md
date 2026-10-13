@@ -4,6 +4,15 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] JSON for the browser. The accounting page hands the browser its accounts and
+      arrows as tab-separated lines in a hidden `pre` (`TOOLS/ACCOUNTING/shared/layout.ady`,
+      `books_text`/`slots_of`), with the fields matched by position and escaped by hand.
+      JSON in a `<script type="application/json">` element would follow the record types
+      instead. The server can already use it (`from json nimport parseJson, ...`, std/json),
+      but the browser build cannot: `browser.ady` has no JSON, and a plain `parseJson` plus
+      `JsonNode` indexing did not translate. The fix is a stdlib piece: typed accessors
+      over the parsed value in `browser.ady`, tested on both backends. Then the page
+      writes the records as JSON and the browser reads them by name.
 - [ ] an imported function named like a builtin is read as the builtin. A
       same-file `def run` overrides the builtin `run([...])` (the tutorial says
       so), but `from loop import run` does not: the call is the builtin's, and the

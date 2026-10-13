@@ -67,6 +67,12 @@ let kept: str = books_text(kept_slots, kept_arrows)
 assert kept == "slot\t100000/0\t0\t100000\t15.0\t0\tBank\nslot\t610000/2\t2\t610000\t23.0\t1\tRent\narrow\tBank\tRent\t$100.00\n"
 assert slots_of(kept)[1].name == "Rent" and slots_of(kept)[1].group and not slots_of(kept)[0].group
 assert arrows_of(kept)[0].label == "$100.00"
+# a name with a tab, a newline or a % reads back as it was: the line it is on is not broken
+let odd: []Slot_T = [Slot_T("1/0", "Ban\tk\n50%", 0, "1", 15.0, false)]
+let no_arrows: []Arrow_T = []
+let odd_text: str = books_text(odd, no_arrows)
+assert len(odd_text.split("\n")) == 2 and len(slots_of(odd_text)) == 1
+assert slots_of(odd_text)[0].name == "Ban\tk\n50%" and slots_of(odd_text)[0].id == "1/0"
 assert layout_of_slots(slots_of(kept), "100000/0@600.0,300.0").points[0].x == 600.0
 assert "<pre id=\"books\">slot\t" in all_text(b, ["x"], ["X"], "x", params_of(""))
 assert "<script src=\"/accounting_js_events.js\"" in shell_text()
