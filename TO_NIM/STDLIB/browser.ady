@@ -22,6 +22,13 @@ called on its first argument that way):
     form.field("pos")                           # and read one
     page.press("#redraw")                       # click a button, as the user would
 
+A change sent to the server through a form is a Change: fill its fields by name, then press its button,
+which sends them (htmx sends the form the button is in):
+
+    let change: Change = Change("#gesture")     # the form, by its CSS selector
+    change.set("name", "A")                     # a field of it, by name
+    change.send("#make_node")                   # its button
+
 A CSS selector names elements the way the page's stylesheet does: "g.node" is a <g> of class
 node, "#move" the element with id="move", "g[data_from]" a <g> that has a data_from
 attribute, "input[name=pos]" the <input> named pos.
