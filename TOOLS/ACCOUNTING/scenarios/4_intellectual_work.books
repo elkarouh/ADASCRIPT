@@ -1,4 +1,4 @@
-# scenarios/4_intellectual_work.books: loaded by ledger_server into 4_intellectual_work.db the first time it is picked,
+# scenarios/4_intellectual_work.books: loaded by server into 4_intellectual_work.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	4. Intellectual work: hours billed, hours capitalised
 about	Hours never enter the books, only the salaries paid for them (Wages and salaries). Work billed to a client is a cost this year, against the sale it brings.

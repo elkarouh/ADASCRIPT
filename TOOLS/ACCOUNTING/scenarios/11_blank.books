@@ -1,4 +1,4 @@
-# scenarios/11_blank.books: loaded by ledger_server into 11_blank.db the first time it is picked,
+# scenarios/11_blank.books: loaded by server into 11_blank.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	11. Start from scratch
 about	The whole chart of accounts, and no transaction yet: the books of a company of your own. Record its first transaction by freezing Share capital and dragging an arrow to Bank.

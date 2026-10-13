@@ -1,4 +1,4 @@
-# scenarios/10_small_company.books: loaded by ledger_server into 10_small_company.db the first time it is picked,
+# scenarios/10_small_company.books: loaded by server into 10_small_company.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	10. A small company's year, from the founders' money to the income tax
 about	One year of a small trading company, each kind of transaction once: the founders' capital and a bank loan; equipment bought; goods bought on credit and sold with VAT; rent and salaries paid, with the social security and withholding tax passed on; the loan repaid with interest; the VAT return.

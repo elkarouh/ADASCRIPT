@@ -1,4 +1,4 @@
-# scenarios/1_basics.books: loaded by ledger_server into 1_basics.db the first time it is picked,
+# scenarios/1_basics.books: loaded by server into 1_basics.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	1. The basics: money moves between accounts
 about	A company's first months, without VAT, after Martin Kleppmann's article. Each arrow is money leaving one account and reaching another; each account's balance is what came in less what went out.

@@ -9,7 +9,7 @@ statements are read off the balances. It started as an example in
 ## The tool
 
 ```
-make app            # builds everything, starts ledger_server, opens http://127.0.0.1:8802/
+make app            # builds everything, starts server, opens http://127.0.0.1:8802/
 ```
 
 The graph and its controls (scenario picker, replay, date slider, Exercise,
@@ -170,18 +170,18 @@ are replayed with the others, and Delete takes them back.
 
 A scenario is `scenarios/NAME.books`, the books as text (`books_text.ady`:
 a title, about lines, the accounts, the transactions), and `NAME.db`, the
-database the page changes. ledger_server makes NAME.db from NAME.books the
+database the page changes. server makes NAME.db from NAME.books the
 first time NAME is shown, again on Start over, and again when NAME.books
 is newer than NAME.db (a new version of the scenario came in, with git pull); Save as writes the books
 shown to a new NAME.books. A new scenario is a new .books file: write it by
 hand, record it in the page and Save as, or start one with `./backend/ledger new
-NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
+NAME`. `server --scenario NAME` starts on NAME, else on the first.
 
 | File | What it is |
 |---|---|
 | `backend/` (native, compiled to C) | |
 | `backend/ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
-| `backend/ledger_server.ady` | HTTP only: hands each request to `accounting_events.ady` and serves the scripts |
+| `backend/server.ady` | HTTP only: hands each request to `accounting_events.ady` and serves the scripts |
 | `backend/accounting_events.ady` | what each event the page sends does to the books (record, delete, open an account, close the year, the scenarios); holds the books shown. No HTTP |
 | `backend/accounting_gui.ady` | `to_html` for the model's objects (boxes, arrows, tables, statements), the page's texts, and the static example (`make gui`) |
 | `backend/accounting_page_gui.ady` | the page, drawn by the server for htmx, and which event each part of it sends (`hx-*` attributes) |
@@ -372,7 +372,7 @@ that check what the learner records, and the year-end closing.
 
 ## How the page is made (HTMX)
 
-`ledger_server` draws the page itself: http://127.0.0.1:8802/. It is
+`server` draws the page itself: http://127.0.0.1:8802/. It is
 htmx (`frontend/htmx.min.js`, 14 KB gzipped, copied to `build/`) swapping in the HTML
 that `backend/accounting_page_gui.ady` makes, with the same `backend/accounting_gui.ady`, `backend/books_text.ady`, `shared/routes.ady` and
 `backend/accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no

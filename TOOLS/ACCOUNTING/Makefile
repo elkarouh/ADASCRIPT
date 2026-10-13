@@ -4,7 +4,7 @@
 # (nimble install db_connector).
 #
 #   make app        the tool: the books drawn in the browser, kept by clicking
-#                   (ledger_server draws the page, backend/accounting_page_gui.ady; each scenario,
+#                   (server draws the page, backend/accounting_page_gui.ady; each scenario,
 #                   scenarios/NAME.books, gets a database NAME.db there)
 #   make ledger     build the ledger's command line (backend/ledger -h, backend/ledger list)
 #   make gui        the example as a static web page      (backend/accounting_gui.ady)
@@ -25,9 +25,9 @@ ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
 PORT    ?= 8802
 
-.PHONY: all app ledger ledger_server gui test clean
+.PHONY: all app ledger server gui test clean
 
-all: ledger ledger_server build/accounting_gui.html build/accounting_js_events.js build/htmx.min.js
+all: ledger server build/accounting_gui.html build/accounting_js_events.js build/htmx.min.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
 ledger:
@@ -35,9 +35,9 @@ ledger:
 	@$(ADY2NIM) c backend/ledger.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
-ledger_server:
-	@echo "building backend/ledger_server"
-	@$(ADY2NIM) c backend/ledger_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+server:
+	@echo "building backend/server"
+	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 build/accounting_gui.html: backend/accounting_gui.ady shared/routes.ady backend/accounting_model.ady
@@ -63,9 +63,9 @@ build/htmx.min.js: frontend/htmx.min.js
 gui: build/accounting_gui.html
 	$(OPEN) $(CURDIR)/$<
 
-app: ledger_server build/accounting_js_events.js build/htmx.min.js
+app: server build/accounting_js_events.js build/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
-	./backend/ledger_server --port $(PORT)
+	./backend/server --port $(PORT)
 
 test:
 	$(ADY2NIM) c -r tests/test_accounting_model.ady 2>/dev/null

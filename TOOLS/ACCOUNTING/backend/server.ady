@@ -1,10 +1,10 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args c -d:release
-"""ledger_server -- the ledger's books, served to the page that draws them; HTTP only.
+"""server -- the ledger's books, served to the page that draws them; HTTP only.
 
 What each request does to the books is accounting_events.ady; the page is accounting_page_gui.ady.
 
-    ledger_server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
+    server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
 
 Serves the page (drawn by accounting_page_gui.ady, with build/htmx.min.js and
 build/accounting_js_events.js beside the config file) and, as text (books_text.ady), the books of one scenario and

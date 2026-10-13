@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """accounting_events -- what each event the page sends does to the books; no HTTP.
 
-ledger_server.ady hands each request here and sends back what comes out: the page again
+server.ady hands each request here and sends back what comes out: the page again
 (page_all, page_record, page_do) for htmx, or text (post_text) for the plain POST routes. The
 books shown and the scenarios are kept here.
 """

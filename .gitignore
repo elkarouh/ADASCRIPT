@@ -116,7 +116,7 @@ EXAMPLES/HTML/build/
 
 # The accounting tool: its program, tests and pages, and the database it keeps.
 TOOLS/ACCOUNTING/backend/ledger
-TOOLS/ACCOUNTING/backend/ledger_server
+TOOLS/ACCOUNTING/backend/server
 TOOLS/ACCOUNTING/tests/test_ledger
 TOOLS/ACCOUNTING/tests/test_gnucash
 TOOLS/ACCOUNTING/tests/test_beancount

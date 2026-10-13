@@ -1,4 +1,4 @@
-# scenarios/6_salaries.books: loaded by ledger_server into 6_salaries.db the first time it is picked,
+# scenarios/6_salaries.books: loaded by server into 6_salaries.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	6. Salaries: what an employee costs, and who gets it
 about	A salary costs the company more than the employee receives. On a gross salary of 4,000 the company adds its own social security (here 25%, 1,000), so the employee costs 5,000. The employee's own social security (13.07%, 522.80) and the withholding tax (900) are kept back from the gross: 2,577.20 is paid out.

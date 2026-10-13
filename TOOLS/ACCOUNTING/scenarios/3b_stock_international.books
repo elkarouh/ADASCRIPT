@@ -1,4 +1,4 @@
-# scenarios/3b_stock_international.books: loaded by ledger_server into 3b_stock_international.db the first time it is picked,
+# scenarios/3b_stock_international.books: loaded by server into 3b_stock_international.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	3b. Stock, the international way: an asset until sold, then cost of sales
 about	The international way (IFRS, the perpetual inventory): material bought for resale is not a cost when it is bought: it goes to Goods for resale, an asset. When it is sold, its cost moves from Goods for resale to Cost of sales, in the same period as the sale's revenue, so the profit on each sale shows: 5,000 less 3,000.

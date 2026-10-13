@@ -1,4 +1,4 @@
-# scenarios/3a_stock_belgian.books: loaded by ledger_server into 3a_stock_belgian.db the first time it is picked,
+# scenarios/3a_stock_belgian.books: loaded by server into 3a_stock_belgian.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	3a. Stock, the Belgian way: purchases (604) and the stock variation (609)
 about	The Belgian way (PCMN/MAR): material bought for resale goes straight to 604 Purchases (achats, aankopen), a cost. At the year end the stock is counted, and what is still there goes back to 340 Goods for resale, an asset, through 609 Change in stock (variation des stocks, voorraadwijziging), which lowers the cost of the year.

@@ -1447,8 +1447,8 @@ test: compile
 	        (cd $(TOOLDIR)/ACCOUNTING && $(ADY2NIM) c -r tests/$$t.ady >/dev/null 2>&1) \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
-	    printf '  %-42s' "ACCOUNTING/backend/ledger_server.ady (nim)"; \
-	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/backend/ledger_server.ady >/dev/null 2>&1 \
+	    printf '  %-42s' "ACCOUNTING/backend/server.ady (nim)"; \
+	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/backend/server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    if [ -z "$(HTML_SKIPPED)" ]; then \
 	        printf '  %-42s' "ACCOUNTING/frontend/accounting_js_events.ady (ady2nim js)"; \

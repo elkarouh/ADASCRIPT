@@ -1,4 +1,4 @@
-# scenarios/7_customer_deposit.books: loaded by ledger_server into 7_customer_deposit.db the first time it is picked,
+# scenarios/7_customer_deposit.books: loaded by server into 7_customer_deposit.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	7. A customer's deposit: money in, but no revenue yet
 about	A deposit paid before the goods are delivered is not revenue: the company owes the goods, or the money back. It sits in Advances received, a liability (acomptes reçus, ontvangen vooruitbetalingen), until the delivery.

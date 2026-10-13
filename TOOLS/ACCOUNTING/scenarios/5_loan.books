@@ -1,4 +1,4 @@
-# scenarios/5_loan.books: loaded by ledger_server into 5_loan.db the first time it is picked,
+# scenarios/5_loan.books: loaded by server into 5_loan.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	5. A loan: borrowing is not income, interest is a cost
 about	The bank's 10,000 is owed back (Bank loans, a liability), so it is no revenue, and repaying it is no cost: only the interest is. The van it buys is an asset, worth a fifth less each year.

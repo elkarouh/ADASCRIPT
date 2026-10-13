@@ -1,4 +1,4 @@
-# scenarios/8_credit_note_and_bad_debt.books: loaded by ledger_server into 8_credit_note_and_bad_debt.db the first time it is picked,
+# scenarios/8_credit_note_and_bad_debt.books: loaded by server into 8_credit_note_and_bad_debt.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	8. A credit note and a bad debt: revenue that does not come in
 about	A credit note takes back part of a sale: customer A returns damaged goods, so 500 of the sale is cancelled, the arrow going from Trade receivables back to Sales.

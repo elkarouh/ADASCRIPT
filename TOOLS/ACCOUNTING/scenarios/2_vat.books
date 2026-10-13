@@ -1,4 +1,4 @@
-# scenarios/2_vat.books: loaded by ledger_server into 2_vat.db the first time it is picked,
+# scenarios/2_vat.books: loaded by server into 2_vat.db the first time it is picked,
 # and again by Start over. Amounts are in cents.
 title	2. VAT: collected for the tax office, not earned
 about	The VAT paid on a purchase is claimed back (VAT receivable), the VAT charged on a sale is owed (VAT payable); neither is a cost or a revenue. At the VAT return the two are set off, and the bank pays the difference.
