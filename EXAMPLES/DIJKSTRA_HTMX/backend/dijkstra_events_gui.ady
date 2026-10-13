@@ -5,18 +5,18 @@ server.ady hands every request here as a method, a path and its fields, and send
 the page that comes out. The tests call answer() the same way, with no server running.
 The network is kept in a text file (keep_in), written after every change.
 """
-from backend/dijkstra_model import Network_T, add_edge, add_node, names_of, network_of, remove_edge, remove_node, sample, set_cost, text_of
+from backend/dijkstra_model import Network, network_of, sample
 from backend/dijkstra_layout import Layout, Place_T, layout_of, new_spot, sample_layout
 from backend/dijkstra_gui import all_text
 from backend/dijkstra_request import field_of, number_of, params_of
 
-var net: Network_T = sample()
+var net: Network = sample()
 var layout: Layout = sample_layout()   # where each node is drawn (dijkstra_layout.ady), kept with the network
 var store: str = ""                     # the file the network is kept in; "" keeps it nowhere (the tests)
 
 # Network and layout, kept together in PATH: the node and edge lines, then the "at" lines.
-def save(net: Network_T, layout: Layout, path: Path) -> str:
-    let done: None | !PathFailure_T = path.write_text(text_of(net) + layout.text_of(net))
+def save(net: Network, layout: Layout, path: Path) -> str:
+    let done: None | !PathFailure_T = path.write_text(net.text() + layout.text_of(net))
     if done is PathFailure_T:
         return f"Could not write {path}."
     return ""
@@ -58,25 +58,25 @@ def answer(method: str, path: str, fields: str) -> str:
     elif method == "POST" and path == "/nodes":
         let x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
         let y: float = number_of(field_of(fields, "y"))
-        problem = add_node(net, name)
+        problem = net.add_node(name)
         if problem == "":
             if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
                 layout.put(name, new_spot(len(net.nodes) - 1, len(net.nodes)))
             else:
                 layout.put(name, Place_T(x, y))
     elif method == "PUT" and path == "/nodes":
-        if name in names_of(net):
+        if name in net.names():
             layout.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
         else:
             problem = f"There is no node {name}."
     elif method == "DELETE" and path == "/nodes":
-        problem = remove_node(net, name)
+        problem = net.remove_node(name)
     elif method == "POST" and path == "/edges":
-        problem = add_edge(net, a, b, cost)
+        problem = net.add_edge(a, b, cost)
     elif method == "PUT" and path == "/edges":
-        problem = set_cost(net, a, b, cost)
+        problem = net.set_cost(a, b, cost)
     elif method == "DELETE" and path == "/edges":
-        problem = remove_edge(net, a, b)
+        problem = net.remove_edge(a, b)
     elif method == "POST" and path == "/relayout":
         let none: {str}Place_T = {:}
         layout = Layout(none)           # no node has a place of its own: the layout gives each one

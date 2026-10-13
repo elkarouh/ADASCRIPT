@@ -1,27 +1,27 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_dijkstra.ady"""
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network_T, add_edge, add_node, build_graph, network_of, remove_edge, remove_node, sample, set_cost, text_of, uses
+from backend/dijkstra_model import Edge_T, Network, network_of, sample, uses
 from backend/dijkstra_events_gui import answer, keep_in
 
 # ---- the model ----
-var net: Network_T = sample()
-let w: (float, []str) = shortest_route[str](build_graph(net), "A", "E")
+var net: Network = sample()
+let w: (float, []str) = shortest_route[str](net.build_graph(), "A", "E")
 assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
-assert shortest_route[str](build_graph(net), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
+assert shortest_route[str](net.build_graph(), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
 assert uses(w[1], Edge_T("C", "F", 2)) and not uses(w[1], Edge_T("A", "B", 7))
 
-assert add_node(net, "G") == ""
-assert add_node(net, "G") == "There is a node G already."
-assert add_node(net, "a b") != ""                    # letters and digits only
-assert add_edge(net, "G", "A", 3) == ""
-assert add_edge(net, "A", "G", 4) != ""                          # either way round, one edge
-assert add_edge(net, "G", "G", 4) != "" and add_edge(net, "G", "Z", 4) != ""
-assert set_cost(net, "A", "G", 5) == "" and set_cost(net, "A", "G", 0) != ""
-assert "node G" in text_of(net) and "edge G A 5" in text_of(net)
-assert text_of(network_of(text_of(net))) == text_of(net)         # kept and read back, the same
-assert remove_edge(net, "G", "A") == "" and remove_edge(net, "G", "A") != ""
-assert remove_node(net, "C") == ""
+assert net.add_node("G") == ""
+assert net.add_node("G") == "There is a node G already."
+assert net.add_node("a b") != ""                    # letters and digits only
+assert net.add_edge("G", "A", 3) == ""
+assert net.add_edge("A", "G", 4) != ""                          # either way round, one edge
+assert net.add_edge("G", "G", 4) != "" and net.add_edge("G", "Z", 4) != ""
+assert net.set_cost("A", "G", 5) == "" and net.set_cost("A", "G", 0) != ""
+assert "node G" in net.text() and "edge G A 5" in net.text()
+assert network_of(net.text()).text() == net.text()         # kept and read back, the same
+assert net.remove_edge("G", "A") == "" and net.remove_edge("G", "A") != ""
+assert net.remove_node("C") == ""
 assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edges went with it
 
 # ---- the page, through the requests the server answers (kept nowhere) ----

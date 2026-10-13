@@ -11,7 +11,7 @@ A node the reader has put somewhere stays there; those places are kept with the 
 "at" lines beside its node and edge lines. Any other node goes where the layout puts it
 (new_spot), which is the layout algorithm: the nodes in a ring, in the order the model keeps them.
 """
-from backend/dijkstra_model import Network_T
+from backend/dijkstra_model import Network
 nimport math
 
 const WIDTH: float = 580.0             # the drawing's width
@@ -42,7 +42,7 @@ class Layout:
         self.places = places
 
     # Where the node NAME of NET is drawn: where the reader put it, else where the layout puts it.
-    def place_of(self, net: Network_T, name: str) -> Place_T:
+    def place_of(self, net: Network, name: str) -> Place_T:
         if name in self.places:
             return self.places[name]
         for i in range(len(net.nodes)):
@@ -55,7 +55,7 @@ class Layout:
         self.places[name] = at
 
     # The places of NET's nodes as text, "at A 60 190", a line each; nodes that are gone are left out.
-    def text_of(self, net: Network_T) -> str:
+    def text_of(self, net: Network) -> str:
         var lines: []str = []
         for n in net.nodes:
             if n.name in self.places:

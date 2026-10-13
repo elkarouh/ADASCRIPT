@@ -39,7 +39,7 @@ gesture means in this app.
 """
 from browser import Element_T, Event_T, Click_T, Change, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, between, shift, draw_line, place_at, no_click_cb, draggable
-from backend/dijkstra_model import Network_T, Node_T, Edge_T, network_of
+from backend/dijkstra_model import Network, Node_T, Edge_T, network_of
 from backend/dijkstra_layout import Layout, Place_T, WIDTH, inside, layout_of
 
 
@@ -63,7 +63,7 @@ def spot_of_place(p: Place_T) -> Spot_T:
 # ---- The drawing as objects: each node and edge keeps its own drawn parts ----
 #
 # A NodeView is a node as the page draws it: its Node_T and its element. An EdgeView is an edge
-# as the page draws it: its Edge_T and its element. The NetworkView holds the model (Network_T)
+# as the page draws it: its Edge_T and its element. The NetworkView holds the model (Network)
 # and its Layout, and derives a view for each node and edge of the model; where anything is
 # drawn, it asks the layout. It is built again each time htmx draws the page (see page_drawn).
 #
@@ -161,7 +161,7 @@ def kept_text() -> str:
 # view of each node and edge derived from the model. It decides where everything is drawn (by
 # asking its layout); the views only draw what it tells them.
 class NetworkView:
-    var network: Network_T
+    var network: Network
     var layout: Layout
     var nodes: {str}NodeView            # by name
     var edge_views: {str}EdgeView       # by "A-B", the ends as the edge names them
