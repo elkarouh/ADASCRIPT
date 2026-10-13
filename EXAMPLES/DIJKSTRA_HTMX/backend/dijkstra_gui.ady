@@ -36,6 +36,10 @@ def params_of(text: str) -> Params_T:
 
 # ---- the drawing ----
 
+# ------------------------------------------------------------
+# The edges: their look, how each is drawn, and the buttons that act on them.
+# ------------------------------------------------------------
+
 # The edge's own look: the line, the wider line to point at, the cost (see to_html).
 const EDGE_STYLE: str = """
 path.edge { stroke: #b0b8c1; stroke-width: 2.5; fill: none; }
@@ -57,6 +61,22 @@ def to_html(e: Edge_T, on_way: bool, p1: Place_T, p2: Place_T) -> Html:
             path class="hit" d=d
             stext class="cost" x=lx y=ly: label
 
+# The buttons that act on the edges, sent through the hidden form #gesture (see all_html): add one, set its
+# cost, delete it.
+def edge_buttons_html() -> Html:
+    html:
+        span class="edge-actions":
+            input type="hidden" name="a" value=""
+            input type="hidden" name="b" value=""
+            input type="hidden" name="cost" value=""
+            button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
+            button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
+            button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
+
+# ------------------------------------------------------------
+# The nodes: their look, how each is drawn, and the buttons that act on them.
+# ------------------------------------------------------------
+
 # The node's own look: its circle, its name, its port (see to_html).
 const NODE_STYLE: str = """
 g.node { cursor: grab; }
@@ -71,18 +91,6 @@ g.node:hover circle.port, g.node.selected circle.port { opacity: 1; }
 text.name { font-size: 16px; font-weight: 700; text-anchor: middle; pointer-events: none; fill: var(--ink); }
 """
 
-# The buttons that act on the edges, sent through the hidden form #gesture (see all_html): add one, set its
-# cost, delete it.
-def edge_buttons_html() -> Html:
-    html:
-        span class="edge-actions":
-            input type="hidden" name="a" value=""
-            input type="hidden" name="b" value=""
-            input type="hidden" name="cost" value=""
-            button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
-            button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
-            button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
-
 # A node: its circle and name, and a port (the dot on its right) from which a wire is drawn to another.
 def to_html(n: Node_T, at: Place_T, role: str) -> Html:
     let cx: str = f"{at.x:.0f}"
@@ -95,13 +103,6 @@ def to_html(n: Node_T, at: Place_T, role: str) -> Html:
             circle cx=cx cy=cy r="24"
             stext class="name" x=cx y=ty: n.name
             circle class="port" cx=px cy=cy r="6"
-
-# The menus' own look (see menus_html).
-const MENU_STYLE: str = """
-div.menu { position: fixed; z-index: 10; display: none; flex-direction: column; min-width: 10em; background: #fff;
-           border: 1px solid #cbd2d9; border-radius: 8px; box-shadow: 0 6px 18px rgba(31, 41, 51, 0.18); padding: 0.3em; }
-div.menu button { border: none; text-align: left; border-radius: 4px; padding: 0.4em 0.7em; }
-"""
 
 # The buttons that act on the nodes, sent through the hidden form #gesture (see all_html):
 # choose one for the route, add one, delete one.
@@ -116,6 +117,13 @@ def node_buttons_html() -> Html:
             button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
             button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
             button type="button" id="drop_node" data_hx_delete="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete node"
+
+# The menus' own look (see menus_html).
+const MENU_STYLE: str = """
+div.menu { position: fixed; z-index: 10; display: none; flex-direction: column; min-width: 10em; background: #fff;
+           border: 1px solid #cbd2d9; border-radius: 8px; box-shadow: 0 6px 18px rgba(31, 41, 51, 0.18); padding: 0.3em; }
+div.menu button { border: none; text-align: left; border-radius: 4px; padding: 0.4em 0.7em; }
+"""
 
 # The menu of what a right click on a node, an edge or the space offers: the buttons carry
 # data_tool, which dijkstra_js_events.ady acts on for the thing that was right-clicked.
