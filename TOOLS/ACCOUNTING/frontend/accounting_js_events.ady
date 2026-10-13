@@ -23,7 +23,7 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`,
 `clicked_cb` for the shift-click.
 """
 from shared/routes import Point_T, Route_T, boxes, routes_of
-from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position
+from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
 from browser import Element_T, Event_T, Click_T, page, text, field, on, stop, listen
 from svg_drag import Hooks_T, Unit_T, Spot_T, shift, draggable
 
@@ -87,24 +87,12 @@ class BooksView:
                     return s.name
         return ""
 
-    # AT, kept inside the quarter of account ID: the assets on the left above the split and the liabilities
-    # and equity on the right, the costs and revenue below it, as shared/layout.ady lays them out.
+    # AT, kept inside the quarter of account ID (shared/layout.ady says where a quarter ends).
     def within_quarter(self, id: str, at: Point_T) -> Point_T:
         let k: int = self.index_of(id)
         if k < 0:
             return at
-        let q: int = self.slots[k].quarter
-        var x0: float = float(HALF_W)
-        var x1: float = float(WIDTH) / 2.0 - float(HALF_W)
-        if q % 2 == 1:
-            x0 = float(WIDTH) / 2.0 + float(HALF_W)
-            x1 = float(WIDTH) - float(HALF_W)
-        var y0: float = 60.0
-        var y1: float = self.layout.split_y - 20.0
-        if q >= 2:
-            y0 = self.layout.split_y + 50.0
-            y1 = self.height - self.slots[k].tall - 20.0    # inside the drawing as drawn (shared/layout.ady leaves 20 below), not the height that grows with the drag
-        return Point_T(max(x0, min(x1, at.x)), max(y0, min(y1, at.y)))
+        return within_quarter(self.slots[k], at, self.layout.split_y, self.height)
 
     # The account ID is dragged to AT: it is laid out there, and every arrow is routed again from the
     # layout, as the server will route them when the page is drawn again.

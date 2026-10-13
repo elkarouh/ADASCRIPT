@@ -11,10 +11,14 @@ The page keeps the accounts and arrows as text in a hidden element (books_text b
 browser reads them back with slots_of and arrows_of; where the reader dragged an account is kept
 in the form field pos ("id@x,y|id@x,y", see with_position).
 """
-from shared/routes import Point_T
+from shared/routes import Point_T, boxes
 
 const WIDTH: float = 980.0      # the drawing's width (the svg's viewBox); its height varies
 const GAP: float = 10.0         # between two accounts stacked in a quarter
+const TOP: float = 60.0         # the upper quarters start this far down the drawing
+const SPLIT_GAP: float = 20.0   # the split line lies this far below the upper quarters
+const BELOW: float = 50.0       # the lower quarters start this far below the split line
+const MARGIN: float = 20.0      # the drawing ends this far below its last account
 
 # An account as the layout needs it: its id in the page, the quarter of the balance sheet it
 # sits in (0 assets, 1 liabilities and equity, 2 expenses, 3 revenue), its number (which orders
@@ -70,13 +74,30 @@ def with_position(pos: str, id: str, at: Point_T) -> str:
     kept.append(f"{id}@{at.x:.1f},{at.y:.1f}")
     return "|".join(kept)
 
+# Where the account SLOT, drawn at AT, may go: inside its own quarter of a drawing SPLIT_Y down the
+# middle split and HEIGHT tall. The assets on the left and the liabilities and equity on the right,
+# above the split; the costs and the revenue below it.
+def within_quarter(slot: Slot_T, at: Point_T, split_y: float, height: float) -> Point_T:
+    let half_w: float = boxes().half_w
+    var x0: float = half_w
+    var x1: float = WIDTH / 2.0 - half_w
+    if slot.quarter % 2 == 1:
+        x0 = WIDTH / 2.0 + half_w
+        x1 = WIDTH - half_w
+    var y0: float = TOP
+    var y1: float = split_y - SPLIT_GAP
+    if slot.quarter >= 2:
+        y0 = split_y + BELOW
+        y1 = height - slot.tall - MARGIN
+    return Point_T(max(x0, min(x1, at.x)), max(y0, min(y1, at.y)))
+
 # Where every account is drawn: the four quarters of the balance sheet, stacked and in two columns
 # when there are many; then each account the reader dragged somewhere, where it was let go.
 def layout_of_slots(slots: []Slot_T, pos: str) -> Layout_T:
     var points: []Point_T = []
     for s in slots:
         points.append(Point_T(0.0, 0.0))
-    var tops: []float = [60.0, 60.0, 0.0, 0.0]
+    var tops: []float = [TOP, TOP, 0.0, 0.0]
     var heights: []float = [0.0, 0.0, 0.0, 0.0]
     for q in range(4):
         var mine: []int = []
@@ -105,18 +126,18 @@ def layout_of_slots(slots: []Slot_T, pos: str) -> Layout_T:
             most = max(most, u)
         heights[q] = most
     let top_h: float = max(heights[0], heights[1])
-    let split_y: float = 60.0 + top_h + 20.0
+    let split_y: float = TOP + top_h + SPLIT_GAP
     for i in range(len(slots)):
         let q: int = slots[i].quarter
-        let base: float = (60.0 if q < 2 else split_y + 50.0)
+        let base: float = (TOP if q < 2 else split_y + BELOW)
         points[i] = Point_T(points[i].x, points[i].y + base)
     let bottom_h: float = max(heights[2], heights[3])
-    var height: float = split_y + 50.0 + bottom_h + 20.0
+    var height: float = split_y + BELOW + bottom_h + MARGIN
     for i in range(len(slots)):                     # the ones dragged somewhere
         let at: Point_T = dragged_to(pos, slots[i].id)
         if at.x >= 0.0:
             points[i] = at
-            height = max(height, at.y + slots[i].tall + 20.0)
+            height = max(height, at.y + slots[i].tall + MARGIN)
     return Layout_T(points, height, split_y)
 
 # The accounts and arrows as text, the way the page keeps them: a line an account
