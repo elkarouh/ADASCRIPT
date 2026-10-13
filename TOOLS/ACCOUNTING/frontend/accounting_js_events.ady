@@ -25,11 +25,10 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`,
 from shared/routes import Point_T, Route_T, boxes, routes_of
 from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position
 from browser import Element_T, Event_T, Click_T, page, text, field, on, stop, listen
-from svg_drag import Hooks_T, Unit_T, Spot_T, between, shift, draggable
+from svg_drag import Hooks_T, Unit_T, Spot_T, shift, draggable
 
 const WIDTH: Unit_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
 const HALF_W: Unit_T = 110.0    # half an account's box, as boxes() in shared/routes.ady
-const TOP: Unit_T = 20.0        # how near the top an account may go
 
 # shared/routes.ady and shared/layout.ady work in plain floats (Point_T): these convert.
 def point_of(s: Spot_T) -> Point_T:
@@ -86,6 +85,25 @@ class BooksView:
                     return s.name
         return ""
 
+    # AT, kept inside the quarter of account ID: the assets on the left above the split and the liabilities
+    # and equity on the right, the costs and revenue below it, as shared/layout.ady lays them out.
+    def within_quarter(self, id: str, at: Point_T) -> Point_T:
+        let k: int = self.index_of(id)
+        if k < 0:
+            return at
+        let q: int = self.slots[k].quarter
+        var x0: float = float(HALF_W)
+        var x1: float = float(WIDTH) / 2.0 - float(HALF_W)
+        if q % 2 == 1:
+            x0 = float(WIDTH) / 2.0 + float(HALF_W)
+            x1 = float(WIDTH) - float(HALF_W)
+        var y0: float = 60.0
+        var y1: float = self.layout.split_y - 20.0
+        if q >= 2:
+            y0 = self.layout.split_y + 50.0
+            y1 = self.layout.height - 20.0
+        return Point_T(max(x0, min(x1, at.x)), max(y0, min(y1, at.y)))
+
     # The account ID is dragged to AT: it is laid out there, and every arrow is routed again from the
     # layout, as the server will route them when the page is drawn again.
     def move(self, id: str, at: Point_T):
@@ -135,10 +153,11 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     if node.has_class("from"):
         rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
         return wanted                   # the arrow's tip
-    let now: Spot_T = Spot_T(x=between(wanted.x, HALF_W, WIDTH - HALF_W), y=max(TOP, wanted.y))
-    shift(node, centre, now)
-    books.move(data_id(node), point_of(now))
-    return now
+    let now: Point_T = books.within_quarter(data_id(node), point_of(wanted))
+    let spot: Spot_T = spot_at_point(now)
+    shift(node, centre, spot)
+    books.move(data_id(node), now)
+    return spot
 
 # NODE let go at AT.
 def dropped_cb(node: Element_T, at: Spot_T):
