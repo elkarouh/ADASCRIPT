@@ -55,6 +55,7 @@ class BooksView:
     var arrows: []Arrow_T               # the arrows, each from one account to another
     var pos: str                        # where the reader has dragged accounts: "id@x,y|..."
     var layout: Layout_T                # where everything is drawn
+    var height: float                   # the drawing's height, as the server drew it: a drag stays inside it
 
     def __init__(self):
         var kept: str = ""
@@ -67,8 +68,9 @@ class BooksView:
         self.arrows = arrows_of(kept)
         self.pos = pos
         self.layout = layout_of_slots(self.slots, self.pos)
+        self.height = self.layout.height
 
-    # Where the account at index K is drawn, and what it is called.
+    # The index of account ID among the slots, or -1.
     def index_of(self, id: str) -> int:
         for k in range(len(self.slots)):
             if self.slots[k].id == id:
@@ -101,7 +103,7 @@ class BooksView:
         var y1: float = self.layout.split_y - 20.0
         if q >= 2:
             y0 = self.layout.split_y + 50.0
-            y1 = self.layout.height - 20.0
+            y1 = self.height - self.slots[k].tall - 20.0    # inside the drawing as drawn (shared/layout.ady leaves 20 below), not the height that grows with the drag
         return Point_T(max(x0, min(x1, at.x)), max(y0, min(y1, at.y)))
 
     # The account ID is dragged to AT: it is laid out there, and every arrow is routed again from the
