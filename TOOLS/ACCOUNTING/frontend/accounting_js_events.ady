@@ -2,9 +2,9 @@
 #ady2nim-args js
 """accounting_js_events -- the events that stay in the browser: an account dragged with
 the mouse, and an arrow drawn from one. Every other event is declared in the HTML (hx-*
-attributes, accounting_page.ady) and handled on the server (accounting_events.ady).
+attributes, accounting_page_gui.ady) and handled on the server (accounting_events.ady).
 
-The accounts and arrows are the page's own text (the hidden pre#books, see accounting_page.ady),
+The accounts and arrows are the page's own text (the hidden pre#books, see accounting_page_gui.ady),
 read into a BooksView when htmx has drawn the page. Where each account is drawn is computed from
 them (shared/layout.ady), not read off the drawing: while one is dragged, every account is laid
 out again and every arrow routed again, here, by the same code the server uses (shared/routes.ady).

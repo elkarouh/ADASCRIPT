@@ -7,7 +7,7 @@ books shown and the scenarios are kept here.
 """
 from backend/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
 from backend/books_text import AccountRow, Books, closing_entries, kind_named, parse_books, text_of_books
-from backend/accounting_page import Params, account_numbered, all_text, entry_of, fresh_params, int_of, params_of, year_end, retained_account
+from backend/accounting_page_gui import Params, account_numbered, all_text, entry_of, fresh_params, int_of, params_of, year_end, retained_account
 from backend/ledger import Config, Ledger, Scenarios, read_config
 
 var config: Config = Config("USD", [])

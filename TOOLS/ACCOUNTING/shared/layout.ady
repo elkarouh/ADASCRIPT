@@ -2,7 +2,7 @@
 """layout -- where each account of the books is drawn, computed from the accounts alone.
 
 Compiled both ways, like routes.ady: natively by the server, which draws the page with it
-(backend/accounting_page.ady), and to JavaScript by frontend/accounting_js_events.ady, which
+(backend/accounting_page_gui.ady), and to JavaScript by frontend/accounting_js_events.ady, which
 lays the accounts out again in the browser while one is dragged. The two must agree, so they
 are the same code. Nothing here knows the books (the model is native only): an account is a
 Slot_T, and an arrow an Arrow_T, both plain text and numbers. No HTML in here.

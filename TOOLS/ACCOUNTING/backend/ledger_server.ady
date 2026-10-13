@@ -2,16 +2,16 @@
 #ady2nim-args c -d:release
 """ledger_server -- the ledger's books, served to the page that draws them; HTTP only.
 
-What each request does to the books is accounting_events.ady; the page is accounting_page.ady.
+What each request does to the books is accounting_events.ady; the page is accounting_page_gui.ady.
 
     ledger_server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
 
-Serves the page (drawn by accounting_page.ady, with build/htmx.min.js and
+Serves the page (drawn by accounting_page_gui.ady, with build/htmx.min.js and
 build/accounting_js_events.js beside the config file) and, as text (books_text.ady), the books of one scenario and
 what the page does to them:
 
     GET  /books            the accounts and every transaction
-    GET  /, /h             the page, drawn by the server for htmx (accounting_page.ady)
+    GET  /, /h             the page, drawn by the server for htmx (accounting_page_gui.ady)
     GET  /h/all            the page again, from the settings in the query
     POST /h/record, /h/do  what the page changes in the books
     GET  /scenarios        "current", a tab and the scenario shown, then
@@ -33,7 +33,7 @@ made from NAME.books the first time NAME is shown and again by Start over.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from backend/accounting_page import shell_text
+from backend/accounting_page_gui import shell_text
 from backend/accounting_events import books_text, current_scenario, page_all, page_do, page_record, post_text, scenarios_dir, scenarios_text, start
 
 var www: Path = Path("build")            # where the page is: build/, beside the config file

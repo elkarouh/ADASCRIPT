@@ -184,7 +184,7 @@ NAME`. `ledger_server --scenario NAME` starts on NAME, else on the first.
 | `backend/ledger_server.ady` | HTTP only: hands each request to `accounting_events.ady` and serves the scripts |
 | `backend/accounting_events.ady` | what each event the page sends does to the books (record, delete, open an account, close the year, the scenarios); holds the books shown. No HTTP |
 | `backend/accounting_gui.ady` | `to_html` for the model's objects (boxes, arrows, tables, statements), the page's texts, and the static example (`make gui`) |
-| `backend/accounting_page.ady` | the page, drawn by the server for htmx, and which event each part of it sends (`hx-*` attributes) |
+| `backend/accounting_page_gui.ady` | the page, drawn by the server for htmx, and which event each part of it sends (`hx-*` attributes) |
 | `backend/books_text.ady` | the books as text, as the server and the page pass them |
 | `backend/accounting_model.ady` | accounts, transactions (`Entry`, made of `Posting`s that add up to zero), the graph and the statements; no GUI, no storage |
 | `importers/` (native; used by `ledger` to make a scenario from another program's file) | |
@@ -374,7 +374,7 @@ that check what the learner records, and the year-end closing.
 
 `ledger_server` draws the page itself: http://127.0.0.1:8802/. It is
 htmx (`frontend/htmx.min.js`, 14 KB gzipped, copied to `build/`) swapping in the HTML
-that `backend/accounting_page.ady` makes, with the same `backend/accounting_gui.ady`, `backend/books_text.ady`, `shared/routes.ady` and
+that `backend/accounting_page_gui.ady` makes, with the same `backend/accounting_gui.ady`, `backend/books_text.ady`, `shared/routes.ady` and
 `backend/accounting_model.ady` the static example (`make gui`) uses, compiled natively. The server keeps no
 state: the scenario, the grouping, the folding, the opened groups and the tab are the fields
 of a form in the page, and a change to one, or a click on a group or a tab, asks `/h/all`

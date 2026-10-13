@@ -4,7 +4,7 @@
 # (nimble install db_connector).
 #
 #   make app        the tool: the books drawn in the browser, kept by clicking
-#                   (ledger_server draws the page, backend/accounting_page.ady; each scenario,
+#                   (ledger_server draws the page, backend/accounting_page_gui.ady; each scenario,
 #                   scenarios/NAME.books, gets a database NAME.db there)
 #   make ledger     build the ledger's command line (backend/ledger -h, backend/ledger list)
 #   make gui        the example as a static web page      (backend/accounting_gui.ady)

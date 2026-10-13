@@ -6,7 +6,7 @@ A node has a name; an edge joins two nodes, both ways, at a cost. Where a node i
 not the model's business: the GUI decides it (dijkstra_gui.ady). The network is changed only
 through the functions below (create, delete), each of which says what was wrong, or "" when
 it was done. It is kept in a text file, one line a node or an edge (text_of, network_of; the
-file itself is read and written by dijkstra_events.ady). The shortest way itself is the
+file itself is read and written by dijkstra_events_gui.ady). The shortest way itself is the
 library's (TO_NIM/STDLIB/graphs.ady): build_graph turns the network into the graph it wants.
 
 A placeholder: replace this file with your own model. No HTML, no HTTP.

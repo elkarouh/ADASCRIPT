@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""accounting_page -- the page as HTML the server draws, for htmx to swap in.
+"""accounting_page_gui -- the page as HTML the server draws, for htmx to swap in.
 
     GET /h        the shell: a script tag and a div that loads /h/all
     GET /h/all    the whole page, drawn from the books and the settings in the query

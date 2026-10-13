@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""server -- the one place that knows about HTTP; what a request does is dijkstra_events.ady.
+"""server -- the one place that knows about HTTP; what a request does is dijkstra_events_gui.ady.
 
     make app [PORT=n]  (or: ady2nim js frontend/dijkstra_js_events.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
 
@@ -21,7 +21,7 @@ in graph.txt, in the directory the server runs in; it is written after every cha
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from backend/dijkstra_gui import shell_text
-from backend/dijkstra_events import answer, keep_in
+from backend/dijkstra_events_gui import answer, keep_in
 
 async def handler(req: Request):
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])

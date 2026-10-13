@@ -1,12 +1,12 @@
 #!/usr/bin/env ady2nim
-"""accounting_page.ady: the settings read from a query, the groups, and the page drawn.
+"""accounting_page_gui.ady: the settings read from a query, the groups, and the page drawn.
 
     ady2nim c -r test_htmx.ady
 """
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from backend/books_text import AccountRow, Books
 from shared/layout import Arrow_T, Slot_T, arrows_of, books_text, layout_of_slots, slots_of
-from backend/accounting_page import Grouped, Params, all_text, auto_detail, dates_of, entry_of, fresh_params, grouped, params_of, replayable, replayable_by, shell_text, slider_position, upto
+from backend/accounting_page_gui import Grouped, Params, all_text, auto_detail, dates_of, entry_of, fresh_params, grouped, params_of, replayable, replayable_by, shell_text, slider_position, upto
 
 def row(number: str, kind: Kind_T, name: str) -> AccountRow:
     return AccountRow(number, kind, name)
