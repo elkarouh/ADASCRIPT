@@ -50,36 +50,37 @@ def answer(method: str, path: str, fields: str) -> str:
     let a: str = field_of(fields, "a")
     let b: str = field_of(fields, "b")
     let cost: int = int(number_of(field_of(fields, "cost")))
-    if method == "GET" and path == "/all":
-        pass
-    elif method == "POST" and path == "/nodes":
-        let x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
-        let y: float = number_of(field_of(fields, "y"))
-        problem = net.add_node(name)
-        if problem == "":
-            if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
-                net.put(name, new_spot(len(net.nodes) - 1, len(net.nodes)))
+    case method + " " + path:
+        when "GET /all":
+            pass
+        when "POST /nodes":
+            let x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
+            let y: float = number_of(field_of(fields, "y"))
+            problem = net.add_node(name)
+            if problem == "":
+                if x < 0.0 or y < 0.0:                           # not given (-1): the next free place
+                    net.put(name, new_spot(len(net.nodes) - 1, len(net.nodes)))
+                else:
+                    net.put(name, Place_T(x, y))
+        when "PUT /nodes":
+            if name in net.names():
+                net.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
             else:
-                net.put(name, Place_T(x, y))
-    elif method == "PUT" and path == "/nodes":
-        if name in net.names():
-            net.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
-        else:
-            problem = f"There is no node {name}."
-    elif method == "DELETE" and path == "/nodes":
-        problem = net.remove_node(name)
-    elif method == "POST" and path == "/edges":
-        problem = net.add_edge(a, b, cost)
-    elif method == "PUT" and path == "/edges":
-        problem = net.set_cost(a, b, cost)
-    elif method == "DELETE" and path == "/edges":
-        problem = net.remove_edge(a, b)
-    elif method == "POST" and path == "/relayout":
-        net.forget_places()             # no node keeps a place of its own: the layout gives each one
-    elif method == "POST" and path == "/reset":
-        net = sample()
-    else:
-        return ""
+                problem = f"There is no node {name}."
+        when "DELETE /nodes":
+            problem = net.remove_node(name)
+        when "POST /edges":
+            problem = net.add_edge(a, b, cost)
+        when "PUT /edges":
+            problem = net.set_cost(a, b, cost)
+        when "DELETE /edges":
+            problem = net.remove_edge(a, b)
+        when "POST /relayout":
+            net.forget_places()             # no node keeps a place of its own: the layout gives each one
+        when "POST /reset":
+            net = sample()
+        when others:
+            return ""
     if method != "GET" and problem == "" and store != "":
         problem = save(net, Path(store))
     return all_text(net, params_of(fields), problem)

@@ -270,10 +270,13 @@ class Selection:
 
     # Delete what is selected, after asking.
     def remove(self):
-        if self.what.kind == NODE:
-            self.what.node.delete()
-        elif self.what.kind == EDGE:
-            self.what.edge.delete()
+        case self.what.kind:
+            when NODE:
+                self.what.node.delete()
+            when EDGE:
+                self.what.edge.delete()
+            when NOTHING:
+                pass                        # nothing is selected
 
     # Forget the selection without unmarking it: the page it was on has been drawn again.
     def forget(self):
@@ -379,22 +382,32 @@ def tool_click(e: Event_T):
         return
     menus.hide()
     let tool: str = b.data("tool")
-    if tool == "add-here":
-        let name: str = ask_name()
-        if name != "":
-            send_node(name, f"{menus.at.x:.0f}", f"{menus.at.y:.0f}")
-    elif tool == "cost":
-        selection.change_cost()
-    elif tool == "delete-node" or tool == "delete-edge":
-        selection.remove()
+    case tool:
+        when "add-here":
+            let name: str = ask_name()
+            if name != "":
+                send_node(name, f"{menus.at.x:.0f}", f"{menus.at.y:.0f}")
+        when "cost":
+            selection.change_cost()
+        when "delete-node":
+            selection.remove()
+        when "delete-edge":
+            selection.remove()
+        when others:
+            pass                            # a button with another tool, or none
 
 # Delete and Backspace remove what is selected; Escape closes the menus.
 def key_down(e: Event_T):
     let key: str = key_of(e)
-    if key == "Escape":
-        menus.hide()
-    elif key == "Delete" or key == "Backspace":
-        selection.remove()
+    case key:
+        when "Escape":
+            menus.hide()
+        when "Delete":
+            selection.remove()
+        when "Backspace":
+            selection.remove()
+        when others:
+            pass                            # any other key
 
 # ---- A drag from a node's dot: a wire, which is the new edge ----
 #
