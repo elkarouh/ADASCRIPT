@@ -76,6 +76,9 @@ text.name { font-size: 16px; font-weight: 700; text-anchor: middle; pointer-even
 def edge_buttons_html() -> Html:
     html:
         span class="edge-actions":
+            input type="hidden" name="a" value=""
+            input type="hidden" name="b" value=""
+            input type="hidden" name="cost" value=""
             button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
             button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
             button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
@@ -105,6 +108,11 @@ div.menu button { border: none; text-align: left; border-radius: 4px; padding: 0
 def node_buttons_html() -> Html:
     html:
         span class="node-actions":
+            input type="hidden" name="name" value=""
+            input type="hidden" name="x" value=""
+            input type="hidden" name="y" value=""
+            input type="hidden" name="pick" value=""
+            input type="hidden" name="act" value=""
             button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
             button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
             button type="button" id="drop_node" data_hx_delete="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete node"
@@ -162,14 +170,6 @@ def all_html(net: Network_T, layout: Layout, p0: Params_T, problem: str) -> Html
                 button type="button" id="redraw" class="redraw" data_hx_put="/nodes" data_hx_include="#move, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
             # form#gesture: the drawing and the menus (dijkstra_js_events.ady) fill it in, then press one button
             form id="gesture" class="gesture":
-                input type="hidden" name="name" value=""
-                input type="hidden" name="a" value=""
-                input type="hidden" name="b" value=""
-                input type="hidden" name="cost" value=""
-                input type="hidden" name="x" value=""
-                input type="hidden" name="y" value=""
-                input type="hidden" name="pick" value=""
-                input type="hidden" name="act" value=""
                 + node_buttons_html()
                 + edge_buttons_html()
             div class="toolbar":
