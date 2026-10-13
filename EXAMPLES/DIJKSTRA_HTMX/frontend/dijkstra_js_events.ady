@@ -32,10 +32,8 @@ gesture means in this app.
 from browser import Element_T, Event_T, Click_T, Change, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, between, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network_T, Node_T, Edge_T, network_of
-from backend/dijkstra_layout_gui import Layout, Place_T, inside, layout_of
+from backend/dijkstra_layout_gui import Layout, Place_T, WIDTH, inside, layout_of
 
-const WIDTH: Unit_T = 580.0     # the drawing's size (the svg's viewBox)
-const HEIGHT: Unit_T = 380.0
 
 # ---- The model's values, read off the drawing, and the drawing of each ----
 
@@ -477,4 +475,4 @@ listen("dblclick", double_click)
 listen("contextmenu", context)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+draggable("g.node", "svg.graph", Unit_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))

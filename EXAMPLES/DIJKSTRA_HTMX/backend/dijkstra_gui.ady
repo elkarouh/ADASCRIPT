@@ -9,30 +9,10 @@ fill in the hidden form `#gesture` and press one of its buttons, which sends POS
 DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the start or the
 goal; `act` is unpick (a chosen node clicked again).
 """
-from uri nimport decodeUrl
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network_T, Node_T, build_graph, names_of, text_of, uses
-from backend/dijkstra_layout_gui import Layout, Place_T
-
-const WIDTH: float = 580.0
-const HEIGHT: float = 380.0
-
-type Params_T is record:
-    start: str
-    goal:  str
-    pick:  str                      # the node clicked
-    act:   str                      # unpick
-
-# The value of KEY in a query or a form body ("a=1&b=2"), or "".
-def field_of(text: str, key: str) -> str:
-    for pair in text.split("&"):
-        let at: int = pair.find("=")
-        if at > 0 and pair[:at] == key:
-            return decodeUrl(pair[at + 1:])
-    return ""
-
-def params_of(text: str) -> Params_T:
-    return Params_T(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
+from backend/dijkstra_layout_gui import Layout, Place_T, WIDTH, HEIGHT
+from backend/dijkstra_request import Params_T
 
 # ---- the drawing ----
 
@@ -138,9 +118,10 @@ def menus_html() -> Html:
             div id="menu-space" class="menu":
                 button type="button" data_tool="add-here": "New node here"
 
-def all_html(net: Network_T, layout: Layout, p0: Params_T, problem: str) -> Html:
+# The choice the reader's clicks make of P, in a network with the nodes NAMES: a node clicked is
+# the start, then the goal, then the start again; a chosen node clicked again is no longer chosen.
+def picked(p0: Params_T, names: []str) -> Params_T:
     var p: Params_T = p0
-    let names: []str = names_of(net)
     if p.start not in names:            # deleted since
         p.start = ""
     if p.goal not in names:
@@ -158,12 +139,23 @@ def all_html(net: Network_T, layout: Layout, p0: Params_T, problem: str) -> Html
             p.goal = ""
         elif p.pick != p.start:
             p.goal = p.pick
+    return p
+
+# What the page says under the drawing: where to start, where to go, or the way found and its cost.
+def said_of(p: Params_T, way: []str, cost: float) -> str:
+    if p.start == "":
+        return "Click a node to start from."
+    if p.goal == "":
+        return f"From {p.start}: click a node to go to."
+    if len(way) == 0:
+        return f"No way from {p.start} to {p.goal}."
+    return f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {cost:.0f}."
+
+def all_html(net: Network_T, layout: Layout, p0: Params_T, problem: str) -> Html:
+    let p: Params_T = picked(p0, names_of(net))
     let found: (float, []str) = shortest_route[str](build_graph(net), p.start, p.goal)
     let way: []str = found[1]
-    let said: str = ("Click a node to start from." if p.start == "" else
-                     f"From {p.start}: click a node to go to." if p.goal == "" else
-                     f"No way from {p.start} to {p.goal}." if len(way) == 0 else
-                     f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {found[0]:.0f}.")
+    let said: str = said_of(p, way, found[0])
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     let said_css: str = ("said found" if len(way) > 0 else "said")
     html:
