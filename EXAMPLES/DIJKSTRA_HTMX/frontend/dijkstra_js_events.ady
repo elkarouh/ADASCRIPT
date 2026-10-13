@@ -25,6 +25,14 @@ page with. The page carries the network as the server keeps it (pre#network); Ne
 the model and its layout from that, and works out where everything goes from them, never from
 where the page happens to draw it.
 
+Who holds what, in this file (each class keeps one thing and its drawn parts):
+    NetworkView   every node and edge drawn, by name; the one `network` (rebuilt when htmx draws the page)
+    NodeView      one node: its circle and name, how it is chosen, moved and deleted
+    EdgeView      one edge: its line, its cost, how it is redrawn, changed or deleted
+    Selection     the node or edge clicked last; the one `selection`
+    Menus         the right-click menus; the one `menus`
+    Wire          the wire dragged from a node's dot to make an edge; the one `wire`
+
 The drag itself is the standard library's svg_drag; the page (finding elements, forms, menus,
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.

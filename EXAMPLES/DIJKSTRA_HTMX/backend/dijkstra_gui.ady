@@ -232,7 +232,8 @@ def shell() -> Html:
                     p: "Dijkstra on a network you can edit, drawn by the server."
                 div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
 
-# An html: block writes an attribute with underscores (data_hx_get); htmx wants hyphens.
+# An html: block cannot write a hyphen in an attribute name, so it writes data_hx_get, and this turns
+# the underscores into the hyphens htmx reads (data-hx-get). It is applied to the whole page, once.
 def hyphens(text: str) -> str:
     return text.replace("data_hx_", "data-hx-")
 
