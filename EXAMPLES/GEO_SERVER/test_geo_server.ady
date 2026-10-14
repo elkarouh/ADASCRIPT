@@ -1,25 +1,25 @@
 #!/usr/bin/env ady2nim
-"""Test: the callsigns of geo_server.ady.  `Callsign_T` is a distinct string, which keeps
-a callsign from being taken for other text but cannot say which strings are callsigns;
-`callsign` does, and returns a failure for what is not one.
+"""Test: the callsigns of geo_server.ady.  `Callsign_T` is a string that has passed a check,
+so `Callsign_T(text)` is a callsign or a failure, and a callsign cannot be taken for other text.
 """
-from geo_server import Callsign_T, CallsignFailure_T, callsign, angular_gap
+from geo_server import Callsign_T, angular_gap
 
 def accepted(text: str) -> bool:
-    let made: Callsign_T | !CallsignFailure_T = callsign(text)
-    return made is not CallsignFailure_T
+    let made: Callsign_T | !ParseFailure_T = Callsign_T(text)
+    return made is not ParseFailure_T
 
 def kept(text: str) -> bool:
-    """Whether TEXT comes back from `callsign` as it went in."""
-    let made: Callsign_T | !CallsignFailure_T = callsign(text)
-    if made is CallsignFailure_T:
+    """Whether TEXT comes back from `Callsign_T` as it went in."""
+    let made: Callsign_T | !ParseFailure_T = Callsign_T(text)
+    if made is ParseFailure_T:
         return False
     return str(made) == text
 
-def reason(text: str) -> str:
-    let made: Callsign_T | !CallsignFailure_T = callsign(text)
-    if made is CallsignFailure_T:
-        return made.reason
+def offered(text: str) -> str:
+    """What the failure for TEXT says was offered; empty when TEXT is a callsign."""
+    let made: Callsign_T | !ParseFailure_T = Callsign_T(text)
+    if made is ParseFailure_T:
+        return made.text
     return ""
 
 # the angle between two bearings: the smaller way round, never more than half a circle
@@ -49,8 +49,8 @@ assert not accepted("CA-1\n")                  # nothing after the end, a newlin
 assert not accepted(" CA-1") and not accepted("CA-1 ")
 
 # the refusal says what was offered
-assert "'sentinel'" in reason("sentinel")
-assert "callsign" in reason("")
-assert reason("SENTINEL") == ""
+assert offered("sentinel") == "sentinel"
+assert offered("CA-1\n") == "CA-1\n"
+assert offered("SENTINEL") == ""
 
 print "test_geo_server OK"

@@ -47,26 +47,17 @@ type Area_T     is Distance_T * Distance_T   # what two distances multiply to
 type Time_T     is distinct float
 
 # What a ship or an aircraft is called on the radio: not a plain string, so that a
-# callsign cannot be taken for a zone's name or for any other text.  A type cannot
-# say which strings are callsigns, so `callsign` does: make one with it.
-type Callsign_T is distinct str
-
-type CallsignFailure_T is record:
-    text:   str      # what was offered
-    reason: str      # why it is not a callsign
-
-def callsign(text: str) -> Callsign_T | !CallsignFailure_T:
-    """TEXT as a callsign: an upper-case letter, then 1 to 11 more upper-case
-    letters, digits or hyphens -- SENTINEL, HAVEN, CA-1."""
-    if text == /^[A-Z][A-Z0-9-]{1,11}\z/:           # \z, not $: a newline at the end is not a callsign
-        return Callsign_T(text)
-    return CallsignFailure_T(text, f"'{text}' is not a callsign: a capital, then 1 to 11 capitals, digits or hyphens")
+# callsign cannot be taken for a zone's name or for any other text.  The check is part
+# of the type: `Callsign_T(text)` is a callsign, or a failure that says what was offered.
+# An upper-case letter, then 1 to 11 more upper-case letters, digits or hyphens --
+# SENTINEL, HAVEN, CA-1.  \z, not $: a newline at the end is not a callsign.
+type Callsign_T is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
 
 def known(text: str) -> Callsign_T:
     """The callsign TEXT; the program stops, saying why, when it is not one."""
-    let made: Callsign_T | !CallsignFailure_T = callsign(text)
-    if made is CallsignFailure_T:
-        print f"error: {made.reason}"
+    let made: Callsign_T | !ParseFailure_T = Callsign_T(text)
+    if made is ParseFailure_T:
+        print f"error: '{text}' is not a callsign: a capital, then 1 to 11 capitals, digits or hyphens"
         quit(1)
     return made
 
