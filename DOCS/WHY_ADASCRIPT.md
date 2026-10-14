@@ -13,11 +13,15 @@ units are two types, and one line says how they relate:
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
+type Mass_T    is distinct float            # kg
+type Speed_T   is distinct float            # m/s
 type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
 ```
 
-The call that was the mission's loss does not compile:
+A mass and a speed are units of their own, an impulse is declared as their
+product, and a pound-force second is declared as 4.448 of it. The call that was
+the mission's loss does not compile:
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
