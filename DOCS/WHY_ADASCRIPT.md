@@ -1167,6 +1167,64 @@ type (index an `[E]T` with a string and it will not compile), `Natural` and
 `T`, and `Path` is a distinct string — `p = s` is an error on both backends
 and `Path(s)` is how you mean it.
 
+### Using the units
+
+The rungs above are tools, and a program uses them in a fixed order. It helps
+to know the order before reading the declarations.
+
+1. **Declare the base units distinct, once, in the unit the program computes
+   in.** Metres, seconds, kilograms: one `distinct float` each, with the unit
+   in a comment. Nothing else in the program is a bare `float` that means a
+   length.
+2. **Derive the rest from them.** A speed is `Distance_T / Time_T`, an impulse
+   is `Mass_T * Speed_T`. Do not declare a speed as a second `distinct float`:
+   then nothing relates it to the distance and the time it came from, and the
+   compiler cannot refuse `speed * speed` where a distance is wanted.
+3. **Scale for the units the outside world speaks.** A pound-force second or a
+   kilometre is a multiple of a unit you already have. Declare it as one, and
+   write the conversion only where the value crosses.
+4. **Check at the boundary, then work in the plain unit.** A number that comes
+   from a file, a sensor or a person has to pass a test once. Declare a
+   checked type over the unit, convert on the way in, and the rest of the
+   program keeps using the unit, because a checked value goes back up to its
+   base without a cast.
+
+<!-- from: EXAMPLES/mars_climate_orbiter.ady -->
+```python
+type Mass_T     is distinct float           # kg
+type Distance_T is distinct float           # m
+type Time_T     is distinct float           # s
+type Speed_T    is Distance_T / Time_T      # m/s
+type Impulse_T  is Mass_T * Speed_T         # N s, which is kg m/s: what the navigation expects
+type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
+```
+
+Step four is the one that is easy to miss. A derived unit cannot carry a range
+of its own, because a division is not a place where a value is made. What can
+carry one is a type declared over it:
+
+<!-- from: EXAMPLES/test_where_type.ady -->
+```python
+type Legal_Speed_T is Speed_T where v: float(v) <= 299_792_458.0    # no faster than light
+let legal: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(pace)
+let up: Speed_T = legal                      # up to the unit, no cast
+let warp: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(leg / Time_T(1e-9))
+assert warp is ParseFailure_T
+```
+
+`Legal_Speed_T` is a speed in every way that matters: it has `Speed_T`'s
+arithmetic, and it goes up to `Speed_T` freely. What it adds is that the only
+way in is a conversion that can say no. Use it where a speed enters the
+program, not on every speed inside it: a value that has passed once does not
+need to pass again, and arithmetic on it is a plain `Speed_T`, which makes no
+claim.
+
+What to avoid follows from the same order. A bare `float` in a signature that
+means a unit gives the compiler nothing to check. A second base unit for
+something that is a ratio of two others gives it nothing to relate. And a
+conversion written inside the computation, rather than at the boundary, is the
+factor applied twice that the Orbiter lost a spacecraft to.
+
 ---
 
 ## A failure belongs in the signature
