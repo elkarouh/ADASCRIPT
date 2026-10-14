@@ -2,7 +2,7 @@
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, network_of, sample, uses
-from backend/dijkstra_events_gui import answer, keep_in
+from backend/dijkstra_events_gui import Session
 
 # ---- the model ----
 var net: Network = sample()
@@ -25,37 +25,37 @@ assert net.remove_node("C") == ""
 assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edges went with it
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
-keep_in("")
-assert "Click a node to start from." in answer("GET", "/all", "")
-assert "click a node to go to." in answer("GET", "/all", "start=A&pick=A")
-assert "Shortest way from A to E: A → C → F → E, cost 20." in answer("GET", "/all", "start=A&goal=E")
-assert "name=\"start\" value=\"C\"" in answer("GET", "/all", "start=A&goal=B&pick=C")    # a third click starts again
-assert "data-hx-get=\"/all\"" in answer("GET", "/all", "")
-assert answer("GET", "/nowhere", "") == ""
+var session: Session = Session("")
+assert "Click a node to start from." in session.answer("GET", "/all", "")
+assert "click a node to go to." in session.answer("GET", "/all", "start=A&pick=A")
+assert "Shortest way from A to E: A → C → F → E, cost 20." in session.answer("GET", "/all", "start=A&goal=E")
+assert "name=\"start\" value=\"C\"" in session.answer("GET", "/all", "start=A&goal=B&pick=C")    # a third click starts again
+assert "data-hx-get=\"/all\"" in session.answer("GET", "/all", "")
+assert session.answer("GET", "/nowhere", "") == ""
 
-assert "A → F → E, cost 23" in answer("PUT", "/edges", "start=A&goal=E&a=C&b=F&cost=40")   # C-F made dear
-assert "A → C → F → E, cost 20" in answer("PUT", "/edges", "start=A&goal=E&a=F&b=C&cost=2")
-assert "A → F → E, cost 23" in answer("DELETE", "/edges", "start=A&goal=E&a=C&b=F")
-let added: str = answer("POST", "/nodes", "name=H")
+assert "A → F → E, cost 23" in session.answer("PUT", "/edges", "start=A&goal=E&a=C&b=F&cost=40")   # C-F made dear
+assert "A → C → F → E, cost 20" in session.answer("PUT", "/edges", "start=A&goal=E&a=F&b=C&cost=2")
+assert "A → F → E, cost 23" in session.answer("DELETE", "/edges", "start=A&goal=E&a=C&b=F")
+let added: str = session.answer("POST", "/nodes", "name=H")
 assert "data_name=\"H\"" in added or "data-name=\"H\"" in added
-assert "There is a node H already." in answer("POST", "/nodes", "name=H")
-assert "A → F → E, cost 23" in answer("POST", "/edges", "start=A&goal=E&a=A&b=H&cost=1")      # H leads nowhere yet
-assert "A → H → E, cost 2." in answer("POST", "/edges", "start=A&goal=E&a=H&b=E&cost=1")
-let moved: str = answer("PUT", "/nodes", "name=H&x=300&y=100")
+assert "There is a node H already." in session.answer("POST", "/nodes", "name=H")
+assert "A → F → E, cost 23" in session.answer("POST", "/edges", "start=A&goal=E&a=A&b=H&cost=1")      # H leads nowhere yet
+assert "A → H → E, cost 2." in session.answer("POST", "/edges", "start=A&goal=E&a=H&b=E&cost=1")
+let moved: str = session.answer("PUT", "/nodes", "name=H&x=300&y=100")
 assert "data_x=\"300\"" in moved or "data-x=\"300\"" in moved
-assert "A → F → E, cost 23" in answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
-assert "Click a node to start from." in answer("DELETE", "/nodes", "start=A&goal=E&name=A")
-assert "Click a node to start from." in answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
-assert "From C: click a node to go to." in answer("GET", "/all", "start=C&goal=B&pick=B&act=unpick")  # a chosen goal clicked again
-assert "A → C → F → E, cost 20" in answer("POST", "/reset", "start=A&goal=E")
-assert "at A " not in answer("POST", "/relayout", "")         # no kept places: the layout draws every node
-assert "data-hx-post=\"/relayout\"" in answer("GET", "/all", "")
-answer("POST", "/reset", "")                                   # the sample again, for the tests that follow
+assert "A → F → E, cost 23" in session.answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
+assert "Click a node to start from." in session.answer("DELETE", "/nodes", "start=A&goal=E&name=A")
+assert "Click a node to start from." in session.answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
+assert "From C: click a node to go to." in session.answer("GET", "/all", "start=C&goal=B&pick=B&act=unpick")  # a chosen goal clicked again
+assert "A → C → F → E, cost 20" in session.answer("POST", "/reset", "start=A&goal=E")
+assert "at A " not in session.answer("POST", "/relayout", "")         # no kept places: the layout draws every node
+assert "data-hx-post=\"/relayout\"" in session.answer("GET", "/all", "")
+session.answer("POST", "/reset", "")                                   # the sample again, for the tests that follow
 # the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
-let placed: str = answer("POST", "/nodes", "name=K&x=120&y=200")
+let placed: str = session.answer("POST", "/nodes", "name=K&x=120&y=200")
 assert "data_x=\"120\"" in placed or "data-x=\"120\"" in placed
-assert "There is a node K already." in answer("POST", "/nodes", "name=K&x=5&y=5")
-assert "id=\"gesture\"" in answer("GET", "/all", "") and "id=\"wire\"" in answer("GET", "/all", "")
-assert "id=\"menu-node\"" in answer("GET", "/all", "") and "data_tool=\"delete-node\"" in answer("GET", "/all", "")
-assert "<pre id=\"network\">node A\n" in answer("GET", "/all", "") and "at A 60 190\n" in answer("GET", "/all", "")   # what the browser builds its NetworkView from
+assert "There is a node K already." in session.answer("POST", "/nodes", "name=K&x=5&y=5")
+assert "id=\"gesture\"" in session.answer("GET", "/all", "") and "id=\"wire\"" in session.answer("GET", "/all", "")
+assert "id=\"menu-node\"" in session.answer("GET", "/all", "") and "data_tool=\"delete\"" in session.answer("GET", "/all", "")
+assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "at A 60 190\n" in session.answer("GET", "/all", "")   # what the browser builds its NetworkView from
 print "dijkstra: all checks passed"

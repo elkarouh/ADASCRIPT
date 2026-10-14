@@ -248,33 +248,35 @@ whose fields are sent. `data_hx_target` and `data_hx_swap` say where
 the answer goes.
 
 **The server decides what a request does.** `server.ady` only matches
-the path and hands the request on. `answer` does the work, one `case`
+the path and hands the request on. `Session.answer` does the work, one `case`
 per route:
 
 ```adascript
-def answer(method: str, path: str, fields: str) -> str:
+class Session:
     ...
-    case method + " " + path:
-        when "GET /all":
-            pass
-        when "POST /nodes":
-            ...
-            problem = net.add_node(name)
-            if problem == "":
-                ...
-        when "DELETE /nodes":
-            problem = net.remove_node(name)
-        when "POST /edges":
-            problem = net.add_edge(a, b, cost)
+    def answer(self, method: str, path: str, fields: str) -> str:
         ...
-        when others:
-            return ""
-    if method != "GET" and problem == "" and store != "":
-        problem = save(net, Path(store))
-    return all_text(net, params_of(fields), problem)
+        case method + " " + path:
+            when "GET /all":
+                pass
+            when "POST /nodes":
+                ...
+                problem = self.net.add_node(name)
+                if problem == "":
+                    ...
+            when "DELETE /nodes":
+                problem = self.net.remove_node(name)
+            when "POST /edges":
+                problem = self.net.add_edge(a, b, cost_of(fields))
+            ...
+            when others:
+                return ""
+        if method != "GET" and problem == "":
+            problem = self.save()
+        return all_text(self.net, params_of(fields), problem)
 ```
 
-The routes are listed in a comment above `answer`. Every answer is the
+The routes are listed in a comment above `answer`, in the class. Every answer is the
 whole page, which htmx swaps in. A request with an unknown path returns
 `""`, and the server answers 404.
 
@@ -313,11 +315,11 @@ needs an `if` chain: `picked` in `dijkstra_gui.ady` is one.
 Read it from the top:
 
 1. **While the mouse moves**, `moved_cb` runs in the browser. It puts the
-   node where the mouse is, and `NetworkView.move` redraws every edge
-   that ends at it. Nothing goes to the server yet.
+   node where the mouse is, the model takes the new place, and `Drawing.redraw_edges`
+   draws every edge that ends at it. Nothing goes to the server yet.
 2. **On release**, `dropped_cb` fills in the hidden form `#move` with
    the node's name and its new place, and presses `#redraw`.
-3. **htmx sends** `PUT /nodes`. `answer` puts the place into the model,
+3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model,
    saves the file, and returns the page.
 4. **htmx swaps** the page into `#all`. The new page is the same as the
    one the browser was showing, now drawn from the server's copy.
@@ -379,11 +381,11 @@ Each of these changes one layer, so you can see the others not change.
    page does not change until you draw it.
 2. **Draw the field.** In `to_html(n: Node_T, …)`, use `n.colour` for the
    circle's `fill`, and add its rule to `NODE_STYLE`.
-3. **Add a route.** Add `when "POST /relabel":` to `answer`, read a field
+3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
    with `field_of`, and call a new method. Put a button for it in
    `node_buttons_html`, with `data_hx_post="/relabel"`.
 4. **Test it without a server.** In `tests/test_dijkstra.ady`, call
-   `answer("POST", "/relabel", "name=A&colour=red")` and check the page
+   `session.answer("POST", "/relabel", "name=A&colour=red")` and check the page
    contains `red`.
 
 Run `make test` after each step. The model and the page are checked

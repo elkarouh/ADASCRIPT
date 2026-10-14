@@ -111,10 +111,10 @@ def menus_html() -> Html:
     html:
         div id="menus":
             div id="menu-node" class="menu":
-                button type="button" class="danger" data_tool="delete-node": "Delete node"
+                button type="button" class="danger" data_tool="delete": "Delete node"
             div id="menu-edge" class="menu":
                 button type="button" data_tool="cost": "Change cost…"
-                button type="button" class="danger" data_tool="delete-edge": "Delete edge"
+                button type="button" class="danger" data_tool="delete": "Delete edge"
             div id="menu-space" class="menu":
                 button type="button" data_tool="add-here": "New node here"
 

@@ -8,7 +8,7 @@
     GET    /dijkstra_js_events.js     dijkstra_js_events.ady, compiled to JavaScript
 
 Every other request (GET /all, and the routes for nodes, edges, relayout and reset) is answered
-by answer in dijkstra_events_gui.ady, which lists them.
+by Session.answer in dijkstra_events_gui.ady, which lists them.
 
 Every answer but the scripts is the whole page, which htmx swaps in. The network is kept
 in graph.txt, in the directory the server runs in; it is written after every change.
@@ -16,7 +16,10 @@ in graph.txt, in the directory the server runs in; it is written after every cha
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from backend/dijkstra_gui import shell_text
-from backend/dijkstra_events_gui import answer, keep_in
+from backend/dijkstra_events_gui import Session
+
+# The session the requests are answered from: main makes it the one that keeps the network in graph.txt.
+var session: Session = Session("")
 
 # A script the page loads, from the frontend directory.
 async def send_script(req: Request, path: str):
@@ -37,7 +40,7 @@ async def handler(req: Request):
         when "/dijkstra_js_events.js":
             await send_script(req, path)
         when others:
-            let page: str = answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
+            let page: str = session.answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
             if page == "":
                 await req.respond(Http404, "not found")
             else:
@@ -52,7 +55,7 @@ def main():
             pass
         else:
             port = n
-    keep_in("graph.txt")
+    session = Session("graph.txt")
     print f"http://127.0.0.1:{port}/ (Ctrl-C to stop); the network is kept in graph.txt"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))

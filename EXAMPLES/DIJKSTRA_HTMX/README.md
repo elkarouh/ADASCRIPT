@@ -19,9 +19,9 @@ ady2nim c -r tests/test_dijkstra.ady # the model, the page and the requests, no 
 ```
 
 Click a node to start from, another to go to; the shortest way is drawn in
-orange. The tables on the right are the network, and every part of it can be
-created, changed and deleted: add a node or an edge, change a cost, delete with
-the ✕. Drag a node and its edges follow; where you let go is kept. The server
+orange. The drawing is the network, and every part of it can be
+created, changed and deleted: add a node or an edge, change a cost, and delete from the
+right-click menu or with the Delete key. Drag a node and its edges follow; where you let go is kept. The server
 keeps the network in `graph.txt` (in the directory it runs in), written after
 every change; Reset puts the sample back.
 
@@ -29,12 +29,12 @@ every change; Reset puts the sample back.
 |---|---|
 | `backend/dijkstra_model.ady` | the model, a placeholder: a class `Network` of `Node_T`s (a name each), `Edge_T`s and the places the reader put the nodes, with its methods (`add_node`, `remove_node`, `add_edge`, `set_cost`, `remove_edge`, `put`, `forget_places`, each `add`, `remove` or `set` returning what was wrong, or `""`; `names`, `edge_at`, `text`, `build_graph`, which makes of it the graph the library's `shortest_route` wants, `TO_NIM/STDLIB/graphs.ady`); `network_of` reads it back from text. Replace it with your own; no HTML, no HTTP. |
 | `backend/dijkstra_layout.ady` | where each node is drawn when the reader has not put it somewhere: `place_of` (the places the model keeps, else `new_spot`, the layout algorithm: evenly spaced round an ellipse, in the model's order), and `inside`, which keeps a node within the drawing's margin. Compiled both ways, like the model: the server draws the page with it, and the browser's `NetworkView` moves nodes with it. |
-| `backend/dijkstra_gui.ady` | how to draw it: the SVG, the tables and forms, the text. A function from the network and what is picked to HTML; `to_html` for a node or an edge in the drawing, `row_html` for one in a table. |
+| `backend/dijkstra_gui.ady` | how to draw it: the SVG, the buttons and forms, the text. A function from the network and what is picked to HTML: `all_html` for the page, `to_html` for the drawing and for each node and edge in it. |
 | `backend/dijkstra_request.ady` | the fields of a request: `field_of` and `number_of` read them, `params_of` reads the reader's choice (`Params_T`: the start, the goal, the node clicked). No HTML, no HTTP. |
-| `backend/dijkstra_events_gui.ady` | what each request does: `answer(method, path, fields)` calls the model, saves, and returns the page. Holds the network. No HTTP, so the tests call it. |
-| `backend/server.ady` | HTTP, and nothing else: hands each request to `answer`, and serves the two scripts. |
+| `backend/dijkstra_events_gui.ady` | what each request does: `Session.answer(method, path, fields)` calls the model, saves, and returns the page. A `Session` holds the network and the file it is kept in. No HTTP, so the tests call it. |
+| `backend/server.ady` | HTTP, and nothing else: hands each request to `session.answer`, and serves the two scripts. |
 | `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes); the server keeps it and draws the page again. Every change it sends goes through `Change` (in the stdlib's `browser.ady`): the fields are filled in by name in the hidden form, then the form's button is pressed. |
-| `tests/test_dijkstra.ady` | tests of the model, and of the page through `answer`, as the browser would ask; nothing is started. |
+| `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
 `backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). The model and the layout are compiled both ways: the page carries the network, its places included, as the server keeps it (a hidden `pre#network`), and `dijkstra_js_events.ady` builds its `NetworkView` from that with the same `network_of`, so where a node is drawn is computed from the model, never read off the drawing.
@@ -63,7 +63,7 @@ The routes are a small REST interface on two collections, every answer the whole
   `backend/dijkstra_gui.ady`. htmx sends it and swaps in the page that comes back.
 * A mistake (a name taken, an edge that is there already) comes back as a line
   in red on the page; nothing is changed.
-* So testing the GUI is calling `answer(method, path, fields)` and reading the
+* So testing the GUI is calling `session.answer(method, path, fields)` and reading the
   page: see `tests/test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command
   line, a test) uses the model, `build_graph` and `shortest_route` unchanged.
