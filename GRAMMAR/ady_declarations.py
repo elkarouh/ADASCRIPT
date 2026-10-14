@@ -697,7 +697,8 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
             else:
                 out[name] = "float" if any(c in modulus for c in ".eE") else "int"
     for name, parent in where_types(decls).items():
-        out[name] = parent if parent in ("str", "int", "float") else _decl_kind(parent, decls, frozenset({name}))
+        out[name] = (parent if parent in ("str", "int", "float") else out.get(parent)
+                     or _decl_kind(parent, decls, frozenset({name})))
     narrowed = narrowed_types(decls)
     pending = dict(narrowed)
     while pending:
@@ -743,6 +744,17 @@ def parse_narrowed(rhs):
     return m.group(1), m.group(2), m.group(4), m.group(3) == "..<"
 
 
+def _is_unit_decl(rhs):
+    """RHS declares a unit: a distinct type, or one derived from or scaled by
+    others (`A / B`, `K * B`)."""
+    rhs = (rhs or "").strip()
+    return (rhs.startswith("distinct ") or parse_derived(rhs) is not None
+            or _SCALED_RHS.match(rhs) is not None)
+
+
+_SCALED_RHS = _re_du.compile(r"^[-\d_.eE+]+[ \t]*\*[ \t]*[A-Za-z_]\w*$")
+
+
 def narrowed_types(decls):
     """{name: parent} for every `type N is P range LO .. HI` and every
     `type N is P mod M` in DECLS: a type narrowed from, or wrapped within, its
@@ -751,6 +763,9 @@ def narrowed_types(decls):
            for p in [parse_narrowed(r)] if p}
     out.update({n: p[0] for n, r in decls.items() if r is not None
                 for p in [parse_mod(r)] if p and p[0]})
+    # a check over a unit: it goes up to that unit, as a narrowed one does
+    out.update({n: p for n, p in where_types(decls).items()
+                if p not in ("str", "int", "float") and _is_unit_decl(decls.get(p))})
     return out
 
 

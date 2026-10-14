@@ -2589,8 +2589,12 @@ def _where_type_nim(name, params, rhs, indent):
     from ady_declarations import distinct_kind
     _ensure_parse_helpers()
     kind = distinct_kind(name)
+    from ady_declarations import is_distinct, parse_where
+    parent = parse_where(ParserState.ady_type_decls[name])[0]
+    unit_parent = parent not in ("str", "int", "float") and is_distinct(parent)
     scalar = kind in ("str", "int", "float")
-    base = _DISTINCT_BASE_NIM[kind] if scalar else rhs.nodes[0].to_nim()
+    base = (parent if unit_parent else _DISTINCT_BASE_NIM[kind] if scalar
+            else rhs.nodes[0].to_nim())
     var = rhs.nodes[1].to_nim() if type(rhs).__name__ == "where_def" else "x"
     ParserState.symbol_table.add(name, name, "type")
     _top = ParserState.symbol_table.depth() <= 2
@@ -2612,7 +2616,7 @@ def _where_type_nim(name, params, rhs, indent):
         lines += [ind + p.format(e=_exp, t=name) for p in ops]
         lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
                      f"specifier: string) = formatValue(result, {base}(value), specifier)")
-        if kind in ("int", "float"):
+        if kind in ("int", "float") and not unit_parent:
             # a sum of checked values is a sum of their base: it would not be
             # one the check had seen
             ParserState.nim_imports.add("sequtils")
@@ -2627,7 +2631,7 @@ def _where_type_nim(name, params, rhs, indent):
         f"{ind}proc to_{name}{_exp}(value: {base}): {fail} = (if valid_{name}(value): "
         f"{fail}.ok({name}(value)) else: "
         f"{fail}.err(ParseFailure_T(what: \"{name}\", text: {shown})))"]
-    if kind == "float":
+    if kind == "float" and not unit_parent:
         lines.append(f"{ind}proc to_{name}{_exp}(value: int): {fail} = to_{name}(float(value))")
     lines.append(f"{ind}proc to_{name}{_exp}(x: {name}): {name} = x")
     ParserState.proc_return_types[f"to_{name}"] = fail
