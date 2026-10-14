@@ -71,7 +71,7 @@ _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
                     "by_value_procs", "var_param_procs", "var_self_methods",
-                    "failure_types")
+                    "failure_types", "ctor_overloads")
 _nimport_carried: dict = {}
 _nimport_module_symbols: dict = {}
 # The Nim standard modules a dependency's translation imported. An importer
@@ -113,6 +113,7 @@ def _nim_reset():
     ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
     ParserState.narrowed_types = {}     # `type N is P range ..`: name -> P
     ParserState.mod_types = {}          # `type N is [P] mod M`: name -> (P or None, M)
+    ParserState.ctor_overloads = {}     # class -> its __init__s, when one can fail
     ParserState.overloaded_procs = set()  # procs defined more than once, with other types
     ParserState._scaled_bases_done = set()   # bases whose to_B is emitted
     ParserState.generic_funcs = {}      # generic function -> its type parameters
@@ -729,6 +730,8 @@ def translate(code, export_symbols=False):
     ParserState.failure_types = (_failures | BUILTIN_FAILURE_TYPES
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
+    from ady_stmt import scan_constructors
+    ParserState.ctor_overloads.update(scan_constructors(code))
     from ady_stmt import scan_union_aliases, scan_type_decls
     from ady_stmt import check_record_bodies
     check_record_bodies(code)

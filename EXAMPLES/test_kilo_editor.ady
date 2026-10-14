@@ -38,16 +38,20 @@ def started_on(name: str, text: str) -> Editor:
     """An editor on a file NAME holding TEXT."""
     let p: Path = dir / name
     assert p.write_text(text) is None
-    var ed: Editor = Editor(p)
-    assert ed.open() is None
+    let made: Editor | !PathFailure_T = Editor(p)
+    if made is PathFailure_T:
+        die(made.reason)
+    var ed: Editor = made
     ed.fit(40, 12)
     ed
 
 def empty(name: str) -> Editor:
     """An editor on a file that is not there."""
     let p: Path = dir / name
-    var ed: Editor = Editor(p)
-    assert ed.open() is None
+    let made: Editor | !PathFailure_T = Editor(p)
+    if made is PathFailure_T:
+        die(made.reason)
+    var ed: Editor = made
     ed.fit(40, 12)
     ed
 
@@ -174,8 +178,8 @@ let blank: Editor = started_on("blank.txt", "")
 assert len(blank.rows) == 0
 assert started_on("lines.txt", "a\n\nb\n").rows[1].chars == ""
 # a name that is a directory is there and cannot be read: a failure, not a new file
-var directory: Editor = Editor(dir)
-assert directory.open() is PathFailure_T
+let directory: Editor | !PathFailure_T = Editor(dir)
+assert directory is PathFailure_T
 print "open OK"
 
 # ---- typing --------------------------------------------------------------------------------
@@ -494,7 +498,10 @@ assert none.message == "0 bytes written on disk"
 assert slurp(none.path) == ""
 
 # a file that cannot be written: the message says why, and the changes are still unsaved
-var nowhere: Editor = Editor(Path("/no_such_dir_for_test_kilo") / "a.txt")
+let nowhere_made: Editor | !PathFailure_T = Editor(Path("/no_such_dir_for_test_kilo") / "a.txt")
+if nowhere_made is PathFailure_T:
+    die(nowhere_made.reason)
+var nowhere: Editor = nowhere_made
 nowhere.insert_row(0, "hello")
 code(nowhere, CTRL_S)
 assert nowhere.message.startswith("Can't save! I/O error: ")

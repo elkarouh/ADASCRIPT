@@ -447,15 +447,13 @@ class Editor:
     var typing: bool = False             # was the last change a typed character? a run of them is one step
     var cut: []str = []                  # the lines ^K took out, for ^U to put back
 
-    def __init__(self, path: Path):
+    # ---- the file ---------------------------------------------------
+    def __init__(self, path: Path) -> None | !PathFailure_T:
+        """An editor on the file PATH, which it reads. A file that is not there is a new one: no
+        rows. One that is there and cannot be read is a failure (kilo says why and exits)."""
         self.path = path
         self.filename = f"{path}"
         self.syntax = syntax_of(self.filename)
-
-    # ---- the file ---------------------------------------------------
-    def open(self) -> None | !PathFailure_T:
-        """Read the file. A file that is not there is a new one: no rows. One that is there and
-        cannot be read is a failure (kilo says why and exits)."""
         return None if not -e self.path                  # not there: a new file
         let read: []str | !PathFailure_T = self.path.read_lines()
         if read is PathFailure_T:

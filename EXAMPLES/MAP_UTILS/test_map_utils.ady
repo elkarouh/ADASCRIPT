@@ -13,7 +13,7 @@ complex).
 """
 from map_base import Accel_T, Axis_T, BAD_COORDINATE_PAIR, BAD_DMS, Bearing_T, Degrees_T, Duration_T, GeoErr_T, GeoFailure_T, Kilometers_T, LATITUDE, LONGITUDE, LatLong_T, Latitude_T, Longitude_T, Meters_T, OUT_OF_RANGE, Speed_T, SquareMeters_T, dd2dms, dec2human_latlong, dms2dec, human_latlong2dec, modulo
 from map_flat import Acceleration, Position, Vector, Velocity
-from map_geo import GeoPoint, GeoVector, geo_point_from_dms, geo_vector_from_components
+from map_geo import GeoPoint, GeoVector, geo_vector_from_components
 
 def close(actual: float, expected: float, tol: float = 1e-9) -> bool:
     abs(actual - expected) <= tol
@@ -26,7 +26,7 @@ def decimal(text: str, axis: Axis_T) -> float:
     return float(r)
 
 def point(text: str) -> GeoPoint:
-    let r: GeoPoint | !GeoFailure_T = geo_point_from_dms(text)
+    let r: GeoPoint | !GeoFailure_T = GeoPoint(text)
     if r is GeoFailure_T:
         print f"cannot read {text}: {r.detail}"
         quit(1)

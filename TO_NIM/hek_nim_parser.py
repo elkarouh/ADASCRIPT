@@ -5318,7 +5318,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     params_str = ", ".join(param_strs)
 
     # Register parameter types for call-site Option[T] coercion
-    new_name_key = f"new{class_name}"
+    new_name_key = (f"try{class_name}" if ret_ann.lstrip(": ").strip().startswith("Result[") else f"new{class_name}")
     param_types_list = []
     for ps in param_strs:
         import re as _re2
@@ -5374,11 +5374,13 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
         # falling off the end is success
         init_lines.append(f"{_ind(indent + 1)}return {fails}.ok()")
 
-    new_name = f"new{class_name}"
+    new_name = f"try{class_name}" if fails else f"new{class_name}"
     export = "*" if indent == 0 else ""
     if fails:
         # the object is built in a local, and handed back only if init did not fail
         built = f"Result[{class_type}, {failure_type}]"
+        # known to the importers of this module too, as any routine's is
+        ParserState.proc_return_types[new_name] = built
         new_sig = f"{_ind(indent)}proc {new_name}{export}{type_params}({params_str}): {built} ="
         new_body = [f"{_ind(indent + 1)}var obj: {class_type}"]
         if is_ref:

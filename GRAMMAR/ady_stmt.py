@@ -290,9 +290,33 @@ _RETURN_DECL = _re_dup.compile(
     r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", _re_dup.MULTILINE)
 
 
-def failing_constructors(code):
-    """The classes whose `__init__` says `-> None | !F`, as {class: F}: a
-    call of the class can fail."""
+_INIT_DECL = _re_dup.compile(
+    r"[ \t]+def[ \t]+__init__\s*\((.*)\)\s*(?:->\s*([^\n#]*?))?\s*:[ \t]*(?:#.*)?$")
+
+
+def _split_commas(text):
+    """TEXT split at its top-level commas."""
+    depth, parts, cur = 0, [], []
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    if "".join(cur).strip():
+        parts.append("".join(cur).strip())
+    return parts
+
+
+def scan_constructors(code):
+    """Every class's `__init__`s, as {class: [(params, failure), ...]}: PARAMS
+    are (type as written, has a default) for each parameter but self, and
+    FAILURE is F of `-> None | !F`, or None for a constructor that cannot fail.
+    Only classes with at least one that can fail are listed."""
     found = {}
     cls = None
     for line in code.splitlines():
@@ -300,12 +324,27 @@ def failing_constructors(code):
         if m:
             cls = m.group(1)
             continue
-        m = _re_dup.match(r"[ \t]+def[ \t]+__init__\b.*\)\s*->\s*([^\n#]*?)\s*:[ \t]*(?:#.*)?$", line)
-        if m and cls:
-            failure = [p for p in split_top_level_bar(m.group(1)) if p != "None"]
-            if m.group(1).count("!") == 1 and len(failure) == 1:
-                found[cls] = failure[0]
-    return found
+        m = _INIT_DECL.match(line)
+        if not (m and cls):
+            continue
+        failure = None
+        if m.group(2) and m.group(2).count("!") == 1:
+            rest = [p for p in split_top_level_bar(m.group(2)) if p != "None"]
+            if len(rest) == 1:
+                failure = rest[0]
+        params = []
+        for prm in _split_commas(m.group(1)):
+            if prm.split(":")[0].split("=")[0].strip() == "self":
+                continue
+            ptype = prm.split(":", 1)[1].split("=")[0].strip() if ":" in prm else ""
+            params.append((ptype, "=" in prm))
+        found.setdefault(cls, []).append((params, failure))
+    return {c: ov for c, ov in found.items() if any(f for _, f in ov)}
+
+
+def failing_constructors(code):
+    """The classes with a constructor that can fail, as {class: F}."""
+    return {c: next(f for _, f in ov if f) for c, ov in scan_constructors(code).items()}
 
 
 def check_no_failing_init(code):
@@ -327,7 +366,7 @@ def scan_return_types(code):
     types = {m.group(1): m.group(2) for m in _RETURN_DECL.finditer(code)}
     types.pop("__init__", None)
     for cls, failure in failing_constructors(code).items():
-        types[f"new{cls}"] = f"{cls} | !{failure}"
+        types[f"try{cls}"] = f"{cls} | !{failure}"
     return types
 
 

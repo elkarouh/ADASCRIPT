@@ -311,6 +311,16 @@ class GeoPoint:
         self.latitude  = latitude
         self.longitude = longitude
 
+    def __init__(self, human_latlong: str) -> None | !GeoFailure_T:
+        """The point of a 'DDMMSSN DDDMMSSE' string.
+
+            GeoPoint("505405N 0042904E")      # Brussels airport
+        """
+        do:
+            where <- human_latlong2dec(human_latlong)
+        self.latitude  = where.latitude
+        self.longitude = where.longitude
+
     def __add__(self, vector: GeoVector) -> GeoPoint:
         """This point displaced along VECTOR (Vincenty direct formula)."""
         let end: Direct_T = vincenty_direct(self.latitude, self.longitude, vector.heading(), vector.length())
@@ -407,15 +417,6 @@ class GeoPoint:
         f"{self.human()} {self.decimal()}"
 
 
-def geo_point_from_dms(human_latlong: str) -> GeoPoint | !GeoFailure_T:
-    """The GeoPoint of a 'DDMMSSN DDDMMSSE' string.
-
-        geo_point_from_dms("505405N 0042904E")      # Brussels airport
-    """
-    do:
-        where <- human_latlong2dec(human_latlong)
-    return GeoPoint(where.latitude, where.longitude)
-
 # ---------------------------------------------------------------------------
 # Smoke tests / demo
 # ---------------------------------------------------------------------------
@@ -429,8 +430,8 @@ def must(point: GeoPoint | !GeoFailure_T) -> GeoPoint:
 
 def demo():
     # -- GeoPoint arithmetic demo --------------------------------------------
-    let p1: GeoPoint = must(geo_point_from_dms("505405N 0042904E"))     # Brussels airport
-    let p2: GeoPoint = must(geo_point_from_dms("490035N 0023252E"))     # Paris Charles-de-Gaulle
+    let p1: GeoPoint = must(GeoPoint("505405N 0042904E"))     # Brussels airport
+    let p2: GeoPoint = must(GeoPoint("490035N 0023252E"))     # Paris Charles-de-Gaulle
 
     print f"EBBR: {p1}"
     print f"LFPG: {p2}"

@@ -2870,6 +2870,38 @@ def _translate_method(obj_name, method_name):
     return nim_method
 
 
+_SIMPLE_NIM = {"str": "string", "int": "int", "float": "float64", "bool": "bool"}
+
+
+def _constructor_name(cls, call_node):
+    """`newC` for a constructor that cannot fail, `tryC` for one that can. A
+    class with only the one kind has only that name; one with both picks by
+    the call: how many arguments, then what the first one is."""
+    overloads = getattr(ParserState, "ctor_overloads", {}).get(cls)
+    if not overloads:
+        return "new" + cls
+    args = _extract_call_args(call_node) if call_node is not None else []
+    fit = [o for o in overloads
+           if sum(1 for _, d in o[0] if not d) <= len(args) <= len(o[0])]
+    kinds = {bool(f) for _, f in fit}
+    if len(kinds) == 1:
+        return ("try" if kinds.pop() else "new") + cls
+    if len(fit) > 1 and args:
+        seen = _value_nim_type(args[0])
+        same = [o for o in fit
+                if o[0] and _SIMPLE_NIM.get(o[0][0][0], o[0][0][0]) == seen]
+        if not same:
+            # What is not known to be a string is not: the call of a library
+            # routine, `parseJson(text)`, whose type nothing here records.
+            same = [o for o in fit if o[0] and (o[0][0][0] == "str") == (seen == "string")]
+        if same and len({bool(f) for _, f in same}) == 1:
+            return ("try" if same[0][1] else "new") + cls
+    raise SyntaxError(
+        f"{cls}({', '.join(args)}): cannot tell which constructor is meant, "
+        "the plain one or the one that can fail; they differ in the number "
+        "or the types of their parameters.")
+
+
 def _extract_call_arg(call_node):
     """Extract the argument string from a call_trailer node."""
     if len(call_node.nodes) > 1 and hasattr(call_node.nodes[1], "nodes") and call_node.nodes[1].nodes:
@@ -3564,7 +3596,7 @@ def to_nim(self, prec=None):
         else:
             sym = ParserState.symbol_table.lookup(raw_name)
             if sym and sym.get("kind") in ("class", "ref_class"):
-                result = "new" + raw_name
+                result = _constructor_name(raw_name, _first_trailer if _is_call else None)
     base_name = result  # save for type-aware method lookup
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         trailer_list = list(self.nodes[1].nodes)

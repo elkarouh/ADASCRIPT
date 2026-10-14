@@ -156,8 +156,8 @@ class RawTerminal(Terminal):
 
 if $# != 1:
     die("Usage: kilo <filename>")
-var editor: Editor = Editor(Path($1))
-let opened: None | !PathFailure_T = editor.open()
+let opened: Editor | !PathFailure_T = Editor(Path($1))
 if opened is PathFailure_T:
     die(f"Opening file: {opened.reason}")
+var editor: Editor = opened
 edit(editor, RawTerminal())
