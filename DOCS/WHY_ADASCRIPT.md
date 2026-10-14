@@ -141,9 +141,9 @@ type Neighbour_T is tuple:
 type Graph_T is {Node_T}[]Neighbour_T
 
 def dijkstra(graph : Graph_T, start: Node_T) -> {Node_T}Distance_T:
-    distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
+    var distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}
     var visited : {}Node_T
-    queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
+    var queue : PriorityQueue[Neighbour_T] = [(0.0, start)]
     while queue:
         current_dist, node = queue.pop()
         continue if node in visited
@@ -166,7 +166,7 @@ one type, not two descriptions of the same pair.
 The initialisation is one line, and it is the sentence you would say —
 "every node starts at infinity, except the start, which starts at zero":
 
-`distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}`
+`var distances: {Node_T}Distance_T = {node: (0.0 if node==start else Inf) for node in graph}`
 
 That is Dijkstra's whole initialisation phase, written as a mapping
 comprehension, and its result is typed: the keys are `Node_T`, the values
@@ -971,7 +971,12 @@ is not a range: a date is digits, a period is three of them, a probability
 table adds up to one. The usual answer is a function that checks and returns a
 code, `check_date(text) -> (str, Rc_T)`, which every caller has to remember to
 call, and whose result is a plain string again, so that nothing downstream can
-tell the checked from the unchecked. Adascript puts the check in the type:
+tell the checked from the unchecked. Ada 2012 has the idea, as a subtype with a `Dynamic_Predicate`, and Adascript
+takes it from there. What it changes is how the check is met. The checked type
+is a type of its own, not a subtype that mixes freely with its base, so the only
+way in is the check; and the check does not raise, it returns a failure the
+caller must deal with, which is the same rule as everywhere else. Adascript puts
+the check in the type:
 
 <!-- from: EXAMPLES/CFMU/ftps_common.ady -->
 ```python
@@ -1171,8 +1176,11 @@ fails six of its fifteen checks.
 In Python and Java a constructor cannot say that it failed: it returns nothing,
 and the only way out is an exception. In Rust and Zig the question does not
 arise, because there is no constructor, only a function by convention called
-`new` or `init`. Adascript keeps the constructor and lets it fail, which, as far
-as I know, no other language does. It is odd, once seen, that it was ever
+`new` or `init`. Swift comes nearest: an initialiser can fail, but `init?`
+gives back nil and says nothing of why, and `init throws` is an exception
+again. Adascript keeps the constructor and lets it fail with a *value*: the
+signature names the failure type, the call is taken like any other failure, and
+a failure that is dropped is refused. It is odd, once seen, that it was ever
 otherwise: building a value from outside data is the commonest thing that can
 go wrong, and the constructor was the one routine that could not say so. The
 signature says it, as it does for any routine:
