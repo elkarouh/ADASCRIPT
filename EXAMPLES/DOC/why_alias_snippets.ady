@@ -33,6 +33,11 @@ let far: Distance_T = flown(speed, 2.0)
 # let bad: Distance_T = speed * speed  -- refused: speed times speed is not a distance
 assert far == 500.0
 
+# --- a string: distinct separates a type, it does not say which text is valid ----------
+type Callsign_T is distinct str
+let loose: Callsign_T = "not a callsign !!"    # compiles: nothing says which strings are callsigns
+assert str(loose) == "not a callsign !!"
+
 # --- the commoner case: money ----------------------------------------------
 type Dollar_T is distinct float
 type Euro_T   is distinct float

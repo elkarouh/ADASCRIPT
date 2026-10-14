@@ -1082,6 +1082,34 @@ types say which is which.
 
 ### A type that carries its check
 
+A bare `str` is where this matters most, because a string will hold anything.
+A callsign, a date and the name of a zone are all `str`, so any of them goes
+where any other is wanted, and any text at all goes where a callsign is wanted.
+`distinct` fixes the first of those and not the second:
+
+<!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
+```python
+type Callsign_T is distinct str
+let loose: Callsign_T = "not a callsign !!"    # compiles: nothing says which strings are callsigns
+```
+
+A `Callsign_T` can no longer be taken for a zone's name, but `"not a callsign
+!!"` is one. So a bare `str` has to be validated somewhere, and the question is
+where. In most code it is a function the caller is trusted to call, which
+returns a string again. In the geo-server example the rule is one line of the
+type, and there is no other way to make a callsign:
+
+<!-- from: EXAMPLES/GEO_SERVER/geo_server.ady -->
+```python
+type Callsign_T is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
+```
+
+`Callsign_T("sentinel")` is a failure that says what was offered, and
+`Callsign_T("CA-1")` is a callsign. A plain `str` does not go where a callsign
+is wanted, because nobody has checked it, and a callsign goes up to `str`
+where text is wanted. A date, a period and a sequence number are the same
+case, and the rest of this section is about them.
+
 A range says a number is between two bounds. Much of what makes a value valid
 is not a range: a date is digits, a period is three of them, a probability
 table adds up to one. The usual answer is a function that checks and returns a
