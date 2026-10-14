@@ -135,7 +135,7 @@ print "test_where_type pdf OK"
 
 # A check over a unit: the unit's arithmetic stays as it is, and the checked type goes up to it.
 type Distance_T is distinct float
-type Time_T is distinct float
+type Time_T is distinct float range 0.0 .. 1.0e18
 type Speed_T is Distance_T / Time_T
 type Legal_Speed_T is Speed_T where v: float(v) <= 299_792_458.0    # no faster than light
 
