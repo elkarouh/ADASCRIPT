@@ -964,6 +964,62 @@ The count is a range type, not a mod type: it runs from 0 to the capacity,
 one value more than an index has, and a full buffer must not wrap to empty. The
 types say which is which.
 
+### A type that carries its check
+
+A range says a number is between two bounds. Much of what makes a value valid
+is not a range: a date is digits, a period is three of them, a probability
+table adds up to one. The usual answer is a function that checks and returns a
+code, `check_date(text) -> (str, Rc_T)`, which every caller has to remember to
+call, and whose result is a plain string again, so that nothing downstream can
+tell the checked from the unchecked. Adascript puts the check in the type:
+
+<!-- from: EXAMPLES/CFMU/ftps_common.ady -->
+```python
+type Period_T is str where p: p == "" or p == /^\d{3}$/
+type Date_T   is str where d: d == /^\d+$/ or d == ""
+type Sequence_T is str where s: s == "" or s == "ALL" or s == /^\d$/
+```
+
+The condition is any expression over the one variable. A `Date_T` is a type of
+its own: it goes up to `str` where a string is wanted, but a `str` does not
+come down to it. The only way in is the check, `Date_T(text)`, and the check
+can fail, so it is a `Date_T | !ParseFailure_T`, taken like any other failure.
+Past the guard the value is known to be valid, and a function that takes a
+`Date_T` has nothing to validate:
+
+<!-- from: EXAMPLES/CFMU/ftps_list.ady -->
+```python
+let sd_val: Date_T | !ParseFailure_T = Date_T(start_date)
+if sd_val is ParseFailure_T:
+  refuse("start_date", "numeric", sd_val)
+```
+
+The base can be any type, and the variable can be left out, in which case the
+condition speaks of `x`. A probability is `type Prob_T is float where 0 <= x <=
+1`, which says what `float range 0..1` says but refuses with a value instead of
+trusting the caller. And a check can be about a whole: a distribution over the
+faces of a die is a table of probabilities that adds up to one, and the two
+levels are two types, because the entries being fine does not make the table
+fine:
+
+<!-- from: EXAMPLES/test_where_type.ady -->
+```python
+type Dice_T is 1 .. 6
+type Pdf_T is [Dice_T]Prob_T where pdf: abs(sum(pdf[d] for d in Dice_T) - 1.0) < 1e-9
+
+def loaded() -> Pdf_T | !ParseFailure_T:
+    var table: [Dice_T]Prob_T = {:}
+    for d in Dice_T:
+        do:
+            p <- Prob_T(0.2)            # each 0.2 is a fine Prob_T ...
+        table[d] = p
+    return Pdf_T(table)             # ... but six of them add up to 1.2: refused here
+```
+
+Arithmetic on a checked number is the base's, so a sum of probabilities is a
+plain float and never claims to have passed the check. Nim only for now:
+`ady2py` refuses the declaration.
+
 ### What is checked where
 
 Not every name should be distinct. Conversions are work, and a value that
@@ -1290,6 +1346,9 @@ catches them:
 - **Unions** are at most six members.
 - **A constructor that can fail** is refused by `ady2py`: Python's `__init__`
   returns nothing, so the same source needs a function returning `C | !F` there.
+- **A type with a check** (`type D is str where d: ...`) is refused by `ady2py`:
+  there is no Python type to carry it, so the same source needs a validating
+  function there.
 
 ---
 
