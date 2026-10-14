@@ -40,7 +40,7 @@ type UserName_T      is str     # a login name
 type Baseline_T      is str     # the baseline a workspace is based on: BL_42
 type EnvId_T         is str     # the build environment: L8
 type HostName_T      is str     # the machine that registered the workspace
-type Json_T          is str     # the text after "CONFIG <name> " in a commit subject
+type Json_T          is distinct str     # the text after "CONFIG <name> " in a commit subject
 
 # The columns, in the order @headers lists them in Clsworkspace.pl.
 type Column_T is enum COL_WORKSPACE, COL_BASED_ON, COL_ENVID, COL_BL_BUILT, COL_SS_STATE, COL_HOSTNAME
@@ -104,53 +104,57 @@ def release_lock(lock: Lock_T):
 
 # --- one workspace ----------------------------------------------------------------
 
-type WorkspaceConfig is record:
+def json_text(node: JsonNode, key: str) -> str:
+    """The string under key, "" when absent."""
+    node.getOrDefault(key).getStr("")
+
+class WorkspaceConfig:
     """The JSON blob of one 'CONFIG <name> <json>' commit, kept whole.
 
     Real configs carry more keys (branch, data_directory, subsystem_name,
-    system_name, ...) than this tool prints, so the record keeps the parsed
+    system_name, ...) than this tool prints, so the object keeps the parsed
     JSON and has a getter only for what is displayed -- the same bargain
-    CMA5::Workspace::Config makes with its AUTOLOAD. The getters are plain
-    functions called with a dot: `config.name()`.
+    CMA5::Workspace::Config makes with its AUTOLOAD.
+
+    Made from parsed JSON, or from the text of a commit subject. Text that is
+    not JSON gives an empty config, which is_workspace() refuses: a
+    constructor cannot return a failure, and not every "CONFIG ..." commit
+    subject is necessarily ours.
     """
-    data: JsonNode
+    var data: JsonNode
 
-def text(c: WorkspaceConfig, key: str) -> str:
-    """The value under key, "" when absent."""
-    c.data.getOrDefault(key).getStr("")
+    def __init__(self, data: JsonNode):
+        self.data = data
 
-def name(c: WorkspaceConfig) -> WorkspaceName_T:
-    WorkspaceName_T(c.text("name"))
+    def __init__(self, payload: Json_T):
+        try:
+            self.data = parseJson(str(payload))
+        except JsonParsingError:
+            self.data = newJObject()
 
-def username(c: WorkspaceConfig) -> UserName_T:
-    UserName_T(c.text("username"))
+    def is_workspace(self) -> bool:
+        """A JSON object with a name; anything else is somebody else's commit."""
+        return self.data.kind == JObject and self.data.hasKey("name")
 
-def baseline(c: WorkspaceConfig) -> Baseline_T:
-    Baseline_T(c.text("baseline"))
+    def name(self) -> WorkspaceName_T:
+        WorkspaceName_T(json_text(self.data, "name"))
 
-def envid(c: WorkspaceConfig) -> EnvId_T:
-    EnvId_T(c.text("envid"))
+    def username(self) -> UserName_T:
+        UserName_T(json_text(self.data, "username"))
 
-def hostname(c: WorkspaceConfig) -> HostName_T:
-    HostName_T(c.text("hostname"))
+    def baseline(self) -> Baseline_T:
+        Baseline_T(json_text(self.data, "baseline"))
 
-def status(c: WorkspaceConfig) -> ?str:
-    if c.data.hasKey("status"):
-        return c.data["status"].getStr("")
-    return None
+    def envid(self) -> EnvId_T:
+        EnvId_T(json_text(self.data, "envid"))
 
-def parse_config(payload: Json_T) -> ?WorkspaceConfig:
-    """The workspace the payload describes; None when it is not one.
+    def hostname(self) -> HostName_T:
+        HostName_T(json_text(self.data, "hostname"))
 
-    Not every "CONFIG ..." commit subject is necessarily ours: text that is not
-    JSON, or JSON that is not an object with a name, is somebody else's.
-    """
-    try:
-        let node: JsonNode = parseJson(str(payload))
-        if node.kind == JObject and node.hasKey("name"):
-            return WorkspaceConfig(data=node)
-        return None
-    except JsonParsingError:
+    def status(self) -> ?str:
+        let node: JsonNode = self.data
+        if node.hasKey("status"):
+            return node["status"].getStr("")
         return None
 
 # --- the configs repository ----------------------------------------------------------
@@ -210,8 +214,8 @@ class ConfigStorage:
         for line in log.splitlines():
             continue if not line.startswith("CONFIG ")
             let (_, _, rest) = line.removeprefix("CONFIG ").partition(" ")
-            let config: ?WorkspaceConfig = parse_config(Json_T(rest))
-            continue if config is None
+            let config: WorkspaceConfig = WorkspaceConfig(Json_T(rest))
+            continue if not config.is_workspace()
             configs.append(config)
         if user is None:
             return configs
