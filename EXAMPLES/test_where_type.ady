@@ -135,18 +135,18 @@ print "test_where_type pdf OK"
 
 # A check over a unit: the unit's arithmetic stays as it is, and the checked type goes up to it.
 type Distance_T is distinct float
-type Time_T is distinct float range 0.0 .. 1.0e18
-type Speed_T is Distance_T / Time_T
+type Duration_T is distinct float range 0.0 .. 1.0e18
+type Speed_T is Distance_T / Duration_T
 type Legal_Speed_T is Speed_T where v: float(v) <= 299_792_458.0    # no faster than light
 
 let leg: Distance_T = 10.0
-let took: Time_T = 2.0
+let took: Duration_T = 2.0
 let pace: Speed_T = leg / took
 let legal: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(pace)
 if legal is ParseFailure_T:
     die("5 m/s is a legal speed")
 let up: Speed_T = legal                      # up to the unit, no cast
 assert float(up) == 5.0
-let warp: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(leg / Time_T(1e-9))
+let warp: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(leg / Duration_T(1e-9))
 assert warp is ParseFailure_T
 print "test_where_type unit OK"

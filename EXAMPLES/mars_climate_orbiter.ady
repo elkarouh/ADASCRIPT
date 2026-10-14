@@ -19,11 +19,11 @@
 # conversion, written where it happens. Scaled units are Nim only (ady2py refuses the
 # declaration).
 
-type Mass_T     is distinct float           # kg
-type Distance_T is distinct float           # m
-type Time_T     is distinct float range 0.0 .. 1.0e18    # s, never negative
-type Speed_T    is Distance_T / Time_T      # m/s
-type Impulse_T  is Mass_T * Speed_T         # N s, which is kg m/s: what the navigation expects
+type Mass_T     is distinct float                          # kg
+type Distance_T is distinct float                          # m
+type Duration_T is distinct float range 0.0 .. 1.0e18      # s, never negative
+type Speed_T    is Distance_T / Duration_T                 # m/s
+type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
 
@@ -41,7 +41,7 @@ def speed_change(impulses: [*]Impulse_T, mass: Mass_T) -> Speed_T:
     return total / mass
 
 let SPACECRAFT: Mass_T = 629.0
-let CRUISE: Time_T = 2.1e7                  # about eight months
+let CRUISE: Duration_T = 2.1e7                  # about eight months
 
 # The conversion, on the line where the units meet.
 def in_newton_seconds(file: [*]Impulse_in_lbf_s_T) -> []Impulse_T:
