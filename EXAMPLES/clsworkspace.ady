@@ -112,25 +112,23 @@ class WorkspaceConfig:
     JSON and has a getter only for what is displayed -- the same bargain
     CMA5::Workspace::Config makes with its AUTOLOAD.
 
-    Made from parsed JSON, or from the text of a commit subject. Text that is
-    not JSON gives an empty config, which is_workspace() refuses: a
-    constructor cannot return a failure, and not every "CONFIG ..." commit
-    subject is necessarily ours.
+    Made from parsed JSON, or from the text of a commit subject. The text
+    constructor can fail: not every "CONFIG ..." commit subject is
+    necessarily ours, and what is not JSON, or has no name, is somebody
+    else's.
     """
     var data: JsonNode
 
     def __init__(self, data: JsonNode):
         self.data = data
 
-    def __init__(self, payload: Json_T):
+    def __init__(self, payload: Json_T) -> None | !ConfigFailure_T:
         try:
             self.data = parseJson(str(payload))
         except JsonParsingError:
-            self.data = newJObject()
-
-    def is_workspace(self) -> bool:
-        """A JSON object with a name; anything else is somebody else's commit."""
-        return self.data.kind == JObject and self.data.hasKey("name")
+            return ConfigFailure_T("CONFIG payload", "is not JSON")
+        if self.data.kind != JObject or not self.data.hasKey("name"):
+            return ConfigFailure_T("CONFIG payload", "is not a workspace")
 
     def text(self, key: str) -> str:
         """The string under key, "" when absent."""
@@ -227,8 +225,8 @@ class ConfigStorage:
         for line in log.splitlines():
             continue if not line.startswith("CONFIG ")
             let (_, _, rest) = line.removeprefix("CONFIG ").partition(" ")
-            let config: WorkspaceConfig = WorkspaceConfig(Json_T(rest))
-            continue if not config.is_workspace()
+            let config: WorkspaceConfig | !ConfigFailure_T = WorkspaceConfig(Json_T(rest))
+            continue if config is ConfigFailure_T
             configs.append(config)
         if user is None:
             return configs

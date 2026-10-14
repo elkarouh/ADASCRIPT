@@ -100,6 +100,7 @@ STANDALONE := \
     PROJECT/test_geometry.ady \
     test_do_block.ady \
     test_do_discard.ady \
+    test_init_failure.ady \
     test_fstring_width.ady \
     test_pure_conversion.ady \
     test_result.ady \

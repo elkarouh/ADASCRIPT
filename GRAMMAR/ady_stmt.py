@@ -290,9 +290,45 @@ _RETURN_DECL = _re_dup.compile(
     r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$", _re_dup.MULTILINE)
 
 
+def failing_constructors(code):
+    """The classes whose `__init__` says `-> None | !F`, as {class: F}: a
+    call of the class can fail."""
+    found = {}
+    cls = None
+    for line in code.splitlines():
+        m = _re_dup.match(r"class[ \t]+(\w+)", line)
+        if m:
+            cls = m.group(1)
+            continue
+        m = _re_dup.match(r"[ \t]+def[ \t]+__init__\b.*\)\s*->\s*([^\n#]*?)\s*:[ \t]*(?:#.*)?$", line)
+        if m and cls:
+            failure = [p for p in split_top_level_bar(m.group(1)) if p != "None"]
+            if m.group(1).count("!") == 1 and len(failure) == 1:
+                found[cls] = failure[0]
+    return found
+
+
+def check_no_failing_init(code):
+    """ady2py has no constructor that fails: Python's __init__ returns
+    nothing, and a call of the class returns the object. Refused, where the
+    Nim backend takes it."""
+    for cls, failure in failing_constructors(code).items():
+        raise SyntaxError(
+            f"{cls}.__init__ returns `None | !{failure}`: a constructor that can fail "
+            f"is Nim only (ady2nim). Python's __init__ returns nothing; write a function "
+            f"returning `{cls} | !{failure}` for ady2py")
+
+
 def scan_return_types(code):
-    """Every `def`'s return annotation, as written, by routine name."""
-    return {m.group(1): m.group(2) for m in _RETURN_DECL.finditer(code)}
+    """Every `def`'s return annotation, as written, by routine name.
+
+    A class whose `__init__` says `-> None | !F` is a routine returning
+    `Class | !F`, under the name its constructor call is emitted as."""
+    types = {m.group(1): m.group(2) for m in _RETURN_DECL.finditer(code)}
+    types.pop("__init__", None)
+    for cls, failure in failing_constructors(code).items():
+        types[f"new{cls}"] = f"{cls} | !{failure}"
+    return types
 
 
 def split_top_level_bar(text):

@@ -5266,16 +5266,28 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
 
     block_node = None
     param_list_node = None
+    ret_ann = ""        # `-> None | !F`: this constructor can fail
 
     for node in func_node.nodes:
         tname = type(node).__name__
         if tname == "block":
             block_node = node
+        elif tname == "return_annotation":
+            ret_ann = node.to_nim()
         elif tname == "Several_Times":
             for st in node.nodes:
                 if type(st).__name__ == "param_list":
                     param_list_node = st
-                    break
+                elif type(st).__name__ == "return_annotation":
+                    ret_ann = st.to_nim()
+    fails = ret_ann.lstrip(": ").strip()
+    if fails in ("void", "None", "unit"):
+        fails = ""      # `-> None`: an __init__ that says what it always did
+    if fails and not fails.startswith("Result[void, "):
+        raise SyntaxError(
+            f"{class_name}.__init__ can only say `-> None | !Failure_T`: "
+            f"a constructor builds the object, or fails")
+    failure_type = fails[len("Result[void, "):-1] if fails else ""
 
     param_strs = []
     param_names = []
@@ -5323,7 +5335,8 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
         self_param = f"self: {class_type}"
     else:
         self_param = f"self: var {class_type}"
-    init_sig = f"{_ind(indent)}proc {init_name}{type_params}({self_param}{', ' + params_str if params_str else ''}) ="
+    init_ret = f": {fails}" if fails else ""
+    init_sig = f"{_ind(indent)}proc {init_name}{type_params}({self_param}{', ' + params_str if params_str else ''}){init_ret} ="
 
     init_body = []
     if block_node:
@@ -5334,7 +5347,12 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
                 pn = parts[0].strip()
                 pt = parts[1].strip().split("=")[0].strip()
                 ParserState.symbol_table.add(pn, pt, "param")
+        _saved_ret = getattr(ParserState, "_current_return_type", "")
+        if fails:
+            ParserState._current_return_type = ret_ann
+            _mark_either_tail(block_node, ret_ann)
         init_body = _extract_block_body(block_node, indent + 1, is_init_body=True)
+        ParserState._current_return_type = _saved_ret
         ParserState.symbol_table.pop_scope()
         # Handle super().__init__() calls - replace with initParent(self, ...)
         for i, line in enumerate(init_body):
@@ -5352,9 +5370,26 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
         for fname, fdefault in field_defaults:
             init_lines.append(f"{_ind(indent + 1)}self.{fname} = {fdefault}")
     init_lines.extend(init_body)
+    if fails:
+        # falling off the end is success
+        init_lines.append(f"{_ind(indent + 1)}return {fails}.ok()")
 
     new_name = f"new{class_name}"
     export = "*" if indent == 0 else ""
+    if fails:
+        # the object is built in a local, and handed back only if init did not fail
+        built = f"Result[{class_type}, {failure_type}]"
+        new_sig = f"{_ind(indent)}proc {new_name}{export}{type_params}({params_str}): {built} ="
+        new_body = [f"{_ind(indent + 1)}var obj: {class_type}"]
+        if is_ref:
+            new_body.append(f"{_ind(indent + 1)}new(obj)")
+        _args = ", ".join(["obj"] + param_names)
+        new_body.append(f"{_ind(indent + 1)}let made = {init_name}({_args})")
+        new_body.append(f"{_ind(indent + 1)}if made.is_err: return {built}.err(made.error)")
+        new_body.append(f"{_ind(indent + 1)}return {built}.ok(obj)")
+        new_lines.append(new_sig)
+        new_lines.extend(new_body)
+        return init_lines, new_lines
     new_sig = f"{_ind(indent)}proc {new_name}{export}{type_params}({params_str}): {class_type} ="
     new_body = []
     if is_ref:

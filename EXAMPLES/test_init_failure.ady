@@ -1,0 +1,53 @@
+#!/usr/bin/env ady2nim
+"""Test: a constructor that can fail, `__init__(...) -> None | !Failure_T` (Nim only).
+
+The call `Cfg(text)` is then a `Cfg | !Bad_T`, taken like any failure: by name,
+or by a do: step. A return of the failure abandons the construction; falling
+off the end is success. Constructors that do not say so stay plain, and the
+two kinds overload side by side. ady2py refuses the form.
+"""
+
+from json nimport *
+
+type Bad_T is record:
+    why: str
+
+class Cfg:
+    var data: JsonNode
+
+    def __init__(self, data: JsonNode):
+        self.data = data
+
+    def __init__(self, text: str) -> None | !Bad_T:
+        try:
+            self.data = parseJson(text)
+        except JsonParsingError:
+            return Bad_T("not JSON")
+        if not self.data.hasKey("name"):
+            return Bad_T("no name")
+
+    def name(self) -> str:
+        self.data["name"].getStr("")
+
+def build(text: str) -> str | !Bad_T:
+    do:
+        c <- Cfg(text)
+    return c.name()
+
+let ok: Cfg | !Bad_T = Cfg('{"name": "a"}')
+if ok is Bad_T:
+    die(ok.why)
+print ok.name()
+let plain: Cfg = Cfg(parseJson('{"name": "p"}'))
+print plain.name()
+let bad: Cfg | !Bad_T = Cfg("{oops")
+if bad is Bad_T:
+    print bad.why
+let b2: str | !Bad_T = build('{"x": 1}')
+if b2 is Bad_T:
+    print b2.why
+let b3: str | !Bad_T = build('{"name": "z"}')
+if b3 is Bad_T:
+    die(b3.why)
+assert b3 == "z"
+print "test_init_failure OK"

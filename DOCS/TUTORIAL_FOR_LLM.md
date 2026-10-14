@@ -775,6 +775,17 @@ class AwkProcessor(AwkBase):
 
 **Forwarding constructors** — when a subclass has no `__init__`, the transpiler generates one mirroring the parent's parameters.
 
+**A constructor that can fail** (Nim only) says so as any routine does, `-> None | !Failure_T`. A `return` of the failure abandons the construction; falling off the end succeeds. The call `Config(text)` is then a `Config | !Failure_T`, taken by name or by a `do:` step; a plain constructor of the same class (`Config(node)`) overloads beside it and stays a plain `Config`. ady2py refuses the form. `EXAMPLES/test_init_failure.ady`, `EXAMPLES/clsworkspace.ady`.
+```adascript
+class Config:
+    def __init__(self, text: str) -> None | !Bad_T:
+        try:
+            self.data = parseJson(text)
+        except JsonParsingError:
+            return Bad_T("not JSON")
+let c: Config | !Bad_T = Config(text)
+```
+
 **`@virtual`** — only needed when subclasses live in a different file (module). Makes Nim emit `ref object of RootObj` for cross-module dynamic dispatch.
 
 **Inheritance:**
