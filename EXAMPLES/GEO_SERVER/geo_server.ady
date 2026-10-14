@@ -53,14 +53,6 @@ type Time_T     is distinct float
 # SENTINEL, HAVEN, CA-1.  \z, not $: a newline at the end is not a callsign.
 type Callsign_T is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
 
-def known(text: str) -> Callsign_T:
-    """The callsign TEXT; the program stops, saying why, when it is not one."""
-    let made: Callsign_T | !ParseFailure_T = Callsign_T(text)
-    if made is ParseFailure_T:
-        print f"error: '{text}' is not a callsign: a capital, then 1 to 11 capitals, digits or hyphens"
-        quit(1)
-    return made
-
 # An angle on the compass: clockwise from North, so 0 is up and 90 is East. 360 is
 # the same direction as 0 and is allowed, so that rounding at the seam cannot fail.
 type Bearing_T   is float range 0.0 .. 360.0
@@ -267,15 +259,22 @@ def run_geo_server(zones: []NamedZone, time_steps: []TimeStep) -> None:
 # Sample Scenario  (derived from Figure 2 and the sample output in the paper)
 # ---------------------------------------------------------------------------
 
-def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
+def build_scenario() -> ([]Ship, []NamedZone, []TimeStep) | !ParseFailure_T:
     """
     Construct a scenario that mirrors Figure 2 of the paper:
       - One Aegis ship with an engageability zone (annulus) and weapon doctrine (sector)
       - One carrier with a slave doctrine circle
       - Two tight zones (polygons)
     """
+    # What the radio calls them: each is a callsign or the failure that leaves here.
+    do:
+        sentinel <- Callsign_T("SENTINEL")
+        haven <- Callsign_T("HAVEN")
+        ca1 <- Callsign_T("CA-1")
+        hc1 <- Callsign_T("HC-1")
+
     let aegis: Ship = Ship(
-        known("SENTINEL"),
+        sentinel,
         Point(150.0, 100.0),
         30.0,    # inner_radius
         120.0,   # outer_radius
@@ -286,7 +285,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
     )
 
     let carrier: Ship = Ship(
-        known("HAVEN"),
+        haven,
         Point(230.0, 80.0),
         10.0,    # inner_radius
         60.0,    # outer_radius
@@ -316,9 +315,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
 
     let all_zones: []NamedZone = ship_zones + tight_zones
 
-    # The two aircraft, named once: the same callsign at every time step
-    let ca1: Callsign_T = known("CA-1")
-    let hc1: Callsign_T = known("HC-1")
+    # The two aircraft carry the same callsign at every time step
 
     # Five time-steps, positions evolve over time as objects move
     let time_steps: []TimeStep = [
@@ -344,7 +341,7 @@ def build_scenario() -> ([]Ship, []NamedZone, []TimeStep):
         ]),
     ]
 
-    return ships, all_zones, time_steps
+    return (ships, all_zones, time_steps)
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +355,11 @@ def main():
     print "=" * 60
     print
 
-    let (ships, all_zones, time_steps) = build_scenario()
+    let built: ([]Ship, []NamedZone, []TimeStep) | !ParseFailure_T = build_scenario()
+    if built is ParseFailure_T:
+        print f"error: '{built.text}' is not a callsign: a capital, then 1 to 11 capitals, digits or hyphens"
+        quit(1)
+    let (ships, all_zones, time_steps) = built
 
     print "Ships:"
     for s in ships:
