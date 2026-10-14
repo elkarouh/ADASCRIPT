@@ -4,6 +4,9 @@ The smallest version of the architecture of `TOOLS/ACCOUNTING`: the program is
 native, the browser only shows what the server draws, and htmx carries the
 clicks.
 
+The tutorial, `docs/TUTORIAL.md`, builds it step by step: the objects in the model, their
+picture, the events, and why htmx.
+
 ![The files of this example and what each imports](docs/dependencies.png)
 
 ```

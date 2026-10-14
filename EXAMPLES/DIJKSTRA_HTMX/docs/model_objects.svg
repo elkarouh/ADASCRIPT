@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" font-family="system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52606d"/></marker></defs>
+<rect width="100%" height="100%" fill="#f7f8fa"/>
+<text x="30" y="34" font-size="16" fill="#1f2933" font-weight="700" text-anchor="start" >The model: three records, and the class that holds them</text>
+<rect x="30" y="70" width="230" height="70" rx="8" fill="#ffffff" stroke="#9aa5b1" stroke-width="1.5"/>
+<text x="145.0" y="100.5" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Node_T</text>
+<text x="145.0" y="119.5" text-anchor="middle" font-size="13" fill="#52606d"  >name: str</text>
+<rect x="30" y="230" width="230" height="100" rx="8" fill="#ffffff" stroke="#9aa5b1" stroke-width="1.5"/>
+<text x="145.0" y="256.5" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Edge_T</text>
+<text x="145.0" y="275.5" text-anchor="middle" font-size="13" fill="#52606d"  >a: str</text>
+<text x="145.0" y="294.5" text-anchor="middle" font-size="13" fill="#52606d"  >b: str</text>
+<text x="145.0" y="313.5" text-anchor="middle" font-size="13" fill="#52606d"  >cost: int</text>
+<rect x="30" y="410" width="230" height="80" rx="8" fill="#ffffff" stroke="#9aa5b1" stroke-width="1.5"/>
+<text x="145.0" y="445.5" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Place_T</text>
+<text x="145.0" y="464.5" text-anchor="middle" font-size="13" fill="#52606d"  >x: float, y: float</text>
+<rect x="340" y="60" width="330" height="440" rx="8" fill="#ffffff" stroke="#9aa5b1" stroke-width="1.5"/>
+<text x="352" y="82" font-size="14" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">class Network</text>
+<text x="352" y="100" font-size="12.5" fill="#52606d"  >var nodes:  []Node_T</text>
+<text x="352" y="118" font-size="12.5" fill="#52606d"  >var edges:  []Edge_T</text>
+<text x="352" y="136" font-size="12.5" fill="#52606d"  >var places: {str}Place_T</text>
+<text x="352" y="154" font-size="12.5" fill="#52606d"  ></text>
+<text x="352" y="172" font-size="12.5" fill="#52606d"  >put(name, at)</text>
+<text x="352" y="190" font-size="12.5" fill="#52606d"  >forget_places()</text>
+<text x="352" y="208" font-size="12.5" fill="#52606d"  >names() -&gt; []str</text>
+<text x="352" y="226" font-size="12.5" fill="#52606d"  >edge_at(a, b) -&gt; int</text>
+<text x="352" y="244" font-size="12.5" fill="#52606d"  >add_node(name) -&gt; str</text>
+<text x="352" y="262" font-size="12.5" fill="#52606d"  >remove_node(name) -&gt; str</text>
+<text x="352" y="280" font-size="12.5" fill="#52606d"  >add_edge(a, b, cost) -&gt; str</text>
+<text x="352" y="298" font-size="12.5" fill="#52606d"  >set_cost(a, b, cost) -&gt; str</text>
+<text x="352" y="316" font-size="12.5" fill="#52606d"  >remove_edge(a, b) -&gt; str</text>
+<text x="352" y="334" font-size="12.5" fill="#52606d"  >text() -&gt; str</text>
+<text x="352" y="352" font-size="12.5" fill="#52606d"  >build_graph()</text>
+<line x1="340" y1="105" x2="260" y2="105" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="300" y="98" text-anchor="middle" font-size="12.5" fill="#3e4c59">nodes</text>
+<line x1="340" y1="280" x2="260" y2="280" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="300" y="273" text-anchor="middle" font-size="12.5" fill="#3e4c59">edges</text>
+<line x1="340" y1="450" x2="260" y2="450" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="300" y="443" text-anchor="middle" font-size="12.5" fill="#3e4c59">places</text>
+<rect x="720" y="70" width="170" height="96" rx="8" fill="#e8f0fe" stroke="#3a66db" stroke-width="1.5"/>
+<text x="805.0" y="94.5" text-anchor="middle" font-size="14" fill="#1f2933" font-weight="700" >What goes in</text>
+<text x="805.0" y="113.5" text-anchor="middle" font-size="13" fill="#52606d"  >a method</text>
+<text x="805.0" y="132.5" text-anchor="middle" font-size="13" fill="#52606d"  >checks, changes,</text>
+<text x="805.0" y="151.5" text-anchor="middle" font-size="13" fill="#52606d"  >returns "" or a reason</text>
+<rect x="720" y="230" width="170" height="96" rx="8" fill="#eef7ef" stroke="#2e7d32" stroke-width="1.5"/>
+<text x="805.0" y="245.0" text-anchor="middle" font-size="14" fill="#1f2933" font-weight="700" >What comes out</text>
+<text x="805.0" y="264.0" text-anchor="middle" font-size="13" fill="#52606d"  >text() and</text>
+<text x="805.0" y="283.0" text-anchor="middle" font-size="13" fill="#52606d"  >build_graph()</text>
+<text x="805.0" y="302.0" text-anchor="middle" font-size="13" fill="#52606d"  >for the file and for</text>
+<text x="805.0" y="321.0" text-anchor="middle" font-size="13" fill="#52606d"  >the library</text>
+<text x="720" y="380" font-size="12.5" fill="#52606d" font-weight="400" text-anchor="start" >The model knows nothing of HTML</text>
+<text x="720" y="400" font-size="12.5" fill="#52606d" font-weight="400" text-anchor="start" >or HTTP. The tests call it directly.</text>
+</svg>
