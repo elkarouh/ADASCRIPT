@@ -368,7 +368,7 @@ def scan_return_types(code):
     for cls, failure in failing_constructors(code).items():
         types[f"try{cls}"] = f"{cls} | !{failure}"
     for m in _ALIAS_DECL.finditer(code):
-        if _re_dup.match(r"(?:str|int|float)[ \t]+where[ \t]", m.group(2).strip()):
+        if _re_dup.match(r".+?[ \t]+where[ \t]", m.group(2).strip()):
             types[f"to_{m.group(1)}"] = f"{m.group(1)} | !ParseFailure_T"
     return types
 
@@ -376,9 +376,9 @@ def scan_return_types(code):
 def check_no_where_types(code):
     """A where type is Nim only, as a failing constructor is."""
     for m in _ALIAS_DECL.finditer(code):
-        if _re_dup.match(r"(?:str|int|float)[ \t]+where[ \t]", m.group(2).strip()):
+        if _re_dup.match(r".+?[ \t]+where[ \t]", m.group(2).strip()):
             raise SyntaxError(
-                f"type {m.group(1)} is str where ...: a type with a check "
+                f"type {m.group(1)} is ... where ...: a type with a check "
                 "is Nim only; ady2py cannot translate it")
 
 
@@ -910,7 +910,11 @@ parent_mod_def = IDENTIFIER + ikw("mod") + (NUMBER | IDENTIFIER)
 # of its own: `type Date_T is str where x: x == /^\d+$/ or x == ""`. `Date_T(s)`
 # is the check, a `Date_T | !ParseFailure_T`. See ady_declarations.where_types.
 where_def = fw("where_def")
-where_def = (literal("str") | literal("int") | literal("float")) + ikw("where") + IDENTIFIER + V_COLON + expression
+where_def = type_annotation + ikw("where") + IDENTIFIER + V_COLON + expression
+# ... and with the variable left out, the predicate speaks of x:
+# `type Prob_T is float where 0 <= x <= 1`
+where_plain_def = fw("where_plain_def")
+where_plain_def = type_annotation + ikw("where") + expression
 # derived_def: A / B, A * B -- a unit made from two distinct ones, whose
 # arithmetic is then defined: `type Velocity_T is Distance_T / Duration_T`
 # says a Distance_T over a Duration_T is a Velocity_T, and so a Velocity_T
@@ -936,7 +940,7 @@ elem_type.parsers.insert(0, subrange_def)
 from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | where_def | distinct_float_range_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | narrowed_def | mod_def | parent_mod_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | where_def | where_plain_def | distinct_float_range_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | narrowed_def | mod_def | parent_mod_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

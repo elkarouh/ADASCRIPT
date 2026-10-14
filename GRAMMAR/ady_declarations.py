@@ -697,7 +697,7 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
             else:
                 out[name] = "float" if any(c in modulus for c in ".eE") else "int"
     for name, parent in where_types(decls).items():
-        out[name] = parent
+        out[name] = parent if parent in ("str", "int", "float") else _decl_kind(parent, decls, frozenset({name}))
     narrowed = narrowed_types(decls)
     pending = dict(narrowed)
     while pending:
@@ -760,14 +760,14 @@ def narrowed_types(decls):
 # `Date_T | !ParseFailure_T`, taken like any failure. A Date_T goes up to str
 # with no cast; nothing but the check makes one.
 
-_WHERE = _re_du.compile(r"^(str|int|float)[ \t]+where[ \t]+([A-Za-z_]\w*)[ \t]*:[ \t]*(.+)$")
+_WHERE = _re_du.compile(r"^(.+?)[ \t]+where[ \t]+(?:([A-Za-z_]\w*)[ \t]*:[ \t]*)?(.+)$")
 
 
 def parse_where(rhs):
     """(parent, variable, predicate text) for a declaration `type N is P
-    where x: PREDICATE`, P a str, int or float, else None."""
+    where x: PREDICATE`, or `where PREDICATE` over the variable x,, P a str, int or float, else None."""
     m = _WHERE.match((rhs or "").strip())
-    return m.groups() if m else None
+    return (m.group(1), m.group(2) or "x", m.group(3)) if m else None
 
 
 def where_types(decls):

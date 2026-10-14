@@ -60,3 +60,46 @@ let s2: Share_T | !ParseFailure_T = Share_T(1.5)
 if s2 is ParseFailure_T:
     print f"refused: {s2.what} {s2.text}"
 print "test_where_type bases OK"
+
+# The variable may be left out: the predicate then speaks of x.
+type Prob_T is float where 0 <= x <= 1
+
+def either(p: Prob_T) -> Prob_T | !ParseFailure_T:
+    do:
+        q <- Prob_T(1.0 - p)
+    return q
+
+let half: Prob_T | !ParseFailure_T = Prob_T(0.5)
+if half is ParseFailure_T:
+    die("0.5 is a probability")
+let other: Prob_T | !ParseFailure_T = either(half)
+if other is ParseFailure_T:
+    die("1 - 0.5 is a probability")
+assert float(other) == 0.5
+let certain: Prob_T | !ParseFailure_T = Prob_T(1)
+assert not (certain is ParseFailure_T)
+let bad_p: Prob_T | !ParseFailure_T = Prob_T(1.5)
+if bad_p is ParseFailure_T:
+    print f"refused: {bad_p.what} {bad_p.text}"
+print "test_where_type implicit x OK"
+
+# Any type: a record, a sequence.
+type Point_T is record:
+    x: int
+    y: int
+
+type Origin_T  is Point_T where p: p.x == 0 and p.y == 0
+type Triple_T  is []int where len(x) == 3
+
+let o: Origin_T | !ParseFailure_T = Origin_T(Point_T(0, 0))
+if o is ParseFailure_T:
+    die("origin is the origin")
+let off: Origin_T | !ParseFailure_T = Origin_T(Point_T(1, 0))
+assert off is ParseFailure_T
+let tr: Triple_T | !ParseFailure_T = Triple_T([1, 2, 3])
+if tr is ParseFailure_T:
+    die("three items")
+assert len([1, 2, 3]) == 3
+let nt: Triple_T | !ParseFailure_T = Triple_T([1, 2])
+assert nt is ParseFailure_T
+print "test_where_type any type OK"
