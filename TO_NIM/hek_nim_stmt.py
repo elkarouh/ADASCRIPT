@@ -2774,7 +2774,9 @@ def _wrap_distinct_literal(value, nim_type):
         t = t[4:].strip()
     v = (value or "").strip()
     if is_distinct(t):
-        if not _is_nim_literal(v):
+        # a checked string takes no literal: it is compared as a str, and
+        # assigned only through its check
+        if not _is_nim_literal(v) or t in (getattr(ParserState, "where_types", None) or {}):
             return value
         from ady_declarations import wraps_or_checks
         return f"to_{t}({v})" if wraps_or_checks(t) else f"{t}({v})"   # a range is checked, a mod wraps

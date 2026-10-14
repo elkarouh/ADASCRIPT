@@ -44,22 +44,37 @@ let FNC_FREE    : str = "(.{0,100})"
 let FNC_FULL    : str = FNC_VERSION + FNC_DATE + FNC_SEQ_NB + FNC_PERIOD + FNC_APP_KEY + FNC_TYPE + FNC_FREE
 
 # ---------------------------------------------------------------------------
+# Validators: types that carry their check (Period_T, Date_T, Sequence_T)
+# ---------------------------------------------------------------------------
+type Period_T is str where p: p == "" or p == /^\d{3}$/
+type Date_T   is str where d: d == /^\d+$/ or d == ""
+type Sequence_T is str where s: s == "" or s == "ALL" or s == /^\d$/
+
+def refuse(option: str, rule: str, why: ParseFailure_T):
+  """A value that failed its type's check: say so and stop."""
+  print f"ERROR: -{option} must be {rule}, got: {why.text}"
+  sys.exit(ord(RC_ARG_ERROR))
+
+# ---------------------------------------------------------------------------
 # construct_filename_pattern
 #   Build a glob pattern for FTPS filename matching.
 #   Pass "" for any field to use wildcards.
 # ---------------------------------------------------------------------------
-def construct_filename_pattern(date: str, sequence: str, period: str,
+def construct_filename_pattern(date: Date_T, sequence: Sequence_T, period: Period_T,
                                source_key: str, file_type: str,
                                free_text: str) -> str:
+  let day : str = date              # the checked types, as the plain strings they are
+  let seq : str = sequence
+  let per : str = period
   var pattern : str
-  if date != "":
-    pattern = "1." + date
-    pattern += "?" * (8 - len(date))
+  if day != "":
+    pattern = "1." + day
+    pattern += "?" * (8 - len(day))
   else:
     pattern = "1.????????"
 
-  pattern += sequence   if sequence  != "" else "?"
-  pattern += period     if period    != "" else "???"
+  pattern += "?" if seq in ("", "ALL") else seq
+  pattern += per        if per       != "" else "???"
   pattern += source_key if source_key != "" else "??????"
   pattern += file_type  if file_type != "" else "??"
   pattern += free_text  if free_text != "" else "*"
@@ -78,28 +93,6 @@ def filter_output(filename: str, start_date: str, end_date: str) -> bool:
     return True
   else:
     return False
-
-# ---------------------------------------------------------------------------
-# Validators: types that carry their check (Period_T, Date_T), and check_sequence,
-# which also rewrites its value — return (value, rc)
-# ---------------------------------------------------------------------------
-type Period_T is str where p: p == "" or p == /^\d{3}$/
-type Date_T   is str where d: d == /^\d+$/ or d == ""
-
-def refuse(option: str, rule: str, why: ParseFailure_T):
-  """A value that failed its type's check: say so and stop."""
-  print f"ERROR: -{option} must be {rule}, got: {why.text}"
-  sys.exit(ord(RC_ARG_ERROR))
-
-def check_sequence(sequence: str) -> (str, Rc_T):
-  if sequence == "":
-    return ("", RC_OK)
-  if sequence == "ALL":
-    return ("?", RC_OK)
-  if sequence == /^\d$/:
-    return (sequence, RC_OK)
-  print "ERROR: -sequence must be a single digit or ALL, got: ", sequence
-  return ("", RC_ARG_ERROR)
 
 # ---------------------------------------------------------------------------
 # parse_dbt_hdr

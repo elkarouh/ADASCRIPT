@@ -31,7 +31,7 @@
 #   --source_key=APPKEY
 
 from ftps_common import (
-    Date_T, Period_T, Rc_T, check_sequence, refuse, construct_filename_pattern,
+    Date_T, Period_T, Rc_T, Sequence_T, refuse, construct_filename_pattern,
     filter_output, get_server_info, lftp_run,
 )
 
@@ -104,9 +104,9 @@ let ed_val: Date_T | !ParseFailure_T = Date_T(end_date)
 if ed_val is ParseFailure_T:
   refuse("end_date", "numeric", ed_val)
 
-let (seq_val, seq_rc) = check_sequence(sequence_arg)
-if seq_rc != RC_OK:
-  sys.exit(ord(seq_rc))
+let seq_val: Sequence_T | !ParseFailure_T = Sequence_T(sequence_arg)
+if seq_val is ParseFailure_T:
+  refuse("sequence", "a single digit or ALL", seq_val)
 let per_val: Period_T | !ParseFailure_T = Period_T(period_arg)
 if per_val is ParseFailure_T:
   refuse("period", "3 digits", per_val)
