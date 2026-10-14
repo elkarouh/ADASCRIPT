@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Refusal_T, network_of, sample, uses
+from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
 from backend/dijkstra_events_gui import Session
 
 # ---- the model ----
@@ -19,7 +19,7 @@ assert net.add_edge("A", "G", 4) is Refusal_T                          # either 
 assert net.add_edge("G", "G", 4) is Refusal_T and net.add_edge("G", "Z", 4) is Refusal_T
 assert net.set_cost("A", "G", 5) is None and net.set_cost("A", "G", 0) is Refusal_T
 assert "node G" in net.text() and "edge G A 5" in net.text()
-assert network_of(net.text()).text() == net.text()         # kept and read back, the same
+assert Network(net.text()).text() == net.text()         # kept and read back, the same
 assert net.remove_edge("G", "A") is None and net.remove_edge("G", "A") is Refusal_T
 assert net.remove_node("C") is None
 assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edges went with it

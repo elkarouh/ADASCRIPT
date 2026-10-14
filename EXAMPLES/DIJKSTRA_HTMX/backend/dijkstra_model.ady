@@ -6,7 +6,7 @@ A node has a name; an edge joins two nodes, both ways, at a cost. The network is
 a class: it is changed only through its methods (create, update, delete), each of which says
 what was wrong, or "" when it was done. It also keeps where the reader has put each node (put),
 as data; a node without a place is laid out by dijkstra_layout.ady. It is kept in a text file,
-one line a node, an edge or a place (Network.text and network_of; the file itself is read and
+one line a node, an edge or a place (Network.text, and Network(text) to read it back; the file itself is read and
 written by dijkstra_events_gui.ady). The shortest way itself is the library's (TO_NIM/STDLIB/graphs.ady):
 build_graph turns the network into the graph it wants.
 
@@ -44,6 +44,36 @@ class Network:
         self.nodes = nodes
         self.edges = edges
         self.places = places
+
+    # The network kept in TEXT, as text() writes it: its node, edge and "at" lines, in order.
+    def __init__(self, text: str):
+        self.nodes = []
+        self.edges = []
+        let none: {str}Place_T = {:}
+        self.places = none
+        for line in text.split("\n"):
+            let w: []str = line.split()
+            if len(w) == 0:
+                continue
+            case w[0]:
+                when "node":
+                    if len(w) == 2:
+                        let added: None | !Refusal_T = self.add_node(w[1])
+                when "edge":
+                    if len(w) == 4:
+                        let c: int | !ParseFailure_T = parse_int(w[3])
+                        if c is ParseFailure_T:
+                            continue
+                        let joined: None | !Refusal_T = self.add_edge(w[1], w[2], c)
+                when "at":
+                    if len(w) == 4:
+                        let x: float | !ParseFailure_T = parse_float(w[2])
+                        let y: float | !ParseFailure_T = parse_float(w[3])
+                        if x is ParseFailure_T:
+                            continue
+                        if y is ParseFailure_T:
+                            continue
+                        self.put(w[1], Place_T(x, y))
 
     # The reader puts the node NAME at AT.
     def put(self, name: str, at: Place_T):
@@ -167,35 +197,6 @@ def sample() -> Network:
     net.put("D", Place_T(380.0, 60.0))
     net.put("E", Place_T(520.0, 190.0))
     net.put("F", Place_T(330.0, 320.0))
-    return net
-
-# The network kept in TEXT (Network.text): its node, edge and "at" lines, in order.
-def network_of(text: str) -> Network:
-    let none: {str}Place_T = {:}
-    var net: Network = Network([], [], none)
-    for line in text.split("\n"):
-        let w: []str = line.split()
-        if len(w) == 0:
-            continue
-        case w[0]:
-            when "node":
-                if len(w) == 2:
-                    let added: None | !Refusal_T = net.add_node(w[1])
-            when "edge":
-                if len(w) == 4:
-                    let c: int | !ParseFailure_T = parse_int(w[3])
-                    if c is ParseFailure_T:
-                        continue
-                    let joined: None | !Refusal_T = net.add_edge(w[1], w[2], c)
-            when "at":
-                if len(w) == 4:
-                    let x: float | !ParseFailure_T = parse_float(w[2])
-                    let y: float | !ParseFailure_T = parse_float(w[3])
-                    if x is ParseFailure_T:
-                        continue
-                    if y is ParseFailure_T:
-                        continue
-                    net.put(w[1], Place_T(x, y))
     return net
 
 # Whether ROUTE runs along the edge E, in either direction: dijkstra_gui.ady draws those edges in orange.

@@ -5,7 +5,7 @@ server.ady hands every request to a Session, as a method, a path and its fields,
 the page that comes out. The tests make a Session of their own and call answer() the same way, with
 no server running. A Session keeps the network in a text file (its store), written after every change.
 """
-from backend/dijkstra_model import Network, Place_T, Refusal_T, network_of, sample
+from backend/dijkstra_model import Network, Place_T, Refusal_T, sample
 from backend/dijkstra_layout import place_of
 from backend/dijkstra_gui import all_text
 from backend/dijkstra_request import field_of, number_of, params_of
@@ -24,7 +24,7 @@ class Session:
             if text is PathFailure_T:
                 pass                    # no file yet: the sample
             else:
-                self.net = network_of(text)
+                self.net = Network(text)
 
     # The network, with its places, written to the store: refused with why, when it was not.
     def save(self) -> None | !Refusal_T:

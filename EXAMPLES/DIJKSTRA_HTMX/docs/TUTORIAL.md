@@ -98,7 +98,7 @@ def add_node(self, name: str) -> None | !Refusal_T:
 ### The model is kept in text
 
 `text()` writes the network as one line per node, edge and place, and
-`network_of` reads it back. The server saves the file after every
+`Network(text)` reads it back, through a second constructor. The server saves the file after every
 change, and the page carries the same text, so the browser can rebuild
 the same network.
 
@@ -116,7 +116,7 @@ def text(self) -> str:
     return "\n".join(lines) + "\n"
 ```
 
-### Reading the text back: `case` on the first word
+### Reading the text back: a second constructor, `case` on the first word
 
 ```adascript
 for line in text.split("\n"):
@@ -381,7 +381,7 @@ change or returned a `Refusal_T`, and the page shows which.
 Each of these changes one layer, so you can see the others not change.
 
 1. **Add a field to the model.** Give `Node_T` a `colour: str`, change
-   `add_node` to take it, and make `text()` and `network_of` keep it. The
+   `add_node` to take it, and make `text()` and `Network(text)` keep it. The
    page does not change until you draw it.
 2. **Draw the field.** In `to_html(n: Node_T, …)`, use `n.colour` for the
    circle's `fill`, and add its rule to `NODE_STYLE`.
