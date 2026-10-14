@@ -5,7 +5,7 @@ server.ady hands every request to a Session, as a method, a path and its fields,
 the page that comes out. The tests make a Session of their own and call answer() the same way, with
 no server running. A Session keeps the network in a text file (its store), written after every change.
 """
-from backend/dijkstra_model import Network, Place_T, network_of, sample
+from backend/dijkstra_model import Network, Place_T, Refusal_T, network_of, sample
 from backend/dijkstra_layout import place_of
 from backend/dijkstra_gui import all_text
 from backend/dijkstra_request import field_of, number_of, params_of
@@ -26,14 +26,12 @@ class Session:
             else:
                 self.net = network_of(text)
 
-    # The network, with its places, written to the store: "" when it was, else why it was not.
-    def save(self) -> str:
-        if self.store == "":
-            return ""
-        let done: None | !PathFailure_T = Path(self.store).write_text(self.net.text())
-        if done is PathFailure_T:
-            return f"Could not write {self.store}."
-        return ""
+    # The network, with its places, written to the store: refused with why, when it was not.
+    def save(self) -> None | !Refusal_T:
+        if self.store != "":
+            let done: None | !PathFailure_T = Path(self.store).write_text(self.net.text())
+            if done is PathFailure_T:
+                return Refusal_T(message=f"Could not write {self.store}.")
 
     # The routes, all answered by answer below: each is a whole page, sent back to htmx to swap in.
     #
@@ -50,7 +48,7 @@ class Session:
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): the page to
     # send back, or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
-        var problem: str = ""
+        var problem: None | !Refusal_T = None
         let name: str = field_of(fields, "name")
         let a: str = field_of(fields, "a")
         let b: str = field_of(fields, "b")
@@ -61,7 +59,7 @@ class Session:
                 let x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
                 let y: float = number_of(field_of(fields, "y"))
                 problem = self.net.add_node(name)
-                if problem == "":
+                if problem is None:
                     if x < 0.0 or y < 0.0:                           # not given: the layout's place for it
                         self.net.put(name, place_of(self.net, name))
                     else:
@@ -70,7 +68,7 @@ class Session:
                 if name in self.net.names():
                     self.net.put(name, Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y"))))
                 else:
-                    problem = f"There is no node {name}."
+                    problem = Refusal_T(message=f"There is no node {name}.")
             when "DELETE /nodes":
                 problem = self.net.remove_node(name)
             when "POST /edges":
@@ -85,8 +83,10 @@ class Session:
                 self.net = sample()
             when others:
                 return ""
-        if method != "GET" and problem == "":
-            problem = self.save()
+        if method != "GET" and problem is None:
+            let saved: None | !Refusal_T = self.save()
+            if saved is Refusal_T:
+                return all_text(self.net, params_of(fields), saved)
         return all_text(self.net, params_of(fields), problem)
 
 # The cost in FIELDS: -1 when there is none, which the model refuses.

@@ -10,7 +10,7 @@ DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the
 goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Node_T, Place_T, uses
+from backend/dijkstra_model import Edge_T, Network, Node_T, Place_T, Refusal_T, uses
 from backend/dijkstra_layout import WIDTH, HEIGHT, place_of
 from backend/dijkstra_request import Params_T
 
@@ -163,7 +163,7 @@ def to_html(net: Network, p: Params_T, way: []str) -> Html:
                 + to_html(n, place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
             path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 
-def all_html(net: Network, p0: Params_T, problem: str) -> Html:
+def all_html(net: Network, p0: Params_T, problem: None | !Refusal_T) -> Html:
     let p: Params_T = picked(p0, net.names())
     let found: (float, []str) = shortest_route[str](net.build_graph(), p.start, p.goal)
     let way: []str = found[1]
@@ -187,8 +187,8 @@ def all_html(net: Network, p0: Params_T, problem: str) -> Html:
                 button type="button" class="quiet" data_hx_post="/relayout" data_hx_confirm="Put every node where the layout puts it? Nodes you moved go back to the layout." data_hx_target="#all" data_hx_swap="outerHTML": "Relayout"
                 button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
             p class=said_css: said
-            if problem != "":
-                p class="problem": problem
+            if problem is Refusal_T:
+                p class="problem": problem.message
             + to_html(net, p, way)
             # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
             pre id="network": net.text()
@@ -246,5 +246,5 @@ def hyphens(text: str) -> str:
 def shell_text() -> str:
     return "<!doctype html>" + hyphens(str(shell()))
 
-def all_text(net: Network, p: Params_T, problem: str) -> str:
+def all_text(net: Network, p: Params_T, problem: None | !Refusal_T) -> str:
     return hyphens(str(all_html(net, p, problem)))

@@ -13,6 +13,10 @@ build_graph turns the network into the graph it wants.
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
 
+# Why a change to the network is refused: the message the page shows the reader.
+type Refusal_T is record:
+    message: str
+
 # A node: its name.
 type Node_T is record:
     name: str
@@ -65,23 +69,22 @@ class Network:
                 return i
         return -1
 
-    # ---- create, update, delete: each returns what was wrong, or "" ----
+    # ---- create, update, delete: each refuses with a Refusal_T, or is done (None) ----
 
-    def add_node(self, name: str) -> str:
+    def add_node(self, name: str) -> None | !Refusal_T:
         if len(name) == 0 or len(name) > 8:
-            return "A name is 1 to 8 letters or digits."
+            return Refusal_T(message="A name is 1 to 8 letters or digits.")
         for c in name:
             if c not in LETTERS:
-                return "A name is 1 to 8 letters or digits."
+                return Refusal_T(message="A name is 1 to 8 letters or digits.")
         if name in self.names():
-            return f"There is a node {name} already."
+            return Refusal_T(message=f"There is a node {name} already.")
         self.nodes.append(Node_T(name))
-        return ""
 
     # The node goes, and every edge that ends at it.
-    def remove_node(self, name: str) -> str:
+    def remove_node(self, name: str) -> None | !Refusal_T:
         if name not in self.names():
-            return f"There is no node {name}."
+            return Refusal_T(message=f"There is no node {name}.")
         var left: []Node_T = []
         for n in self.nodes:
             if n.name != name:
@@ -92,39 +95,35 @@ class Network:
             if e.a != name and e.b != name:
                 kept.append(e)
         self.edges = kept
-        return ""
 
-    def add_edge(self, a: str, b: str, cost: int) -> str:
+    def add_edge(self, a: str, b: str, cost: int) -> None | !Refusal_T:
         if a not in self.names() or b not in self.names():
-            return "Pick two nodes for the edge."
+            return Refusal_T(message="Pick two nodes for the edge.")
         if a == b:
-            return "An edge joins two different nodes."
+            return Refusal_T(message="An edge joins two different nodes.")
         if self.edge_at(a, b) >= 0:
-            return f"There is an edge {a} - {b} already."
+            return Refusal_T(message=f"There is an edge {a} - {b} already.")
         if cost < 1:
-            return "A cost is 1 or more."
+            return Refusal_T(message="A cost is 1 or more.")
         self.edges.append(Edge_T(a, b, cost))
-        return ""
 
-    def set_cost(self, a: str, b: str, cost: int) -> str:
+    def set_cost(self, a: str, b: str, cost: int) -> None | !Refusal_T:
         let i: int = self.edge_at(a, b)
         if i < 0:
-            return f"There is no edge {a} - {b}."
+            return Refusal_T(message=f"There is no edge {a} - {b}.")
         if cost < 1:
-            return "A cost is 1 or more."
+            return Refusal_T(message="A cost is 1 or more.")
         self.edges[i].cost = cost
-        return ""
 
-    def remove_edge(self, a: str, b: str) -> str:
+    def remove_edge(self, a: str, b: str) -> None | !Refusal_T:
         let i: int = self.edge_at(a, b)
         if i < 0:
-            return f"There is no edge {a} - {b}."
+            return Refusal_T(message=f"There is no edge {a} - {b}.")
         var kept: []Edge_T = []
         for k in range(len(self.edges)):
             if k != i:
                 kept.append(self.edges[k])
         self.edges = kept
-        return ""
 
     # ---- kept in a text file: "node A" and "edge A B 7", a line each ----
 
@@ -181,13 +180,13 @@ def network_of(text: str) -> Network:
         case w[0]:
             when "node":
                 if len(w) == 2:
-                    let added: str = net.add_node(w[1])
+                    let added: None | !Refusal_T = net.add_node(w[1])
             when "edge":
                 if len(w) == 4:
                     let c: int | !ParseFailure_T = parse_int(w[3])
                     if c is ParseFailure_T:
                         continue
-                    let joined: str = net.add_edge(w[1], w[2], c)
+                    let joined: None | !Refusal_T = net.add_edge(w[1], w[2], c)
             when "at":
                 if len(w) == 4:
                     let x: float | !ParseFailure_T = parse_float(w[2])

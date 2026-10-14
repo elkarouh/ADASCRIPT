@@ -71,27 +71,29 @@ class Network:
 
 ![The model: three records, and the class that holds them](model_objects.svg)
 
-### Methods return a problem, or ""
+### Methods refuse with a failure, or succeed
 
-Every method that changes the network returns a string. Empty means
-it was done; anything else is the reason it was refused. The page shows
-that reason in red, so the model is the one place where the rules live.
+Every method that changes the network returns `None | !Refusal_T`. A
+refusal is a `Refusal_T`, a record whose message the page shows in red.
+Success is the normal end of the method. The caller narrows the result
+with `is`, the same way `parse_int` results are read, so a refusal
+cannot be ignored by accident. The rules live in the model, and the
+page only decides how to show them.
 
 ```adascript
-def add_node(self, name: str) -> str:
+type Refusal_T is record:
+    message: str
+
+def add_node(self, name: str) -> None | !Refusal_T:
     if len(name) == 0 or len(name) > 8:
-        return "A name is 1 to 8 letters or digits."
+        return Refusal_T(message="A name is 1 to 8 letters or digits.")
     for c in name:
         if c not in LETTERS:
-            return "A name is 1 to 8 letters or digits."
+            return Refusal_T(message="A name is 1 to 8 letters or digits.")
     if name in self.names():
-        return f"There is a node {name} already."
+        return Refusal_T(message=f"There is a node {name} already.")
     self.nodes.append(Node_T(name))
-    return ""
 ```
-
-Nothing in the model knows that a page exists. The tests call
-`add_node` and check the string it returns.
 
 ### The model is kept in text
 
@@ -262,7 +264,7 @@ class Session:
             when "POST /nodes":
                 ...
                 problem = self.net.add_node(name)
-                if problem == "":
+                if problem is None:
                     ...
             when "DELETE /nodes":
                 problem = self.net.remove_node(name)
@@ -271,8 +273,10 @@ class Session:
             ...
             when others:
                 return ""
-        if method != "GET" and problem == "":
-            problem = self.save()
+        if method != "GET" and problem is None:
+            let saved: None | !Refusal_T = self.save()
+            if saved is Refusal_T:
+                return all_text(self.net, params_of(fields), saved)
         return all_text(self.net, params_of(fields), problem)
 ```
 
@@ -367,8 +371,8 @@ sends along. So the server keeps no session, and any page can be
 rebuilt from what the request carries.
 
 **Errors.** A refused change returns the whole page again, with the
-reason in a red line. Nothing is half-done: the model returned `""` or
-a reason, and the page shows which.
+reason in a red line. Nothing is half-done: the model either did the
+change or returned a `Refusal_T`, and the page shows which.
 
 ---
 
