@@ -6,6 +6,8 @@ an account is a node, a transaction moves money along an edge, and the
 statements are read off the balances. It started as an example in
 `EXAMPLES/HTML`, and replaced it.
 
+![The files of this app and what each imports](docs/dependencies.png)
+
 ## The tool
 
 ```
