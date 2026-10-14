@@ -4,6 +4,8 @@ The smallest version of the architecture of `TOOLS/ACCOUNTING`: the program is
 native, the browser only shows what the server draws, and htmx carries the
 clicks.
 
+![The files of this example and what each imports](docs/dependencies.png)
+
 ```
 make app                      # builds dijkstra_js_events.js and the server, starts it and opens the page
 make test                     # the model, the page and the requests, no server
