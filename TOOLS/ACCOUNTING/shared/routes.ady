@@ -8,6 +8,7 @@ dragged. The two must give the same curves, so they are the same code. No HTML i
 from math nimport sqrt
 
 const NODE_RADIUS: float = 42.0
+const BOX_HALF_W: float = 110.0     # half the width of an account drawn as a box (see boxes)
 
 # How accounts are drawn: as circles, NODE_RADIUS round, or as boxes with
 # the name and the balance, stacked like the lines of a balance sheet.
@@ -20,7 +21,7 @@ def circles() -> Shape:
     return Shape(False, NODE_RADIUS, NODE_RADIUS)
 
 def boxes() -> Shape:
-    return Shape(True, 110.0, 15.0)
+    return Shape(True, BOX_HALF_W, 15.0)
 
 def px(v: float) -> str:
     return f"{v:.1f}"

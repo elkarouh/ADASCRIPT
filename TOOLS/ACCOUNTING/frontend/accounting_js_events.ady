@@ -22,13 +22,12 @@ library's svg_drag, and the page (finding elements, forms, clicks) its browser m
 in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`, `dropped_cb`, and
 `clicked_cb` for the shift-click.
 """
-from shared/routes import Point_T, Route_T, boxes, routes_of
+from shared/routes import Point_T, Route_T, BOX_HALF_W, boxes, routes_of
 from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
 from browser import Element_T, Event_T, Click_T, Change, page, text, field, on, stop, listen
 from svg_drag import Hooks_T, Unit_T, Spot_T, shift, draggable
 
 const WIDTH: Unit_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
-const HALF_W: Unit_T = 110.0    # half an account's box, as boxes() in shared/routes.ady
 
 # shared/routes.ady and shared/layout.ady work in plain floats (Point_T): these convert.
 def point_of(s: Spot_T) -> Point_T:
@@ -83,7 +82,7 @@ class BooksView:
             let s: Slot_T = self.slots[k]
             let c: Point_T = self.layout.points[k]
             if s.name != from_name and not s.group:
-                if abs(at.x - c.x) <= float(HALF_W) and abs(at.y - c.y) <= s.tall:
+                if abs(at.x - c.x) <= BOX_HALF_W and abs(at.y - c.y) <= s.tall:
                     return s.name
         return ""
 
