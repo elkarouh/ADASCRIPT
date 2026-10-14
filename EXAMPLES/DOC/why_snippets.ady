@@ -10,7 +10,7 @@ DOCS/check_quotes.py checks the document against it.
 # --- the concepts, the collections and the mappings ------------------------
 const METRES_PER_KNOT: float = 1852.0 / 3600.0      # exact: a nautical mile is 1852 m
 
-type Callsign_T       is str
+type Callsign_T       is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
 type Metre_T          is distinct float              # the basic unit of length
 type Second_T         is distinct float where s: float(s) >= 0.0   # of time, never negative
 type Distance_T       is Metre_T                     # the quantity, as a signature says it
@@ -28,7 +28,7 @@ type Fix_T is tuple:
     lon: Longitude_T
 
 type Aircraft_T is record:
-    callsign: Callsign_T       = ""
+    callsign: Callsign_T
     phase:    Flight_Phase_T   = CLIMB
     altitude: Altitude_T       = 0.0
     speed:    Speed_in_knots_T = 0.0
@@ -57,12 +57,20 @@ var watched : {}Callsign_T               = {}    # the ones above their ceiling
 var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 410.0, CRUISE: 410.0,
                                             DESCENT: 410.0, HOLD: 240.0]
 
-fleet["BAW117"] = Aircraft_T(callsign="BAW117", phase=CRUISE,
-                             altitude=370.0, speed=452.0)
-fleet["AFR22"]  = Aircraft_T(callsign="AFR22", phase=HOLD,
-                             altitude=250.0, speed=210.0)
+# A callsign is made by the check, so each is a callsign or the failure that stops here.
+let baw: Callsign_T | !ParseFailure_T = Callsign_T("BAW117")
+let afr: Callsign_T | !ParseFailure_T = Callsign_T("AFR22")
+if baw is ParseFailure_T:
+    die("BAW117 is a callsign")
+if afr is ParseFailure_T:
+    die("AFR22 is a callsign")
 
-for cs in ["AFR22", "BAW117"]:
+fleet[baw] = Aircraft_T(callsign=baw, phase=CRUISE,
+                        altitude=370.0, speed=452.0)
+fleet[afr] = Aircraft_T(callsign=afr, phase=HOLD,
+                        altitude=250.0, speed=210.0)
+
+for cs in [afr, baw]:
     let a: Aircraft_T = fleet[cs]
     by_phase[a.phase].append(a.callsign)
     if a.altitude > ceiling[a.phase]:
@@ -71,7 +79,7 @@ for cs in ["AFR22", "BAW117"]:
 for phase in Flight_Phase_T:
     print f"{phase:<8} {by_phase[phase]'Length}"
 
-var flight: Flight = Flight(fleet["BAW117"])
+var flight: Flight = Flight(fleet[baw])
 flight.report((lat: Latitude_T(51.47), lon: Longitude_T(-0.46)))
 flight.climb(390.0)
 assert flight.route'Length == 1 and flight.aircraft.phase == CLIMB
@@ -107,8 +115,8 @@ assert nested["a"]["b"] == 1
 type Duration_in_minutes_T is 60.0 * Duration_T
 var landed: [Callsign_T]Duration_in_minutes_T = {:}    # in the order they landed
 
-landed["AFR22"]  = 12.0
-landed["BAW117"] = 3.0
+landed[afr] = 12.0
+landed[baw] = 3.0
 
 type Ceiling_Rule_T is (Flight_Phase_T) -> Altitude_T   # computed, not stored
 
@@ -121,9 +129,9 @@ def over_ceiling(a: Aircraft_T, rule: Ceiling_Rule_T) -> bool:
 var order: []Callsign_T = []
 for cs in landed.keys():
     order.append(cs)
-assert order == ["AFR22", "BAW117"]
-assert over_ceiling(fleet["AFR22"], published)
-assert not over_ceiling(fleet["BAW117"], published)
+assert order == [afr, baw]
+assert over_ceiling(fleet[afr], published)
+assert not over_ceiling(fleet[baw], published)
 
 # --- the signatures the document argues from -------------------------------
 def restriction(phase: Flight_Phase_T) -> Altitude_T:

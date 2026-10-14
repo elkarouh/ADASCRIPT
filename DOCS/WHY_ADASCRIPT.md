@@ -290,7 +290,7 @@ values — a phase of flight, a message kind, a state — is an enumeration.
 ```python
 const METRES_PER_KNOT: float = 1852.0 / 3600.0      # exact: a nautical mile is 1852 m
 
-type Callsign_T       is str
+type Callsign_T       is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
 type Metre_T          is distinct float              # the basic unit of length
 type Second_T         is distinct float where s: float(s) >= 0.0   # of time, never negative
 type Distance_T       is Metre_T                     # the quantity, as a signature says it
@@ -311,7 +311,9 @@ never negative. A speed is a distance over a duration; an altitude is the
 flight level the controller says, hundreds of feet, which is 30.48 metres of
 distance; the knots the radar reports are a multiple of the speed; and a
 latitude is an angle that is only ever between -90 and 90. None of them is a
-`float` that someone has to remember the meaning of.
+`float` that someone has to remember the meaning of, and a callsign is not a
+plain `str` either: it is a string that has passed its check, so the first line
+of the block says which strings are callsigns.
 
 A bare type is still right for a value that only counts or indexes and
 means nothing more: a count, a loop index, text that is just text.
@@ -328,14 +330,15 @@ type Fix_T is tuple:
 ```
 
 **A thing whose parts change: a record.** An aircraft has more parts, each
-with a sensible starting value, and they change over its life: it climbs, it
+with a sensible starting value except the callsign, which is given when the
+aircraft is made, and they change over its life: it climbs, it
 changes phase. A record holds them, each field one of the named types
 above:
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 type Aircraft_T is record:
-    callsign: Callsign_T       = ""
+    callsign: Callsign_T
     phase:    Flight_Phase_T   = CLIMB
     altitude: Altitude_T       = 0.0
     speed:    Speed_in_knots_T = 0.0
@@ -455,8 +458,8 @@ wanted. Landings, in the order they happened:
 type Duration_in_minutes_T is 60.0 * Duration_T
 var landed: [Callsign_T]Duration_in_minutes_T = {:}    # in the order they landed
 
-landed["AFR22"]  = 12.0
-landed["BAW117"] = 3.0
+landed[afr] = 12.0
+landed[baw] = 3.0
 ```
 
 Written `{Callsign_T}Duration_in_minutes_T`, the order is simply not part of the type:
@@ -615,7 +618,7 @@ The whole of step 1 and step 2, and then the code:
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
-for cs in ["AFR22", "BAW117"]:
+for cs in [afr, baw]:
     let a: Aircraft_T = fleet[cs]
     by_phase[a.phase].append(a.callsign)
     if a.altitude > ceiling[a.phase]:
