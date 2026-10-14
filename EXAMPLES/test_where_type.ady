@@ -40,3 +40,23 @@ let t2: str | !ParseFailure_T = twice("x")
 if t2 is ParseFailure_T:
     print t2.text
 print "test_where_type OK"
+
+# The base may be a whole number, a float or a character too; arithmetic is the base's.
+type Even_T  is int   where n: n % 2 == 0
+type Share_T is float where f: 0.0 <= f <= 1.0
+
+let e: Even_T | !ParseFailure_T = Even_T(10)
+if e is ParseFailure_T:
+    die("10 is even")
+let doubled: int = e + 1
+assert doubled == 11
+let odd: Even_T | !ParseFailure_T = Even_T(7)
+assert odd is ParseFailure_T
+let s1: Share_T | !ParseFailure_T = Share_T(0.25)
+if s1 is ParseFailure_T:
+    die("0.25 is a share")
+print f"{s1:.2f}"
+let s2: Share_T | !ParseFailure_T = Share_T(1.5)
+if s2 is ParseFailure_T:
+    print f"refused: {s2.what} {s2.text}"
+print "test_where_type bases OK"

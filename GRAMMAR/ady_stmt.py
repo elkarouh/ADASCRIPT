@@ -368,7 +368,7 @@ def scan_return_types(code):
     for cls, failure in failing_constructors(code).items():
         types[f"try{cls}"] = f"{cls} | !{failure}"
     for m in _ALIAS_DECL.finditer(code):
-        if _re_dup.match(r"str[ \t]+where[ \t]", m.group(2).strip()):
+        if _re_dup.match(r"(?:str|int|float)[ \t]+where[ \t]", m.group(2).strip()):
             types[f"to_{m.group(1)}"] = f"{m.group(1)} | !ParseFailure_T"
     return types
 
@@ -376,7 +376,7 @@ def scan_return_types(code):
 def check_no_where_types(code):
     """A where type is Nim only, as a failing constructor is."""
     for m in _ALIAS_DECL.finditer(code):
-        if _re_dup.match(r"str[ \t]+where[ \t]", m.group(2).strip()):
+        if _re_dup.match(r"(?:str|int|float)[ \t]+where[ \t]", m.group(2).strip()):
             raise SyntaxError(
                 f"type {m.group(1)} is str where ...: a type with a check "
                 "is Nim only; ady2py cannot translate it")
@@ -906,11 +906,11 @@ mod_def = fw("mod_def")
 mod_def = ikw("mod") + (NUMBER | IDENTIFIER)
 parent_mod_def = fw("parent_mod_def")
 parent_mod_def = IDENTIFIER + ikw("mod") + (NUMBER | IDENTIFIER)
-# where_def: str where x: PREDICATE -- a string that has passed a check, a type
+# where_def: (str|int|float) where x: PREDICATE -- a string that has passed a check, a type
 # of its own: `type Date_T is str where x: x == /^\d+$/ or x == ""`. `Date_T(s)`
 # is the check, a `Date_T | !ParseFailure_T`. See ady_declarations.where_types.
 where_def = fw("where_def")
-where_def = literal("str") + ikw("where") + IDENTIFIER + V_COLON + expression
+where_def = (literal("str") | literal("int") | literal("float")) + ikw("where") + IDENTIFIER + V_COLON + expression
 # derived_def: A / B, A * B -- a unit made from two distinct ones, whose
 # arithmetic is then defined: `type Velocity_T is Distance_T / Duration_T`
 # says a Distance_T over a Duration_T is a Velocity_T, and so a Velocity_T

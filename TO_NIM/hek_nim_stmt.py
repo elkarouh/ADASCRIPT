@@ -2573,28 +2573,45 @@ def _derived_type_nim(name, params, indent):
 
 
 def _where_type_nim(name, params, rhs, indent):
-    """`type N is str where x: PREDICATE` -> a distinct string N, a converter
-    taking it up to str, and `to_N(text)`, which is the PREDICATE's check: an
-    `N | !ParseFailure_T`. The predicate sees X as a str."""
+    """`type N is P where x: PREDICATE` (P a str, int or float) -> a
+    distinct N that orders and prints as P does, with no operations of its own
+    (they would make an N the check never saw): a converter takes it up to P,
+    so `n + 1` is a P. `to_N(value)` is the PREDICATE's check, an
+    `N | !ParseFailure_T`. The predicate sees X as a P."""
     from hek_nim_declarations import _ensure_parse_helpers
+    from ady_declarations import distinct_kind, parse_where
     _ensure_parse_helpers()
+    kind = distinct_kind(name)
+    base = _DISTINCT_BASE_NIM[kind]
     var = rhs.nodes[1].to_nim()
-    lines, _exp = _distinct_lines(name, params, "string", "str", indent)
+    ParserState.symbol_table.add(name, name, "type")
+    _top = ParserState.symbol_table.depth() <= 2
+    _exp = "*" if getattr(ParserState, 'export_symbols', False) and _top else ""
     ind = _ind(indent)
+    ParserState.nim_imports.update(("hashes", "strformat"))
     ParserState.symbol_table.push_scope(f"where {name}")
-    ParserState.symbol_table.add(var, "str", "let")
+    ParserState.symbol_table.add(var, kind, "let")
     try:
         pred = rhs.nodes[-1].to_nim()
     finally:
         ParserState.symbol_table.pop_scope()
     fail = f"Result[{name}, ParseFailure_T]"
+    ops = [p for p in _DISTINCT_ORDERED]
+    if kind == "str":
+        ops.append("proc len{e}(a: {t}): int {{.borrow.}}")
+    lines = [f"{ind}type {name}{_exp}{params} = distinct {base}"]
+    lines += [ind + p.format(e=_exp, t=name) for p in ops]
+    lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
+                 f"specifier: string) = formatValue(result, {base}(value), specifier)")
     lines += [
-        f"{ind}converter up_{name}{_exp}(x: {name}): string = string(x)",
-        f"{ind}proc valid_{name}({var}: string): bool = ({pred})",
-        f"{ind}proc to_{name}{_exp}(text: string): {fail} = (if valid_{name}(text): "
-        f"{fail}.ok({name}(text)) else: "
-        f"{fail}.err(ParseFailure_T(what: \"{name}\", text: text)))",
-        f"{ind}proc to_{name}{_exp}(x: {name}): {name} = x"]
+        f"{ind}converter up_{name}{_exp}(x: {name}): {base} = {base}(x)",
+        f"{ind}proc valid_{name}({var}: {base}): bool = ({pred})",
+        f"{ind}proc to_{name}{_exp}(value: {base}): {fail} = (if valid_{name}(value): "
+        f"{fail}.ok({name}(value)) else: "
+        f"{fail}.err(ParseFailure_T(what: \"{name}\", text: $value)))"]
+    if kind == "float":
+        lines.append(f"{ind}proc to_{name}{_exp}(value: int): {fail} = to_{name}(float(value))")
+    lines.append(f"{ind}proc to_{name}{_exp}(x: {name}): {name} = x")
     ParserState.proc_return_types[f"to_{name}"] = fail
     return "\n".join(lines)
 
