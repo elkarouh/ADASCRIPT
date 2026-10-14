@@ -19,11 +19,11 @@
 # conversion, written where it happens. Scaled units are Nim only (ady2py refuses the
 # declaration).
 
-type Mass_T    is distinct float            # kg
-type Speed_T   is distinct float            # m/s
-type Time_T    is distinct float            # s
-type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
-type Length_T  is Speed_T * Time_T          # m
+type Mass_T     is distinct float           # kg
+type Distance_T is distinct float           # m
+type Time_T     is distinct float           # s
+type Speed_T    is Distance_T / Time_T      # m/s
+type Impulse_T  is Mass_T * Speed_T         # N s, which is kg m/s: what the navigation expects
 
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
 
@@ -48,7 +48,7 @@ def in_newton_seconds(file: [*]Impulse_in_lbf_s_T) -> []Impulse_T:
     return [Impulse_T(p) for p in file]
 
 let dv: Speed_T = speed_change(in_newton_seconds(SMALL_FORCES), SPACECRAFT)
-let miss_if_ignored: Length_T = dv * CRUISE
+let miss_if_ignored: Distance_T = dv * CRUISE
 
 # What the navigation did in 1999: take the numbers as they were. Writing it needs the plain
 # numbers, which is the point: with types, a program has to say so.
@@ -56,7 +56,7 @@ var raw: float = 0.0
 for p in SMALL_FORCES:
     raw += float(p)
 let dv_1999: Speed_T = Speed_T(raw / float(SPACECRAFT))
-let miss_1999: Length_T = (dv - dv_1999) * CRUISE
+let miss_1999: Distance_T = (dv - dv_1999) * CRUISE
 
 print f"speed change from the burns, in the right unit : {dv * 1000.0:.2f} mm/s"
 print f"speed change as the 1999 navigation took it     : {dv_1999 * 1000.0:.2f} mm/s"

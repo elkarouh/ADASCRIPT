@@ -13,15 +13,18 @@ units are two types, and one line says how they relate:
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
-type Mass_T    is distinct float            # kg
-type Speed_T   is distinct float            # m/s
-type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
+type Mass_T     is distinct float           # kg
+type Distance_T is distinct float           # m
+type Time_T     is distinct float           # s
+type Speed_T    is Distance_T / Time_T      # m/s
+type Impulse_T  is Mass_T * Speed_T         # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
 ```
 
-A mass and a speed are units of their own, an impulse is declared as their
-product, and a pound-force second is declared as 4.448 of it. The call that was
-the mission's loss does not compile:
+A mass, a distance and a time are units of their own. A speed is declared as a
+distance over a time, an impulse as a mass times that speed, and a pound-force
+second as 4.448 of an impulse. The call that was the mission's loss does not
+compile:
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
@@ -808,7 +811,7 @@ In Adascript the two units are two types, and one line says how they relate:
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
-type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
+type Impulse_T  is Mass_T * Speed_T         # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
 ```
 
