@@ -71,7 +71,7 @@ _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
                     "by_value_procs", "var_param_procs", "var_self_methods",
-                    "failure_types", "ctor_overloads")
+                    "failure_types", "ctor_overloads", "where_types")
 _nimport_carried: dict = {}
 _nimport_module_symbols: dict = {}
 # The Nim standard modules a dependency's translation imported. An importer
@@ -113,6 +113,7 @@ def _nim_reset():
     ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
     ParserState.narrowed_types = {}     # `type N is P range ..`: name -> P
     ParserState.mod_types = {}          # `type N is [P] mod M`: name -> (P or None, M)
+    ParserState.where_types = {}        # `type N is str where ..`: name -> str
     ParserState.ctor_overloads = {}     # class -> its __init__s, when one can fail
     ParserState.overloaded_procs = set()  # procs defined more than once, with other types
     ParserState._scaled_bases_done = set()   # bases whose to_B is emitted
@@ -748,6 +749,8 @@ def translate(code, export_symbols=False):
     ParserState.scaled_units.update(_scaled)
     from ady_declarations import narrowed_types, mod_types
     ParserState.narrowed_types.update(narrowed_types(ParserState.ady_type_decls))
+    from ady_declarations import where_types
+    ParserState.where_types.update(where_types(ParserState.ady_type_decls))
     ParserState.mod_types.update(mod_types(ParserState.ady_type_decls))
     ParserState.distinct_types.update(
         distinct_types(ParserState.ady_type_decls, ParserState.distinct_types, _scaled,

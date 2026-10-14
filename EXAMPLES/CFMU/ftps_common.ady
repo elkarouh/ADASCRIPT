@@ -80,15 +80,16 @@ def filter_output(filename: str, start_date: str, end_date: str) -> bool:
     return False
 
 # ---------------------------------------------------------------------------
-# Validators — return (value, rc)
+# Validators: types that carry their check (Period_T, Date_T), and check_sequence,
+# which also rewrites its value — return (value, rc)
 # ---------------------------------------------------------------------------
-def check_period(period: str) -> (str, Rc_T):
-  if period == "":
-    return ("", RC_OK)
-  if period == /^\d{3}$/:
-    return (period, RC_OK)
-  print "ERROR: -period must be 3 digits, got: ", period
-  return ("", RC_ARG_ERROR)
+type Period_T is str where p: p == "" or p == /^\d{3}$/
+type Date_T   is str where d: d == /^\d+$/ or d == ""
+
+def refuse(option: str, rule: str, why: ParseFailure_T):
+  """A value that failed its type's check: say so and stop."""
+  print f"ERROR: -{option} must be {rule}, got: {why.text}"
+  sys.exit(ord(RC_ARG_ERROR))
 
 def check_sequence(sequence: str) -> (str, Rc_T):
   if sequence == "":
@@ -98,14 +99,6 @@ def check_sequence(sequence: str) -> (str, Rc_T):
   if sequence == /^\d$/:
     return (sequence, RC_OK)
   print "ERROR: -sequence must be a single digit or ALL, got: ", sequence
-  return ("", RC_ARG_ERROR)
-
-def check_date(date: str, option_name: str) -> (str, Rc_T):
-  if date == "":
-    return ("", RC_OK)
-  if date == /^\d+$/:
-    return (date, RC_OK)
-  print f"ERROR: -{option_name} must be numeric, got: {date}"
   return ("", RC_ARG_ERROR)
 
 # ---------------------------------------------------------------------------

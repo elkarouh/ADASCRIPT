@@ -2202,6 +2202,12 @@ def to_nim(self, prec=None):
     return ""
 
 
+@method(where_def)
+def to_nim(self, prec=None):
+    """where_def: 'str' 'where' IDENTIFIER ':' expression; type_stmt renders it."""
+    return ""
+
+
 @method(narrowed_def)
 def to_nim(self, prec=None):
     """narrowed_def: IDENTIFIER 'range' BOUND '..' BOUND; type_stmt renders it,
@@ -2408,6 +2414,8 @@ def to_nim(self, indent=0):
         return f"{_ind(indent)}type {name}{_exp}{params} = float"
     elif rhs_type == "narrowed_def":
         return _narrowed_type_nim(name, params, indent)
+    elif rhs_type == "where_def":
+        return _where_type_nim(name, params, rhs, indent)
     elif rhs_type in ("mod_def", "parent_mod_def"):
         return _mod_type_nim(name, params, indent)
     elif rhs_type == "distinct_float_range_def":
@@ -2561,6 +2569,33 @@ def _derived_type_nim(name, params, indent):
         nim_op = "div" if (o == "/" and kind == "int") else o
         lines.append(f"{ind}proc `{nim_op}`{_exp}(a: {l}, b: {r}): {res} = "
                      f"{res}({base}(a) {nim_op} {base}(b))")
+    return "\n".join(lines)
+
+
+def _where_type_nim(name, params, rhs, indent):
+    """`type N is str where x: PREDICATE` -> a distinct string N, a converter
+    taking it up to str, and `to_N(text)`, which is the PREDICATE's check: an
+    `N | !ParseFailure_T`. The predicate sees X as a str."""
+    from hek_nim_declarations import _ensure_parse_helpers
+    _ensure_parse_helpers()
+    var = rhs.nodes[1].to_nim()
+    lines, _exp = _distinct_lines(name, params, "string", "str", indent)
+    ind = _ind(indent)
+    ParserState.symbol_table.push_scope(f"where {name}")
+    ParserState.symbol_table.add(var, "str", "let")
+    try:
+        pred = rhs.nodes[-1].to_nim()
+    finally:
+        ParserState.symbol_table.pop_scope()
+    fail = f"Result[{name}, ParseFailure_T]"
+    lines += [
+        f"{ind}converter up_{name}{_exp}(x: {name}): string = string(x)",
+        f"{ind}proc valid_{name}({var}: string): bool = ({pred})",
+        f"{ind}proc to_{name}{_exp}(text: string): {fail} = (if valid_{name}(text): "
+        f"{fail}.ok({name}(text)) else: "
+        f"{fail}.err(ParseFailure_T(what: \"{name}\", text: text)))",
+        f"{ind}proc to_{name}{_exp}(x: {name}): {name} = x"]
+    ParserState.proc_return_types[f"to_{name}"] = fail
     return "\n".join(lines)
 
 

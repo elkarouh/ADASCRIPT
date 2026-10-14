@@ -323,7 +323,7 @@ def _leaves_the_block(last_line):
     import re as _re_lb
     call = _re_lb.match(r'^(?:discard\s+)?([A-Za-z_]\w*)\(', stripped)
     # adascriptDie is the built-in die(): noreturn like a program's own.
-    return bool(call) and (call.group(1) == "adascriptDie"
+    return bool(call) and (call.group(1) in ("adascriptDie", "adascriptExit")
                            or call.group(1) in getattr(ParserState, "noreturn_procs", set()))
 
 
@@ -2988,7 +2988,7 @@ def _func_def_to_nim_inner(self, indent=0):
                       if l.strip() and not l.lstrip().startswith("#")]
         if _blines_nr:
             _last_nr = _blines_nr[-1].lstrip().split("(")[0].split()
-            if _last_nr and _last_nr[0] in ("quit", "raise"):
+            if _last_nr and _last_nr[0] in ("quit", "raise", "adascriptExit"):
                 if not hasattr(ParserState, "noreturn_procs"):
                     ParserState.noreturn_procs = set()
                 ParserState.noreturn_procs.add(name)

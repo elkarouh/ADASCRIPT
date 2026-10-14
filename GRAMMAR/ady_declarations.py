@@ -696,6 +696,8 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
                 out[name] = ctype
             else:
                 out[name] = "float" if any(c in modulus for c in ".eE") else "int"
+    for name in where_types(decls):
+        out[name] = "str"
     narrowed = narrowed_types(decls)
     pending = dict(narrowed)
     while pending:
@@ -750,6 +752,28 @@ def narrowed_types(decls):
     out.update({n: p[0] for n, r in decls.items() if r is not None
                 for p in [parse_mod(r)] if p and p[0]})
     return out
+
+
+# --- where types ----------------------------------------------------------------
+# `type Date_T is str where x: x == /^\d+$/ or x == ""` is a string that has
+# passed a check, and a type of its own. `Date_T(text)` is the check: a
+# `Date_T | !ParseFailure_T`, taken like any failure. A Date_T goes up to str
+# with no cast; nothing but the check makes one.
+
+_WHERE = _re_du.compile(r"^(str)[ \t]+where[ \t]+([A-Za-z_]\w*)[ \t]*:[ \t]*(.+)$")
+
+
+def parse_where(rhs):
+    """(parent, variable, predicate text) for a declaration `type N is str
+    where x: PREDICATE`, else None."""
+    m = _WHERE.match((rhs or "").strip())
+    return m.groups() if m else None
+
+
+def where_types(decls):
+    """{name: parent} for every where type in DECLS."""
+    return {n: p[0] for n, r in decls.items() if r is not None
+            for p in [parse_where(r)] if p}
 
 
 # --- mod types ------------------------------------------------------------------
@@ -810,7 +834,9 @@ def mod_type_of(name):
 def wraps_or_checks(name):
     """NAME is a type whose `N(x)` is a proc of its own -- one that checks a
     range or wraps -- rather than a plain conversion."""
-    return narrowed_parent(name) is not None or mod_type_of(name) is not None
+    from hek_parsec import ParserState
+    return (narrowed_parent(name) is not None or mod_type_of(name) is not None
+            or name in (getattr(ParserState, "where_types", None) or {}))
 
 
 def narrowed_parent(name):

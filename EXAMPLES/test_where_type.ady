@@ -1,0 +1,42 @@
+#!/usr/bin/env ady2nim
+"""Test: a string type with a check, `type N is str where x: PREDICATE` (Nim only).
+
+`Date_T(text)` is the check: a `Date_T | !ParseFailure_T`, taken like any
+failure. A Date_T goes up to str with no cast, and is refused beside a plain
+str. ady2py refuses the form.
+"""
+
+type Date_T   is str where d: d == /^\d+$/ or d == ""
+type Period_T is str where p: p == /^\d{3}$/
+
+def describe(d: Date_T) -> str:
+    f"date [{d}] of length {len(d)}"
+
+def twice(text: str) -> str | !ParseFailure_T:
+    do:
+        a <- Date_T(text)
+        b <- Period_T("123")
+    return describe(a) + " " + b
+
+let good: Date_T | !ParseFailure_T = Date_T("20240131")
+if good is ParseFailure_T:
+    die("good date refused")
+print describe(good)
+let blank: Date_T | !ParseFailure_T = Date_T("")
+if blank is ParseFailure_T:
+    die("blank refused")
+let bad: Date_T | !ParseFailure_T = Date_T("2024-01-31")
+if bad is ParseFailure_T:
+    print f"refused: {bad.what} {bad.text}"
+else:
+    die("bad date accepted")
+let p: Period_T | !ParseFailure_T = Period_T("12")
+assert p is ParseFailure_T
+let t1: str | !ParseFailure_T = twice("99")
+if t1 is ParseFailure_T:
+    die("twice refused")
+print t1
+let t2: str | !ParseFailure_T = twice("x")
+if t2 is ParseFailure_T:
+    print t2.text
+print "test_where_type OK"
