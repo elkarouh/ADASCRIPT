@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""The model, the page and the requests, with no server running: ady2nim c -r test_dijkstra.ady"""
+"""The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, network_of, sample, uses
 from backend/dijkstra_events_gui import answer, keep_in

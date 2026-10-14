@@ -41,7 +41,7 @@ app: all frontend/htmx.min.js
 	./backend/server $(PORT)
 
 test:
-	$(ADY2NIM) c -r test_dijkstra.ady 2>/dev/null
+	$(ADY2NIM) c -r tests/test_dijkstra.ady 2>/dev/null
 
 clean:
 	rm -f backend/server test_dijkstra frontend/dijkstra_js_events.js build.log

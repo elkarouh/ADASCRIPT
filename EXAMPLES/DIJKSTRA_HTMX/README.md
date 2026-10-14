@@ -12,7 +12,7 @@ make test                     # the model, the page and the requests, no server
 # or by hand:
 ady2nim js frontend/dijkstra_js_events.ady   # the one script of our own, frontend/dijkstra_js_events.js
 ady2nim c -r backend/server.ady # then open http://127.0.0.1:8810/ (run from this directory)
-ady2nim c -r test_dijkstra.ady # the model, the page and the requests, no server
+ady2nim c -r tests/test_dijkstra.ady # the model, the page and the requests, no server
 ```
 
 Click a node to start from, another to go to; the shortest way is drawn in
@@ -31,7 +31,7 @@ every change; Reset puts the sample back.
 | `backend/dijkstra_events_gui.ady` | what each request does: `answer(method, path, fields)` calls the model, saves, and returns the page. Holds the network. No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to `answer`, and serves the two scripts. |
 | `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes); the server keeps it and draws the page again. Every change it sends goes through `Change` (in the stdlib's `browser.ady`): the fields are filled in by name in the hidden form, then the form's button is pressed. |
-| `test_dijkstra.ady` | tests of the model, and of the page through `answer`, as the browser would ask; nothing is started. |
+| `tests/test_dijkstra.ady` | tests of the model, and of the page through `answer`, as the browser would ask; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
 `backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). The model and the layout are compiled both ways: the page carries the network, its places included, as the server keeps it (a hidden `pre#network`), and `dijkstra_js_events.ady` builds its `NetworkView` from that with the same `network_of`, so where a node is drawn is computed from the model, never read off the drawing.
@@ -61,7 +61,7 @@ The routes are a small REST interface on two collections, every answer the whole
 * A mistake (a name taken, an edge that is there already) comes back as a line
   in red on the page; nothing is changed.
 * So testing the GUI is calling `answer(method, path, fields)` and reading the
-  page: see `test_dijkstra.ady`.
+  page: see `tests/test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command
   line, a test) uses the model, `build_graph` and `shortest_route` unchanged.
 
