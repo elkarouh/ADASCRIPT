@@ -1148,21 +1148,32 @@ test: compile
 	@printf '  %-42s' "spell.ady (big.txt speling)"; \
 	    $(EXDIR)/spell $(EXDIR)/big.txt speling >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
-	@# clsworkspace --demo builds a configs repository of its own in $(TMPDIR) and
-	@# needs only git. The rows' order is git's for commits made in the same second,
-	@# so the checks look for rows, not for their order.
-	@printf '  %-42s' "clsworkspace.ady (--demo)"; \
-	    CLS=$(EXDIR)/clsworkspace; \
-	    $$CLS --reset-demo > $(TMPDIR)/ady_cls.out 2>/dev/null \
+	@# clsworkspace against a configs repository the test builds with git: a bare
+	@# remote with one branch per workspace, each holding one CONFIG commit. The
+	@# program clones it itself. The rows' order is git's for commits made in the
+	@# same second, so the checks look for rows, not for their order.
+	@printf '  %-42s' "clsworkspace.ady (a repo built here)"; \
+	    W=$(TMPDIR)/ady_cls; rm -rf $$W; mkdir -p $$W && \
+	    git init -q --bare --initial-branch=main $$W/remote.git && \
+	    git clone -q $$W/remote.git $$W/seed 2>/dev/null && \
+	    git -C $$W/seed config user.email t@example.invalid && git -C $$W/seed config user.name t && \
+	    git -C $$W/seed commit -q --allow-empty -m init && git -C $$W/seed push -q origin main && \
+	    for w in "ws_a mine BL_42" "ws_b mine BL_41" "ws_c other BL_42"; do set -- $$w; \
+	        git -C $$W/seed checkout -q -b workspace/$$1 main && \
+	        git -C $$W/seed commit -q --allow-empty -m "CONFIG $$1 {\"name\": \"$$1\", \"username\": \"$$2\", \"baseline\": \"$$3\", \"envid\": \"L8\", \"hostname\": \"h1\"}" && \
+	        git -C $$W/seed push -q origin workspace/$$1 || exit 1; done && \
+	    git -C $$W/seed commit -q --allow-empty -m "CONFIG not json" && git -C $$W/seed push -q origin HEAD && \
+	    export CONFIGS_REPOSITORY_URL=$$W/remote.git CONFIGS_REPOSITORY_LOCATION=$$W/clone/configs && \
+	    CLS=$(EXDIR)/clsworkspace && \
+	    USER=mine $$CLS --user mine > $(TMPDIR)/ady_cls.out 2>/dev/null \
 	        && grep -q '^Workspace  *Based On  *ENV_ID  *BL Built?  *SS State  *Hostname *$$' $(TMPDIR)/ady_cls.out \
-	        && grep -q '^ws_feature_a  *BL_42  *L8  *?  *---  ' $(TMPDIR)/ady_cls.out \
-	        && grep -q '^ws_feature_b  *BL_41  *L8  *?  *---  ' $(TMPDIR)/ady_cls.out \
-	        && ! grep -q ws_other_user $(TMPDIR)/ady_cls.out \
-	        && $$CLS --demo --all --extra 2>/dev/null | grep -q '^ws_other_user  *BL_42  *L8  *?  *---  *otherhost  *N  *?' \
-	        && [ "$$($$CLS --demo --user=someone_else 2>/dev/null | grep -c '^ws_')" = 1 ] \
-	        && ! $$CLS --demo --all --user x >/dev/null 2>&1 \
+	        && grep -q '^ws_a  *BL_42  *L8  *?  *---  *h1' $(TMPDIR)/ady_cls.out \
+	        && grep -q '^ws_b  *BL_41  *L8  *?  *---  *h1' $(TMPDIR)/ady_cls.out \
+	        && ! grep -q ws_c $(TMPDIR)/ady_cls.out \
+	        && USER=other $$CLS --extra 2>/dev/null | grep -q '^ws_c  *BL_42  *L8  *?  *---  *h1  *N  *?' \
+	        && ! $$CLS --bogus >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_cls.out; exit 1; }
-	@rm -rf $(TMPDIR)/ady_cls.out $(TMPDIR)/clsworkspace-demo-*
+	@rm -rf $(TMPDIR)/ady_cls $(TMPDIR)/ady_cls.out
 	@# git1 --version is the only invocation with no side effects: every other
 	@# subcommand creates, moves or deletes a repo in the working directory.
 	@printf '  %-42s' "TOOLS/GIT1/git1.ady (--version)"; \

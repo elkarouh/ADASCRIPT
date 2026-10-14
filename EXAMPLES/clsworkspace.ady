@@ -10,24 +10,21 @@ so the whole list is one `git log --all`. By default it reads the real local
 clone of the configs repository, the one CMA5 itself uses:
 
     $CONFIGS_REPOSITORY_URL        where the repository is cloned from
-    $CMA_WORKSPACE_ROOT            names the local clone:
+    $CONFIGS_REPOSITORY_LOCATION   the local clone; unless set,
                                    /cm/local_build/$USER/$CMA_WORKSPACE_ROOT/cma/configs
     $CM_ROOT                       /cm/ot unless set; --extra looks for builds there
 
 Usage:
     clsworkspace               your workspaces
-    clsworkspace --all         everyone's
     clsworkspace --user NAME   NAME's
     clsworkspace --extra       also WS Built? and WS Dependency?
-    clsworkspace --demo        a throwaway repository, built on the spot (needs only git)
-    clsworkspace --reset-demo  the same, rebuilt from nothing
 
 What it leaves out of the original: `-long`, the ClearCase-derived "BL Built?"
 (always "?") and the `git checkout main` before listing, which `git log --all`
 does not need and which would move the branch of a real clone.
 
 Where Python raised, a function here returns `T | !ConfigFailure_T`: `git`,
-`ConfigStorage.init`, `list_workspaces_config`, the lock, the demo's set-up
+`ConfigStorage.init`, `list_workspaces_config`, the lock
 and the two lookups of the real repository all say in their signature that
 they can fail, and `main` is the one place that turns a failure into a message.
 
@@ -35,7 +32,6 @@ Nim only: the lock is flock(2) and the configs are JSON.
 """
 
 from json nimport *
-from nativesockets nimport getHostname
 from os nimport walkPattern
 nimport posix
 nimport time
@@ -76,14 +72,6 @@ def git(args: []str, cwd: Path) -> str | !ConfigFailure_T:
         let words: str = " ".join(args)
         return ConfigFailure_T(f"git {words} in {cwd}", res.stderr.strip())
     return res.output
-
-def git_steps(steps: [][]str, cwd: Path) -> None | !ConfigFailure_T:
-    """Run each git command in turn; the first one that fails ends the run."""
-    for args in steps:
-        let out: str | !ConfigFailure_T = git(args, cwd)
-        if out is ConfigFailure_T:
-            return out
-    return None
 
 def make_dir(d: Path) -> None | !ConfigFailure_T:
     let made: None | !PathFailure_T = d.mkdir()
@@ -249,6 +237,8 @@ def real_cm_root() -> Path:
     return Path($CM_ROOT if $CM_ROOT != "" else "/cm/ot")
 
 def real_configs_location() -> Path | !ConfigFailure_T:
+    if $CONFIGS_REPOSITORY_LOCATION != "":
+        return Path($CONFIGS_REPOSITORY_LOCATION)
     if $CMA_WORKSPACE_ROOT == "":
         return ConfigFailure_T("CMA_WORKSPACE_ROOT", "is not set in the environment")
     return Path(f"/cm/local_build/{current_user()}/{$CMA_WORKSPACE_ROOT}/cma/configs")
@@ -267,73 +257,6 @@ def has_workspace_build_dir(build_root: Path, name: WorkspaceName_T, envid: EnvI
     for _ in walkPattern(str(build_root) + f"/*/*{name.upper()}/build_{envid}"):
         return True
     return False
-
-# --- the demo repository: only for --demo ---------------------------------------------
-
-type DemoWorkspace is record:
-    name:     WorkspaceName_T
-    username: UserName_T
-    baseline: Baseline_T
-    envid:    EnvId_T
-    hostname: HostName_T
-
-def commit_subject(w: DemoWorkspace) -> str:
-    """CONFIG <name> <json>, the subject a workspace is registered under."""
-    return (f"CONFIG {w.name} " "{" f'"name": {escapeJson(str(w.name))}, "username": {escapeJson(str(w.username))}, '
-            f'"baseline": {escapeJson(str(w.baseline))}, "envid": {escapeJson(str(w.envid))}, '
-            f'"hostname": {escapeJson(str(w.hostname))}' "}")
-
-def demo_root() -> Path:
-    # one per user, in the temporary directory: nothing is written beside the program
-    return Path($TMPDIR if $TMPDIR != "" else "/tmp") / f"clsworkspace-demo-{current_user()}"
-
-def setup_demo_repo(root: Path, reset: bool) -> None | !ConfigFailure_T:
-    """A bare 'remote' with a main branch and one branch per workspace, each
-    carrying one empty CONFIG commit. Built once; --reset-demo builds it again."""
-    let remote: Path = root / "remote_configs.git"
-    if reset:
-        run(["rm", "-rf", str(root)])
-    return None if -d remote
-
-    let scratch: Path = root / "_scratch_init"
-    let made: None | !ConfigFailure_T = make_dir(remote)
-    if made is ConfigFailure_T:
-        return made
-    let me: UserName_T = current_user()
-    let here: HostName_T = HostName_T(getHostname())
-    let workspaces: []DemoWorkspace = [
-        DemoWorkspace("ws_feature_a", me, "BL_42", "L8", here),
-        DemoWorkspace("ws_feature_b", me, "BL_41", "L8", here),
-        DemoWorkspace("ws_other_user", "someone_else", "BL_42", "L8", "otherhost")]
-    let started: None | !ConfigFailure_T = git_steps([
-        ["init", "--quiet", "--bare", "--initial-branch=main", str(remote)],
-        ["clone", "--quiet", str(remote), str(scratch)]], root)
-    if started is ConfigFailure_T:
-        return started
-    let configured: None | !ConfigFailure_T = git_steps([
-        ["config", "user.email", "demo@example.invalid"],
-        ["config", "user.name", "demo"]], scratch)
-    if configured is ConfigFailure_T:
-        return configured
-    let readme: None | !PathFailure_T = (scratch / "README").write_text("CMA5 configs repository (demo)\n")
-    if readme is PathFailure_T:
-        return ConfigFailure_T(f"write {readme.path}", readme.reason)
-    let first: None | !ConfigFailure_T = git_steps([
-        ["add", "README"],
-        ["commit", "--quiet", "-m", "init"],
-        ["push", "--quiet", "origin", "main"]], scratch)
-    if first is ConfigFailure_T:
-        return first
-    for w in workspaces:
-        let branch: str = f"workspace/{w.name}"
-        let pushed: None | !ConfigFailure_T = git_steps([
-            ["checkout", "--quiet", "-b", branch, "main"],
-            ["commit", "--quiet", "--allow-empty", "-m", commit_subject(w)],
-            ["push", "--quiet", "-u", "origin", branch]], scratch)
-        if pushed is ConfigFailure_T:
-            return pushed
-    run(["rm", "-rf", str(scratch)])
-    return None
 
 # --- the table ---------------------------------------------------------------------------
 
@@ -370,14 +293,11 @@ def print_table(rows: []Row_T, columns: []Column_T):
 # --- main(): the `eval { ... }` block of Clsworkspace.pl ----------------------------------
 
 type Options_T is record:
-    everyone: bool = False
     extra:    bool = False
-    demo:     bool = False
-    reset:    bool = False
     user:     ?UserName_T
 
 def usage() -> str:
-    return f"usage: {PROG} [--all | --user NAME] [--extra] [--demo | --reset-demo]"
+    return f"usage: {PROG} [--user NAME] [--extra]"
 
 def read_options(argv: []str) -> Options_T:
     var opt: Options_T
@@ -385,10 +305,7 @@ def read_options(argv: []str) -> Options_T:
     while i < len(argv):
         let arg: str = argv[i]
         case arg:
-            when "--all":        opt.everyone = True
             when "--extra":      opt.extra = True
-            when "--demo":       opt.demo = True
-            when "--reset-demo": opt.reset = True
             when "-h" | "--help":
                 print usage()
                 quit(0)
@@ -401,37 +318,24 @@ def read_options(argv: []str) -> Options_T:
             when others:
                 die(f"unknown option {arg}\n{usage()}", code = 2)
         i += 1
-    die("Options --all and --user are mutually exclusive", code = 2) if opt.everyone and opt.user is not None
-    if opt.reset:
-        opt.demo = True                         # --reset-demo implies --demo
     return opt
 
 def main() -> int:
     let opt: Options_T = read_options($@)
 
-    var storage: ConfigStorage
-    var build_root: Path
-    if opt.demo:
-        let root: Path = demo_root()
-        let set_up: None | !ConfigFailure_T = setup_demo_repo(root, opt.reset)
-        if set_up is ConfigFailure_T:
-            die(f"{set_up.step}: {set_up.reason}")
-        storage = ConfigStorage(root / "local_configs_clone", str(root / "remote_configs.git"))
-        build_root = root / "builds"
-    else:
-        let location: Path | !ConfigFailure_T = real_configs_location()
-        if location is ConfigFailure_T:
-            die(f"{location.step} {location.reason} (pass --demo to use the sandbox repository instead)")
-        let url: str | !ConfigFailure_T = real_configs_url()
-        if url is ConfigFailure_T:
-            die(f"{url.step} {url.reason} (pass --demo to use the sandbox repository instead)")
-        storage = ConfigStorage(location, url)
-        build_root = real_cm_root()
+    let location: Path | !ConfigFailure_T = real_configs_location()
+    if location is ConfigFailure_T:
+        die(f"{location.step} {location.reason}")
+    let url: str | !ConfigFailure_T = real_configs_url()
+    if url is ConfigFailure_T:
+        die(f"{url.step} {url.reason}")
+    var storage: ConfigStorage = ConfigStorage(location, url)
+    let build_root: Path = real_cm_root()
 
     let started: float = time.time()
 
-    # --all lists everyone's; otherwise one user's: --user's, or your own
-    let who: ?UserName_T = None if opt.everyone else (opt.user or current_user())
+    # one user's workspaces: --user's, or your own
+    let who: ?UserName_T = opt.user or current_user()
     let listed: []WorkspaceConfig | !ConfigFailure_T = storage.list_workspaces_config(who)
     if listed is ConfigFailure_T:
         die(f"{listed.step}: {listed.reason}")
