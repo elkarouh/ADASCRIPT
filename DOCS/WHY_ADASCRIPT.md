@@ -40,7 +40,8 @@ How it is laid out:
   notation that writes them down.
 - **What the compiler holds you to** is what that buys: units, money, ranges,
   and a spacecraft that would not have been lost.
-- **A failure belongs in the signature** is the second idea in full.
+- **A failure belongs in the signature** is the second idea in full, down to
+  the constructor.
 - **What is not yet true** lists what each backend does not do.
 
 ---
@@ -1109,6 +1110,46 @@ look at. `TOOLS/RSYNC_TIME_MACHINE/test/rsync_time_machine_test.sh` now runs
 the tool against real folders, with a disk that fills up; the old version
 fails six of its fifteen checks.
 
+### Even a constructor
+
+In Python and Java a constructor cannot say that it failed: it returns nothing,
+and the only way out is an exception. In Rust and Zig the question does not
+arise, because there is no constructor, only a function by convention called
+`new` or `init`. Adascript keeps the constructor and lets it fail, which, as far
+as I know, no other language does. It is odd, once seen, that it was ever
+otherwise: building a value from outside data is the commonest thing that can
+go wrong, and the constructor was the one routine that could not say so. The
+signature says it, as it does for any routine:
+
+<!-- from: EXAMPLES/clsworkspace.ady -->
+```python
+    def __init__(self, data: JsonNode):
+        self.data = data
+
+    def __init__(self, payload: Json_T) -> None | !ConfigFailure_T:
+        try:
+            self.data = parseJson(str(payload))
+        except JsonParsingError:
+            return ConfigFailure_T("CONFIG payload", "is not JSON")
+        if self.data.kind != JObject or not self.data.hasKey("name"):
+            return ConfigFailure_T("CONFIG payload", "is not a workspace")
+```
+
+A `return` of the failure abandons the construction; reaching the end builds the
+object. The first constructor cannot fail and says nothing, and the two
+overload by their parameters. The call of the second is a `WorkspaceConfig |
+!ConfigFailure_T`, taken like any other failure, so that a commit subject which
+is not ours is skipped where it is read instead of being caught somewhere else:
+
+<!-- from: EXAMPLES/clsworkspace.ady -->
+```python
+            let config: WorkspaceConfig | !ConfigFailure_T = WorkspaceConfig(Json_T(rest))
+            continue if config is ConfigFailure_T
+```
+
+A `do:` step takes it the same way, and a dropped failure is refused. Nim only
+for now: Python's `__init__` returns nothing, so `ady2py` refuses the form.
+
 ### The same chain in other notations
 
 [trcks](https://github.com/christophgietl/trcks) is a Python library for
@@ -1247,6 +1288,8 @@ catches them:
 - **Scaled units** (the kilometre, the mile, money in cents) are refused:
   they are built by `ady2nim` only.
 - **Unions** are at most six members.
+- **A constructor that can fail** is refused by `ady2py`: Python's `__init__`
+  returns nothing, so the same source needs a function returning `C | !F` there.
 
 ---
 
