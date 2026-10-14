@@ -15,7 +15,7 @@ units are two types, and one line says how they relate:
 ```python
 type Mass_T     is distinct float                          # kg
 type Distance_T is distinct float                          # m
-type Duration_T is distinct float range 0.0 .. 1.0e18      # s, never negative
+type Duration_T is distinct float where d: float(d) >= 0.0   # s, never negative
 type Speed_T    is Distance_T / Duration_T                 # m/s
 type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
@@ -1174,9 +1174,10 @@ to know the order before reading the declarations.
 
 1. **Declare the base units distinct, once, in the unit the program computes
    in.** Metres, seconds, kilograms: one `distinct float` each, with the unit
-   in a comment. Give a base unit the range it really has: a time is never
-   negative, so `Duration_T` says so and a negative duration stops the program
-   where it is made. Nothing else in the program is a bare `float` that means a
+   in a comment. Give a base unit the check it really has: a duration is never
+   negative, so `Duration_T` says `where d: float(d) >= 0.0`, and a negative
+   duration stops the program where it is made. (`range` says the same for
+   plain bounds; `where` takes any test.) Nothing else in the program is a bare `float` that means a
    length.
 2. **Derive the rest from them.** A speed is `Distance_T / Duration_T`, an impulse
    is `Mass_T * Speed_T`. Do not declare a speed as a second `distinct float`:
@@ -1195,7 +1196,7 @@ to know the order before reading the declarations.
 ```python
 type Mass_T     is distinct float                          # kg
 type Distance_T is distinct float                          # m
-type Duration_T is distinct float range 0.0 .. 1.0e18      # s, never negative
+type Duration_T is distinct float where d: float(d) >= 0.0   # s, never negative
 type Speed_T    is Distance_T / Duration_T                 # m/s
 type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s

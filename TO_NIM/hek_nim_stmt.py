@@ -168,6 +168,9 @@ def _float_range_assert(varname, type_name):
     info = getattr(ParserState, 'tick_types', {}).get(type_name)
     if not info or not info.get('is_float_range'):
         return None
+    if info.get('pred'):
+        return (f'assert valid_{type_name}(float({varname})), '
+                f'"{type_name} value " & ${varname} & " fails its where"')
     lo = info['First']
     hi = info['Last']
     return (
@@ -2202,6 +2205,11 @@ def to_nim(self, prec=None):
     return ""
 
 
+@method(distinct_where_def)
+def to_nim(self, prec=None):
+    return ""
+
+
 @method(where_def)
 def to_nim(self, prec=None):
     """where_def: 'str' 'where' IDENTIFIER ':' expression; type_stmt renders it."""
@@ -2424,6 +2432,21 @@ def to_nim(self, indent=0):
         return _where_type_nim(name, params, rhs, indent)
     elif rhs_type in ("mod_def", "parent_mod_def"):
         return _mod_type_nim(name, params, indent)
+    elif rhs_type == "distinct_where_def":
+        inner = rhs.nodes[0]
+        var = inner.nodes[1].to_nim() if type(inner).__name__ == "where_def" else "x"
+        ParserState.symbol_table.push_scope(f"where {name}")
+        ParserState.symbol_table.add(var, "float", "let")
+        try:
+            pred = inner.nodes[-1].to_nim()
+        finally:
+            ParserState.symbol_table.pop_scope()
+        ParserState.tick_types[name] = {"First": "-Inf", "Last": "Inf",
+                                        "is_float_range": True, "pred": pred}
+        lines, _ = _distinct_lines(name, params, "float", "float", indent)
+        _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
+        lines.append(f"{_ind(indent)}proc valid_{name}{_exp}({var}: float): bool = ({pred})")
+        return "\n".join(lines)
     elif rhs_type == "distinct_float_range_def":
         fr = rhs.nodes[0]
         lo = _float_bound_text(fr.nodes[2])

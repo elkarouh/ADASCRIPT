@@ -21,7 +21,7 @@
 
 type Mass_T     is distinct float                          # kg
 type Distance_T is distinct float                          # m
-type Duration_T is distinct float range 0.0 .. 1.0e18      # s, never negative
+type Duration_T is distinct float where d: float(d) >= 0.0   # s, never negative
 type Speed_T    is Distance_T / Duration_T                 # m/s
 type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 

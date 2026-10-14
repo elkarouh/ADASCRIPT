@@ -651,7 +651,7 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
     scaled = scaled or {}
     consts = consts or {}
     for name, rhs in decls.items():
-        if rhs is not None and _re_du.match(r"distinct\s+float\s+range\b", rhs.strip()):
+        if rhs is not None and _re_du.match(r"distinct\s+float\s+(?:range|where)\b", rhs.strip()):
             out[name] = "float"          # a distinct float range is a unit of its own
         elif rhs is not None and rhs.strip().startswith("distinct "):
             out[name] = _decl_kind(rhs, decls, frozenset({name}))
@@ -782,6 +782,8 @@ def parse_where(rhs):
     """(parent, variable, predicate text) for a declaration `type N is P
     where x: PREDICATE`, or `where PREDICATE` over the variable x,, P a str, int or float, else None."""
     m = _WHERE.match((rhs or "").strip())
+    if m and m.group(1).startswith("distinct "):
+        return None               # a unit with a check, not a checked type
     return (m.group(1), m.group(2) or "x", m.group(3)) if m else None
 
 
