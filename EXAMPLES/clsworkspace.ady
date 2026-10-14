@@ -12,15 +12,13 @@ clone of the configs repository, the one CMA5 itself uses:
     $CONFIGS_REPOSITORY_URL        where the repository is cloned from
     $CONFIGS_REPOSITORY_LOCATION   the local clone; unless set,
                                    /cm/local_build/$USER/$CMA_WORKSPACE_ROOT/cma/configs
-    $CM_ROOT                       /cm/ot unless set; --extra looks for builds there
 
 Usage:
     clsworkspace               your workspaces
     clsworkspace --user NAME   NAME's
-    clsworkspace --extra       also WS Built? and WS Dependency?
 
 What it leaves out of the original: `-long`, the ClearCase-derived "BL Built?"
-(always "?") and the `git checkout main` before listing, which `git log --all`
+(always "?"), `-extra` and the `git checkout main` before listing, which `git log --all`
 does not need and which would move the branch of a real clone.
 
 Where Python raised, a function here returns `T | !ConfigFailure_T`: `git`,
@@ -32,7 +30,6 @@ Nim only: the lock is flock(2) and the configs are JSON.
 """
 
 from json nimport *
-from os nimport walkPattern
 nimport posix
 nimport time
 
@@ -45,15 +42,11 @@ type EnvId_T         is str     # the build environment: L8
 type HostName_T      is str     # the machine that registered the workspace
 type Json_T          is str     # the text after "CONFIG <name> " in a commit subject
 
-# The columns, in the order @headers lists them in Clsworkspace.pl. WS Built? and
-# WS Dependency? are the two that only --extra prints.
-type Column_T is enum COL_WORKSPACE, COL_BASED_ON, COL_ENVID, COL_BL_BUILT, COL_SS_STATE, COL_HOSTNAME, COL_WS_BUILT, COL_WS_DEPENDENCY
+# The columns, in the order @headers lists them in Clsworkspace.pl.
+type Column_T is enum COL_WORKSPACE, COL_BASED_ON, COL_ENVID, COL_BL_BUILT, COL_SS_STATE, COL_HOSTNAME
 const HEADER: [Column_T]str = [
     COL_WORKSPACE: "Workspace", COL_BASED_ON: "Based On", COL_ENVID: "ENV_ID",
-    COL_BL_BUILT: "BL Built?", COL_SS_STATE: "SS State", COL_HOSTNAME: "Hostname",
-    COL_WS_BUILT: "WS Built?", COL_WS_DEPENDENCY: "WS Dependency?"]
-const PLAIN_COLUMNS: []Column_T = [COL_WORKSPACE, COL_BASED_ON, COL_ENVID, COL_BL_BUILT, COL_SS_STATE, COL_HOSTNAME]
-const EXTRA_COLUMNS: []Column_T = PLAIN_COLUMNS + [COL_WS_BUILT, COL_WS_DEPENDENCY]
+    COL_BL_BUILT: "BL Built?", COL_SS_STATE: "SS State", COL_HOSTNAME: "Hostname"]
 
 type Row_T is [Column_T]str
 
@@ -233,9 +226,6 @@ def current_user() -> UserName_T:
         return UserName_T($LOGNAME)
     return UserName_T(run(["id", "-un"]).output.strip())
 
-def real_cm_root() -> Path:
-    return Path($CM_ROOT if $CM_ROOT != "" else "/cm/ot")
-
 def real_configs_location() -> Path | !ConfigFailure_T:
     if $CONFIGS_REPOSITORY_LOCATION != "":
         return Path($CONFIGS_REPOSITORY_LOCATION)
@@ -248,19 +238,9 @@ def real_configs_url() -> str | !ConfigFailure_T:
         return ConfigFailure_T("CONFIGS_REPOSITORY_URL", "is not set in the environment")
     return $CONFIGS_REPOSITORY_URL
 
-# --- WS Built? for --extra ----------------------------------------------------------
-
-def has_workspace_build_dir(build_root: Path, name: WorkspaceName_T, envid: EnvId_T) -> bool:
-    """The glob("$CM_ROOT/*/*$uc_name/build_$envid") of -extra (Clsworkspace.pl:95-98).
-    Against the real $CM_ROOT this can itself be slow: it is a wildcard scan, as
-    it is in the original."""
-    for _ in walkPattern(str(build_root) + f"/*/*{name.upper()}/build_{envid}"):
-        return True
-    return False
-
 # --- the table ---------------------------------------------------------------------------
 
-def row_of(config: WorkspaceConfig, columns: []Column_T, build_root: Path) -> Row_T:
+def row_of(config: WorkspaceConfig) -> Row_T:
     var row: Row_T = ["" for c in Column_T]
     row[COL_WORKSPACE] = str(config.name())
     row[COL_BASED_ON] = str(config.baseline())
@@ -270,34 +250,30 @@ def row_of(config: WorkspaceConfig, columns: []Column_T, build_root: Path) -> Ro
     row[COL_BL_BUILT] = "?"
     row[COL_SS_STATE] = config.status() or "---"
     row[COL_HOSTNAME] = str(config.hostname())
-    if COL_WS_BUILT in columns:
-        row[COL_WS_BUILT] = "Y" if has_workspace_build_dir(build_root, config.name(), config.envid()) else "N"
-        row[COL_WS_DEPENDENCY] = "?"        # "Still needed?" in the original, too
     return row
 
 def pad(text: str, width: int) -> str:
     return text + " " * (width - len(text))
 
-def print_table(rows: []Row_T, columns: []Column_T):
+def print_table(rows: []Row_T):
     var widths: [Column_T]int = [len(HEADER[c]) for c in Column_T]
     for row in rows:
-        for c in columns:
+        for c in Column_T:
             widths[c] = max(widths[c], len(row[c]))
-    let separator: str = "--".join(["-" * widths[c] for c in columns])
+    let separator: str = "--".join(["-" * widths[c] for c in Column_T])
     print separator
-    print "  ".join([pad(HEADER[c], widths[c]) for c in columns])
+    print "  ".join([pad(HEADER[c], widths[c]) for c in Column_T])
     print separator
     for row in rows:
-        print "  ".join([pad(row[c], widths[c]) for c in columns])
+        print "  ".join([pad(row[c], widths[c]) for c in Column_T])
 
 # --- main(): the `eval { ... }` block of Clsworkspace.pl ----------------------------------
 
 type Options_T is record:
-    extra:    bool = False
     user:     ?UserName_T
 
 def usage() -> str:
-    return f"usage: {PROG} [--user NAME] [--extra]"
+    return f"usage: {PROG} [--user NAME]"
 
 def read_options(argv: []str) -> Options_T:
     var opt: Options_T
@@ -305,7 +281,6 @@ def read_options(argv: []str) -> Options_T:
     while i < len(argv):
         let arg: str = argv[i]
         case arg:
-            when "--extra":      opt.extra = True
             when "-h" | "--help":
                 print usage()
                 quit(0)
@@ -330,7 +305,6 @@ def main() -> int:
     if url is ConfigFailure_T:
         die(f"{url.step} {url.reason}")
     var storage: ConfigStorage = ConfigStorage(location, url)
-    let build_root: Path = real_cm_root()
 
     let started: float = time.time()
 
@@ -340,14 +314,13 @@ def main() -> int:
     if listed is ConfigFailure_T:
         die(f"{listed.step}: {listed.reason}")
 
-    let columns: []Column_T = EXTRA_COLUMNS if opt.extra else PLAIN_COLUMNS
-    let rows: []Row_T = [row_of(c, columns, build_root) for c in listed]
+    let rows: []Row_T = [row_of(c) for c in listed]
     let elapsed: float = time.time() - started
 
     if len(rows) == 0:
         stderr.writeLine("(no workspaces found)")
         return 0
-    print_table(rows, columns)
+    print_table(rows)
     stderr.writeLine(f"\n[{elapsed:.3f}s against {storage.path}]")
     return 0
 

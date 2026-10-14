@@ -1170,7 +1170,7 @@ test: compile
 	        && grep -q '^ws_a  *BL_42  *L8  *?  *---  *h1' $(TMPDIR)/ady_cls.out \
 	        && grep -q '^ws_b  *BL_41  *L8  *?  *---  *h1' $(TMPDIR)/ady_cls.out \
 	        && ! grep -q ws_c $(TMPDIR)/ady_cls.out \
-	        && USER=other $$CLS --extra 2>/dev/null | grep -q '^ws_c  *BL_42  *L8  *?  *---  *h1  *N  *?' \
+	        && USER=other $$CLS 2>/dev/null | grep -q '^ws_c  *BL_42  *L8  *?  *---  *h1' \
 	        && ! $$CLS --bogus >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_cls.out; exit 1; }
 	@rm -rf $(TMPDIR)/ady_cls $(TMPDIR)/ady_cls.out
