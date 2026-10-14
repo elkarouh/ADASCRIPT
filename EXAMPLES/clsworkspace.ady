@@ -1,0 +1,450 @@
+#!/usr/bin/env ady2nim
+"""clsworkspace -- list the workspaces recorded in a git "configs" repository.
+
+A small twin of the Perl tool Clsworkspace.pl (CMA5::Workspace::Config::Storage).
+Each workspace is registered by one commit whose subject reads
+
+    CONFIG <name> <json>
+
+so the whole list is one `git log --all`. By default it reads the real local
+clone of the configs repository, the one CMA5 itself uses:
+
+    $CONFIGS_REPOSITORY_URL        where the repository is cloned from
+    $CMA_WORKSPACE_ROOT            names the local clone:
+                                   /cm/local_build/$USER/$CMA_WORKSPACE_ROOT/cma/configs
+    $CM_ROOT                       /cm/ot unless set; --extra looks for builds there
+
+Usage:
+    clsworkspace               your workspaces
+    clsworkspace --all         everyone's
+    clsworkspace --user NAME   NAME's
+    clsworkspace --extra       also WS Built? and WS Dependency?
+    clsworkspace --demo        a throwaway repository, built on the spot (needs only git)
+    clsworkspace --reset-demo  the same, rebuilt from nothing
+
+What it leaves out of the original: `-long`, the ClearCase-derived "BL Built?"
+(always "?") and the `git checkout main` before listing, which `git log --all`
+does not need and which would move the branch of a real clone.
+
+Where Python raised, a function here returns `T | !ConfigFailure_T`: `git`,
+`ConfigStorage.init`, `list_workspaces_config`, the lock, the demo's set-up
+and the two lookups of the real repository all say in their signature that
+they can fail, and `main` is the one place that turns a failure into a message.
+
+Nim only: the lock is flock(2) and the configs are JSON.
+"""
+
+from json nimport *
+from nativesockets nimport getHostname
+from os nimport walkPattern
+nimport posix
+nimport time
+
+# --- the vocabulary -----------------------------------------------------------
+
+type WorkspaceName_T is str     # as typed to the tool that registered it: ws_feature_a
+type UserName_T      is str     # a login name
+type Baseline_T      is str     # the baseline a workspace is based on: BL_42
+type EnvId_T         is str     # the build environment: L8
+type HostName_T      is str     # the machine that registered the workspace
+type Json_T          is str     # the text after "CONFIG <name> " in a commit subject
+
+# The columns, in the order @headers lists them in Clsworkspace.pl. WS Built? and
+# WS Dependency? are the two that only --extra prints.
+type Column_T is enum COL_WORKSPACE, COL_BASED_ON, COL_ENVID, COL_BL_BUILT, COL_SS_STATE, COL_HOSTNAME, COL_WS_BUILT, COL_WS_DEPENDENCY
+const HEADER: [Column_T]str = [
+    COL_WORKSPACE: "Workspace", COL_BASED_ON: "Based On", COL_ENVID: "ENV_ID",
+    COL_BL_BUILT: "BL Built?", COL_SS_STATE: "SS State", COL_HOSTNAME: "Hostname",
+    COL_WS_BUILT: "WS Built?", COL_WS_DEPENDENCY: "WS Dependency?"]
+const PLAIN_COLUMNS: []Column_T = [COL_WORKSPACE, COL_BASED_ON, COL_ENVID, COL_BL_BUILT, COL_SS_STATE, COL_HOSTNAME]
+const EXTRA_COLUMNS: []Column_T = PLAIN_COLUMNS + [COL_WS_BUILT, COL_WS_DEPENDENCY]
+
+type Row_T is [Column_T]str
+
+# What went wrong, and in which step: the one failure every fallible function of
+# the program returns.
+type ConfigFailure_T is record:
+    step:   str     # what was being done: "git fetch --prune in /cm/local_build/..."
+    reason: str     # what the system said
+
+# --- running git ----------------------------------------------------------------
+
+def git(args: []str, cwd: Path) -> str | !ConfigFailure_T:
+    """Run `git -C cwd args` and return its stdout (CMA5::Utils->run_command)."""
+    let res: RunResult = run(["git", "-C", str(cwd)] + args)
+    if res.code != 0:
+        let words: str = " ".join(args)
+        return ConfigFailure_T(f"git {words} in {cwd}", res.stderr.strip())
+    return res.output
+
+def git_steps(steps: [][]str, cwd: Path) -> None | !ConfigFailure_T:
+    """Run each git command in turn; the first one that fails ends the run."""
+    for args in steps:
+        let out: str | !ConfigFailure_T = git(args, cwd)
+        if out is ConfigFailure_T:
+            return out
+    return None
+
+def make_dir(d: Path) -> None | !ConfigFailure_T:
+    let made: None | !PathFailure_T = d.mkdir()
+    if made is PathFailure_T:
+        return ConfigFailure_T(f"mkdir {made.path}", made.reason)
+    return None
+
+# --- the lock ---------------------------------------------------------------------
+#
+# A lock scoped to THIS program only (not the real CMA5::Mutex::ConfigsRepository
+# lock, whose path and format are not reproduced here). It shows the same idea:
+# listing holds an exclusive lock for its whole git operation, so callers that
+# arrive together queue up instead of racing a fetch against a clone.
+#
+# flock(2) is blocking, and dropped when the descriptor is closed, so a
+# crash cannot leave the lock held.
+
+type Lock_T is distinct int     # a descriptor holding flock(LOCK_EX)
+
+# Nim has no flock in its posix module, and nothing here is worth a name in
+# Adascript: two procs, the whole of what the lock needs from C.
+# nimraw: proc c_flock(fd: cint, op: cint): cint {.importc: "flock", header: "<sys/file.h>".}
+# nimraw: proc lock_fd(path: string): int = (let fd = posix.open(path.cstring, O_CREAT or O_RDWR, 0o644.Mode); if fd >= 0 and c_flock(fd, 2) != 0: (discard posix.close(fd); -2) else: int(fd))
+# nimraw: proc unlock_fd(fd: int) = (discard posix.close(fd.cint))
+
+def acquire_lock(path: Path) -> Lock_T | !ConfigFailure_T:
+    let made: None | !ConfigFailure_T = make_dir(path.parent)
+    if made is ConfigFailure_T:
+        return made
+    let fd: int = lock_fd(str(path))             # LOCK_EX: waits its turn
+    if fd < 0:
+        return ConfigFailure_T(f"lock {path}", "cannot create or lock the file")
+    return Lock_T(fd)
+
+def release_lock(lock: Lock_T):
+    unlock_fd(int(lock))
+
+# --- one workspace ----------------------------------------------------------------
+
+type WorkspaceConfig is record:
+    """The JSON blob of one 'CONFIG <name> <json>' commit, kept whole.
+
+    Real configs carry more keys (branch, data_directory, subsystem_name,
+    system_name, ...) than this tool prints, so the record keeps the parsed
+    JSON and has a getter only for what is displayed -- the same bargain
+    CMA5::Workspace::Config makes with its AUTOLOAD. The getters are plain
+    functions called with a dot: `config.name()`.
+    """
+    data: JsonNode
+
+def text(c: WorkspaceConfig, key: str) -> str:
+    """The value under key, "" when absent."""
+    c.data.getOrDefault(key).getStr("")
+
+def name(c: WorkspaceConfig) -> WorkspaceName_T:
+    WorkspaceName_T(c.text("name"))
+
+def username(c: WorkspaceConfig) -> UserName_T:
+    UserName_T(c.text("username"))
+
+def baseline(c: WorkspaceConfig) -> Baseline_T:
+    Baseline_T(c.text("baseline"))
+
+def envid(c: WorkspaceConfig) -> EnvId_T:
+    EnvId_T(c.text("envid"))
+
+def hostname(c: WorkspaceConfig) -> HostName_T:
+    HostName_T(c.text("hostname"))
+
+def status(c: WorkspaceConfig) -> ?str:
+    if c.data.hasKey("status"):
+        return c.data["status"].getStr("")
+    return None
+
+def parse_config(payload: Json_T) -> ?WorkspaceConfig:
+    """The workspace the payload describes; None when it is not one.
+
+    Not every "CONFIG ..." commit subject is necessarily ours: text that is not
+    JSON, or JSON that is not an object with a name, is somebody else's.
+    """
+    try:
+        let node: JsonNode = parseJson(str(payload))
+        if node.kind == JObject and node.hasKey("name"):
+            return WorkspaceConfig(data=node)
+        return None
+    except JsonParsingError:
+        return None
+
+# --- the configs repository ----------------------------------------------------------
+
+class ConfigStorage:
+    """Twin of CMA5::Workspace::Config::Storage (Config.pm:264-420)."""
+    var path:       Path     # the local clone
+    var remote_url: str
+    var inited:     bool = False
+
+    def __init__(self, path: Path, remote_url: str):
+        self.path = path
+        self.remote_url = remote_url
+
+    def init(self) -> None | !ConfigFailure_T:
+        """Storage::init() (Config.pm:284-359): the call behind 'slow the first
+        time, fast afterwards'. A clone the first time, a fetch after that."""
+        if self.inited:
+            return None
+        if -d self.path:
+            # Steady state: an incremental fetch into the clone that is there.
+            let fetched: str | !ConfigFailure_T = git(["fetch", "--prune"], self.path)
+            if fetched is ConfigFailure_T:
+                # Config.pm:302-304: not fatal. Fall back on what is cached.
+                warn(f"Unable to contact remote repository; relying on cached data ({fetched.reason})")
+        else:
+            # First call ever for this location: the whole repository. Slow.
+            let made: None | !ConfigFailure_T = make_dir(self.path.parent)
+            if made is ConfigFailure_T:
+                return made
+            let cloned: RunResult = run(["git", "clone", "--quiet", self.remote_url, str(self.path)])
+            if cloned.code != 0:
+                return ConfigFailure_T(f"git clone {self.remote_url}", cloned.stderr.strip())
+        self.inited = True
+        return None
+
+    def subjects(self) -> str | !ConfigFailure_T:
+        """Every commit subject on every ref, oldest first -- init() included."""
+        let ready: None | !ConfigFailure_T = self.init()
+        if ready is ConfigFailure_T:
+            return ready
+        return git(["log", "--all", "--pretty=%s", "--reverse"], self.path)
+
+    def list_workspaces_config(self, user: ?UserName_T) -> []WorkspaceConfig | !ConfigFailure_T:
+        """list_workspaces_config() (Config.pm:389-420): one lock-protected git
+        operation however many workspaces there are. Unlike the real tool it does
+        not `git checkout` the default branch first -- `git log --all` covers every
+        ref, and not checking out leaves your real clone on its own branch."""
+        do:
+            lock <- acquire_lock(self.path.parent / ".clsworkspace.lock")
+        let log: str | !ConfigFailure_T = self.subjects()
+        release_lock(lock)
+        if log is ConfigFailure_T:
+            return log
+
+        var configs: []WorkspaceConfig = []
+        for line in log.splitlines():
+            continue if not line.startswith("CONFIG ")
+            let (_, _, rest) = line.removeprefix("CONFIG ").partition(" ")
+            let config: ?WorkspaceConfig = parse_config(Json_T(rest))
+            continue if config is None
+            configs.append(config)
+        if user is None:
+            return configs
+        return [c for c in configs if c.username() == user]
+
+# --- where the real repository is (CMA5::Global, Global.pm:13,45) ------------------
+
+def current_user() -> UserName_T:
+    if $USER != "":
+        return UserName_T($USER)
+    if $LOGNAME != "":
+        return UserName_T($LOGNAME)
+    return UserName_T(run(["id", "-un"]).output.strip())
+
+def real_cm_root() -> Path:
+    return Path($CM_ROOT if $CM_ROOT != "" else "/cm/ot")
+
+def real_configs_location() -> Path | !ConfigFailure_T:
+    if $CMA_WORKSPACE_ROOT == "":
+        return ConfigFailure_T("CMA_WORKSPACE_ROOT", "is not set in the environment")
+    return Path(f"/cm/local_build/{current_user()}/{$CMA_WORKSPACE_ROOT}/cma/configs")
+
+def real_configs_url() -> str | !ConfigFailure_T:
+    if $CONFIGS_REPOSITORY_URL == "":
+        return ConfigFailure_T("CONFIGS_REPOSITORY_URL", "is not set in the environment")
+    return $CONFIGS_REPOSITORY_URL
+
+# --- WS Built? for --extra ----------------------------------------------------------
+
+def has_workspace_build_dir(build_root: Path, name: WorkspaceName_T, envid: EnvId_T) -> bool:
+    """The glob("$CM_ROOT/*/*$uc_name/build_$envid") of -extra (Clsworkspace.pl:95-98).
+    Against the real $CM_ROOT this can itself be slow: it is a wildcard scan, as
+    it is in the original."""
+    for _ in walkPattern(str(build_root) + f"/*/*{name.upper()}/build_{envid}"):
+        return True
+    return False
+
+# --- the demo repository: only for --demo ---------------------------------------------
+
+type DemoWorkspace is record:
+    name:     WorkspaceName_T
+    username: UserName_T
+    baseline: Baseline_T
+    envid:    EnvId_T
+    hostname: HostName_T
+
+def commit_subject(w: DemoWorkspace) -> str:
+    """CONFIG <name> <json>, the subject a workspace is registered under."""
+    return (f"CONFIG {w.name} " "{" f'"name": {escapeJson(str(w.name))}, "username": {escapeJson(str(w.username))}, '
+            f'"baseline": {escapeJson(str(w.baseline))}, "envid": {escapeJson(str(w.envid))}, '
+            f'"hostname": {escapeJson(str(w.hostname))}' "}")
+
+def demo_root() -> Path:
+    # one per user, in the temporary directory: nothing is written beside the program
+    return Path($TMPDIR if $TMPDIR != "" else "/tmp") / f"clsworkspace-demo-{current_user()}"
+
+def setup_demo_repo(root: Path, reset: bool) -> None | !ConfigFailure_T:
+    """A bare 'remote' with a main branch and one branch per workspace, each
+    carrying one empty CONFIG commit. Built once; --reset-demo builds it again."""
+    let remote: Path = root / "remote_configs.git"
+    if reset:
+        run(["rm", "-rf", str(root)])
+    return None if -d remote
+
+    let scratch: Path = root / "_scratch_init"
+    let made: None | !ConfigFailure_T = make_dir(remote)
+    if made is ConfigFailure_T:
+        return made
+    let me: UserName_T = current_user()
+    let here: HostName_T = HostName_T(getHostname())
+    let workspaces: []DemoWorkspace = [
+        DemoWorkspace("ws_feature_a", me, "BL_42", "L8", here),
+        DemoWorkspace("ws_feature_b", me, "BL_41", "L8", here),
+        DemoWorkspace("ws_other_user", "someone_else", "BL_42", "L8", "otherhost")]
+    let started: None | !ConfigFailure_T = git_steps([
+        ["init", "--quiet", "--bare", "--initial-branch=main", str(remote)],
+        ["clone", "--quiet", str(remote), str(scratch)]], root)
+    if started is ConfigFailure_T:
+        return started
+    let configured: None | !ConfigFailure_T = git_steps([
+        ["config", "user.email", "demo@example.invalid"],
+        ["config", "user.name", "demo"]], scratch)
+    if configured is ConfigFailure_T:
+        return configured
+    let readme: None | !PathFailure_T = (scratch / "README").write_text("CMA5 configs repository (demo)\n")
+    if readme is PathFailure_T:
+        return ConfigFailure_T(f"write {readme.path}", readme.reason)
+    let first: None | !ConfigFailure_T = git_steps([
+        ["add", "README"],
+        ["commit", "--quiet", "-m", "init"],
+        ["push", "--quiet", "origin", "main"]], scratch)
+    if first is ConfigFailure_T:
+        return first
+    for w in workspaces:
+        let branch: str = f"workspace/{w.name}"
+        let pushed: None | !ConfigFailure_T = git_steps([
+            ["checkout", "--quiet", "-b", branch, "main"],
+            ["commit", "--quiet", "--allow-empty", "-m", commit_subject(w)],
+            ["push", "--quiet", "-u", "origin", branch]], scratch)
+        if pushed is ConfigFailure_T:
+            return pushed
+    run(["rm", "-rf", str(scratch)])
+    return None
+
+# --- the table ---------------------------------------------------------------------------
+
+def row_of(config: WorkspaceConfig, columns: []Column_T, build_root: Path) -> Row_T:
+    var row: Row_T = ["" for c in Column_T]
+    row[COL_WORKSPACE] = str(config.name())
+    row[COL_BASED_ON] = str(config.baseline())
+    row[COL_ENVID] = str(config.envid())
+    # The real "BL Built?" is CMA5::BaselineId->is_built(), a query of a
+    # ClearCase-backed build registry that is not reproduced here.
+    row[COL_BL_BUILT] = "?"
+    row[COL_SS_STATE] = config.status() or "---"
+    row[COL_HOSTNAME] = str(config.hostname())
+    if COL_WS_BUILT in columns:
+        row[COL_WS_BUILT] = "Y" if has_workspace_build_dir(build_root, config.name(), config.envid()) else "N"
+        row[COL_WS_DEPENDENCY] = "?"        # "Still needed?" in the original, too
+    return row
+
+def pad(text: str, width: int) -> str:
+    return text + " " * (width - len(text))
+
+def print_table(rows: []Row_T, columns: []Column_T):
+    var widths: [Column_T]int = [len(HEADER[c]) for c in Column_T]
+    for row in rows:
+        for c in columns:
+            widths[c] = max(widths[c], len(row[c]))
+    let separator: str = "--".join(["-" * widths[c] for c in columns])
+    print separator
+    print "  ".join([pad(HEADER[c], widths[c]) for c in columns])
+    print separator
+    for row in rows:
+        print "  ".join([pad(row[c], widths[c]) for c in columns])
+
+# --- main(): the `eval { ... }` block of Clsworkspace.pl ----------------------------------
+
+type Options_T is record:
+    everyone: bool = False
+    extra:    bool = False
+    demo:     bool = False
+    reset:    bool = False
+    user:     ?UserName_T
+
+def usage() -> str:
+    return f"usage: {PROG} [--all | --user NAME] [--extra] [--demo | --reset-demo]"
+
+def read_options(argv: []str) -> Options_T:
+    var opt: Options_T
+    var i: int = 0
+    while i < len(argv):
+        let arg: str = argv[i]
+        case arg:
+            when "--all":        opt.everyone = True
+            when "--extra":      opt.extra = True
+            when "--demo":       opt.demo = True
+            when "--reset-demo": opt.reset = True
+            when "-h" | "--help":
+                print usage()
+                quit(0)
+            when "--user":
+                i += 1
+                die(f"--user needs a name\n{usage()}", code = 2) if i >= len(argv)
+                opt.user = UserName_T(argv[i])
+            when _ if arg.startswith("--user="):
+                opt.user = UserName_T(arg.removeprefix("--user="))
+            when others:
+                die(f"unknown option {arg}\n{usage()}", code = 2)
+        i += 1
+    die("Options --all and --user are mutually exclusive", code = 2) if opt.everyone and opt.user is not None
+    if opt.reset:
+        opt.demo = True                         # --reset-demo implies --demo
+    return opt
+
+def main() -> int:
+    let opt: Options_T = read_options($@)
+
+    var storage: ConfigStorage
+    var build_root: Path
+    if opt.demo:
+        let root: Path = demo_root()
+        let set_up: None | !ConfigFailure_T = setup_demo_repo(root, opt.reset)
+        if set_up is ConfigFailure_T:
+            die(f"{set_up.step}: {set_up.reason}")
+        storage = ConfigStorage(root / "local_configs_clone", str(root / "remote_configs.git"))
+        build_root = root / "builds"
+    else:
+        let location: Path | !ConfigFailure_T = real_configs_location()
+        if location is ConfigFailure_T:
+            die(f"{location.step} {location.reason} (pass --demo to use the sandbox repository instead)")
+        let url: str | !ConfigFailure_T = real_configs_url()
+        if url is ConfigFailure_T:
+            die(f"{url.step} {url.reason} (pass --demo to use the sandbox repository instead)")
+        storage = ConfigStorage(location, url)
+        build_root = real_cm_root()
+
+    let started: float = time.time()
+
+    # --all lists everyone's; otherwise one user's: --user's, or your own
+    let who: ?UserName_T = None if opt.everyone else (opt.user or current_user())
+    let listed: []WorkspaceConfig | !ConfigFailure_T = storage.list_workspaces_config(who)
+    if listed is ConfigFailure_T:
+        die(f"{listed.step}: {listed.reason}")
+
+    let columns: []Column_T = EXTRA_COLUMNS if opt.extra else PLAIN_COLUMNS
+    let rows: []Row_T = [row_of(c, columns, build_root) for c in listed]
+    let elapsed: float = time.time() - started
+
+    if len(rows) == 0:
+        stderr.writeLine("(no workspaces found)")
+        return 0
+    print_table(rows, columns)
+    stderr.writeLine(f"\n[{elapsed:.3f}s against {storage.path}]")
+    return 0
+
+quit(main())

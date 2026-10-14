@@ -224,6 +224,7 @@ STDIN_EXAMPLES := \
 # -----------------------------------------------------------------------
 ARG_EXAMPLES := \
     argparse.ady \
+    clsworkspace.ady \
     phonecode.ady \
     spell.ady
 
@@ -1147,6 +1148,21 @@ test: compile
 	@printf '  %-42s' "spell.ady (big.txt speling)"; \
 	    $(EXDIR)/spell $(EXDIR)/big.txt speling >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# clsworkspace --demo builds a configs repository of its own in $(TMPDIR) and
+	@# needs only git. The rows' order is git's for commits made in the same second,
+	@# so the checks look for rows, not for their order.
+	@printf '  %-42s' "clsworkspace.ady (--demo)"; \
+	    CLS=$(EXDIR)/clsworkspace; \
+	    $$CLS --reset-demo > $(TMPDIR)/ady_cls.out 2>/dev/null \
+	        && grep -q '^Workspace  *Based On  *ENV_ID  *BL Built?  *SS State  *Hostname *$$' $(TMPDIR)/ady_cls.out \
+	        && grep -q '^ws_feature_a  *BL_42  *L8  *?  *---  ' $(TMPDIR)/ady_cls.out \
+	        && grep -q '^ws_feature_b  *BL_41  *L8  *?  *---  ' $(TMPDIR)/ady_cls.out \
+	        && ! grep -q ws_other_user $(TMPDIR)/ady_cls.out \
+	        && $$CLS --demo --all --extra 2>/dev/null | grep -q '^ws_other_user  *BL_42  *L8  *?  *---  *otherhost  *N  *?' \
+	        && [ "$$($$CLS --demo --user=someone_else 2>/dev/null | grep -c '^ws_')" = 1 ] \
+	        && ! $$CLS --demo --all --user x >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_cls.out; exit 1; }
+	@rm -rf $(TMPDIR)/ady_cls.out $(TMPDIR)/clsworkspace-demo-*
 	@# git1 --version is the only invocation with no side effects: every other
 	@# subcommand creates, moves or deletes a repo in the working directory.
 	@printf '  %-42s' "TOOLS/GIT1/git1.ady (--version)"; \
