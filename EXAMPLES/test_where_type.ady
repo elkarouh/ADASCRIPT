@@ -66,7 +66,7 @@ type Prob_T is float where 0 <= x <= 1
 
 def either(p: Prob_T) -> Prob_T | !ParseFailure_T:
     do:
-        q <- Prob_T(1.0 - p)
+        q <- Prob_T(1.0 - p)        # arithmetic on a Prob_T is a float: checked again to be one
     return q
 
 let half: Prob_T | !ParseFailure_T = Prob_T(0.5)
@@ -105,6 +105,8 @@ assert nt is ParseFailure_T
 print "test_where_type any type OK"
 
 # A checked type over a table of checked values: a probability distribution.
+# Two levels of check: each entry is a Prob_T (between 0 and 1), and the table
+# as a whole is a Pdf_T (its entries add up to 1). One does not imply the other.
 type Dice_T is 1 .. 6
 type Pdf_T is [Dice_T]Prob_T where pdf: abs(sum(pdf[d] for d in Dice_T) - 1.0) < 1e-9
 
@@ -112,17 +114,17 @@ def fair() -> Pdf_T | !ParseFailure_T:
     var table: [Dice_T]Prob_T = {:}
     for d in Dice_T:
         do:
-            p <- Prob_T(1.0 / 6.0)
+            p <- Prob_T(1.0 / 6.0)      # a plain float is not a Prob_T until it passes its check
         table[d] = p
-    return Pdf_T(table)
+    return Pdf_T(table)             # the sum check: entries in 0..1 do not imply they add up to 1
 
 def loaded() -> Pdf_T | !ParseFailure_T:
     var table: [Dice_T]Prob_T = {:}
     for d in Dice_T:
         do:
-            p <- Prob_T(0.2)
+            p <- Prob_T(0.2)            # each 0.2 is a fine Prob_T ...
         table[d] = p
-    return Pdf_T(table)
+    return Pdf_T(table)             # ... but six of them add up to 1.2: refused here
 
 let pf: Pdf_T | !ParseFailure_T = fair()
 if pf is ParseFailure_T:
