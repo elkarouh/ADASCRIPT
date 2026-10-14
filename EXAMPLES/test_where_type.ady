@@ -106,7 +106,7 @@ print "test_where_type any type OK"
 
 # A checked type over a table of checked values: a probability distribution.
 type Dice_T is 1 .. 6
-type Pdf_T is [Dice_T]Prob_T where pdf: abs(sum(float(pdf[d]) for d in Dice_T) - 1.0) < 1e-9
+type Pdf_T is [Dice_T]Prob_T where pdf: abs(sum(pdf[d] for d in Dice_T) - 1.0) < 1e-9
 
 def fair() -> Pdf_T | !ParseFailure_T:
     var table: [Dice_T]Prob_T = {:}

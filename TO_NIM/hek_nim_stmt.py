@@ -2612,6 +2612,14 @@ def _where_type_nim(name, params, rhs, indent):
         lines += [ind + p.format(e=_exp, t=name) for p in ops]
         lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
                      f"specifier: string) = formatValue(result, {base}(value), specifier)")
+        if kind in ("int", "float"):
+            # a sum of checked values is a sum of their base: it would not be
+            # one the check had seen
+            ParserState.nim_imports.add("sequtils")
+            ParserState.nim_imports.add("math")
+            zero = "0.0" if kind == "float" else "0"
+            lines.append(f"{ind}proc sum{_exp}(x: openArray[{name}]): {base} = "
+                         f"x.foldl(a + {base}(b), {zero})")
     shown = "$value" if scalar else "repr(value)"
     lines += [
         f"{ind}converter up_{name}{_exp}(x: {name}): {base} = {base}(x)",
