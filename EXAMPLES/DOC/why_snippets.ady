@@ -8,22 +8,30 @@ DOCS/check_quotes.py checks the document against it.
 """
 
 # --- the concepts, the collections and the mappings ------------------------
-type Callsign_T     is str
-type Altitude_T     is Natural        # feet
-type Velocity_T     is float          # knots
-type Flight_Phase_T is enum CLIMB, CRUISE, DESCENT, HOLD
-type Latitude_T     is float          # degrees, north positive
-type Longitude_T    is float          # degrees, east positive
+const METRES_PER_KNOT: float = 1852.0 / 3600.0      # exact: a nautical mile is 1852 m
+
+type Callsign_T       is str
+type Metre_T          is distinct float              # the basic unit of length
+type Second_T         is distinct float where s: float(s) >= 0.0   # of time, never negative
+type Distance_T       is Metre_T                     # the quantity, as a signature says it
+type Duration_T       is Second_T
+type Speed_T          is Distance_T / Duration_T     # metres per second
+type Altitude_T       is 30.48 * Distance_T          # a flight level: hundreds of feet
+type Speed_in_knots_T is METRES_PER_KNOT * Speed_T   # what the radio and the radar say
+type Flight_Phase_T   is enum CLIMB, CRUISE, DESCENT, HOLD
+type Degree_T         is distinct float
+type Latitude_T       is Degree_T range -90 .. 90        # north positive
+type Longitude_T      is Degree_T range -180 .. 180      # east positive
 
 type Fix_T is tuple:
     lat: Latitude_T
     lon: Longitude_T
 
 type Aircraft_T is record:
-    callsign: Callsign_T     = ""
-    phase:    Flight_Phase_T = CLIMB
-    altitude: Altitude_T     = 0
-    speed:    Velocity_T     = 0.0
+    callsign: Callsign_T       = ""
+    phase:    Flight_Phase_T   = CLIMB
+    altitude: Altitude_T       = 0.0
+    speed:    Speed_in_knots_T = 0.0
 
 class Flight:
     var aircraft: Aircraft_T
@@ -46,13 +54,13 @@ class Flight:
 var fleet   : {Callsign_T}Aircraft_T     = {:}   # every aircraft, by callsign
 var by_phase: [Flight_Phase_T][]Callsign_T       # who is in each phase
 var watched : {}Callsign_T               = {}    # the ones above their ceiling
-var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 41000, CRUISE: 41000,
-                                            DESCENT: 41000, HOLD: 24000]
+var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 410.0, CRUISE: 410.0,
+                                            DESCENT: 410.0, HOLD: 240.0]
 
 fleet["BAW117"] = Aircraft_T(callsign="BAW117", phase=CRUISE,
-                             altitude=37000, speed=452.0)
+                             altitude=370.0, speed=452.0)
 fleet["AFR22"]  = Aircraft_T(callsign="AFR22", phase=HOLD,
-                             altitude=25000, speed=210.0)
+                             altitude=250.0, speed=210.0)
 
 for cs in ["AFR22", "BAW117"]:
     let a: Aircraft_T = fleet[cs]
@@ -64,13 +72,13 @@ for phase in Flight_Phase_T:
     print f"{phase:<8} {by_phase[phase]'Length}"
 
 var flight: Flight = Flight(fleet["BAW117"])
-flight.report((lat: 51.47, lon: -0.46))
-flight.climb(39000)
+flight.report((lat: Latitude_T(51.47), lon: Longitude_T(-0.46)))
+flight.climb(390.0)
 assert flight.route'Length == 1 and flight.aircraft.phase == CLIMB
 assert not flight.above(ceiling[CRUISE]) and flight.above(ceiling[HOLD])
 
 # --- the "not yet true" section is why_alias_snippets.ady: it declares its
-# own Velocity_T, as the document shows it, and a module declares a type once.
+# own Miles_T, as the document shows it, and a module declares a type once.
 
 # --- the notation, one line per shape --------------------------------------
 type Sector_T is enum NORTH, CENTRE, SOUTH
@@ -80,7 +88,7 @@ let m    : {str}int           = {"a": 1}                  # a mapping from .. to
 let s    : {}str              = {"x", "y"}                # a set of
 let arr  : [Sector_T]int       = [NORTH: 1, CENTRE: 2, SOUTH: 3]  # one per member
 let opt  : ?int               = 7                         # possibly absent
-let pair : Fix_T              = (lat: 51.5, lon: -0.1)    # named tuple
+let pair : Fix_T              = (lat: Latitude_T(51.5), lon: Longitude_T(-0.1))   # named tuple
 
 # They compose as prefixes, so the type reads left to right.
 var routes : {str}[]str       = {"BA117": ["EGLL", "KJFK"]}
@@ -96,11 +104,11 @@ assert bysector[CENTRE][0] == "BA117" and bysector[NORTH]'Length == 0
 assert nested["a"]["b"] == 1
 
 # --- a mapping ordered by arrival; a mapping computed rather than stored ---
-type Minutes_T is Natural
-var landed: [Callsign_T]Minutes_T = {:}    # in the order they landed
+type Duration_in_minutes_T is 60.0 * Duration_T
+var landed: [Callsign_T]Duration_in_minutes_T = {:}    # in the order they landed
 
-landed["AFR22"]  = 12
-landed["BAW117"] = 3
+landed["AFR22"]  = 12.0
+landed["BAW117"] = 3.0
 
 type Ceiling_Rule_T is (Flight_Phase_T) -> Altitude_T   # computed, not stored
 
@@ -118,24 +126,18 @@ assert over_ceiling(fleet["AFR22"], published)
 assert not over_ceiling(fleet["BAW117"], published)
 
 # --- the signatures the document argues from -------------------------------
-type Distance_T is float
-type Duration_T is float
-
-type Position_T is record:
-    lat: float = 0.0
-    lon: float = 0.0
-
 def restriction(phase: Flight_Phase_T) -> Altitude_T:
     return ceiling[phase]
 
 let phase: Flight_Phase_T = HOLD
 let limit: Altitude_T = restriction(phase)
-assert limit == 24000
+assert limit == 240.0
 
-def separation(own: Position_T, other: Position_T,
-               closing: Velocity_T, horizon: Duration_T) -> Distance_T:
+def separation(own: Fix_T, other: Fix_T,
+               closing: Speed_T, horizon: Duration_T) -> Distance_T:
     return closing * horizon
 
-assert separation(Position_T(), Position_T(), 250.0, 0.1) == 25.0
+let origin: Fix_T = (lat: Latitude_T(0.0), lon: Longitude_T(0.0))
+assert separation(origin, origin, 250.0, 0.1) == 25.0
 
 print "all WHY-document snippets ok"

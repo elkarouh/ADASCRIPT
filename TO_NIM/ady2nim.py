@@ -710,6 +710,8 @@ def translate(code, export_symbols=False):
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     from ady_html import expand_html_blocks
     code = expand_html_blocks(code)  # `html:` blocks: see ady_html
+    from ady_stmt import resolve_unit_aliases
+    code = resolve_unit_aliases(code, _nimport_carried.get("distinct_types", {}))
     # Before the parse, so that `failure` on anything but a record is
     # reported as that rather than as the parse error it also is.
     from ady_stmt import scan_failure_types, scan_return_types, either_procs

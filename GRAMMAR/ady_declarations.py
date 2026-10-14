@@ -722,13 +722,13 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
 
 
 # --- narrowed types -------------------------------------------------------------
-# `type Latitude_T is Degrees_T range -90 .. 90` is a Degrees_T that is only
+# `type Latitude_T is Degree_T range -90 .. 90` is a Degree_T that is only
 # ever in that range, and a type of its own. It goes up to its parent without
-# a cast (a Latitude_T is where a Degrees_T is wanted), is refused beside a
+# a cast (a Latitude_T is where a Degree_T is wanted), is refused beside a
 # sibling (a Longitude_T is not a Latitude_T, whatever the range), and comes
 # down from the parent by an explicit conversion, `Latitude_T(d)`, which
 # checks the range. Arithmetic on one is arithmetic on its parent: `lat + 1.0`
-# is a Degrees_T, and has to be converted to be stored in a Latitude_T.
+# is a Degree_T, and has to be converted to be stored in a Latitude_T.
 
 _NARROWED = _re_du.compile(
     r"^([A-Za-z_]\w*)[ \t]+range[ \t]+(-?[\d_.eE+]+)[ \t]*(\.\.<?)[ \t]*(-?[\d_.eE+]+)$")
@@ -795,8 +795,8 @@ def where_types(decls):
 
 # --- mod types ------------------------------------------------------------------
 # `type Slot_T is mod 8` is a whole number that wraps: 7 + 1 is 0 and -1 is 7.
-# `type Bearing_T is Degrees_T mod 360` is a Degrees_T that wraps the same way:
-# Bearing_T(-10.0) is 350.0, and a Bearing_T plus a Degrees_T is a Bearing_T. A
+# `type Bearing_T is Degree_T mod 360` is a Degree_T that wraps the same way:
+# Bearing_T(-10.0) is 350.0, and a Bearing_T plus a Degree_T is a Bearing_T. A
 # range checks and refuses; a mod type wraps, with the sign of the modulus, as
 # Python's `%` does. It is a type of its own, as a narrowed one is.
 
@@ -1139,7 +1139,7 @@ def expr_unit(expr, atom):
 
 def _mod_result(lu, op, ru):
     """The mod type `l op r` is when one side is one -- it wraps, so the sum of a
-    Bearing_T and a Degrees_T is a Bearing_T, and a Bearing_T scaled by a plain
+    Bearing_T and a Degree_T is a Bearing_T, and a Bearing_T scaled by a plain
     number is one -- or None."""
     ml, mr = mod_type_of(lu) is not None, mod_type_of(ru) is not None
     if not (ml or mr):

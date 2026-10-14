@@ -474,22 +474,22 @@ at run time.
 A distinct type can be narrowed to part of its values, in the manner of an Ada subtype, with `type N is P range lo .. hi` -- `P` any distinct float or int, the bounds negative if need be. The result is a type of its own, with a relation to its parent: it goes up, comes down only by an explicit conversion that checks the range, and does not stand for a sibling:
 
 ```python
-type Degrees_T is distinct float
-type Latitude_T is Degrees_T range -90 .. 90
-type Longitude_T is Degrees_T range -180 .. 180
+type Degree_T is distinct float
+type Latitude_T is Degree_T range -90 .. 90
+type Longitude_T is Degree_T range -180 .. 180
 
 let lat: Latitude_T = Latitude_T(45.5)
-let wide: Degrees_T = lat                  # up to the parent: no cast
-let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
+let wide: Degree_T = lat                  # up to the parent: no cast
+let sum: Degree_T = lat + Degree_T(1.0)  # arithmetic is the parent's
 let back: Latitude_T = Latitude_T(sum)     # down: checked
 let lat2: Latitude_T = 12.5                # a literal takes the declared type, checked
 ```
 
-- A narrowed type goes up to its parent, and to the parent's parents, wherever the parent is wanted -- a `Degrees_T` parameter takes a `Latitude_T`, and `Radians_T(lat)` of a scaled unit converts it. `Degrees_T(lat)` is allowed too, if you like to say so.
-- It comes down by `Latitude_T(d)`, from a `Degrees_T` or a plain number: out of range, that raises `AssertionError` (Nim: `AssertionDefect`, which `except AssertionError` catches). It is never silent, and never skipped in a release build.
+- A narrowed type goes up to its parent, and to the parent's parents, wherever the parent is wanted -- a `Degree_T` parameter takes a `Latitude_T`, and `Radians_T(lat)` of a scaled unit converts it. `Degree_T(lat)` is allowed too, if you like to say so.
+- It comes down by `Latitude_T(d)`, from a `Degree_T` or a plain number: out of range, that raises `AssertionError` (Nim: `AssertionDefect`, which `except AssertionError` catches). It is never silent, and never skipped in a release build.
 - It does not stand for a sibling: `let l: Latitude_T = lon` and `Latitude_T(lon)` are refused, and so is a `Longitude_T` passed where a `Latitude_T` is declared -- the point of two types, that `GeoPoint(lon, lat)` is an error.
-- Arithmetic leaves the range, so it is the parent's: `lat + lat` is a `Degrees_T`, to be converted back to be stored in a `Latitude_T`. Comparisons, `min`, `max`, `print` and f-string formats work on the narrowed type as they do on its parent.
-- Python: `class Latitude_T(Degrees_T)`, whose constructor checks the range. Nim: a `distinct float` with a converter up and a checking `to_Latitude_T` that `Latitude_T(x)` is emitted as.
+- Arithmetic leaves the range, so it is the parent's: `lat + lat` is a `Degree_T`, to be converted back to be stored in a `Latitude_T`. Comparisons, `min`, `max`, `print` and f-string formats work on the narrowed type as they do on its parent.
+- Python: `class Latitude_T(Degree_T)`, whose constructor checks the range. Nim: a `distinct float` with a converter up and a checking `to_Latitude_T` that `Latitude_T(x)` is emitted as.
 
 It is a unit with a range, where `distinct float range lo .. hi` (below) is a unit of its own that has no parent. Use the narrowing when there is a parent to go up to.
 
@@ -497,12 +497,12 @@ It is a unit with a range, where `distinct float range lo .. hi` (below) is a un
 
 ### A type that wraps: `mod`
 
-Where a range type refuses a value outside it, a mod type wraps it back in. `type Slot_T is mod 8` is a whole number that is always 0 .. 7, and `type Bearing_T is Degrees_T mod 360` is a `Degrees_T` that is always 0 .. 360 -- a compass bearing, an angle, a clock hand, a ring-buffer index. Making one, and `+`, `-` and `*` on it, wrap:
+Where a range type refuses a value outside it, a mod type wraps it back in. `type Slot_T is mod 8` is a whole number that is always 0 .. 7, and `type Bearing_T is Degree_T mod 360` is a `Degree_T` that is always 0 .. 360 -- a compass bearing, an angle, a clock hand, a ring-buffer index. Making one, and `+`, `-` and `*` on it, wrap:
 
 ```python
 type Slot_T is mod 8
-type Degrees_T is distinct float
-type Bearing_T is Degrees_T mod 360
+type Degree_T is distinct float
+type Bearing_T is Degree_T mod 360
 
 var s: Slot_T = Slot_T(6)
 s = s + Slot_T(1)                          # 7
@@ -510,8 +510,8 @@ s = s + Slot_T(1)                          # 8 wraps to 0
 print(int(Slot_T(-1)))                     # 7
 
 let b: Bearing_T = Bearing_T(-10.0)        # 350.0
-let turned: Bearing_T = b + Degrees_T(30.0)   # 380 wraps to 20.0
-let wide: Degrees_T = b                    # up to the parent: no cast
+let turned: Bearing_T = b + Degree_T(30.0)   # 380 wraps to 20.0
+let wide: Degree_T = b                    # up to the parent: no cast
 ```
 
 - The modulus may be a `const`, declared with its type: `const CAPACITY: int = 100` and `type Index_T is mod CAPACITY` make a ring-buffer index, `buffer[int(i)]` with `i = i + Index_T(1)` coming round to 0 after 99. An `int` const makes a whole-number type and a `float` one a float type; the name of anything else is refused.
@@ -549,11 +549,11 @@ class Ring:
 
   After six pushes of 10, 20, ... 60 into this four-slot ring, `latest(0)` is 60 and `latest(3)` is 30. The count is not an `Index_T`: it runs from 0 to `CAPACITY`, one more value than an index has, so it is an `int range 0 .. CAPACITY`. `CAPACITY` appears twice, in the two types, there is no `% CAPACITY` anywhere, and `head - Index_T(1)` is the newest slot even when `head` is 0. This is `EXAMPLES/test_ring_buffer.ady`.
 - The value wraps with the sign of the modulus, as Python's `%` does, on both backends: `Slot_T(-1)` is 7, not -1.
-- `Slot_T` has no parent: it is a type of its own, and a plain `int` is given to it by `Slot_T(n)`. `Bearing_T` has `Degrees_T`: a `Bearing_T` goes up to it without a cast, `bearing + degrees` is a `Bearing_T`, and a `Degrees_T` comes down only by `Bearing_T(d)`, which wraps it. A literal takes the declared type, wrapped: `let c: Bearing_T = 400.0` is 40.0.
+- `Slot_T` has no parent: it is a type of its own, and a plain `int` is given to it by `Slot_T(n)`. `Bearing_T` has `Degree_T`: a `Bearing_T` goes up to it without a cast, `bearing + degrees` is a `Bearing_T`, and a `Degree_T` comes down only by `Bearing_T(d)`, which wraps it. A literal takes the declared type, wrapped: `let c: Bearing_T = 400.0` is 40.0.
 - `*` by a plain number gives the same type, wrapped; `/` by a plain number does too, and `Bearing_T / Bearing_T` is a plain ratio. Comparisons compare the wrapped values.
 - It is refused beside a sibling, as a narrowed type is, and `bearing + 1.0` mixes a unit with a plain number as it does for any unit.
 - A mod type wraps and never raises. Use `range` when a value outside should be an error, and `mod` when it should come round.
-- Python: `class Bearing_T(Degrees_T)`, whose `__new__` and operators wrap. Nim: a `distinct float` with a `to_Bearing_T` that wraps with `floorMod`, wrapping operators, and a converter up.
+- Python: `class Bearing_T(Degree_T)`, whose `__new__` and operators wrap. Nim: a `distinct float` with a `to_Bearing_T` that wraps with `floorMod`, wrapping operators, and a converter up.
 
 <!-- tested by EXAMPLES/test_mod_type.ady -->
 
@@ -1263,7 +1263,7 @@ type Age is int range 0..100   # same as: type Age is 0..100
 
 ### Float subranges
 
-For floating-point ranges use `float range lo .. hi` (the bounds may be negative). It is a float with a stated range, and still mixes with floats. Write `distinct float range lo .. hi` when it should also be a unit of its own: it does not mix with a float, or with another range. When the range narrows a unit that already exists -- a latitude is a `Degrees_T` in `-90 .. 90` -- say so with `type Latitude_T is Degrees_T range -90 .. 90` (see *A unit narrowed to a range*): it goes up to its parent without a cast.
+For floating-point ranges use `float range lo .. hi` (the bounds may be negative). It is a float with a stated range, and still mixes with floats. Write `distinct float range lo .. hi` when it should also be a unit of its own: it does not mix with a float, or with another range. When the range narrows a unit that already exists -- a latitude is a `Degree_T` in `-90 .. 90` -- say so with `type Latitude_T is Degree_T range -90 .. 90` (see *A unit narrowed to a range*): it goes up to its parent without a cast.
 
 ```python
 type Temperature is float range 0.0 .. 100.0
@@ -1928,7 +1928,7 @@ def describe(n: int, s: str) -> str:
 
 This is what makes an operator work on more than one type: `Velocity` has `__mul__(self, scale: float) -> Velocity`, which scales, and `__mul__(self, t: Duration_T) -> Vector`, which turns a speed into a distance, so `v * 2.0` and `v * t` are both written as they read. A distinct type is its own type here: a `Duration_T` finds the overload that names it, not the one that names `float`.
 
-- A constructor overloads the same way: `Vector(length, angle)` and `Vector(x, y)` are two `__init__`s, told apart by the types of the arguments (`Degrees_T` against `Meters_T`).
+- A constructor overloads the same way: `Vector(length, angle)` and `Vector(x, y)` are two `__init__`s, told apart by the types of the arguments (`Degree_T` against `Meters_T`).
 - A literal is no argument of any type, so one given to an overloaded name is refused on Nim -- `Vector(3.0, 4.0)` could be either -- and written with its type: `Vector(Meters_T(3.0), Meters_T(4.0))`.
 - Two defs with the same parameter types are one name defined twice, and refused.
 - Nim overloads natively. On Python the defs are renamed and a def of the name dispatches on the types of the arguments, the exact type first, then what each is an instance of; a type it cannot test (a union, a generic) matches anything. Arithmetic on a distinct value is a plain number in Python, so as a last resort a plain number matches a distinct type of numbers; write `Meters_T(a + b)` where overloads differ only in such types. Call overloads by position.

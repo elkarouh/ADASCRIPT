@@ -6,37 +6,37 @@ DOCS/check_quotes.py checks the document against it. The lines a rung refuses
 are here as comments; the Makefile's checks refuse the same mixes.
 """
 
-type Altitude_T is Natural                           # a name: documents, refuses nothing
-type Feet_T is distinct int                          # distinct: mixes with nothing else
-type Miles_T is distinct float
-type Hours_T is distinct float
-type Knots_T is Miles_T / Hours_T                    # a relation: knots x hours is miles
-type Metres_T is distinct float
-type Km_T is 1000.0 * Metres_T                       # a scale: the conversion is derived
-type Degrees_T is distinct float
-type Latitude_T is Degrees_T range -90 .. 90         # a range: values outside it are refused
-type Bearing_T is Degrees_T mod 360                  # a wrap: 370 is 10
+type Flight_Number_T is Natural                      # a name: documents, refuses nothing
+type Metre_T is distinct float                       # distinct: a basic unit, mixes with nothing else
+type Second_T is distinct float                      # another
+type Distance_T is Metre_T                           # an alias: the same type, named for the quantity
+type Duration_T is Second_T
+type Speed_T is Distance_T / Duration_T              # a relation: speed x duration is distance
+type Altitude_T is 30.48 * Distance_T                # a scale: a flight level, hundreds of feet
+type Degree_T is distinct float
+type Latitude_T is Degree_T range -90 .. 90          # a range: values outside it are refused
+type Bearing_T is Degree_T mod 360                   # a wrap: 370 is 10
 type Callsign_T is str where c: c == /^[A-Z]{3}\d{1,4}$/   # a check: any predicate
 
-let level: Altitude_T = 350
-let cruise: Feet_T = 35000
-let speed: Knots_T = 250.0
-let flown: Miles_T = speed * Hours_T(2.0)
-let leg: Km_T = 12.5
-let total: Metres_T = Metres_T(leg) + Metres_T(300.0)
+let number: Flight_Number_T = 117
+let leg: Distance_T = 12500.0
+let pace: Speed_T = 250.0
+let flown: Distance_T = pace * Duration_T(2.0)
+let level: Altitude_T = 350.0
+let height: Distance_T = Distance_T(level)
 let north: Latitude_T = Latitude_T(51.5)
 let heading: Bearing_T = Bearing_T(370.0)
 let named: Callsign_T | !ParseFailure_T = Callsign_T("BAW117")
 let unnamed: Callsign_T | !ParseFailure_T = Callsign_T("baw 117")
 
-# let wrong: Feet_T = level                -- refused: a name is not a distinct type
-# let bad: Miles_T = speed * speed         -- refused: knots times knots is not miles
-# let mixed: Metres_T = Metres_T(300.0) + leg  -- refused: metres plus kilometres
+# let wrong: Distance_T = number           -- refused: a name is not a distinct type
+# let bad: Distance_T = pace * pace        -- refused: speed times speed is not a distance
+# let mixed: Distance_T = leg + level      -- refused: metres plus flight levels
 # let off: Latitude_T = Latitude_T(95.0)   -- stops at its line: 95 is not a latitude
 
-assert level == 350 and cruise == 35000
+assert number == 117
 assert float(flown) == 500.0
-assert float(total) == 12800.0
+assert float(height) == 10668.0
 assert float(heading) == 10.0
 if named is ParseFailure_T:
     die("BAW117 is a callsign")

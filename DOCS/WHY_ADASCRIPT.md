@@ -240,22 +240,23 @@ concept, the vocabulary grows and the layers appear. If naming a concept costs
 a class, a header and a constructor, you use `float` and write a comment, and
 the layer never forms.
 
-### A `Velocity_T` is better than a `float`
+### A `Speed_T` is better than a `float`
 
-`float` says how the value is stored. `Velocity_T` says what it *is*. Consider:
+`float` says how the value is stored. `Speed_T` says what it *is*. Consider:
 
 <!-- illustrative: two signatures contrasted, neither of them with a body -->
 ```python
 def separation(a: float, b: float, c: float, d: float) -> float
-def separation(own: Position_T, other: Position_T,
-               closing: Velocity_T, horizon: Duration_T) -> Distance_T
+def separation(own: Fix_T, other: Fix_T,
+               closing: Speed_T, horizon: Duration_T) -> Distance_T
 ```
 
 The second signature is the documentation, the review checklist and the
 argument order all at once. You cannot get the arguments the wrong way round
 without it being visible on the page. And the day somebody asks "is this in
-knots or metres per second?", there is one place to look and one place to
-change.
+knots or metres per second?", there is one place to look: `Speed_T` is metres
+per second, and the knots the radar speaks are a unit of their own, a line
+away.
 
 That is the argument, and it holds even when the type is only a name. When
 putting one of them where the other belongs would be a bug, a type can be
@@ -277,23 +278,43 @@ come in a progression, from a single value to a thing with behaviour, and a
 concept moves up it only as far as it needs to.
 
 **A single value: a named type, not a bare one.** `float` says how a value
-is stored; `Velocity_T` says what it is, as argued above. So a quantity of
+is stored; `Speed_T` says what it is, as argued above. So a quantity of
 the domain is never a bare `int`, `float` or `str`: it gets a name of its
-own, and its unit is written once, next to that name. A closed set of
+own, and its unit is written once, next to that name. Only the basic units
+of the domain, a distance, a duration, an angle, are declared from nothing;
+every other quantity is made from them, so that a speed cannot be declared
+without saying what it is a speed of. A closed set of
 values — a phase of flight, a message kind, a state — is an enumeration.
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
-type Callsign_T     is str
-type Altitude_T     is Natural        # feet
-type Velocity_T     is float          # knots
-type Flight_Phase_T is enum CLIMB, CRUISE, DESCENT, HOLD
-type Latitude_T     is float          # degrees, north positive
-type Longitude_T    is float          # degrees, east positive
+const METRES_PER_KNOT: float = 1852.0 / 3600.0      # exact: a nautical mile is 1852 m
+
+type Callsign_T       is str
+type Metre_T          is distinct float              # the basic unit of length
+type Second_T         is distinct float where s: float(s) >= 0.0   # of time, never negative
+type Distance_T       is Metre_T                     # the quantity, as a signature says it
+type Duration_T       is Second_T
+type Speed_T          is Distance_T / Duration_T     # metres per second
+type Altitude_T       is 30.48 * Distance_T          # a flight level: hundreds of feet
+type Speed_in_knots_T is METRES_PER_KNOT * Speed_T   # what the radio and the radar say
+type Flight_Phase_T   is enum CLIMB, CRUISE, DESCENT, HOLD
+type Degree_T         is distinct float
+type Latitude_T       is Degree_T range -90 .. 90        # north positive
+type Longitude_T      is Degree_T range -180 .. 180      # east positive
 ```
 
+A metre, a second and a degree are the basic units, and the only ones
+declared bare. `Distance_T` and `Duration_T` are those same types under the
+names a signature wants to read, and `Second_T` says what it holds: a time is
+never negative. A speed is a distance over a duration; an altitude is the
+flight level the controller says, hundreds of feet, which is 30.48 metres of
+distance; the knots the radar reports are a multiple of the speed; and a
+latitude is an angle that is only ever between -90 and 90. None of them is a
+`float` that someone has to remember the meaning of.
+
 A bare type is still right for a value that only counts or indexes and
-means nothing more: a length, a loop index, text that is just text.
+means nothing more: a count, a loop index, text that is just text.
 
 **A few values that go together: a tuple.** A position is a latitude and a
 longitude — always both, passed around whole, and equal to another when both
@@ -314,10 +335,10 @@ above:
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
 type Aircraft_T is record:
-    callsign: Callsign_T     = ""
-    phase:    Flight_Phase_T = CLIMB
-    altitude: Altitude_T     = 0
-    speed:    Velocity_T     = 0.0
+    callsign: Callsign_T       = ""
+    phase:    Flight_Phase_T   = CLIMB
+    altitude: Altitude_T       = 0.0
+    speed:    Speed_in_knots_T = 0.0
 ```
 
 **A thing with behaviour: a class.** Once there are operations that belong
@@ -366,8 +387,8 @@ Write those down as declarations, before any logic:
 var fleet   : {Callsign_T}Aircraft_T     = {:}   # every aircraft, by callsign
 var by_phase: [Flight_Phase_T][]Callsign_T       # who is in each phase
 var watched : {}Callsign_T               = {}    # the ones above their ceiling
-var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 41000, CRUISE: 41000,
-                                            DESCENT: 41000, HOLD: 24000]
+var ceiling : [Flight_Phase_T]Altitude_T = [CLIMB: 410.0, CRUISE: 410.0,
+                                            DESCENT: 410.0, HOLD: 240.0]
 ```
 
 Each of those lines is a relation between concepts of step 1, and each one
@@ -431,14 +452,14 @@ wanted. Landings, in the order they happened:
 
 <!-- from: EXAMPLES/DOC/why_snippets.ady -->
 ```python
-type Minutes_T is Natural
-var landed: [Callsign_T]Minutes_T = {:}    # in the order they landed
+type Duration_in_minutes_T is 60.0 * Duration_T
+var landed: [Callsign_T]Duration_in_minutes_T = {:}    # in the order they landed
 
-landed["AFR22"]  = 12
-landed["BAW117"] = 3
+landed["AFR22"]  = 12.0
+landed["BAW117"] = 3.0
 ```
 
-Written `{Callsign_T}Minutes_T`, the order is simply not part of the type:
+Written `{Callsign_T}Duration_in_minutes_T`, the order is simply not part of the type:
 `{…}` promises none, so each backend is free to use whatever it has — Python
 happens to keep insertion order, Nim uses hash order — and a program that
 reads the landings back in order is relying on something it was never
@@ -516,7 +537,7 @@ let m    : {str}int           = {"a": 1}                  # a mapping from .. to
 let s    : {}str              = {"x", "y"}                # a set of
 let arr  : [Sector_T]int       = [NORTH: 1, CENTRE: 2, SOUTH: 3]  # one per member
 let opt  : ?int               = 7                         # possibly absent
-let pair : Fix_T              = (lat: 51.5, lon: -0.1)    # named tuple
+let pair : Fix_T              = (lat: Latitude_T(51.5), lon: Longitude_T(-0.1))   # named tuple
 ```
 
 They compose by stacking, with no brackets to hold open:
@@ -546,7 +567,7 @@ costs elsewhere:
 | `[Phase_T]Altitude_T` | one altitude for every phase | `Dict[Phase_T, Altitude_T]` | `array[Phase_T, Altitude_T]` |
 | `{}Callsign_T` | a set of callsigns | `Set[Callsign_T]` | `HashSet[Callsign_T]` |
 | `?Altitude_T` | an altitude, or nothing | `Optional[Altitude_T]` | `Option[Altitude_T]` |
-| `[Callsign_T]Minutes_T` | minutes per callsign, in arrival order | `dict[Callsign_T, Minutes_T]` | `OrderedTable[Callsign_T, Minutes_T]` |
+| `[Callsign_T]Duration_in_minutes_T` | minutes per callsign, in arrival order | `dict[Callsign_T, Duration_in_minutes_T]` | `OrderedTable[Callsign_T, Duration_in_minutes_T]` |
 | `(Flight_Phase_T) -> Altitude_T` | an altitude computed from a phase | `Callable[[Flight_Phase_T], Altitude_T]` | `proc(a0: Flight_Phase_T): Altitude_T` |
 
 The others all put the container's *name* first and its contents inside
@@ -623,27 +644,27 @@ line of declaration, and each catches a bug the line above it lets through:
 
 | Rung | Written | The compiler refuses | The bug it catches |
 |------|---------|----------------------|--------------------|
-| a name | `type Altitude_T is Natural` | nothing: it documents | a signature nobody can read |
-| distinct | `type Feet_T is distinct int` | mixing with any other type | feet passed as metres |
-| a relation | `type Knots_T is Miles_T / Hours_T` | arithmetic nobody declared | `speed * speed` |
-| a scale | `type Km_T is 1000.0 * Metres_T` | a unit mixed in silently | the factor applied twice |
-| a range, a wrap | `type Latitude_T is Degrees_T range -90 .. 90` | values outside the set | a latitude of 95, a bearing of 370 |
+| a name | `type Flight_Number_T is Natural` | nothing: it documents | a signature nobody can read |
+| distinct | `type Metre_T is distinct float` | mixing with any other type | a duration passed where a distance belongs |
+| a relation | `type Speed_T is Distance_T / Duration_T` | arithmetic nobody declared | `speed * speed` taken for a distance |
+| a scale | `type Altitude_T is 30.48 * Distance_T` | a unit mixed in silently | the factor applied twice |
+| a range, a wrap | `type Latitude_T is Degree_T range -90 .. 90` | values outside the set | a latitude of 95, a bearing of 370 |
 | a check | `type Callsign_T is str where c: ...` | any value failing a predicate | a callsign that is not one |
 
 One domain, all the rungs, as the program writes them:
 
 <!-- from: EXAMPLES/DOC/why_ladder_snippets.ady -->
 ```python
-type Altitude_T is Natural                           # a name: documents, refuses nothing
-type Feet_T is distinct int                          # distinct: mixes with nothing else
-type Miles_T is distinct float
-type Hours_T is distinct float
-type Knots_T is Miles_T / Hours_T                    # a relation: knots x hours is miles
-type Metres_T is distinct float
-type Km_T is 1000.0 * Metres_T                       # a scale: the conversion is derived
-type Degrees_T is distinct float
-type Latitude_T is Degrees_T range -90 .. 90         # a range: values outside it are refused
-type Bearing_T is Degrees_T mod 360                  # a wrap: 370 is 10
+type Flight_Number_T is Natural                      # a name: documents, refuses nothing
+type Metre_T is distinct float                       # distinct: a basic unit, mixes with nothing else
+type Second_T is distinct float                      # another
+type Distance_T is Metre_T                           # an alias: the same type, named for the quantity
+type Duration_T is Second_T
+type Speed_T is Distance_T / Duration_T              # a relation: speed x duration is distance
+type Altitude_T is 30.48 * Distance_T                # a scale: a flight level, hundreds of feet
+type Degree_T is distinct float
+type Latitude_T is Degree_T range -90 .. 90          # a range: values outside it are refused
+type Bearing_T is Degree_T mod 360                   # a wrap: 370 is 10
 type Callsign_T is str where c: c == /^[A-Z]{3}\d{1,4}$/   # a check: any predicate
 ```
 
@@ -665,48 +686,63 @@ enforcement.**
 <!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
 ```python
 type Velocity_T is float
-type Distance_T is float
+type Height_T is float
 
 let v: Velocity_T = 250.0
-let d: Distance_T = v        # an alias: compiles, on both backends
+let h: Height_T = v          # an alias: compiles, on both backends
 ```
 
 `Velocity_T` gives you the name in the signature, in the review and in the
 grep, and by the argument above that is most of the benefit. It does not
-give you the compiler refusing to put knots where miles belong. `distinct`
+give you the compiler refusing to put a speed where a height belongs. `distinct`
 does:
 
 <!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
 ```python
-type Miles_T is distinct float    # nautical miles
-type Hours_T is distinct float    # hours
-type Knots_T is Miles_T / Hours_T # knots: a unit made from two others
+type Metre_T is distinct float           # a basic unit: metres
+type Second_T is distinct float          # another: seconds
+type Distance_T is Metre_T               # the quantity, named where a signature reads it
+type Duration_T is Second_T
+type Speed_T is Distance_T / Duration_T  # metres per second: a unit made from two others
 
-def flown(speed: Knots_T, time: Hours_T) -> Miles_T:
-    return speed * time           # Knots x Hours is Miles: the type says so
+def flown(speed: Speed_T, time: Duration_T) -> Distance_T:
+    return speed * time           # Speed x Duration is Distance: the type says so
 
-let speed: Knots_T = 250.0        # a literal takes the type it is given to
-let far: Miles_T = flown(speed, 2.0)
-# let wrong: Miles_T = speed      -- refused, on both backends
-# let bad: Miles_T = speed * speed  -- refused: knots times knots is not miles
+let speed: Speed_T = 250.0        # a literal takes the type it is given to
+let far: Distance_T = flown(speed, 2.0)
+# let wrong: Distance_T = speed   -- refused, on both backends
+# let bad: Distance_T = speed * speed  -- refused: speed times speed is not a distance
 ```
 
-A `Miles_T` keeps everything a `float` can do — with another `Miles_T`. It
-mixes with nothing else: not a `float` variable, not a `Knots_T`, not an
-`Hours_T`. It is Ada's derived type, and like Ada it lets a literal take
+A `Metre_T` keeps everything a `float` can do — with another `Metre_T`. It
+mixes with nothing else: not a `float` variable, not a `Speed_T`, not a
+`Second_T`. It is Ada's derived type, and like Ada it lets a literal take
 whatever type its context asks for, so `250.0` needs no ceremony.
 
-The third line is the one that matters. A unit is not only a name that
+Two of those lines are aliases, and they are there for the reader.
+`Metre_T` says how the quantity is measured, which is what the one line that
+declares it needs. `Distance_T` says what it is, which is what a signature
+needs: `flown(speed, time) -> Distance_T` reads as physics, and the day the
+program counts in something else only the declaration changes. The alias is
+the same type under a second name, so there is nothing to convert, and a
+`Distance_T` goes where a `Metre_T` is wanted, in either direction. What is
+declared from nothing is only the basic units, one `distinct float` for each
+measure; a speed, an altitude or a latitude is always made from them, so
+that no quantity in the program is a bare `float` that someone has to
+remember the meaning of. The alias is read within the module that declares
+it.
+
+The fifth line is the one that matters. A unit is not only a name that
 refuses to mix; it is a *relation*, and most of what goes wrong with
-quantities goes wrong when they meet. `type Knots_T is Miles_T / Hours_T`
-says what dividing miles by hours makes, and everything else follows from it:
-knots times hours is miles, in either order, and miles over knots is hours.
+quantities goes wrong when they meet. `type Speed_T is Distance_T / Duration_T`
+says what dividing a distance by a duration makes, and everything else follows from it:
+speed times duration is distance, in either order, and distance over speed is duration.
 `flown` needs no `float()` on the way in and no conversion on the way out,
 and the compiler checks the one line where the units meet, which is the line
 a reviewer would read anyway. What it does not say does not exist: `speed *
-speed` is refused, because knots times knots is not knots, and `miles *
-hours` because nobody declared a mile-hour. Multiplying by a plain number
-scales, so `speed * 2.0` is still knots.
+speed` is refused, because speed times speed is not a speed, and `distance *
+duration` because nobody declared a metre-second. Multiplying by a plain number
+scales, so `speed * 2.0` is still a speed.
 
 ### Money, in dollars and euros
 
@@ -755,7 +791,7 @@ Nim's ecosystem has libraries that do this for every combination
 automatically, tracking the exponent of each base unit. I chose the other
 end deliberately. Here every combination a program uses has a name, and the
 name is in the signature, in the grep and in the compiler's message —
-`Velocity_T`, not an exponent vector. The price is writing down the
+`Speed_T`, not an exponent vector. The price is writing down the
 combinations, which a program has to name to be read anyway, and the gain is
 that there is nothing to learn beyond `type C is A / B`.
 
@@ -952,47 +988,47 @@ and the rounding policy is a visible call. One honest limit: scaled units are
 Nim only. A conversion depends on the type of its argument, which the Python
 backend cannot always see, so `ady2py` refuses the declaration with a message
 saying the program is built by `ady2nim` only, and `make test` checks that it
-does. Plain `distinct` units and derived units such as `Knots_T` work on both.
+does. Plain `distinct` units and derived units such as `Speed_T` work on both.
 
 ### Narrowed and wrapping ranges
 
 A unit can also be narrowed to a range, and a range can be made to wrap. A
-latitude is a `Degrees_T` that is only ever between -90 and 90, and it goes up
-to a `Degrees_T` with no cast but comes down only through a checked
+latitude is a `Degree_T` that is only ever between -90 and 90, and it goes up
+to a `Degree_T` with no cast but comes down only through a checked
 conversion:
 
 <!-- from: EXAMPLES/test_narrowed_type.ady -->
 ```python
-type Degrees_T is distinct float
-type Latitude_T is Degrees_T range -90 .. 90
-type Longitude_T is Degrees_T range -180 .. 180
+type Degree_T is distinct float
+type Latitude_T is Degree_T range -90 .. 90
+type Longitude_T is Degree_T range -180 .. 180
 ```
 
 <!-- from: EXAMPLES/test_narrowed_type.ady -->
 ```python
     let lat: Latitude_T = Latitude_T(45.5)
-    let wide: Degrees_T = lat                  # up to the parent: no cast
-    let sum: Degrees_T = lat + Degrees_T(1.0)  # arithmetic is the parent's
+    let wide: Degree_T = lat                  # up to the parent: no cast
+    let sum: Degree_T = lat + Degree_T(1.0)  # arithmetic is the parent's
     let back: Latitude_T = Latitude_T(sum)     # down: checked
 ```
 
 Latitude and longitude are siblings, so a point built with the two swapped does
-not compile, which two plain `Degrees_T` would have let through. A bearing is
+not compile, which two plain `Degree_T` would have let through. A bearing is
 the other case: 360 is north again, so the type wraps rather than refuses, and
 the `modulo` helper that every bearing calculation carries is gone:
 
 <!-- from: EXAMPLES/test_mod_type.ady -->
 ```python
-type Degrees_T is distinct float
-type Bearing_T is Degrees_T mod 360
+type Degree_T is distinct float
+type Bearing_T is Degree_T mod 360
 ```
 
 <!-- from: EXAMPLES/test_mod_type.ady -->
 ```python
     let b: Bearing_T = Bearing_T(-10.0)
     show(b)                                    # up to the parent, no cast
-    show(turn(b, Degrees_T(30.0)))
-    show(turn(Bearing_T(350.0), Degrees_T(20.0)))
+    show(turn(b, Degree_T(30.0)))
+    show(turn(Bearing_T(350.0), Degree_T(20.0)))
 ```
 
 That prints 350.0, 20.0 and 10.0, on both backends, with the sign of the
@@ -1174,11 +1210,14 @@ to know the order before reading the declarations.
 
 1. **Declare the base units distinct, once, in the unit the program computes
    in.** Metres, seconds, kilograms: one `distinct float` each, with the unit
-   in a comment. Give a base unit the check it really has: a duration is never
-   negative, so `Duration_T` says `where d: float(d) >= 0.0`, and a negative
-   duration stops the program where it is made. (`range` says the same for
-   plain bounds; `where` takes any test.) Nothing else in the program is a bare `float` that means a
-   length.
+   in a comment, and nothing else in the program is a bare `float` that means
+   a length. A program that wants its signatures to read as quantities names
+   the unit for how it is measured and the alias for what it is, `Distance_T
+   is Metre_T`; the Orbiter below names its basic units for the quantity and
+   needs no alias. Give a base unit the check it really has: a duration is
+   never negative, so `Duration_T` says `where d: float(d) >= 0.0`, and a
+   negative duration stops the program where it is made. (`range` says the
+   same for plain bounds; `where` takes any test.)
 2. **Derive the rest from them.** A speed is `Distance_T / Duration_T`, an impulse
    is `Mass_T * Speed_T`. Do not declare a speed as a second `distinct float`:
    then nothing relates it to the distance and the time it came from, and the
@@ -1494,9 +1533,9 @@ Python gets there only by a library whose function names carry the meaning.
 
 **"Why not Ada?"** Ada has the typing and I took it. What it asks in return is
 ceremony and a build, and its derived types need an operator written by hand
-for every unit relation: knots times hours is miles only because somebody wrote
-`function "*"` for that pair. Here the relation is the line `type Knots_T is
-Miles_T / Hours_T`, and the operators follow from it. Adascript is Ada's typing
+for every unit relation: a speed times a duration is a distance only because somebody wrote
+`function "*"` for that pair. Here the relation is the line `type Speed_T is
+Distance_T / Duration_T`, and the operators follow from it. Adascript is Ada's typing
 in Python's syntax, and it also produces Python.
 
 **"Why not F# units of measure, or a units library?"** F# is the closest

@@ -8,7 +8,7 @@ Distances are in metres, angles in degrees; a time turns a Vector into a Velocit
 and a Velocity into an Acceleration, by `/`, and back by `*`.
 """
 
-from map_base import Accel_T, AngMom_T, Degrees_T, Duration_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
+from map_base import Accel_T, AngMom_T, Degree_T, Duration_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
 nimport math
 from math nimport floor, sqrt, round, hypot
 
@@ -26,7 +26,7 @@ class Vector:
     var x: Meters_T
     var y: Meters_T
 
-    def __init__(self, length: Meters_T, angle: Degrees_T) -> None:
+    def __init__(self, length: Meters_T, angle: Degree_T) -> None:
         let radians: float = float(Radians_T(angle))
         self.x = Meters_T(float(length) * cos(radians))
         self.y = Meters_T(float(length) * sin(radians))
@@ -41,13 +41,13 @@ class Vector:
         """Magnitude of the vector."""
         Meters_T(hypot(float(self.x), float(self.y)))
 
-    def angle(self) -> Degrees_T:
+    def angle(self) -> Degree_T:
         """Direction of the vector."""
-        Degrees_T(arctan2(float(self.y), float(self.x)))
+        Degree_T(arctan2(float(self.y), float(self.x)))
 
     # -- transformations -----------------------------------------------------
 
-    def rotated_by(self, relative_angle: Degrees_T) -> Vector:
+    def rotated_by(self, relative_angle: Degree_T) -> Vector:
         """A new vector rotated counter-clockwise by the given angle."""
         Vector(self.length(), self.angle() + relative_angle)
 
@@ -64,7 +64,7 @@ class Vector:
 
     def normal(self) -> Vector:
         """The unit normal: the unit vector turned 90 degrees counter-clockwise."""
-        self.unit().rotated_by(Degrees_T(90.0))
+        self.unit().rotated_by(Degree_T(90.0))
 
     # -- products / projections ----------------------------------------------
 
@@ -141,7 +141,7 @@ class Position:
         """The displacement vector from OTHER to SELF."""
         Vector(self.x - other.x, self.y - other.y)
 
-    def rotate_around_point(self, pivot: Position, angle: Degrees_T) -> Position:
+    def rotate_around_point(self, pivot: Position, angle: Degree_T) -> Position:
         """This position rotated counter-clockwise around PIVOT."""
         let vec: Vector = (self - pivot).rotated_by(angle)
         pivot + vec
@@ -166,7 +166,7 @@ class Velocity:
     var x: Speed_T
     var y: Speed_T
 
-    def __init__(self, speed: Speed_T, angle: Degrees_T) -> None:
+    def __init__(self, speed: Speed_T, angle: Degree_T) -> None:
         let radians: float = float(Radians_T(angle))
         self.x = Speed_T(float(speed) * cos(radians))
         self.y = Speed_T(float(speed) * sin(radians))
@@ -179,11 +179,11 @@ class Velocity:
         """Magnitude of the velocity."""
         Speed_T(hypot(float(self.x), float(self.y)))
 
-    def angle(self) -> Degrees_T:
+    def angle(self) -> Degree_T:
         """Direction of the velocity, counter-clockwise from the x axis."""
-        Degrees_T(arctan2(float(self.y), float(self.x)))
+        Degree_T(arctan2(float(self.y), float(self.x)))
 
-    def rotated_by(self, relative_angle: Degrees_T) -> Velocity:
+    def rotated_by(self, relative_angle: Degree_T) -> Velocity:
         Velocity(self.speed(), self.angle() + relative_angle)
 
     def direction(self) -> Vector:
@@ -231,7 +231,7 @@ class Acceleration:
     var x: Accel_T
     var y: Accel_T
 
-    def __init__(self, magnitude: Accel_T, angle: Degrees_T) -> None:
+    def __init__(self, magnitude: Accel_T, angle: Degree_T) -> None:
         let radians: float = float(Radians_T(angle))
         self.x = Accel_T(float(magnitude) * cos(radians))
         self.y = Accel_T(float(magnitude) * sin(radians))
@@ -243,8 +243,8 @@ class Acceleration:
     def magnitude(self) -> Accel_T:
         Accel_T(hypot(float(self.x), float(self.y)))
 
-    def angle(self) -> Degrees_T:
-        Degrees_T(arctan2(float(self.y), float(self.x)))
+    def angle(self) -> Degree_T:
+        Degree_T(arctan2(float(self.y), float(self.x)))
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""

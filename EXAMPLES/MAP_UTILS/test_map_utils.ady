@@ -11,7 +11,7 @@ that does not parse is a failure value -- and the two methods the original got
 wrong (Vector.normal raised TypeError; Vector.projection returned a plain
 complex).
 """
-from map_base import Accel_T, Axis_T, BAD_COORDINATE_PAIR, BAD_DMS, Bearing_T, Degrees_T, Duration_T, GeoErr_T, GeoFailure_T, Kilometers_T, LATITUDE, LONGITUDE, LatLong_T, Latitude_T, Longitude_T, Meters_T, OUT_OF_RANGE, Speed_T, SquareMeters_T, dd2dms, dec2human_latlong, dms2dec, human_latlong2dec, modulo
+from map_base import Accel_T, Axis_T, BAD_COORDINATE_PAIR, BAD_DMS, Bearing_T, Degree_T, Duration_T, GeoErr_T, GeoFailure_T, Kilometers_T, LATITUDE, LONGITUDE, LatLong_T, Latitude_T, Longitude_T, Meters_T, OUT_OF_RANGE, Speed_T, SquareMeters_T, dd2dms, dec2human_latlong, dms2dec, human_latlong2dec, modulo
 from map_flat import Acceleration, Position, Vector, Velocity
 from map_geo import GeoPoint, GeoVector, geo_vector_from_components
 
@@ -20,7 +20,7 @@ def close(actual: float, expected: float, tol: float = 1e-9) -> bool:
 
 def decimal(text: str, axis: Axis_T) -> float:
     """dms2dec as a plain number; the tests of a failure are further down."""
-    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    let r: Degree_T | !GeoFailure_T = dms2dec(text, axis)
     if r is GeoFailure_T:
         return -999.0
     return float(r)
@@ -69,13 +69,13 @@ assert dec2human_latlong(50.9013889, 4.4844444) == "505405N 0042904E"
 
 def dms_refused(text: str, axis: Axis_T, why: GeoErr_T) -> bool:
     """Whether dms2dec refused TEXT, and for the reason WHY."""
-    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    let r: Degree_T | !GeoFailure_T = dms2dec(text, axis)
     if r is GeoFailure_T:
         return r.kind == why
     return False
 
 def dms_accepted(text: str, axis: Axis_T) -> bool:
-    let r: Degrees_T | !GeoFailure_T = dms2dec(text, axis)
+    let r: Degree_T | !GeoFailure_T = dms2dec(text, axis)
     return r is not GeoFailure_T
 
 def pair_refused(text: str, why: GeoErr_T) -> bool:
@@ -110,8 +110,8 @@ assert decimal("0042904-", LONGITUDE) < 0
 
 # ---- flat-plane geometry ------------------------------------------------------
 
-let v1: Vector = Vector(Meters_T(1.0), Degrees_T(30.0)) * 5.0
-let v2: Vector = Vector(Meters_T(2.0), Degrees_T(40.0)) * 5.0
+let v1: Vector = Vector(Meters_T(1.0), Degree_T(30.0)) * 5.0
+let v2: Vector = Vector(Meters_T(2.0), Degree_T(40.0)) * 5.0
 assert close(float(v1.x), 4.330127018922194) and close(float(v1.y), 2.4999999999999996)
 assert close(float(v1.length()), 5.0) and close(float(v1.angle()), 30.0)
 assert close(float(v2.x), 7.660444431189779) and close(float(v2.y), 6.427876096865392)
@@ -150,7 +150,7 @@ let b: Position = Position(4.0, 6.0)
 let ab: Vector = b - a
 assert close(float(ab.x), 3.0) and close(float(ab.y), 4.0)
 assert close(float(ab.length()), 5.0) and close(float(ab.angle()), 53.13010235415597)
-let moved: Position = a + Vector(Meters_T(10.0), Degrees_T(90.0))
+let moved: Position = a + Vector(Meters_T(10.0), Degree_T(90.0))
 assert close(float(moved.x), 1.0) and close(float(moved.y), 12.0)
 let corner: Position = Position(5.0, 5.0)
 let pivot: Position = Position(1.0, 1.0)
@@ -231,14 +231,14 @@ assert close(modulo(360.0, 360.0), 0.0)
 # ---- velocity and acceleration: the metres of a Vector, over time ------------
 
 let ten_seconds: Duration_T = 10.0
-let heading: Velocity = Velocity(Speed_T(5.0), Degrees_T(90.0))                              # 5 m/s, due +y
+let heading: Velocity = Velocity(Speed_T(5.0), Degree_T(90.0))                              # 5 m/s, due +y
 assert close(float(heading.speed()), 5.0) and close(float(heading.angle()), 90.0)
 assert close(float(heading.x), 0.0, 1e-9) and close(float(heading.y), 5.0)
 let covered: Vector = heading * ten_seconds                          # speed * time is a distance
 assert close(float(covered.length()), 50.0) and close(float(covered.angle()), 90.0)
 let recovered: Velocity = covered / ten_seconds                       # and a distance over time a speed
 assert close(float(recovered.speed()), 5.0) and close(float(recovered.angle()), 90.0)
-let push: Acceleration = Acceleration(Accel_T(2.0), Degrees_T(0.0))                          # 2 m/s^2 along +x
+let push: Acceleration = Acceleration(Accel_T(2.0), Degree_T(0.0))                          # 2 m/s^2 along +x
 let gained: Velocity = push * ten_seconds
 assert close(float(gained.x), 20.0) and close(float(gained.y), 0.0, 1e-9)
 assert close(float((gained / ten_seconds).magnitude()), 2.0)

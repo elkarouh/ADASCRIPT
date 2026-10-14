@@ -1,23 +1,23 @@
 # A mod type wraps where a range type refuses. `type Slot_T is mod 8` is a whole number
-# that is always 0 .. 7; `type Bearing_T is Degrees_T mod 360` is a Degrees_T that is
+# that is always 0 .. 7; `type Bearing_T is Degree_T mod 360` is a Degree_T that is
 # always 0 .. 360. Making one, and + - * on it, wrap, with the sign of the modulus as
 # Python's % has it. A mod type goes up to its parent as it is.
 
 const CAPACITY: int = 8
 const FULL_TURN: float = 360.0
 type Slot_T is mod 8
-type Degrees_T is distinct float
-type Bearing_T is Degrees_T mod 360
+type Degree_T is distinct float
+type Bearing_T is Degree_T mod 360
 type Index_T is mod CAPACITY
-type Heading_T is Degrees_T mod FULL_TURN
+type Heading_T is Degree_T mod FULL_TURN
 
 def next_slot(s: Slot_T) -> Slot_T:
     return s + Slot_T(1)
 
-def turn(b: Bearing_T, by: Degrees_T) -> Bearing_T:
+def turn(b: Bearing_T, by: Degree_T) -> Bearing_T:
     return b + by
 
-def show(d: Degrees_T):
+def show(d: Degree_T):
     print(f"{float(d):.1f}")
 
 def main():
@@ -33,8 +33,8 @@ def main():
     print(int(i))
     let b: Bearing_T = Bearing_T(-10.0)
     show(b)                                    # up to the parent, no cast
-    show(turn(b, Degrees_T(30.0)))
-    show(turn(Bearing_T(350.0), Degrees_T(20.0)))
+    show(turn(b, Degree_T(30.0)))
+    show(turn(Bearing_T(350.0), Degree_T(20.0)))
     show(Bearing_T(725.5))
     let c: Bearing_T = 400.0                   # a literal takes the declared type
     show(c)

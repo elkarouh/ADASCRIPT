@@ -498,6 +498,44 @@ def scan_consts(code):
 _CLASS_DECL = _re_dup.compile(r"^[ \t]*class[ \t]+([A-Za-z_]\w*)", _re_dup.MULTILINE)
 
 
+def resolve_unit_aliases(code, known=()):
+    """CODE with every alias of a unit written as the unit. `type Distance_T is
+    Metre_T`, Metre_T being `distinct float` or a unit made from others, names
+    the same type, so a derived unit (`Speed_T is Distance_T / Duration_T`), a
+    scaled one and a literal take it as the unit they are: the uses in this
+    module are rewritten, and the alias line stays, so that the name is there
+    for a module that nimports this one. KNOWN is the units an imported
+    module declared."""
+    from ady_declarations import _is_unit_decl
+    from ady_modules import _blank
+    decls = {n: r for n, r in scan_type_decls(code).items() if r is not None}
+    units = set(known) | {n for n, r in decls.items() if _is_unit_decl(r)}
+    alias = {}
+    changed = True
+    while changed:
+        changed = False
+        for n, r in decls.items():
+            if n not in alias and r.isidentifier() and r != n and (r in units or r in alias):
+                alias[n] = alias.get(r, r)
+                changed = True
+    if not alias:
+        return code
+    text = _blank(code)
+    decl_lines = {m.start() for m in _ALIAS_DECL.finditer(text) if m.group(1) in alias}
+    out, last = [], 0
+    for m in _re_dup.finditer(r"(?<![\w.$])[A-Za-z_]\w*\b", text):
+        if m.group(0) not in alias:
+            continue
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        if line_start in decl_lines:
+            continue
+        out.append(code[last:m.start()])
+        out.append(alias[m.group(0)])
+        last = m.end()
+    out.append(code[last:])
+    return "".join(out)
+
+
 def scan_type_decls(code):
     """Every type CODE declares, as {name: its definition, as written}; a
     class maps to None. Read by ordered_map_key to tell `[Color_T]int`, an
@@ -894,13 +932,13 @@ distinct_def = ikw("distinct") + type_annotation
 distinct_float_range_def = fw("distinct_float_range_def")
 distinct_float_range_def = ikw("distinct") + float_range_def
 # narrowed_def: P range LO .. HI -- a distinct type narrowed to part of its
-# parent's values (`type Latitude_T is Degrees_T range -90 .. 90`). It goes up
+# parent's values (`type Latitude_T is Degree_T range -90 .. 90`). It goes up
 # to P without a cast, is refused beside a sibling, and comes down from P by
 # an explicit, range-checked `Latitude_T(d)`. See ady_declarations.narrowed_types.
 narrowed_def = fw("narrowed_def")
 narrowed_def = IDENTIFIER + literal("range") + float_bound + (RANGE_EXCL_OP | RANGE_OP) + float_bound
 # mod_def: mod M -- a whole number that wraps, `type Slot_T is mod 8`; and
-# `P mod M`, a distinct type P that wraps, `type Bearing_T is Degrees_T mod 360`.
+# `P mod M`, a distinct type P that wraps, `type Bearing_T is Degree_T mod 360`.
 # See ady_declarations.mod_types.
 mod_def = fw("mod_def")
 mod_def = ikw("mod") + (NUMBER | IDENTIFIER)

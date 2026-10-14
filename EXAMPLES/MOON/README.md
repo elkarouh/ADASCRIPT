@@ -224,12 +224,12 @@ the six plots have the same shape as `moon_mission.png`. Matplotlib is needed to
 
 ## Units
 
-No bare floats in signatures. From map_base and map_flat: `Meters_T`, `Degrees_T`, `SquareMeters_T`, `Vector`,
-`Position`, `Kilometers_T` and `Radians_T` (scaled units: `Kilometers_T(m)`, `Degrees_T(r)`), `modulo`, and `rotated_by` / `angle` / `unit` / `cross` for the rotations and
+No bare floats in signatures. From map_base and map_flat: `Meters_T`, `Degree_T`, `SquareMeters_T`, `Vector`,
+`Position`, `Kilometers_T` and `Radians_T` (scaled units: `Kilometers_T(m)`, `Degree_T(r)`), `modulo`, and `rotated_by` / `angle` / `unit` / `cross` for the rotations and
 signs the original did with `rot`, `arctan2` and `np.sign`. Declared here: `Mass_T`, `Duration_T`
 (distinct), `Speed_T`, `Accel_T`, `Force_T`, `Mu_T` (a body's GM), `AngularRate_T` and `AngMom_T` (derived).
 The rocket equation is `ve = isp * G0` (a `Speed_T`), `used = m0 * (1 - exp(-dv / ve))` (a `Mass_T`),
-gravity is `MU_MOON / (r * r)` (an `Accel_T`), the Moon's phase is a `Degrees_T` advancing at an
+gravity is `MU_MOON / (r * r)` (an `Accel_T`), the Moon's phase is a `Degree_T` advancing at an
 `AngularRate_T`, and a burn's delta-v cannot be added to a mass.
 
 Dot and cross products keep their unit: `r . v` and `r x v` are `AngMom_T` (m^2/s), `along` divides one by

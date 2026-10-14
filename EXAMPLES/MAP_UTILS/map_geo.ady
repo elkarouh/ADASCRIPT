@@ -24,7 +24,7 @@ What changed in the translation
 -------------------------------
 * No bare floats.  The original mixes metres (the flat plane, the Vincenty
   internals) and kilometres (the geodetic interface); here a distance is
-  `Meters_T` or `Kilometers_T`, an angle of any size is `Degrees_T`, a compass
+  `Meters_T` or `Kilometers_T`, an angle of any size is `Degree_T`, a compass
   direction is a `Bearing_T`, and a position is a `Latitude_T` / `Longitude_T`
   (two types, so that the two cannot be swapped).
   `Meters_T * Meters_T` is a `SquareMeters_T`, which is what a dot product is.
@@ -51,7 +51,7 @@ What changed in the translation
   demo.  The demo's assertions and the flat-plane prints are kept.
 """
 
-from map_base import Bearing_T, Degrees_T, GeoFailure_T, Kilometers_T, Latitude_T, Longitude_T, Meters_T, Radians_T, SquareMeters_T, Unit_T, arcsin, arctan, arctan2, cos, dec2human_latlong, human_latlong2dec, modulo, sin, tan
+from map_base import Bearing_T, Degree_T, GeoFailure_T, Kilometers_T, Latitude_T, Longitude_T, Meters_T, Radians_T, SquareMeters_T, Unit_T, arcsin, arctan, arctan2, cos, dec2human_latlong, human_latlong2dec, modulo, sin, tan
 from map_flat import Vector
 nimport math
 from math nimport floor, sqrt, round, hypot
@@ -70,10 +70,10 @@ const WGS84_B: Meters_T = Meters_T(6378137.0 * (1.0 - 1.0 / 298.257223563))   # 
 
 type Direct_T is record:
     latitude:  Latitude_T
-    longitude: Degrees_T         # not wrapped: lon1 + L can leave (-180, 180]
+    longitude: Degree_T         # not wrapped: lon1 + L can leave (-180, 180]
     azimuth:   Bearing_T         # the reverse azimuth
 
-def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: Meters_T) -> Direct_T:
+def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degree_T, dist: Meters_T) -> Direct_T:
     """Given a start point, an azimuth and a distance, the end point and the
     reverse azimuth."""
     let a: float = float(WGS84_A)
@@ -133,7 +133,7 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degrees_T, dist: M
     let lon2: Radians_T = lon1_rad + big_l
     let az2: Radians_T = arctan2(sin_alpha, -sin_u1 * sin_sigma + cos_u1 * cos_sigma * cos_az1)
 
-    Direct_T(Latitude_T(Degrees_T(lat2)), Degrees_T(lon2), Bearing_T(Degrees_T(az2)))
+    Direct_T(Latitude_T(Degree_T(lat2)), Degree_T(lon2), Bearing_T(Degree_T(az2)))
 
 # ---------------------------------------------------------------------------
 # Vincenty inverse formula
@@ -196,10 +196,10 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
     ))
     let dist_m: float = b * big_a * float(sigma - d_sigma)
 
-    var az1: Degrees_T = Degrees_T(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))
+    var az1: Degree_T = Degree_T(arctan2(cos(u2) * sin(lon), cos(u1) * sin(u2) - sin(u1) * cos(u2) * cos(lon)))
     if az1 < 0:
         az1 += 360
-    let az2: Degrees_T = Degrees_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
+    let az2: Degree_T = Degree_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
 
     Inverse_T(Meters_T(dist_m), Bearing_T(az1), Bearing_T(az2))
 
@@ -222,7 +222,7 @@ class GeoVector:
     var north: Meters_T
     var east:  Meters_T
 
-    def __init__(self, distance: Kilometers_T, bearing: Degrees_T) -> None:
+    def __init__(self, distance: Kilometers_T, bearing: Degree_T) -> None:
         """A displacement of DISTANCE along BEARING (clockwise from true north)."""
         let radians: float = float(Radians_T(bearing))
         let metres: float = float(distance) * 1000.0
@@ -236,13 +236,13 @@ class GeoVector:
         """Length of the vector in kilometres."""
         Kilometers_T(self.length())
 
-    def heading(self) -> Degrees_T:
+    def heading(self) -> Degree_T:
         """The bearing as the arctangent gives it: between -180 and 180."""
-        Degrees_T(arctan2(float(self.east), float(self.north)))
+        Degree_T(arctan2(float(self.east), float(self.north)))
 
     def phase(self) -> Bearing_T:
         """Bearing, clockwise from north, in [0, 360)."""
-        let around: Degrees_T = self.heading()
+        let around: Degree_T = self.heading()
         Bearing_T(around)
 
     def east_km(self) -> Kilometers_T:
@@ -251,11 +251,11 @@ class GeoVector:
     def north_km(self) -> Kilometers_T:
         Kilometers_T(self.north)
 
-    def turn(self, angle: Degrees_T) -> GeoVector:
+    def turn(self, angle: Degree_T) -> GeoVector:
         """A new vector turned by ANGLE."""
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        GeoVector(km, Degrees_T(bearing) + angle)
+        GeoVector(km, Degree_T(bearing) + angle)
 
     def __mul__(self, other: GeoVector) -> SquareMeters_T:
         self.north * other.north + self.east * other.east
@@ -267,12 +267,12 @@ class GeoVector:
     def __truediv__(self, scale: float) -> GeoVector:
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        GeoVector(km / scale, Degrees_T(bearing))
+        GeoVector(km / scale, Degree_T(bearing))
 
     def __mul__(self, scale: float) -> GeoVector:
         let km: Kilometers_T = self.magnitude()
         let bearing: Bearing_T = self.phase()
-        GeoVector(km * scale, Degrees_T(bearing))
+        GeoVector(km * scale, Degree_T(bearing))
 
     def __str__(self) -> str:
         let km: Kilometers_T = self.magnitude()
@@ -289,8 +289,8 @@ def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVe
     let n: float = float(north) * 1000.0
     let e: float = float(east) * 1000.0
     let distance: float = hypot(n, e) / 1000.0
-    let bearing: float = modulo(float(Degrees_T(arctan2(e, n))), 360.0)
-    GeoVector(Kilometers_T(distance), Degrees_T(bearing))
+    let bearing: float = modulo(float(Degree_T(arctan2(e, n))), 360.0)
+    GeoVector(Kilometers_T(distance), Degree_T(bearing))
 
 # ---------------------------------------------------------------------------
 # Geodetic geometry -- GeoPoint
@@ -333,9 +333,9 @@ class GeoPoint:
     def __sub__(self, other: GeoPoint) -> GeoVector:
         """The geodetic displacement from OTHER to SELF (Vincenty inverse formula)."""
         let way: Inverse_T = vincenty_inverse(self.latitude, self.longitude, other.latitude, other.longitude)
-        GeoVector(Kilometers_T(way.distance), Degrees_T(float(way.reverse)))
+        GeoVector(Kilometers_T(way.distance), Degree_T(float(way.reverse)))
 
-    def rotate_around_point(self, pivot: GeoPoint, angle: Degrees_T) -> GeoPoint:
+    def rotate_around_point(self, pivot: GeoPoint, angle: Degree_T) -> GeoPoint:
         """This point turned by ANGLE around PIVOT."""
         let vec: GeoVector = self - pivot
         pivot + vec.turn(angle)
@@ -452,8 +452,8 @@ def demo():
     print "All point-in-region assertions passed."
 
     # -- flat-plane Vector demo ----------------------------------------------
-    let v1: Vector = Vector(Meters_T(1.0), Degrees_T(30.0)) * 5.0
-    let v2: Vector = Vector(Meters_T(2.0), Degrees_T(40.0)) * 5.0
+    let v1: Vector = Vector(Meters_T(1.0), Degree_T(30.0)) * 5.0
+    let v2: Vector = Vector(Meters_T(2.0), Degree_T(40.0)) * 5.0
     print ""
     print f"v1 = {v1}"
     print f"v2 = {v2}"

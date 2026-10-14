@@ -10,7 +10,7 @@ the Vincenty direct and inverse formulae, so that `GeoPoint + GeoVector` and
 trigonometry on `Radians_T` and the DMS conversions, `map_flat` the flat-plane `Vector`, `Position`,
 `Velocity` and `Acceleration`, and `map_geo` Vincenty, `GeoVector`, `GeoPoint` and the demo.
 What they change is listed at the top of `map_geo.ady`: no bare floats (`Meters_T`,
-`Kilometers_T`, `Degrees_T`, `Bearing_T`, `Latitude_T` and `Longitude_T`, `Degrees_T` narrowed to -90 .. 90 and -180 .. 180),
+`Kilometers_T`, `Degree_T`, `Bearing_T`, `Latitude_T` and `Longitude_T`, `Degree_T` narrowed to -90 .. 90 and -180 .. 180),
 enums where the original had strings and a flag (`Axis_T` for latitude or
 longitude, `Hemisphere_T` for the letter a DMS string ends in, `DmsPart_T` for
 which field did not parse), a DMS string that does not parse -- or ends in a letter

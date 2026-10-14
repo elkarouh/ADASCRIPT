@@ -3,32 +3,34 @@
 a scalar type alias is documentation, a distinct type is enforcement, and a
 unit made from two others says what multiplying and dividing them means.
 
-Apart from why_snippets.ady because it declares Velocity_T as the
-document shows it here, which that file already declares for its record,
-and a module declares each type once. `make test` runs it, and
+Apart from why_snippets.ady because it declares Distance_T, Duration_T and
+Speed_T as the document shows them here, which that file already declares for
+its record, and a module declares each type once. `make test` runs it, and
 DOCS/check_quotes.py checks the document against it. The line a distinct
 type refuses are here as comments; the Makefile's distinct-type checks refuse
 the same mixes, on both backends.
 """
 
 type Velocity_T is float
-type Distance_T is float
+type Height_T is float
 
 let v: Velocity_T = 250.0
-let d: Distance_T = v        # an alias: compiles, on both backends
-assert d == 250.0
+let h: Height_T = v          # an alias: compiles, on both backends
+assert h == 250.0
 
-type Miles_T is distinct float    # nautical miles
-type Hours_T is distinct float    # hours
-type Knots_T is Miles_T / Hours_T # knots: a unit made from two others
+type Metre_T is distinct float           # a basic unit: metres
+type Second_T is distinct float          # another: seconds
+type Distance_T is Metre_T               # the quantity, named where a signature reads it
+type Duration_T is Second_T
+type Speed_T is Distance_T / Duration_T  # metres per second: a unit made from two others
 
-def flown(speed: Knots_T, time: Hours_T) -> Miles_T:
-    return speed * time           # Knots x Hours is Miles: the type says so
+def flown(speed: Speed_T, time: Duration_T) -> Distance_T:
+    return speed * time           # Speed x Duration is Distance: the type says so
 
-let speed: Knots_T = 250.0        # a literal takes the type it is given to
-let far: Miles_T = flown(speed, 2.0)
-# let wrong: Miles_T = speed      -- refused, on both backends
-# let bad: Miles_T = speed * speed  -- refused: knots times knots is not miles
+let speed: Speed_T = 250.0        # a literal takes the type it is given to
+let far: Distance_T = flown(speed, 2.0)
+# let wrong: Distance_T = speed   -- refused, on both backends
+# let bad: Distance_T = speed * speed  -- refused: speed times speed is not a distance
 assert far == 500.0
 
 # --- the commoner case: money ----------------------------------------------

@@ -24,7 +24,7 @@ Fidelity notes
 
 The geometry is MAP_UTILS/map_flat.ady's flat plane: a `Position` is a point,
 a `Vector` a displacement, a `Velocity` has its parts in m/s and an `Acceleration` in
-m/s^2, and `Meters_T`, `Degrees_T`, `Duration_T`, `Speed_T` and `Accel_T` are its units.
+m/s^2, and `Meters_T`, `Degree_T`, `Duration_T`, `Speed_T` and `Accel_T` are its units.
 A time turns one into the next: `velocity * t` is a `Vector`, `vector / t` a `Velocity`,
 `acceleration * t` a `Velocity`, `velocity / t` an `Acceleration`.
 
@@ -34,7 +34,7 @@ Nim only (map_flat is):  ady2nim c -r moon_sim.ady
 """
 
 from math nimport sqrt, exp, ln, PI
-from MAP_UTILS/map_base import Accel_T, AngMom_T, Bearing_T, Degrees_T, Duration_T, Kilometers_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
+from MAP_UTILS/map_base import Accel_T, AngMom_T, Bearing_T, Degree_T, Duration_T, Kilometers_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
 from MAP_UTILS/map_flat import Acceleration, Position, Vector, Velocity
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
@@ -47,7 +47,7 @@ type Mass_T        is distinct float                # kg
 type Force_T       is Mass_T * Accel_T              # N
 type Sense_T       is enum COUNTER_CLOCKWISE, CLOCKWISE   # the way round the origin
 type Mu_T          is Accel_T * SquareMeters_T      # a body's GM, m^3/s^2
-type AngularRate_T is Degrees_T / Duration_T        # deg/s
+type AngularRate_T is Degree_T / Duration_T        # deg/s
 type Hours_T       is 3600.0 * Duration_T           # for the log: Hours_T(t) is t in hours
 type Days_T        is 86400.0 * Duration_T
 
@@ -75,9 +75,9 @@ let ORIGIN: Position = Position(0.0, 0.0)                # the body being orbite
 const SECOND: Duration_T = 1.0
 const APPROACH_LIMIT: Duration_T = 432000.0     # 5 days: no coast to the Moon's periapsis takes longer
 const ORBIT_LIMIT: Duration_T = 259200.0        # 3 days: nor a coast to the next apsis
-const EAST: Degrees_T = 0.0        # a direction, for the constructors that take a length and an angle
-const NORTH: Degrees_T = 90.0
-const HALF_TURN: Degrees_T = 180.0
+const EAST: Degree_T = 0.0        # a direction, for the constructors that take a length and an angle
+const NORTH: Degree_T = 90.0
+const HALF_TURN: Degree_T = 180.0
 let AT_REST: Velocity = Velocity(Speed_T(0.0), Speed_T(0.0))
 let NO_ACCEL: Acceleration = Acceleration(Accel_T(0.0), Accel_T(0.0))
 
@@ -123,12 +123,12 @@ def perp(v: Vector) -> Vector:
     """90 deg counter-clockwise rotation."""
     return v.rotated_by(90.0)
 
-def rot(v: Vector, ang: Degrees_T) -> Vector:
+def rot(v: Vector, ang: Degree_T) -> Vector:
     return v.rotated_by(ang)
 
-def wrapped(a: Degrees_T) -> Degrees_T:
+def wrapped(a: Degree_T) -> Degree_T:
     """An angle in (-180, 180]."""
-    let turns: Degrees_T = Bearing_T(a + 180.0)       # wraps into [0, 360)
+    let turns: Degree_T = Bearing_T(a + 180.0)       # wraps into [0, 360)
     return turns - 180.0
 
 def tangent_along(r: Position, v: Velocity) -> Vector:
@@ -142,7 +142,7 @@ def fraction(i: int, n: int) -> float:
     """i / n as a plain number: Nim does not mix an int with a float."""
     return float(i) / float(n)
 
-def arc(radius: Meters_T, angle: Degrees_T) -> Meters_T:
+def arc(radius: Meters_T, angle: Degree_T) -> Meters_T:
     """Arc length. A radian carries no unit, so radius * angle-in-radians is a length."""
     return Meters_T(float(radius) * float(Radians_T(angle)))
 
@@ -361,13 +361,13 @@ class State_T:
 
 class MoonEphemeris:
     """Moon on a circular orbit about Earth, analytic in time."""
-    var phase0: Degrees_T
+    var phase0: Degree_T
     var n: AngularRate_T
 
-    def __init__(self, phase0: Degrees_T):
+    def __init__(self, phase0: Degree_T):
         self.phase0 = phase0
         let rate: float = sqrt(float(MU_EARTH + MU_MOON) / float(MOON_DISTANCE) ** 3)
-        self.n = Degrees_T(Radians_T(rate)) / SECOND     # rad/s -> deg/s
+        self.n = Degree_T(Radians_T(rate)) / SECOND     # rad/s -> deg/s
 
     def position(self, t: Duration_T) -> Position:
         return ORIGIN + Vector(MOON_DISTANCE, self.phase0 + self.n * t)
@@ -751,7 +751,7 @@ class Guidance:
         self.has_t_go = False
 
     def target(self, gate: Gate_T) -> Target_T:
-        let behind: Degrees_T = Degrees_T(Radians_T(gate.uprange / R_MOON))
+        let behind: Degree_T = Degree_T(Radians_T(gate.uprange / R_MOON))
         let up: Vector = rot(self.site_up, behind * -turn(self.s))
         let east: Vector = perp(up) * turn(self.s)
         return Target_T(ORIGIN + Vector(R_MOON + gate.alt, up.angle()),
@@ -822,9 +822,9 @@ class Autopilot:
     def command(self, a_cmd: Acceleration, mass: Mass_T, max_thrust: Force_T, dt: Duration_T) -> (Vector, Throttle_T):
         let mag: Accel_T = a_cmd.magnitude()
         if mag > 0.0:
-            let ang: Degrees_T = wrapped(a_cmd.angle() - self.dir.angle())
-            let limit: Degrees_T = self.max_rate * dt
-            self.dir = rot(self.dir, clip[Degrees_T](ang, -limit, limit))
+            let ang: Degree_T = wrapped(a_cmd.angle() - self.dir.angle())
+            let limit: Degree_T = self.max_rate * dt
+            self.dir = rot(self.dir, clip[Degree_T](ang, -limit, limit))
         let raw: float = mag * mass / max_thrust
         return (self.dir, clip[float](raw, self.tmin, self.tmax))
 
@@ -885,11 +885,11 @@ class PhaseError(Scalar_Fn):
     the Moon's phase correction in degrees: what the shooting method finds the zero of."""
     var tli_r: Position
     var tli_v: Velocity
-    var phase_nominal: Degrees_T
+    var phase_nominal: Degree_T
     var t_max: Duration_T
     var target: Meters_T
 
-    def __init__(self, tli_r: Position, tli_v: Velocity, phase_nominal: Degrees_T,
+    def __init__(self, tli_r: Position, tli_v: Velocity, phase_nominal: Degree_T,
                  t_max: Duration_T, target: Meters_T):
         self.tli_r = tli_r
         self.tli_v = tli_v
@@ -897,7 +897,7 @@ class PhaseError(Scalar_Fn):
         self.t_max = t_max
         self.target = target
 
-    def signed_periapsis(self, delta: Degrees_T) -> ?Meters_T:
+    def signed_periapsis(self, delta: Degree_T) -> ?Meters_T:
         """Signed perilune radius (negative: the Moon would be passed on the other side),
         None if the transfer never reaches the Moon's sphere of influence."""
         let moon: MoonEphemeris = MoonEphemeris(self.phase_nominal + delta)
@@ -912,7 +912,7 @@ class PhaseError(Scalar_Fn):
         return -el.periapsis if el.h < 0.0 else el.periapsis
 
     def value(self, x: float) -> float:
-        let p: ?Meters_T = self.signed_periapsis(Degrees_T(x))
+        let p: ?Meters_T = self.signed_periapsis(Degree_T(x))
         if p is None:
             return 1e30
         return float(p - self.target)
@@ -922,7 +922,7 @@ class Mission:
     const LOI_PERI_ALT: Kilometers_T = 100.0
     const LOI1_APO_ALT: Kilometers_T = 300.0
     const DOI_PERI_ALT: Kilometers_T = 15.0
-    const DESCENT_ARC: Degrees_T = Degrees_T(Radians_T(0.36))   # lunar arc between PDI and the site
+    const DESCENT_ARC: Degree_T = Degree_T(Radians_T(0.36))   # lunar arc between PDI and the site
     const DT: Duration_T = 0.2                           # physics step in powered descent
     const GUIDANCE_CYCLE: Duration_T = 2.0               # AGC guidance cycle
 
@@ -941,7 +941,7 @@ class Mission:
     var result: Result_T
     var tli_r: Position
     var tli_v: Velocity
-    var phase_nominal: Degrees_T
+    var phase_nominal: Degree_T
     var t_max: Duration_T
 
     def __init__(self, seed: int):
@@ -999,8 +999,8 @@ class Mission:
         var prev: ?Meters_T = None
         var prev_delta: float = 0.0
         for i in 0 .. steps:
-            let delta: float = float(Degrees_T(Radians_T(-0.45 + 0.9 * fraction(i, steps))))
-            let p: ?Meters_T = miss.signed_periapsis(Degrees_T(delta))
+            let delta: float = float(Degree_T(Radians_T(-0.45 + 0.9 * fraction(i, steps))))
+            let p: ?Meters_T = miss.signed_periapsis(Degree_T(delta))
             if p is not None and prev is not None and not found:
                 if (prev - target) * (p - target) < 0.0:
                     root = brentq(miss, prev_delta, delta, 1e-9)
@@ -1009,7 +1009,7 @@ class Mission:
             prev_delta = delta
         if not found:
             die("could not find a Moon phase that gives the target periapsis")
-        self.moon_ephem = MoonEphemeris(self.phase_nominal + Degrees_T(root))
+        self.moon_ephem = MoonEphemeris(self.phase_nominal + Degree_T(root))
         print f"  Moon phase correction = {root:+.3f} deg"
 
     # --------------------------------------------------------
@@ -1195,7 +1195,7 @@ class Mission:
         let east: Vector = perp(up) * turn(s)
         let vv: Speed_T = along(v, up)
         let vh: Speed_T = along(v, east)
-        let along_track: Degrees_T = wrapped(up.angle() - site_up.angle()) * turn(s)
+        let along_track: Degree_T = wrapped(up.angle() - site_up.angle()) * turn(s)
         let miss: Meters_T = arc(R_MOON, along_track)   # + = overshoot (beyond site)
 
         let good: bool = touched_down and abs(vv) < 3.0 and abs(vh) < 1.5
@@ -1278,7 +1278,7 @@ def make_plots(m: Mission, path: str, show: bool):
     let t_end: Duration_T = m.earth_ts[len(m.earth_ts) - 1]
     a1.plot(plot_xs(m.earth_track, mega), plot_ys(m.earth_track, mega),
                               lw=1.2, label="spacecraft")
-    let ring: []Position = [ORIGIN + Vector(MOON_DISTANCE, Degrees_T(360.0 * fraction(i, 399))) for i in 0 ..< 400]
+    let ring: []Position = [ORIGIN + Vector(MOON_DISTANCE, Degree_T(360.0 * fraction(i, 399))) for i in 0 ..< 400]
     a1.plot(plot_xs(ring, mega), plot_ys(ring, mega),
                               "k:", lw=0.6, label="Moon orbit")
     let moon_path: []Position = [m.moon_ephem.position(t_end * fraction(i, 199)) for i in 0 ..< 200]
