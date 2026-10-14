@@ -104,10 +104,6 @@ def release_lock(lock: Lock_T):
 
 # --- one workspace ----------------------------------------------------------------
 
-def json_text(node: JsonNode, key: str) -> str:
-    """The string under key, "" when absent."""
-    node.getOrDefault(key).getStr("")
-
 class WorkspaceConfig:
     """The JSON blob of one 'CONFIG <name> <json>' commit, kept whole.
 
@@ -136,20 +132,37 @@ class WorkspaceConfig:
         """A JSON object with a name; anything else is somebody else's commit."""
         return self.data.kind == JObject and self.data.hasKey("name")
 
+    def text(self, key: str) -> str:
+        """The string under key, "" when absent."""
+        self.data.getOrDefault(key).getStr("")
+
+    def row(self) -> Row_T:
+        """This workspace as one line of the table."""
+        var cells: Row_T = ["" for c in Column_T]
+        cells[COL_WORKSPACE] = str(self.name())
+        cells[COL_BASED_ON] = str(self.baseline())
+        cells[COL_ENVID] = str(self.envid())
+        # The real "BL Built?" is CMA5::BaselineId->is_built(), a query of a
+        # ClearCase-backed build registry that is not reproduced here.
+        cells[COL_BL_BUILT] = "?"
+        cells[COL_SS_STATE] = self.status() or "---"
+        cells[COL_HOSTNAME] = str(self.hostname())
+        return cells
+
     def name(self) -> WorkspaceName_T:
-        WorkspaceName_T(json_text(self.data, "name"))
+        WorkspaceName_T(self.text("name"))
 
     def username(self) -> UserName_T:
-        UserName_T(json_text(self.data, "username"))
+        UserName_T(self.text("username"))
 
     def baseline(self) -> Baseline_T:
-        Baseline_T(json_text(self.data, "baseline"))
+        Baseline_T(self.text("baseline"))
 
     def envid(self) -> EnvId_T:
-        EnvId_T(json_text(self.data, "envid"))
+        EnvId_T(self.text("envid"))
 
     def hostname(self) -> HostName_T:
-        HostName_T(json_text(self.data, "hostname"))
+        HostName_T(self.text("hostname"))
 
     def status(self) -> ?str:
         let node: JsonNode = self.data
@@ -244,21 +257,6 @@ def real_configs_url() -> str | !ConfigFailure_T:
 
 # --- the table ---------------------------------------------------------------------------
 
-def row_of(config: WorkspaceConfig) -> Row_T:
-    var row: Row_T = ["" for c in Column_T]
-    row[COL_WORKSPACE] = str(config.name())
-    row[COL_BASED_ON] = str(config.baseline())
-    row[COL_ENVID] = str(config.envid())
-    # The real "BL Built?" is CMA5::BaselineId->is_built(), a query of a
-    # ClearCase-backed build registry that is not reproduced here.
-    row[COL_BL_BUILT] = "?"
-    row[COL_SS_STATE] = config.status() or "---"
-    row[COL_HOSTNAME] = str(config.hostname())
-    return row
-
-def pad(text: str, width: int) -> str:
-    return text + " " * (width - len(text))
-
 def print_table(rows: []Row_T):
     var widths: [Column_T]int = [len(HEADER[c]) for c in Column_T]
     for row in rows:
@@ -266,10 +264,10 @@ def print_table(rows: []Row_T):
             widths[c] = max(widths[c], len(row[c]))
     let separator: str = "--".join(["-" * widths[c] for c in Column_T])
     print separator
-    print "  ".join([pad(HEADER[c], widths[c]) for c in Column_T])
+    print "  ".join([f"{HEADER[c]:<{widths[c]}}" for c in Column_T])
     print separator
     for row in rows:
-        print "  ".join([pad(row[c], widths[c]) for c in Column_T])
+        print "  ".join([f"{row[c]:<{widths[c]}}" for c in Column_T])
 
 # --- main(): the `eval { ... }` block of Clsworkspace.pl ----------------------------------
 
@@ -318,7 +316,7 @@ def main() -> int:
     if listed is ConfigFailure_T:
         die(f"{listed.step}: {listed.reason}")
 
-    let rows: []Row_T = [row_of(c) for c in listed]
+    let rows: []Row_T = [c.row() for c in listed]
     let elapsed: float = time.time() - started
 
     if len(rows) == 0:

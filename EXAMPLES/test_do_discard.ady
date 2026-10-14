@@ -1,0 +1,33 @@
+#!/usr/bin/env ady2nim
+"""Test: `_ <- step` in a do: block runs a step whose value is not wanted.
+
+Several of them in one block used to bind the same name twice on Nim. Each
+is a bare step, binding nothing; the first failure still ends the function.
+"""
+
+type Bad_T is record:
+    why: str
+
+def check(n: int) -> int | !Bad_T:
+    if n < 0:
+        return Bad_T(f"{n} is negative")
+    return n
+
+def all_ok(a: int, b: int, c: int) -> int | !Bad_T:
+    do:
+        _ <- check(a)
+        _ <- check(b)
+        kept <- check(c)
+        _ <- check(kept + 1)
+    return kept
+
+let ok: int | !Bad_T = all_ok(1, 2, 3)
+if ok is Bad_T:
+    die(ok.why)
+assert ok == 3
+let r: int | !Bad_T = all_ok(1, -2, 3)
+if r is Bad_T:
+    assert r.why == "-2 is negative"
+else:
+    die("the failure was lost")
+print "test_do_discard OK"

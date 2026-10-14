@@ -1,0 +1,14 @@
+#!/usr/bin/env ady2nim
+"""Test: a width that is an expression, in an f-string spec: {s:<{w}}.
+
+Python takes the nested field; Nim's fmt does not, so the Nim backend pads with
+alignLeft / align / center. Run on both backends and the outputs compared.
+"""
+
+let name: str = "ab"
+let w: int = 6
+let widths: []int = [4, 7]
+print f"[{name:<{w}}] [{name:>{w}}] [{name:^{w}}]"
+print f"[{name:<{widths[1]}}] [{name:>{widths[0]}}]"
+print "|".join([f"{name:<{widths[i]}}" for i in 0 .. 1]) + "|"
+print f"[{'x' + name:>{w + 1}}]"

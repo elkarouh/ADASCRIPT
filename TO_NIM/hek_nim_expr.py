@@ -2266,6 +2266,7 @@ def to_nim(self, prec=None):
         return field, ''
 
     def _convert_field(field):
+        import re as _re_dw
         expr, spec = _split_spec(field)
         stripped = expr.rstrip()
         # '!=' never ends in r/s/a, so an expression ending in '!r' can only
@@ -2275,6 +2276,13 @@ def to_nim(self, prec=None):
         if stripped.endswith('!s'):
             # fmt already stringifies with $, so !s just drops away.
             return stripped[:-2].rstrip() + spec
+        # `{s:<{w}}`, `{s:>{widths[c]}}`: a width that is itself an expression.
+        # Nim's fmt has no nested field in a spec, so it is padded by hand.
+        _mw = _re_dw.fullmatch(r":([<>^])\{(.+)\}", spec.strip())
+        if _mw:
+            ParserState.nim_imports.add("strutils")
+            _pad = {"<": "alignLeft", ">": "align", "^": "center"}[_mw.group(1)]
+            return f"{_pad}($({stripped}), {_mw.group(2)})"
         # `{x:.0f}`, `{x:7.0f}`: Nim's formatFloat keeps the point of a float
         # printed with no decimals (`780.`), Python's does not (`780`). A number
         # aligns right where a string aligns left, so a width asks for `>`.

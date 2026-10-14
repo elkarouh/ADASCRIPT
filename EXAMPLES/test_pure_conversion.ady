@@ -1,0 +1,30 @@
+#!/usr/bin/env ady2nim
+"""Test: an accessor that wraps another accessor in a distinct type stays pure.
+
+`Name_T(self.text("name"))` hands self to the conversion, which takes its
+argument by value, so `name` keeps a plain self like `text` and can be called
+on a `let`. It used to count as a write and take `var self`, which a `let`
+refused.
+"""
+
+from json nimport *
+
+type Name_T is distinct str
+
+class Config:
+    var data: JsonNode
+
+    def __init__(self, data: JsonNode):
+        self.data = data
+
+    def text(self, key: str) -> str:
+        self.data.getOrDefault(key).getStr("")
+
+    def name(self) -> Name_T:
+        Name_T(self.text("name"))
+
+let c: Config = Config(parseJson('{"name": "ws_a"}'))
+let n: str = str(c.name())
+assert n == "ws_a"
+assert c.text("missing") == ""
+print "test_pure_conversion OK"

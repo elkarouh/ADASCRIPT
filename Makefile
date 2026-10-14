@@ -99,6 +99,9 @@ STANDALONE := \
     PROJECT/dispatch.ady \
     PROJECT/test_geometry.ady \
     test_do_block.ady \
+    test_do_discard.ady \
+    test_fstring_width.ady \
+    test_pure_conversion.ady \
     test_result.ady \
     test_optional_spelling.ady \
     test_union.ady \
@@ -314,7 +317,7 @@ COMPILE_ONLY := \
 
 # Run on both backends and their output compared, below: the Nim run there
 # is the one they get, so the self-contained loop leaves them out.
-BOTH_BACKENDS_COMPARED := test_do_block test_result test_optional_spelling \
+BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_result test_optional_spelling \
     test_union test_case_ranges test_contextmanager_fstring \
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \

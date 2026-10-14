@@ -949,6 +949,8 @@ def to_nim(self, indent=0):
     ind1 = _ind(indent + 1)
     lines = []
     for name, value, else_node, is_shell in _pyb._do_lines(self):
+        if name == "_":
+            name = None         # `_ <- step`: a step whose value is not wanted
         if name:
             tmp = f"adado{name[0].upper()}{name[1:]}"
         else:
@@ -5621,7 +5623,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # A sibling method is set aside the same way; whether it takes a
             # parameter as `var` is only known once every method has been
             # through here, so the fixpoint weighs that, from arg_calls.
-            _by_value = (_BY_VALUE_HELPERS
+            # `Name_T(self.text("name"))`: the conversion to a type the
+            # program declares -- alias, distinct, narrowed, mod, scaled --
+            # takes its argument by value, as `to_Kilometers_T` does below.
+            _conversions = set()
+            for _kind in ("ady_type_decls", "distinct_types", "narrowed_types", "mod_types", "scaled_units"):
+                _conversions |= set(getattr(ParserState, _kind, None) or ())
+            _by_value = (_BY_VALUE_HELPERS | _conversions
                          | (getattr(ParserState, "by_value_procs", set())
                             - getattr(ParserState, "var_param_procs", set())))
             text = _by_value_calls_neutralised(body_text, _by_value | set(_siblings))
