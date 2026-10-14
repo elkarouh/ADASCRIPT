@@ -2,21 +2,33 @@
 
 *Hassan El-Karouni*
 
-I started this language more than ten years ago as a dialect of Python. It was
-called py2py then, because it generated valid Python from the dialect. I have
-spent a long career in aerospace building complex systems, and I have written
-them in C, C++, AWK, Bash, Ada, Python and Nim.
+## The bug that lost a spacecraft
 
-When optional typing was added to Python I was disappointed. It made Python
-more verbose and added little compared with what explicit typing could give.
-So I looked at Ada first, and then at Nim. Nim is a great language, inspired by
-Python and by Ada. But none of the three satisfied me:
+On 23 September 1999 the Mars Climate Orbiter reached Mars about 57 km above
+the surface, not the planned 226 km, and was lost. Two programs were each
+correct. One wrote thruster impulses in pound-force seconds, the other read
+them as newton-seconds, and a factor of 4.45 sat between them, because both
+held the number in a `float` and nothing could notice. In Adascript the two
+units are two types, and one line says how they relate:
 
-- **Python**'s type annotations are ugly, and nothing checks them.
-- **Ada** is verbose.
-- **Nim**'s syntax is sometimes weird, and its type syntax was not optimal.
+<!-- from: EXAMPLES/mars_climate_orbiter.ady -->
+```python
+type Impulse_T is Mass_T * Speed_T          # N s, which is kg m/s: what the navigation expects
+type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
+```
 
-I then decided to develop Adascript on three ideas:
+The call that was the mission's loss does not compile:
+
+<!-- from: EXAMPLES/mars_climate_orbiter.ady -->
+```python
+#     let wrong: Speed_T = speed_change(SMALL_FORCES, SPACECRAFT)
+```
+
+That is the whole case for this language in one example: a type that says what
+a number *is*, and a compiler that holds you to it. The rest of this document is
+how far the idea goes, and how little it costs to write down.
+
+Adascript rests on three ideas:
 
 1. **Take inspiration from Ada's typing, because it is fantastic.**
 2. **Exceptions are not a very good idea. Errors should be processed where they
@@ -29,7 +41,8 @@ I stole many features from many languages, and I say from whom where I know.
 What is unique to Adascript is its powerful typing syntax, and this document
 goes deeper on it. It transpiles to both Python and Nim from one source. This
 document is the argument, not the manual; the manual is `README.md` and
-`DOCS/BOOK/`.
+`DOCS/BOOK/`. Every block of Adascript quoted here is checked against its file
+by `DOCS/check_quotes.py`, and the examples are compiled and run by `make test`.
 
 How it is laid out:
 
@@ -38,11 +51,14 @@ How it is laid out:
 - **Layers and vocabulary**, **The method** and **The notation** are the
   typing: why a type should name a concept, how to find the concepts, and the
   notation that writes them down.
-- **What the compiler holds you to** is what that buys: units, money, ranges,
-  and a spacecraft that would not have been lost.
+- **What the compiler holds you to** is what that buys, as one ladder of rungs
+  from a name to a check: units, money, ranges, and a spacecraft that would not
+  have been lost.
 - **A failure belongs in the signature** is the second idea in full, down to
   the constructor.
+- **Objections** answers the questions a sceptical reader asks first.
 - **What is not yet true** lists what each backend does not do.
+- **Why I wrote it** is the story, kept to the end.
 
 ---
 
@@ -517,14 +533,14 @@ assert nested["a"]["b"] == 1
 you read it in that order, once, left to right. Compare what the same type
 costs elsewhere:
 
-| Adascript | Python | Nim |
-|-----------|--------|-----|
-| `{Callsign_T}[]Waypoint_T` | `Dict[Callsign_T, List[Waypoint_T]]` | `Table[Callsign_T, seq[Waypoint_T]]` |
-| `[Phase_T]Altitude_T` | `Dict[Phase_T, Altitude_T]` | `array[Phase_T, Altitude_T]` |
-| `{}Callsign_T` | `Set[Callsign_T]` | `HashSet[Callsign_T]` |
-| `?Altitude_T` | `Optional[Altitude_T]` | `Option[Altitude_T]` |
-| `[Callsign_T]Minutes_T` | `dict[Callsign_T, Minutes_T]` | `OrderedTable[Callsign_T, Minutes_T]` |
-| `(Flight_Phase_T) -> Altitude_T` | `Callable[[Flight_Phase_T], Altitude_T]` | `proc(a0: Flight_Phase_T): Altitude_T` |
+| Adascript | Read aloud | Python | Nim |
+|-----------|-----------|--------|-----|
+| `{Callsign_T}[]Waypoint_T` | for each callsign, a list of waypoints | `Dict[Callsign_T, List[Waypoint_T]]` | `Table[Callsign_T, seq[Waypoint_T]]` |
+| `[Phase_T]Altitude_T` | one altitude for every phase | `Dict[Phase_T, Altitude_T]` | `array[Phase_T, Altitude_T]` |
+| `{}Callsign_T` | a set of callsigns | `Set[Callsign_T]` | `HashSet[Callsign_T]` |
+| `?Altitude_T` | an altitude, or nothing | `Optional[Altitude_T]` | `Option[Altitude_T]` |
+| `[Callsign_T]Minutes_T` | minutes per callsign, in arrival order | `dict[Callsign_T, Minutes_T]` | `OrderedTable[Callsign_T, Minutes_T]` |
+| `(Flight_Phase_T) -> Altitude_T` | an altitude computed from a phase | `Callable[[Flight_Phase_T], Altitude_T]` | `proc(a0: Flight_Phase_T): Altitude_T` |
 
 The others all put the container's *name* first and its contents inside
 brackets, so the reader opens a bracket, holds it, and closes it. At one level
@@ -538,6 +554,24 @@ ordered mapping and the unordered one are the four answers to two questions,
 that the optional joins them under the same rule — "container first,
 element after, no brackets to balance" — and that they stack. I did not take it from another language,
 because I could not find one that had it.
+
+### What the notation was weighed against
+
+A notation is a set of choices, and a reader trusts it more when they can see
+what it was set against. Three of them, in the order a reader meets them:
+
+- **`?T`, not `T | None`.** An optional is the commonest union and it is not
+  really a union: it is "this, or nothing". Written `T | None` it would be one
+  more member list to read, and it would not stack with the rest. As a prefix it
+  composes like the other containers, `?[]Fix_T`, read left to right.
+- **`!F` marks the failure, not a tuple.** Go returns `(value, error)`, and the
+  error can be ignored. A union `Path | Failure_T` alone does not say which side
+  is the failure; the `!` does, and so a failure that is dropped can be refused,
+  which a pair cannot do.
+- **The annotation is the ordinary way to declare, and `let` and `var` say
+  whether it can change.** Inference would save the writer four characters and
+  cost every later reader the trip, as argued above. Two short words buy the
+  reader the type and the mutability on the same line.
 
 `[E]T` in particular is the one I would not give up. An array indexed by an
 enumeration is Pascal's and Ada's idea and it has been quietly dropped by
@@ -575,6 +609,45 @@ step 2 were done first.
 ---
 
 ## What the compiler holds you to
+
+The typing in this document is one idea asked with increasing strictness: what
+may a value of this type be mixed with, and what may it hold? Each answer is one
+line of declaration, and each catches a bug the line above it lets through:
+
+| Rung | Written | The compiler refuses | The bug it catches |
+|------|---------|----------------------|--------------------|
+| a name | `type Altitude_T is Natural` | nothing: it documents | a signature nobody can read |
+| distinct | `type Feet_T is distinct int` | mixing with any other type | feet passed as metres |
+| a relation | `type Knots_T is Miles_T / Hours_T` | arithmetic nobody declared | `speed * speed` |
+| a scale | `type Km_T is 1000.0 * Metres_T` | a unit mixed in silently | the factor applied twice |
+| a range, a wrap | `type Latitude_T is Degrees_T range -90 .. 90` | values outside the set | a latitude of 95, a bearing of 370 |
+| a check | `type Callsign_T is str where c: ...` | any value failing a predicate | a callsign that is not one |
+
+One domain, all the rungs, as the program writes them:
+
+<!-- from: EXAMPLES/DOC/why_ladder_snippets.ady -->
+```python
+type Altitude_T is Natural                           # a name: documents, refuses nothing
+type Feet_T is distinct int                          # distinct: mixes with nothing else
+type Miles_T is distinct float
+type Hours_T is distinct float
+type Knots_T is Miles_T / Hours_T                    # a relation: knots x hours is miles
+type Metres_T is distinct float
+type Km_T is 1000.0 * Metres_T                       # a scale: the conversion is derived
+type Degrees_T is distinct float
+type Latitude_T is Degrees_T range -90 .. 90         # a range: values outside it are refused
+type Bearing_T is Degrees_T mod 360                  # a wrap: 370 is 10
+type Callsign_T is str where c: c == /^[A-Z]{3}\d{1,4}$/   # a check: any predicate
+```
+
+None of it is a feature to learn separately. The first line costs nothing and
+already helps a reader; each rung after it is bought only for the quantity
+whose mix-up would hurt. `float range 0..1` and `float where 0 <= x <= 1` say
+the same thing about the values; the difference is how a bad one is met, which
+is a stop at its line for a range, and a failure the caller must handle for a
+check. The sections below take the rungs in turn, each with the bug that
+justifies it.
+
 
 ### Aliases document, and `distinct` enforces
 
@@ -1025,6 +1098,46 @@ Arithmetic on a checked number is the base's, so a sum of probabilities is a
 plain float and never claims to have passed the check. Nim only for now:
 `ady2py` refuses the declaration.
 
+What the same probability costs elsewhere shows what the line is worth. In Ada
+it is a subtype, which a plain `Float` mixes with and which raises when it is
+violated:
+
+```ada
+subtype Probability is Float range 0.0 .. 1.0;
+```
+
+In Rust it is a struct, a constructor that returns a `Result`, and an accessor,
+for every checked type:
+
+```rust
+pub struct ProbError(f64);
+pub struct Prob(f64);
+impl Prob {
+    pub fn new(x: f64) -> Result<Prob, ProbError> {
+        if (0.0..=1.0).contains(&x) { Ok(Prob(x)) } else { Err(ProbError(x)) }
+    }
+    pub fn get(self) -> f64 { self.0 }
+}
+```
+
+In Python it is a function that raises, and returns a plain `float` that nothing
+downstream can tell from an unchecked one:
+
+```py
+def prob(x: float) -> float:
+    if not 0 <= x <= 1:
+        raise ValueError(x)
+    return x
+```
+
+In Adascript it is one line, and the conversion that checks it returns the
+failure instead of raising:
+
+<!-- from: EXAMPLES/test_where_type.ady -->
+```python
+type Prob_T is float where 0 <= x <= 1
+```
+
 ### What is checked where
 
 Not every name should be distinct. Conversions are work, and a value that
@@ -1309,6 +1422,36 @@ Python gets there only by a library whose function names carry the meaning.
 
 ---
 
+## Objections
+
+**"Why not Ada?"** Ada has the typing and I took it. What it asks in return is
+ceremony and a build, and its derived types need an operator written by hand
+for every unit relation: knots times hours is miles only because somebody wrote
+`function "*"` for that pair. Here the relation is the line `type Knots_T is
+Miles_T / Hours_T`, and the operators follow from it. Adascript is Ada's typing
+in Python's syntax, and it also produces Python.
+
+**"Why not F# units of measure, or a units library?"** F# is the closest
+rival and the honest comparison. It tracks the exponent of each base unit, so a
+speed is `m/s` and an area is `m^2` without anyone naming them, and that is more
+general than what Adascript does. I chose the other end deliberately: every
+combination a program uses has a name, and the name is in the signature, in the
+grep and in the compiler's message. The price is writing the combinations down,
+which a program has to name to be read anyway. Rust's newtypes work too, at the
+cost of a struct, a constructor and the operator implementations for each unit.
+
+**"Isn't this just more annotation?"** For a name, no: `type Altitude_T is
+Natural` is one line and already documents. The strict rungs are paid for only
+by the quantities whose mix-up would hurt, and a program with no such quantity
+does not use them.
+
+**"What does it cost?"** Writing the types down, and the split between the two
+backends. Scaled units, failing constructors and types with a check are built by
+`ady2nim` only today; `ady2py` refuses them with a message saying so. The last
+section lists exactly what each backend does not do.
+
+---
+
 ## What is not yet true
 
 The Nim backend is the reference one; the Python backend is less
@@ -1357,6 +1500,24 @@ catches them:
 - **A type with a check** (`type D is str where d: ...`) is refused by `ady2py`:
   there is no Python type to carry it, so the same source needs a validating
   function there.
+
+---
+
+## Why I wrote it
+
+I started this language more than ten years ago as a dialect of Python. It was
+called py2py then, because it generated valid Python from the dialect. I have
+spent a long career in aerospace building complex systems, and I have written
+them in C, C++, AWK, Bash, Ada, Python and Nim.
+
+When optional typing was added to Python I was disappointed. It made Python
+more verbose and added little compared with what explicit typing could give.
+So I looked at Ada first, and then at Nim. Nim is a great language, inspired by
+Python and by Ada. But none of the three satisfied me:
+
+- **Python**'s type annotations are ugly, and nothing checks them.
+- **Ada** is verbose.
+- **Nim**'s syntax is sometimes weird, and its type syntax was not optimal.
 
 ---
 

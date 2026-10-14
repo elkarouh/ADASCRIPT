@@ -102,6 +102,7 @@ STANDALONE := \
     test_do_discard.ady \
     test_init_failure.ady \
     test_where_type.ady \
+    DOC/why_ladder_snippets.ady \
     test_fstring_width.ady \
     test_pure_conversion.ady \
     test_result.ady \
