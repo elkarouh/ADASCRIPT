@@ -1,7 +1,7 @@
 --  GNAT project for the Ada translation of ada_indent.
 --
---    gprbuild -P ada_indent.gpr            -- builds bin/ada_indent
---    gprbuild -P ada_indent.gpr -XMODE=debug
+--    g gprbuild -P ada_indent.gpr            -- builds bin/ada_indent
+--    g gprbuild -P ada_indent.gpr -XMODE=debug
 project Ada_Indent is
 
    type Mode_Type is ("release", "debug");

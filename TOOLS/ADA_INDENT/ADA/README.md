@@ -8,13 +8,14 @@ and the comment rules are documented in [`../README.md`](../README.md).
 
 ## Build and run
 
-Needs GNAT and `gprbuild`.
+Needs GNAT and `gprbuild`, run through the `g` wrapper (`g gprbuild`, `g gprclean`);
+without it, `make GPRBUILD=gprbuild GPRCLEAN=gprclean`.
 
 ```bash
-make                                  # or: gprbuild -P ada_indent.gpr
+make                                  # or: g gprbuild -P ada_indent.gpr
 bin/ada_indent file.adb               # re-indent a file
 cat file.adb | bin/ada_indent         # ...or stdin
-gprbuild -P ada_indent.gpr -XMODE=debug   # assertions, overflow and stack checks
+g gprbuild -P ada_indent.gpr -XMODE=debug   # assertions, overflow and stack checks
 ```
 
 ## Layout

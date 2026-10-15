@@ -7,9 +7,11 @@
 #                   (stdout, stderr and --emit-state), over the same inputs
 #   make clean
 #
-# Needs GNAT and gprbuild.
+# Needs GNAT and gprbuild, run through the `g` wrapper (g gprbuild, g gprclean).
+# Without it: make GPRBUILD=gprbuild GPRCLEAN=gprclean
 
-GPRBUILD ?= gprbuild
+GPRBUILD ?= g gprbuild
+GPRCLEAN ?= g gprclean
 BIN      := bin/ada_indent
 REF      ?= ../ada_indent
 PYTHON   ?= python3
@@ -46,5 +48,5 @@ compare: $(BIN)
 	[ $$fail = 0 ] && echo "compare: identical ($(words $(ALL)) files)"
 
 clean:
-	gprclean -q -P ada_indent.gpr || true
+	$(GPRCLEAN) -q -P ada_indent.gpr || true
 	rm -rf obj bin
