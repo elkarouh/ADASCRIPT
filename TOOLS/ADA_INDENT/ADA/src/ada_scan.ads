@@ -1,10 +1,8 @@
 --  ada_scan.ads - the lexical helpers of the indenter: everything that looks
 --  at a single physical line and knows nothing of the block stack.
 --
---  Counterpart of the "Lexical helpers" and "Construct names" sections of
---  ada_indent.ady.  Indices are 0-based, as in Strscan.  Like the Adascript
---  original, the line-level functions expect comments to be removed already
---  (see Strscan.Strip_Line_Comment).
+--  Indices are 0-based, as in Strscan.  The line-level functions expect
+--  comments to be removed already (see Strscan.Strip_Line_Comment).
 
 with Ada.Containers.Vectors;
 with Strscan;  use Strscan;

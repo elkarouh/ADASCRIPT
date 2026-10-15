@@ -1,7 +1,6 @@
 --  indenter.ads - the stack machine that re-indents Ada source.
 --
---  Counterpart of the Indenter class of ada_indent.ady; see that file (and
---  ../README.md) for the model.  Each open construct pushes a frame; the
+--  See ../docs/INDENTATION.md for the model.  Each open construct pushes a frame; the
 --  display indent of a line is the stack depth (times the indent width),
 --  with small adjustments for the keywords that align with their opener
 --  rather than the block body.

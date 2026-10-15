@@ -3,8 +3,7 @@
 --  This is NOT a full Ada parser.  It implements only the slice of Ada
 --  grammar that matters for indentation: the keywords that open, close, or
 --  split an indented block.  Everything else is treated as an ordinary
---  statement line.  See ../README.md for the grammar and ada_indent.ady for
---  the Adascript original this program is translated from.
+--  statement line.  See ../docs/INDENTATION.md for the grammar.
 
 with Ada.Command_Line;
 with Ada.Text_IO;       use Ada.Text_IO;

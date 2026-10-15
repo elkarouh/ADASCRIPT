@@ -2,9 +2,8 @@
 --  lexer keeps needing, and the few Python/Nim string idioms the indenter
 --  leans on (strip, split, slice).
 --
---  Counterpart of TO_NIM/STDLIB/strscan.ady.  Every classifier is defined by
---  ASCII range, and every index in this package is 0-BASED, exactly as in the
---  Adascript source: S (S'First + I) is character I, and a slice is
+--  Every classifier is defined by ASCII range, and every index in this
+--  package is 0-BASED: S (S'First + I) is character I, and a slice is
 --  Slice (S, Lo, Hi) = S[Lo:Hi] (half open, clamped like Python's).  Strings
 --  that come back from this package always have bounds 1 .. N.
 
