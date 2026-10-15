@@ -146,9 +146,9 @@ because only there is the expression certain to go on.
 **Editors.** Rule 2 needs the line after the comment, so it applies when whole
 input is indented: the command line, `format-all`, a region re-indent. When an
 editor indents one line at a time, the comment is placed before that line
-exists. The Emacs integration catches up: once the code line is indented, it
-re-indents the paragraph above it together with it. Other editors place such a
-comment by rule 1 until the region is re-indented.
+exists. An integration can catch up: once the code line is indented, re-indent the
+paragraph above it together with it. Otherwise such a comment is placed by
+rule 1 until the region is re-indented.
 
 ## The model: a block stack
 

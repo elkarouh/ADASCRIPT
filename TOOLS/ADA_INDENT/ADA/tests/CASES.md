@@ -658,3 +658,8 @@ it. A comment at the default column is re-indented as ever.
 91. The same when the only line before the comment at its depth is the
 one that opens the parenthesis with its first item ('(V => Make
 (...),'): that line is the comment's reference too.
+
+## 092
+
+Blank lines at the end of the file are lines like any other and are kept: the
+output has exactly as many lines as the input.

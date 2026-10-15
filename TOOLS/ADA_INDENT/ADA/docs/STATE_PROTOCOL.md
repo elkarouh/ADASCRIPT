@@ -40,63 +40,27 @@ The two are exact inverses: feeding line *K+1* with `--state <blob-for-K>`
 produces byte-for-byte the same result (and the same next blob) as piping
 lines *1..K+1* from scratch. That equivalence is what makes the cache safe.
 
-### What Emacs does with it
+### What a client does with it
 
-`ada-indent.el` keeps two buffer-local variables:
+`lsp/ada_indent_proxy.py` is the reference client. Per open document it keeps
+the last blob and the number of lines that blob covers, and on each request:
 
-| variable                  | meaning                                            |
-|---------------------------|----------------------------------------------------|
-| `ada-indent--state`       | the last `##STATE:` blob captured, or `nil`        |
-| `ada-indent--state-lnum`  | the line number that blob was captured *after*      |
-
-On each call to `ada-indent--column` (the function behind `RET`/`TAB`):
-
-1. **Decide whether the cache is usable.** It is usable when a blob exists and
-   the cursor is *below* the cached line (`ada-indent--state-lnum < current
-   line`). Editing happens top-to-bottom, so the common case — type a line,
-   press `RET`, type the next — always hits the cache.
-2. **Pick the slice to send.**
-   - *Cache hit:* send only the lines from `ada-indent--state-lnum + 1` through
-     the current line, prefixed with `--state <blob>`.
-   - *Cache miss* (first indent in the buffer, or cursor jumped upward): send the
-     whole prefix `1..N` with no `--state`.
-3. **Run `ada_indent … --emit-state`,** split the output into code lines and
-   `##STATE:` lines.
-4. **Refresh the cache:** store the last blob and set `ada-indent--state-lnum`
-   to the current line.
-5. **Return** the indent column of the last code line to `indent-line-to`.
+1. **Decides whether the cache is usable.** It is usable when the request
+   starts at or below the first line not covered by the blob. Editing happens
+   top-to-bottom, so the common case -- type a line, press Enter, type the next
+   -- hits the cache.
+2. **Picks the slice to send.** On a hit, the lines after the covered ones
+   through the requested line, with `--state <blob>`; on a miss, everything
+   from line 1, with no `--state`.
+3. **Runs `ada_indent --emit-state`.** Every input line comes back as its
+   indented text followed by its `##STATE:` line, so the output is read two
+   lines at a time.
+4. **Refreshes the cache** with the blob *before* the last line fed. That line
+   is the one the editor is about to re-indent; an edit to it must not discard
+   what was read above it.
 
 ### Keeping the cache honest
 
-A checkpoint for line *K* is only valid if lines *1..K* have not changed.
-The mode installs `ada-indent--invalidate-cache` on `before-change-functions`.
-
-Any change on or above line *K* clears it -- the condition is `<=`:
-
-```
-(<= (line-number-at-pos beg) ada-indent--state-lnum)
-```
-
-with one exemption: the package's own reindentation. Computing line *K*'s
-column caches the state after *K*, and the very next thing that happens is
-`indent-line-to` rewriting line *K*'s indentation -- an edit at the cache point
-that must not wipe the cache it just set. Those rewrites go through
-`ada-indent--indent-to`, which binds `ada-indent--reindenting` so the
-invalidation hook lets them pass. So:
-
-- Our own reindent of line *K*: **cache kept** ✓
-- Edit on lines *K+1, K+2, …* -- forward typing: **cache kept** ✓
-- Any other edit on lines *1..K* -- typing on line *K* itself, or going back
-  to change earlier code: **cache cleared** ✓
-
-Steady-state forward editing keeps the cache alive across every keystroke;
-only an edit at or above the cache point pays a one-time full-prefix rescan.
-
-The net effect: steady-state editing costs one short `ada_indent` invocation
-over just the handful of lines since your last keystroke, regardless of how large
-the file is — while a jump to the top of a big buffer pays a one-time
-full-prefix scan and then resumes incremental speed.
-
-(One small subtlety re-stated: a blank current line is probed with a neutral
-token `x` before being sent, so the indenter reports the enclosing block's body
-indent instead of column 0. The probe is never inserted into the buffer.)
+A blob covering lines *1..K* is only valid while those lines are unchanged. Any
+edit that starts on a line above *K+1* (that is, on a covered line) drops it;
+edits further down keep it. A full-text `didChange` drops it too.

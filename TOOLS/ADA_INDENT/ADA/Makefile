@@ -3,7 +3,7 @@
 #   make          build bin/ada_indent
 #   make test     the table cases and fixtures (tests/run_tests.py), then the
 #                 metamorphic check (tools/metamorphic_check.py)
-#   make test-lsp the language server's tests (needs pygls and lsprotocol)
+#   make test-lsp the language server proxy's tests
 #   make clean
 #
 # Needs GNAT and gprbuild, run through the `g` wrapper (g gprbuild, g gprclean).
@@ -25,7 +25,7 @@ test: $(BIN)
 	$(PYTHON) tools/metamorphic_check.py --bin $(CURDIR)/$(BIN)
 
 test-lsp: $(BIN)
-	$(PYTHON) lsp/test_lsp.py     # needs: pip install pygls lsprotocol
+	$(PYTHON) lsp/test_proxy.py
 
 clean:
 	$(GPRCLEAN) -q -P ada_indent.gpr || true

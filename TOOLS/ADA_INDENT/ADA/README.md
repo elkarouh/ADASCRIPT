@@ -43,7 +43,7 @@ Without the wrapper: `make GPRBUILD=gprbuild GPRCLEAN=gprclean`.
 make test
 ```
 
-* `tests/run_tests.py` -- the 91 messy-input -> canonical-output cases in
+* `tests/run_tests.py` -- the 92 messy-input -> canonical-output cases in
   `tests/cases/` (`NNN.in.adb` must come out as `NNN.out.adb`; what each one
   is about is in `tests/CASES.md`), and the files in `tests/fixtures/`, which
   must come back unchanged both as they are and with all leading whitespace
@@ -65,11 +65,11 @@ in `tests/fixtures/` and list it in `FIXTURES` in `tests/run_tests.py`.
 
 ## Language server
 
-`lsp/ada-indent-lsp.py` is a small LSP server around `bin/ada_indent`
-(`textDocument/formatting`, `rangeFormatting` and `onTypeFormatting`, with the
-state cache of `--emit-state` / `--state` so a keystroke re-reads only the
-lines after the edit). It needs `pip install pygls lsprotocol`; see
-[`lsp/README.md`](lsp/README.md) for editor setup and `make test-lsp` to test it.
+`lsp/ada_indent_proxy.py` wraps the Ada Language Server: it forwards everything
+to `ada_language_server` and answers `formatting`, `rangeFormatting` and
+`onTypeFormatting` itself with `bin/ada_indent` (resuming from the saved state
+of `--emit-state` / `--state` after an edit). Standard library only; see
+[`lsp/README.md`](lsp/README.md) for editor setup, and `make test-lsp`.
 
 ## Documentation
 

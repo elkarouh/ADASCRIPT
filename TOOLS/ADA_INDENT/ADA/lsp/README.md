@@ -1,157 +1,93 @@
-# ada-indent-lsp — Ada Indentation via LSP
+# ada_indent_proxy -- the Ada Language Server with ada_indent's formatting
 
-A lightweight Language Server Protocol server that provides Ada source
-indentation by wrapping the `ada_indent` binary.  Works with any LSP-capable
-editor: Emacs (eglot/lsp-mode), VS Code, Neovim, Helix, etc.
+`ada_indent_proxy.py` starts the Ada Language Server (`ada_language_server`,
+"als", from AdaCore) as a child process and sits between it and the editor.
+Everything is forwarded unchanged in both directions -- requests, responses,
+notifications, and the requests als itself sends to the editor -- except:
 
-## What it provides
+| What | Handled by |
+|---|---|
+| `initialize` response | als's, with the formatting capabilities added (als's own are kept) |
+| `textDocument/formatting` | the proxy, with `ada_indent` -- never sent to als |
+| `textDocument/rangeFormatting` | the proxy |
+| `textDocument/onTypeFormatting` | the proxy (Enter, and the last letter of a dedenting keyword) |
 
-| LSP capability | Trigger | Description |
-|---|---|---|
-| `textDocument/formatting` | Format document | Reindent the entire file |
-| `textDocument/rangeFormatting` | Format selection | Reindent a region (also used by indent-line) |
-| `textDocument/onTypeFormatting` | Enter / dedent keyword | Auto-indent new lines and snap dedenting keywords |
+Documents are tracked from `didOpen` / `didChange` / `didClose` (which als
+receives too, so it sees exactly what the editor sent). For an edit near the
+end of a file the proxy resumes `ada_indent` from a saved state
+(`--emit-state` / `--state`) instead of reading the file from the top; an edit
+to a line already covered by the saved state drops it.
 
-The server maintains a **per-document state cache** so incremental formatting only processes lines from the
-last cache point — O(distance) per edit instead of O(file size).
+Enter on a blank line puts the cursor at the column a statement would take
+there (`ada_indent` itself leaves blank lines empty).
 
-## Prerequisites
+If als cannot be started, or dies, the proxy keeps answering on its own: it
+announces only the formatting capabilities and refuses everything else with
+`MethodNotFound`. `--no-als` asks for that from the start.
 
-- **`ada_indent`** binary: on your PATH, or built in this repository
-  (`make`, which gives `../bin/ada_indent`; the server falls back to it).
+Standard library only -- Python 3.9 or later.
 
-- **Python 3.10+** with `pygls` and `lsprotocol`:
-
-  ```bash
-  pip install pygls lsprotocol
-  ```
-
-## Usage
-
-Start the server (communicates over stdio):
-
-```bash
-python3 ada-indent-lsp.py
-```
-
-Options:
+## Use
 
 ```
---ada-indent PATH   Path to ada_indent binary (default: ada_indent on PATH)
---log FILE          Write debug log to FILE (default: no logging)
+ada_indent_proxy.py [--ada-indent PATH] [--als COMMAND] [--no-als]
+                    [--log FILE] [-- ALS_ARGS...]
 ```
 
-## Editor setup
+* `--ada-indent` -- the binary (default: `ada_indent` on PATH, else `../bin/ada_indent`)
+* `--als` -- the Ada Language Server command (default: `ada_language_server`)
+* arguments after `--` go to als
 
-### Emacs — eglot (built-in since Emacs 29)
+Point the editor at the proxy instead of at als. The server communicates over
+stdio. For example:
 
 ```elisp
-(with-eval-after-load 'eglot
-  (add-to-list 'eglot-server-programs
-               '((ada-mode ada-ts-mode) . ("python3" "/path/to/ada-indent-lsp.py"))))
-
-;; Then in an Ada buffer:
-;;   M-x eglot    (start the server)
-;;   C-M-\        (indent region)
-;;   M-x eglot-format-buffer
+;; Emacs (eglot)
+(add-to-list 'eglot-server-programs
+             '((ada-mode ada-ts-mode) . ("python3" "/path/to/ada_indent_proxy.py")))
 ```
-
-### Emacs — lsp-mode
-
-```elisp
-(with-eval-after-load 'lsp-mode
-  (lsp-register-client
-   (make-lsp-client
-    :new-connection (lsp-stdio-connection '("python3" "/path/to/ada-indent-lsp.py"))
-    :major-modes '(ada-mode ada-ts-mode)
-    :server-id 'ada-indent-lsp)))
-
-(add-hook 'ada-mode-hook #'lsp)
-```
-
-### Neovim — nvim-lspconfig
 
 ```lua
-local lspconfig = require('lspconfig')
-local configs = require('lspconfig.configs')
-
-configs.ada_indent = {
+-- Neovim (nvim-lspconfig)
+require('lspconfig.configs').ada_indent = {
   default_config = {
-    cmd = { "python3", "/path/to/ada-indent-lsp.py" },
+    cmd = { "python3", "/path/to/ada_indent_proxy.py" },
     filetypes = { "ada" },
-    root_dir = lspconfig.util.find_git_ancestor,
+    root_dir = require('lspconfig').util.find_git_ancestor,
   },
 }
-lspconfig.ada_indent.setup{}
+require('lspconfig').ada_indent.setup{}
 ```
-
-### VS Code
-
-Add to `.vscode/settings.json`:
-
-```json
-{
-  "ada-indent-lsp.path": "python3",
-  "ada-indent-lsp.args": ["/path/to/ada-indent-lsp.py"]
-}
-```
-
-Or use a generic LSP client extension and point it at the server command.
-
-### Helix
-
-Add to `~/.config/helix/languages.toml`:
 
 ```toml
+# Helix, languages.toml
+[language-server.ada-indent]
+command = "python3"
+args = ["/path/to/ada_indent_proxy.py"]
 [[language]]
 name = "ada"
-language-servers = ["ada-indent-lsp"]
-
-[language-server.ada-indent-lsp]
-command = "python3"
-args = ["/path/to/ada-indent-lsp.py"]
+language-servers = ["ada-indent"]
 ```
 
-## How it works
+als reads its project from the editor's `initialize` request as usual; the
+proxy does not touch it.
 
-1. The server tracks document content via `didOpen` / `didChange` / `didClose`
-   notifications, applying incremental edits to an in-memory copy.
-
-2. On a formatting request, it pipes the relevant lines through `ada_indent
-   --emit-state`, reads back the indented output, and returns LSP `TextEdit`s
-   that replace only the leading whitespace of lines whose indentation changed.
-
-3. The `##STATE:` lines emitted by `ada_indent` are captured and cached
-   per-document.  Subsequent requests reuse the cache via `--state <data>`,
-   skipping all lines before the cache point.
-
-4. The cache is invalidated when an edit occurs before the cache point.
-
-## Testing
+## Tests
 
 ```bash
-make test-lsp          # from the repository root
-# or: python3 lsp/test_lsp.py
+make test-lsp          # from the repository root; or: python3 lsp/test_proxy.py
 ```
 
-The test suite has three layers:
+Unit tests (applying incremental edits, UTF-16 positions, when the saved state
+is dropped); the proxy on its own (`--no-als`); and the proxy in front of
+`stub_als.py`, a stand-in for als that checks what is forwarded, what is not,
+that als's own capabilities survive, and that requests als makes of the editor
+get through. The tests do not need als. Nor have they been run against the
+real `ada_language_server`.
 
-| Layer | What it tests |
-|---|---|
-| **Unit** | `_apply_change` incremental edit logic (no external dependencies) |
-| **Integration** | `ada_indent` binary: package, enum, record indentation, state cache, fixpoint |
-| **LSP end-to-end** | Full server over stdio: initialize, didOpen, formatting, rangeFormatting, didChange, shutdown |
+## Limits
 
-The LSP tests start the server as a subprocess and send raw JSON-RPC — no
-pygls needed on the test side (only the server subprocess needs it).
-
-## Known limitations
-
-- **On-type formatting triggers on keyword-final letters only** — not every
-  keystroke, but still one LSP round-trip per letter that could end a dedenting
-  keyword (`d`, `e`, `n`, `s`, `t`, etc.).  The server checks for a complete
-  keyword and returns no edits for non-matching lines.
-
-- **No semantic features** — this server provides indentation only.  For
-  navigation, completion, and diagnostics, use it alongside an Ada language
-  server (e.g. `ada_language_server` from AdaCore).
+* Indentation only: the proxy adds nothing else to als, and replaces als's own
+  formatting requests with `ada_indent`'s.
+* The editor's `FormattingOptions` (tab size, insert spaces) are ignored:
+  `ada_indent` always indents with 2 spaces.

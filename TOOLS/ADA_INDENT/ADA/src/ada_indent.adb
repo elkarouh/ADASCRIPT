@@ -6,11 +6,56 @@
 --  statement line.  See ../docs/INDENTATION.md for the grammar.
 
 with Ada.Command_Line;
+with Ada.Streams;       use Ada.Streams;
+with Ada.Streams.Stream_IO;
 with Ada.Text_IO;       use Ada.Text_IO;
+with Ada.Text_IO.Text_Streams;
 with Indenter;
+with Ada.Strings.Unbounded;
 with Strscan;           use Strscan;
 
 procedure Ada_Indent is
+
+   --  Split a stream into lines at LF, CR LF or a lone CR.  A final line
+   --  terminator does not start another line, but a blank line before the end
+   --  of the file is a line (Text_IO.End_Of_File would drop it).
+   procedure Read_Lines
+     (Stream : not null access Root_Stream_Type'Class; Lines : in out Str_Vector)
+   is
+      Buffer   : Stream_Element_Array (1 .. 65_536);
+      Last     : Stream_Element_Offset;
+      Current  : Ustr := +"";
+      Pending  : Boolean := False;   --  Current holds the start of a line
+      After_CR : Boolean := False;
+   begin
+      loop
+         Read (Stream.all, Buffer, Last);
+         exit when Last < Buffer'First;
+         for I in Buffer'First .. Last loop
+            declare
+               C : constant Character := Character'Val (Buffer (I));
+            begin
+               if After_CR and then C = ASCII.LF then
+                  After_CR := False;          --  the LF of a CR LF
+               else
+                  After_CR := False;
+                  if C = ASCII.LF or else C = ASCII.CR then
+                     Lines.Append (Current);
+                     Current := +"";
+                     Pending := False;
+                     After_CR := C = ASCII.CR;
+                  else
+                     Ada.Strings.Unbounded.Append (Current, C);
+                     Pending := True;
+                  end if;
+               end if;
+            end;
+         end loop;
+      end loop;
+      if Pending then
+         Lines.Append (Current);
+      end if;
+   end Read_Lines;
 
    procedure Usage is
    begin
@@ -37,7 +82,7 @@ procedure Ada_Indent is
    Do_Emit_State : Boolean := False;
    File_Arg      : Ustr := +"";   --  empty until a non-option argument names one
    Lines         : Str_Vector;
-   Input         : File_Type;
+   Input         : Ada.Streams.Stream_IO.File_Type;
    Argc          : constant Natural := Ada.Command_Line.Argument_Count;
    Ai            : Natural := 1;
 
@@ -67,19 +112,19 @@ begin
 
    if -File_Arg /= "" then
       begin
-         Open (Input, In_File, -File_Arg);
+         Ada.Streams.Stream_IO.Open
+           (Input, Ada.Streams.Stream_IO.In_File, -File_Arg);
       exception
          when Name_Error | Use_Error =>
             Put_Line (Standard_Error, "ada_indent: cannot open " & (-File_Arg));
             Ada.Command_Line.Set_Exit_Status (Ada.Command_Line.Failure);
             return;
       end;
-      Set_Input (Input);
+      Read_Lines (Ada.Streams.Stream_IO.Stream (Input), Lines);
+      Ada.Streams.Stream_IO.Close (Input);
+   else
+      Read_Lines (Ada.Text_IO.Text_Streams.Stream (Current_Input), Lines);
    end if;
-
-   while not End_Of_File loop
-      Lines.Append (+Get_Line);
-   end loop;
 
    --  Whole input first: a comment opening a paragraph takes the column of
    --  the code line after it (see Indent_Lines), so it cannot be printed
