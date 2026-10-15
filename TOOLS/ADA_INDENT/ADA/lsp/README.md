@@ -27,7 +27,8 @@ If als cannot be started, or dies, the proxy keeps answering on its own: it
 announces only the formatting capabilities and refuses everything else with
 `MethodNotFound`. `--no-als` asks for that from the start.
 
-Standard library only -- Python 3.9 or later.
+It is written in Python 3 (3.9 or later) and uses only the standard library,
+so there is nothing to install besides als itself.
 
 ## Use
 

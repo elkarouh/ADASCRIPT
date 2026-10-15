@@ -63,13 +63,35 @@ To add a case, put `NNN.in.adb` and `NNN.out.adb` in `tests/cases/` and
 describe it in `tests/CASES.md`. To add a fixture, indent it by hand, put it
 in `tests/fixtures/` and list it in `FIXTURES` in `tests/run_tests.py`.
 
-## Language server
+## Language server (Python)
 
-`lsp/ada_indent_proxy.py` wraps the Ada Language Server: it forwards everything
-to `ada_language_server` and answers `formatting`, `rangeFormatting` and
-`onTypeFormatting` itself with `bin/ada_indent` (resuming from the saved state
-of `--emit-state` / `--state` after an edit). Standard library only; see
-[`lsp/README.md`](lsp/README.md) for editor setup, and `make test-lsp`.
+`lsp/ada_indent_proxy.py` is a proxy between your editor and the Ada Language
+Server. It is written in **Python 3** (3.9 or later, standard library only --
+nothing to `pip install`), and needs `bin/ada_indent` built and
+`ada_language_server` (AdaCore's, "als") installed.
+
+It forwards everything to als and answers `formatting`, `rangeFormatting` and
+`onTypeFormatting` itself with `ada_indent`, so the editor gets als's features
+plus this indentation.
+
+```bash
+make                                   # build bin/ada_indent
+python3 lsp/ada_indent_proxy.py        # speaks LSP on stdin/stdout
+```
+
+You don't run it by hand: tell the editor to start it where it would start
+`ada_language_server`. For example, in Emacs (eglot):
+
+```elisp
+(add-to-list 'eglot-server-programs
+             '((ada-mode ada-ts-mode) . ("python3" "/path/to/lsp/ada_indent_proxy.py")))
+```
+
+Options: `--ada-indent PATH` (default: `ada_indent` on PATH, else
+`bin/ada_indent`), `--als COMMAND` (default `ada_language_server`),
+`--no-als` (formatting only), `--log FILE`, and `-- ARGS...` passed on to als.
+Neovim and Helix setups, how it behaves when als is missing, and its limits are
+in [`lsp/README.md`](lsp/README.md). `make test-lsp` runs its tests.
 
 ## Documentation
 
