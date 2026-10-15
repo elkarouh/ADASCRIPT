@@ -16,7 +16,9 @@ Documents are tracked from `didOpen` / `didChange` / `didClose` (which als
 receives too, so it sees exactly what the editor sent). For an edit near the
 end of a file the proxy resumes `ada_indent` from a saved state
 (`--emit-state` / `--state`) instead of reading the file from the top; an edit
-to a line already covered by the saved state drops it.
+to a line already covered by the saved state drops it. The state kept
+is the one from before the line just formatted, so the editor rewriting that
+line's indentation does not discard it.
 
 Enter on a blank line puts the cursor at the column a statement would take
 there (`ada_indent` itself leaves blank lines empty).
