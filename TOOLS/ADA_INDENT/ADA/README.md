@@ -63,6 +63,14 @@ To add a case, put `NNN.in.adb` and `NNN.out.adb` in `tests/cases/` and
 describe it in `tests/CASES.md`. To add a fixture, indent it by hand, put it
 in `tests/fixtures/` and list it in `FIXTURES` in `tests/run_tests.py`.
 
+## Language server
+
+`lsp/ada-indent-lsp.py` is a small LSP server around `bin/ada_indent`
+(`textDocument/formatting`, `rangeFormatting` and `onTypeFormatting`, with the
+state cache of `--emit-state` / `--state` so a keystroke re-reads only the
+lines after the edit). It needs `pip install pygls lsprotocol`; see
+[`lsp/README.md`](lsp/README.md) for editor setup and `make test-lsp` to test it.
+
 ## Documentation
 
 * [`docs/INDENTATION.md`](docs/INDENTATION.md) -- the block-stack model, the
@@ -80,6 +88,7 @@ in `tests/fixtures/` and list it in `FIXTURES` in `tests/run_tests.py`.
 | `src/ada_scan.ads/.adb` | single-line lexical helpers: `Last_Word`, `Code_Words`, `Stmt_Incomplete`, `Scan_Parens`, `Declared_Name`, ... |
 | `src/indenter.ads/.adb` | the block-stack machine: `Indent_Line`, `Indent_Lines`, `Dump_State`/`Load_State` |
 | `src/ada_indent.adb` | command line |
+| `lsp/` | the language server and its tests |
 | `tests/`, `tools/`, `docs/`, `examples/` | as above |
 
 Two conventions carry the code: indices are **0-based** in `Strscan` and
