@@ -76,7 +76,8 @@ plus this indentation.
 
 ```bash
 make                                   # build bin/ada_indent
-python3 lsp/ada_indent_proxy.py        # speaks LSP on stdin/stdout
+make lsp                               # builds if needed, then speaks LSP on stdin/stdout
+                                       # (make lsp LSP_ARGS="--no-als" for options)
 ```
 
 You don't run it by hand: tell the editor to start it where it would start
