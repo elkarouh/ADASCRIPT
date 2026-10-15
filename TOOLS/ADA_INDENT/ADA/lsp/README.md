@@ -50,27 +50,23 @@ stdio. For example:
              '((ada-mode ada-ts-mode) . ("python3" "/path/to/ada_indent_proxy.py")))
 ```
 
-```lua
--- Neovim (nvim-lspconfig)
-require('lspconfig.configs').ada_indent = {
-  default_config = {
-    cmd = { "python3", "/path/to/ada_indent_proxy.py" },
-    filetypes = { "ada" },
-    root_dir = require('lspconfig').util.find_git_ancestor,
-  },
+VS Code has no built-in way to start an arbitrary language server, so use a
+generic LSP client extension. With
+[Generic LSP Client](https://marketplace.visualstudio.com/items?itemName=zsol.vscode-glspc)
+(`zsol.vscode-glspc`), in `settings.json`:
+
+```json
+{
+  "glspc.server.command": "python3",
+  "glspc.server.commandArguments": ["/path/to/lsp/ada_indent_proxy.py"],
+  "glspc.server.languageId": "ada"
 }
-require('lspconfig').ada_indent.setup{}
 ```
 
-```toml
-# Helix, languages.toml
-[language-server.ada-indent]
-command = "python3"
-args = ["/path/to/ada_indent_proxy.py"]
-[[language]]
-name = "ada"
-language-servers = ["ada-indent"]
-```
+(Those setting names are from that extension's documentation; this has not
+been tried in VS Code here.) If AdaCore's own Ada extension is also installed,
+it starts als by itself; disable it for the workspace, or the editor will talk
+to two servers.
 
 als reads its project from the editor's `initialize` request as usual; the
 proxy does not touch it.

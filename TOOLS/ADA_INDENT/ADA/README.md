@@ -90,7 +90,7 @@ You don't run it by hand: tell the editor to start it where it would start
 Options: `--ada-indent PATH` (default: `ada_indent` on PATH, else
 `bin/ada_indent`), `--als COMMAND` (default `ada_language_server`),
 `--no-als` (formatting only), `--log FILE`, and `-- ARGS...` passed on to als.
-Neovim and Helix setups, how it behaves when als is missing, and its limits are
+The VS Code setup, how it behaves when als is missing, and its limits are
 in [`lsp/README.md`](lsp/README.md). `make test-lsp` runs its tests.
 
 ## Documentation
