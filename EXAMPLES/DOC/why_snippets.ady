@@ -10,11 +10,11 @@ DOCS/check_quotes.py checks the document against it.
 # --- the concepts, the collections and the mappings ------------------------
 const METRES_PER_KNOT: float = 1852.0 / 3600.0      # exact: a nautical mile is 1852 m
 
+from units import metre_T, second_T
+
 type Callsign_T       is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
-type Metre_T          is distinct float              # the basic unit of length
-type Second_T         is distinct float where s: float(s) >= 0.0   # of time, never negative
-type Distance_T       is Metre_T                     # the quantity, as a signature says it
-type Duration_T       is Second_T
+type Distance_T       is metre_T                     # the quantity, as a signature says it
+type Duration_T       is second_T
 type Speed_T          is Distance_T / Duration_T     # metres per second
 type Altitude_T       is 30.48 * Distance_T          # a flight level: hundreds of feet
 type Speed_in_knots_T is METRES_PER_KNOT * Speed_T   # what the radio and the radar say

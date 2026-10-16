@@ -290,11 +290,11 @@ values — a phase of flight, a message kind, a state — is an enumeration.
 ```python
 const METRES_PER_KNOT: float = 1852.0 / 3600.0      # exact: a nautical mile is 1852 m
 
+from units import metre_T, second_T
+
 type Callsign_T       is str where c: c == /^[A-Z][A-Z0-9-]{1,11}\z/
-type Metre_T          is distinct float              # the basic unit of length
-type Second_T         is distinct float where s: float(s) >= 0.0   # of time, never negative
-type Distance_T       is Metre_T                     # the quantity, as a signature says it
-type Duration_T       is Second_T
+type Distance_T       is metre_T                     # the quantity, as a signature says it
+type Duration_T       is second_T
 type Speed_T          is Distance_T / Duration_T     # metres per second
 type Altitude_T       is 30.48 * Distance_T          # a flight level: hundreds of feet
 type Speed_in_knots_T is METRES_PER_KNOT * Speed_T   # what the radio and the radar say
@@ -304,10 +304,10 @@ type Latitude_T       is Degree_T range -90 .. 90        # north positive
 type Longitude_T      is Degree_T range -180 .. 180      # east positive
 ```
 
-A metre, a second and a degree are the basic units, and the only ones
-declared bare. `Distance_T` and `Duration_T` are those same types under the
-names a signature wants to read, and `Second_T` says what it holds: a time is
-never negative. A speed is a distance over a duration; an altitude is the
+A metre, a second and a degree are the basic units: the first two come from
+the standard library's `units` module, and the degree is the only one the
+program declares bare. `Distance_T` and `Duration_T` are those same types under the
+names a signature wants to read, and `Duration_T` says what it holds. A speed is a distance over a duration; an altitude is the
 flight level the controller says, hundreds of feet, which is 30.48 metres of
 distance; the knots the radar reports are a multiple of the speed; and a
 latitude is an angle that is only ever between -90 and 90. None of them is a
@@ -648,7 +648,7 @@ line of declaration, and each catches a bug the line above it lets through:
 | Rung | Written | The compiler refuses | The bug it catches |
 |------|---------|----------------------|--------------------|
 | a name | `type Flight_Number_T is Natural` | nothing: it documents | a signature nobody can read |
-| distinct | `type Metre_T is distinct float` | mixing with any other type | a duration passed where a distance belongs |
+| distinct | `type metre_T is distinct float` | mixing with any other type | a duration passed where a distance belongs |
 | a relation | `type Speed_T is Distance_T / Duration_T` | arithmetic nobody declared | `speed * speed` taken for a distance |
 | a scale | `type Altitude_T is 30.48 * Distance_T` | a unit mixed in silently | the factor applied twice |
 | a range, a wrap | `type Latitude_T is Degree_T range -90 .. 90` | values outside the set | a latitude of 95, a bearing of 370 |
@@ -659,10 +659,9 @@ One domain, all the rungs, as the program writes them:
 <!-- from: EXAMPLES/DOC/why_ladder_snippets.ady -->
 ```python
 type Flight_Number_T is Natural                      # a name: documents, refuses nothing
-type Metre_T is distinct float                       # distinct: a basic unit, mixes with nothing else
-type Second_T is distinct float                      # another
-type Distance_T is Metre_T                           # an alias: the same type, named for the quantity
-type Duration_T is Second_T
+from units import metre_T, second_T
+type Distance_T is metre_T                           # an alias: the same type, named for the quantity
+type Duration_T is second_T
 type Speed_T is Distance_T / Duration_T              # a relation: speed x duration is distance
 type Altitude_T is 30.48 * Distance_T                # a scale: a flight level, hundreds of feet
 type Degree_T is distinct float
@@ -702,10 +701,9 @@ does:
 
 <!-- from: EXAMPLES/DOC/why_alias_snippets.ady -->
 ```python
-type Metre_T is distinct float           # a basic unit: metres
-type Second_T is distinct float          # another: seconds
-type Distance_T is Metre_T               # the quantity, named where a signature reads it
-type Duration_T is Second_T
+from units import metre_T, second_T
+type Distance_T is metre_T               # the quantity, named where a signature reads it
+type Duration_T is second_T
 type Speed_T is Distance_T / Duration_T  # metres per second: a unit made from two others
 
 def flown(speed: Speed_T, time: Duration_T) -> Distance_T:
@@ -717,19 +715,18 @@ let far: Distance_T = flown(speed, 2.0)
 # let bad: Distance_T = speed * speed  -- refused: speed times speed is not a distance
 ```
 
-A `Metre_T` keeps everything a `float` can do — with another `Metre_T`. It
+A `metre_T` (the stdlib's, `distinct float`) keeps everything a `float` can do — with another `metre_T`. It
 mixes with nothing else: not a `float` variable, not a `Speed_T`, not a
-`Second_T`. It is Ada's derived type, and like Ada it lets a literal take
+`second_T`. It is Ada's derived type, and like Ada it lets a literal take
 whatever type its context asks for, so `250.0` needs no ceremony.
 
 Two of those lines are aliases, and they are there for the reader.
-`Metre_T` says how the quantity is measured, which is what the one line that
-declares it needs. `Distance_T` says what it is, which is what a signature
+`metre_T` says how the quantity is measured, and comes from the stdlib. `Distance_T` says what it is, which is what a signature
 needs: `flown(speed, time) -> Distance_T` reads as physics, and the day the
 program counts in something else only the declaration changes. The alias is
 the same type under a second name, so there is nothing to convert, and a
-`Distance_T` goes where a `Metre_T` is wanted, in either direction. What is
-declared from nothing is only the basic units, one `distinct float` for each
+`Distance_T` goes where a `metre_T` is wanted, in either direction. What the
+stdlib declares from nothing is only the basic units, one `distinct float` for each
 measure; a speed, an altitude or a latitude is always made from them, so
 that no quantity in the program is a bare `float` that someone has to
 remember the meaning of. The alias is read within the module that declares
@@ -1244,7 +1241,7 @@ to know the order before reading the declarations.
    in a comment, and nothing else in the program is a bare `float` that means
    a length. A program that wants its signatures to read as quantities names
    the unit for how it is measured and the alias for what it is, `Distance_T
-   is Metre_T`; the Orbiter below names its basic units for the quantity and
+   is metre_T`; the Orbiter below names its basic units for the quantity and
    needs no alias. Give a base unit the check it really has: a duration is
    never negative, so `Duration_T` says `where d: float(d) >= 0.0`, and a
    negative duration stops the program where it is made. (`range` says the

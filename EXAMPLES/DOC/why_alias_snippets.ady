@@ -18,10 +18,9 @@ let v: Velocity_T = 250.0
 let h: Height_T = v          # an alias: compiles, on both backends
 assert h == 250.0
 
-type Metre_T is distinct float           # a basic unit: metres
-type Second_T is distinct float          # another: seconds
-type Distance_T is Metre_T               # the quantity, named where a signature reads it
-type Duration_T is Second_T
+from units import metre_T, second_T
+type Distance_T is metre_T               # the quantity, named where a signature reads it
+type Duration_T is second_T
 type Speed_T is Distance_T / Duration_T  # metres per second: a unit made from two others
 
 def flown(speed: Speed_T, time: Duration_T) -> Distance_T:

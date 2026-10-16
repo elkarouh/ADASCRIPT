@@ -6,11 +6,10 @@ DOCS/check_quotes.py checks the document against it. The lines a rung refuses
 are here as comments; the Makefile's checks refuse the same mixes.
 """
 
+from units import metre_T, second_T
 type Flight_Number_T is Natural                      # a name: documents, refuses nothing
-type Metre_T is distinct float                       # distinct: a basic unit, mixes with nothing else
-type Second_T is distinct float                      # another
-type Distance_T is Metre_T                           # an alias: the same type, named for the quantity
-type Duration_T is Second_T
+type Distance_T is metre_T                           # an alias: the same type, named for the quantity
+type Duration_T is second_T
 type Speed_T is Distance_T / Duration_T              # a relation: speed x duration is distance
 type Altitude_T is 30.48 * Distance_T                # a scale: a flight level, hundreds of feet
 type Degree_T is distinct float
