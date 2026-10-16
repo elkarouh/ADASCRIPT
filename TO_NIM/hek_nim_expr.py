@@ -2879,13 +2879,13 @@ def _constructor_name(cls, call_node):
     the call: how many arguments, then what the first one is."""
     overloads = getattr(ParserState, "ctor_overloads", {}).get(cls)
     if not overloads:
-        return "new" + cls
+        return "new" + cls.strip("`")
     args = _extract_call_args(call_node) if call_node is not None else []
     fit = [o for o in overloads
            if sum(1 for _, d in o[0] if not d) <= len(args) <= len(o[0])]
     kinds = {bool(f) for _, f in fit}
     if len(kinds) == 1:
-        return ("try" if kinds.pop() else "new") + cls
+        return ("try" if kinds.pop() else "new") + cls.strip("`")
     if len(fit) > 1 and args:
         seen = _value_nim_type(args[0])
         same = [o for o in fit
@@ -2895,7 +2895,7 @@ def _constructor_name(cls, call_node):
             # routine, `parseJson(text)`, whose type nothing here records.
             same = [o for o in fit if o[0] and (o[0][0][0] == "str") == (seen == "string")]
         if same and len({bool(f) for _, f in same}) == 1:
-            return ("try" if same[0][1] else "new") + cls
+            return ("try" if same[0][1] else "new") + cls.strip("`")
     raise SyntaxError(
         f"{cls}({', '.join(args)}): cannot tell which constructor is meant, "
         "the plain one or the one that can fail; they differ in the number "

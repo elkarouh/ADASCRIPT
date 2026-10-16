@@ -100,27 +100,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       between the backends, three or four refusals, docs. Worth building
       when a second wrapper is reused across several functions; `lv.py`
       alone is one use, and the call-site form is as short.
-- [ ] `+` of two calls returning lists does not build on Nim. `evens(4) +
-      odds(4)`, each `-> []int`, is emitted as it is, and nim has no `+`
-      for seqs ("type mismatch ... seq[int]"); the same on two typed
-      locals, `a + b`, becomes `a & b` and builds. Python takes both. The
-      list concatenation is recognised from a name's declared type but not
-      from a call's result type. Worked around in
-      TOOLS/TCHECK/LIBS/baselines.ady (`diff_summaries`) with two typed
-      locals.
-- [ ] `s.split()` of a string with leading whitespace differs between the
-      backends. `"    ./c.ksh  gone".split()[0]` is `"./c.ksh"` on Python,
-      which drops the empty fields, and `""` on Nim, whose strutils `split`
-      keeps an empty field for each leading separator. Map a bare `split()`
-      to `splitWhitespace()`. Worked around in
-      TOOLS/TCHECK/LIBS/baselines.ady (`script_of`, `marked`) with
-      `.strip().split(" ")[0]`.
-- [ ] a class named after a Nim keyword does not build on Nim: `class Out:`
-      emits `proc new`Out`*()`, the constructor's name pasted onto the
-      backticked type name, which nim rejects ("invalid indentation"). The
-      constructor has to be named from the bare name -- `newOut` -- wherever
-      it is declared and called.
-
 - [ ] whether a class is a `ref object` on Nim is decided twice, and the two
       can disagree. An exact check over the field declarations runs first
       and the constructor follows it (`new(result)` or not); a search of the
@@ -166,13 +145,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       lo, hi)` at each assignment and augmented assignment of a variable of
       the type, as Ada's constraint model does. The tutorial says "Nim only"
       meanwhile.
-- [ ] a subrange with a negative bound does not declare on either backend.
-      `type Off_T is range -2 .. 1` emits `Off_T = range(<Filter object>,
-      1 + 1)` on Python -- a parser node reaches the output -- and a type
-      mismatch on Nim. The unary minus is not being folded into the literal
-      where the bounds are read, so both `tick_types` and the rendered alias
-      get it wrong. Loud on both sides rather than divergent, and a
-      non-negative subrange is unaffected.
 - [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
       collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
       `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same
@@ -184,11 +156,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       component at transpile time with a pointer to `.parent`.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
-- [ ] `EXAMPLES/ROI_JOINTJS/roi_glue.ady` crashes ady2py on `jsvar`, which the
-      grammar marks JS-backend-only. The file targets neither Python nor the
-      Nim C backend (it does not compile there either), so this is a bad
-      diagnostic rather than a missing feature: ady2py should say the construct
-      is not for this backend instead of raising AttributeError.
 - [ ] containers holding enum values stringify differently. `print xs` where
       `xs: []Node_T` gives `@[A, B, C, D]` on Nim and
       `[<Node_T.A: 0>, <Node_T.B: 1>, ...]` on Python -- Nim's seq syntax and
@@ -224,14 +191,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       of a string, so `+` failed on Nim in exactly the position where
       `sudoku.ady` had reached for `&`. Worth a transpile-time warning on
       `&` between strings rather than a Python run-time error.
-- [ ] `T'Last` on an alias of a non-ordinal type emits nonsense on Python.
-      With `type Distance_T is float`, `Distance_T'Last` is `Distance_T.high`
-      on Nim -- which is `inf`, and right -- and `(len(Distance_T) - 1)` on
-      Python, which raises `TypeError: object of type 'type' has no len()`.
-      The tick means the largest value of the type; the Python emitter is
-      reaching for the ordinal-domain reading without checking that the
-      type has one. `Inf` is the portable spelling meanwhile, and is what
-      `dijkstra.ady` uses.
 - [ ] `int == int / int` compiles on Python and is rejected by Nim, whose
       `/` yields a float and whose `==` has no int/float overload. Python
       says `4 == 8 / 2` is True. Either the emitter converts, or the
@@ -302,23 +261,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       drags CPython into a Nim binary. `re(expr)` appears in a couple of older
       CFMU files as if it existed; it does not. Either a `Regex(s)` value that
       `==` accepts on the right, or interpolation inside a literal.
-- [ ] `s.split(None, maxsplit)` emits `split(s, nil, 1)`, which is not valid
-      Nim. Python's "split on runs of whitespace, at most n times" has no
-      single Nim call -- `splitWhitespace` takes no maxsplit -- so it wants a
-      helper. It is the last thing keeping `cfmu_get_file_type.ady` from
-      compiling.
-- [ ] an escaped delimiter in the *replacement* half of `s///` keeps its
-      backslash. `s = s/(\d{4})-(\d{2})-(\d{2})/$+3\/$+2\/$+1/g` gives Nim
-      `"$3\/$2\/$1"`, which is not a valid character escape and does not
-      compile, and Python `r'\3\/\2\/\1'`, which leaves a stray backslash in
-      the result. The pattern half is fine -- `s/^[.\/]+//g` works on both --
-      so it is only the replacement scanner that keeps the backslash instead
-      of dropping it.
-- [ ] a Nim keyword used as a tuple-unpacking target is not escaped. `let out:
-      str = "x"` emits `` let `out` `` and is fine; `let (out, rc) = shell: echo
-      hi` emits a bare `out` and fails with "identifier expected, but got
-      'keyword out'". The plain-declaration path calls `_nim_user_ident` and
-      the unpacking path does not.
 - [ ] `for x in Enum_T'Range:` iterates in a different order on each backend,
       and on Python in a different order on each *run*. `'Range` is the set of
       members, which the Nim backend renders as a `set[Enum_T]` -- ordinal
@@ -342,11 +284,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       returning one. Those now keep `.lines` as an attribute and raise
       AttributeError, which is at least loud. A receiver-type pass would
       settle it properly.
-- [ ] a comment between `case X:` and its first `when` is a parse error on
-      both backends: "got RichNL, expected one of: ... regex_lit". A comment
-      above the `case`, or between two `when` clauses, is fine -- it is only
-      the position before the first clause, where a reader naturally puts the
-      note explaining what the block dispatches on.
 - [ ] a single-line `when COND: stmt` body glues a following comment onto
       the Nim `of` clause instead of leaving it where it is, when that
       comment is the very next line after the case statement (at the same
@@ -602,8 +539,6 @@ transpiler bug, and it cannot be fixed in one without picking a side, so
 filter the empty lines after splitting input that might be empty.
 Everything else the outside session catalogued now compiles and runs the
 same on both backends; the probes are in the session log.
-## Nim keyword as a tuple-unpacking target
-
 ## `{!var}` quoting not supported in shell block form
 
 In single-line `shell:`, `{!var}` quotes the value as a single shell argument

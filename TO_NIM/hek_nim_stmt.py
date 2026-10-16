@@ -2903,6 +2903,7 @@ def to_nim(self):
         elif raw[j] == '/': break
         else: j += 1
     repl = raw[repl_start:j]
+    repl = repl.replace('\\/', '/')      # an escaped delimiter is the delimiter
     flags = raw[j + 1:]          # after third '/', strip 'g' (std/re replace is always global)
     regex_flags = flags.replace('g', '')
     # Use std/re via srx alias (nre.replace has quadratic blowup like findAll)

@@ -792,6 +792,12 @@ def _tick_to_py(expr, attr):
         if attr == "choose":
             ParserState.nim_imports.add("import random as _random")
             return f"_random.choice(list({expr}))"
+    if getattr(ParserState, "py_type_aliases", {}).get(expr) == "float":
+        # the ends of float are the infinities, as on the Nim backend
+        if attr in ("Last", "High"):
+            return "float('inf')"
+        if attr in ("First", "Low"):
+            return "float('-inf')"
     if attr in ("Length", "len"):
         return f"len({expr})"
     if attr in ("First", "Low"):

@@ -653,14 +653,14 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # If no __init__ but class needs a constructor, generate a default newClassName.
         # If the class has a parent with a known constructor, forward its parameters.
         if not inits and class_name:
-            new_name = f"new{class_name}"
+            new_name = f"new{class_name.strip(chr(96))}"
             export = "*" if base_indent == 0 else ""
             parent_param_types = (
-                getattr(ParserState, "proc_param_types", {}).get(f"new{parent_name}", [])
+                getattr(ParserState, "proc_param_types", {}).get(f"new{parent_name.strip(chr(96))}", [])
                 if parent_name else []
             )
             parent_param_strs = (
-                ParserState.proc_param_types_full.get(f"new{parent_name}", [])
+                ParserState.proc_param_types_full.get(f"new{parent_name.strip(chr(96))}", [])
                 if parent_name else []
             )
             if parent_param_strs:
@@ -669,7 +669,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                 fwd_args = ", ".join(p.split(":")[0].strip().split(" = ")[0] for p in parent_param_strs)
                 result_lines.append(f"{_ind(base_indent)}proc {new_name}{export}{type_params}({fwd_params}): {class_type} =")
                 result_lines.append(f"{_ind(base_indent + 1)}new(result)" if is_virtual_class else f"{_ind(base_indent + 1)}result = {class_type}()")
-                result_lines.append(f"{_ind(base_indent + 1)}init{parent_name}(result, {fwd_args})")
+                result_lines.append(f"{_ind(base_indent + 1)}init{parent_name.strip(chr(96))}(result, {fwd_args})")
                 for fname, fdefault in field_defaults:
                     result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
             else:
@@ -5318,7 +5318,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     params_str = ", ".join(param_strs)
 
     # Register parameter types for call-site Option[T] coercion
-    new_name_key = (f"try{class_name}" if ret_ann.lstrip(": ").strip().startswith("Result[") else f"new{class_name}")
+    new_name_key = (f"try{class_name.strip(chr(96))}" if ret_ann.lstrip(": ").strip().startswith("Result[") else f"new{class_name.strip(chr(96))}")
     param_types_list = []
     for ps in param_strs:
         import re as _re2
@@ -5328,7 +5328,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
     # Store full param strings (name: type = default) for forwarding constructors
     ParserState.proc_param_types_full[new_name_key] = list(param_strs)
 
-    init_name = f"init{class_name}"
+    init_name = f"init{class_name.strip(chr(96))}"
     # ref types: self: ClassName; value types: self: var ClassName
     is_ref = is_virtual
     if is_ref:
@@ -5361,7 +5361,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
                 match = re.search(r'super\(\).__init__\((.*)\)', line)
                 if match:
                     args = match.group(1)
-                    line = line.replace(f"super().__init__({args})", f"init{parent_name}(self, {args})")
+                    line = line.replace(f"super().__init__({args})", f"init{parent_name.strip(chr(96))}(self, {args})")
                 init_body[i] = line
 
     init_lines.append(init_sig)
@@ -5374,7 +5374,7 @@ def _generate_init_new(func_node, indent, class_name, parent_name, is_virtual=Tr
         # falling off the end is success
         init_lines.append(f"{_ind(indent + 1)}return {fails}.ok()")
 
-    new_name = f"try{class_name}" if fails else f"new{class_name}"
+    new_name = f"try{class_name.strip(chr(96))}" if fails else f"new{class_name.strip(chr(96))}"
     export = "*" if indent == 0 else ""
     if fails:
         # the object is built in a local, and handed back only if init did not fail

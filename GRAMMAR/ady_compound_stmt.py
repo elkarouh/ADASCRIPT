@@ -305,6 +305,7 @@ case_stmt = (
     + expression
     + COLON
     + NEWLINE
+    + NL[:]
     + INDENT
     + NL[:]
     + (when_clause + NL[:])[1:]

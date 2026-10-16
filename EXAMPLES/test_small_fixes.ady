@@ -1,0 +1,42 @@
+#!/usr/bin/env ady2nim
+"""Small slips that were once open in TODO.md, one line each, the same on both backends."""
+
+# a class named like a Nim keyword: its constructor is newOut, not new`Out`
+class Out:
+    var n: int
+
+    def __init__(self, n: int):
+        self.n = n
+
+    def twice(self) -> int:
+        return self.n * 2
+
+type Tool_T is enum:
+    GREP
+    RG
+
+def number_of(t: Tool_T) -> int:
+    case t:
+        # a note above the first clause, saying what the case dispatches on
+        when GREP: return 1
+        when RG: return 2
+
+type Distance_T is float
+
+def main():
+    let o: Out = Out(21)
+    assert o.twice() == 42
+    assert number_of(GREP) == 1 and number_of(RG) == 2
+
+    # an escaped delimiter in the replacement is the delimiter
+    var date: str = "2024-01-02"
+    date = s/(\d{4})-(\d{2})-(\d{2})/$+3\/$+2\/$+1/g
+    assert date == "02/01/2024"
+
+    # the ends of a float type are the infinities
+    let near: Distance_T = 3.5
+    assert near < Distance_T'Last and near > Distance_T'First
+    print "test_small_fixes: ok"
+
+if __name__ == "__main__":
+    main()

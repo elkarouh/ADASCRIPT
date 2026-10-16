@@ -1473,6 +1473,7 @@ def to_py(self):
         elif raw[j] == '/': break
         else: j += 1
     repl = raw[repl_start:j]
+    repl = repl.replace('\\/', '/')      # an escaped delimiter is the delimiter
     flags_str = raw[j + 1:]
     # $+N → \N and $+{name} → \g<name>  (Python re.sub backreference syntax)
     repl = _re_s.sub(r'\$\+(\d+)', r'\\\1', repl)
@@ -1581,6 +1582,10 @@ def to_py(self, indent=0):
         positionally is accepted in silence, adds no indentation, and quietly
         rewrites the expression's parenthesisation into the bargain.
         """
+        if not hasattr(node, "to_py"):
+            # a statement of the JavaScript backend only (jsvar): nothing here renders it
+            raise SyntaxError("`jsvar` is for the JavaScript backend (ady2nim js); "
+                              "it has no meaning in Python")
         if _to_py_takes_indent(node.to_py):
             return node.to_py(indent)
         return ind + node.to_py()
