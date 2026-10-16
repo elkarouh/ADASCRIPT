@@ -2803,39 +2803,83 @@ def _wrap_option_tail(body, ret_ann):
     field typed ?T, a call of a routine returning one -- here, nimported,
     or a method of what a call returns -- or some()/none() itself. Shared
     by procs and methods: a method's tail went unwrapped, and Nim refused
-    `n` where the method returns Option[int]."""
+    `n` where the method returns Option[int]. When the last statement is an
+    if or a case, each of its branches ends in a tail of its own, and each
+    is wrapped the same way; a bare None is none(T)."""
     import re as _re_opt
     _nim_ret = ret_ann.lstrip(": ").strip()
-    if not _re_opt.search(r"Option\[(.+)\]", _nim_ret):
+    _inner = _re_opt.search(r"Option\[(.+)\]", _nim_ret)
+    if not _inner:
         return body
-    _blines_o = body.rstrip().splitlines()
-    # Find last non-comment, non-empty line
-    _idx_o = len(_blines_o) - 1
-    while _idx_o >= 0 and (_blines_o[_idx_o].lstrip().startswith("#") or _blines_o[_idx_o].strip() == ""):
-        _idx_o -= 1
-    if _idx_o < 0:
-        return body
-    _last_o = _blines_o[_idx_o]
-    _last_o_s = _last_o.lstrip()
-    _is_stmt = _re_opt.match(
-        r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when)\b',
-        _last_o_s)
-    if _is_stmt or _last_o_s.startswith(("some(", "none(")):
-        return body
-    _sym_o = ParserState.symbol_table.lookup(_last_o_s.split("(")[0].split(".")[0].split("[")[0].strip())
+    lines = body.rstrip().splitlines()
+    _wrap_option_tail_lines(lines, 0, len(lines), _inner.group(1))
+    return chr(10).join(lines) + chr(10)
+
+
+_TAIL_HEADS = r'^(if|elif|else|case|of|when|for|while|try|except|finally|block)\b'
+
+
+def _wrap_option_tail_lines(lines, lo, hi, inner):
+    """Wrap, in place, the tail of the block LINES[lo:hi] (see _wrap_option_tail)."""
+    import re as _re_opt
+    # last non-comment, non-empty line
+    idx = hi - 1
+    while idx >= lo and (lines[idx].lstrip().startswith("#") or lines[idx].strip() == ""):
+        idx -= 1
+    if idx < lo:
+        return
+    code = [k for k in range(lo, hi) if lines[k].strip() and not lines[k].lstrip().startswith("#")]
+    base = min(len(lines[k]) - len(lines[k].lstrip()) for k in code)
+    # the last statement starts at the last line at BASE that is not a continuation of a chain
+    starts = [k for k in code if len(lines[k]) - len(lines[k].lstrip()) == base]
+    first = starts[-1]
+    while (_re_opt.match(r'^(elif|else|of|except|finally)\b', lines[first].lstrip())
+           and starts.index(first) > 0):
+        first = starts[starts.index(first) - 1]
+    head = lines[first].lstrip()
+    if _re_opt.match(r'^(if|case)\b', head) and lines[first].rstrip().endswith(":"):
+        # each branch: the lines under a header at BASE (for case, under its `of`/`else`)
+        chain = [k for k in starts if k >= first]
+        if _re_opt.match(r'^if\b', head) and not lines[chain[-1]].lstrip().startswith("else"):
+            return          # an if with no else does not end in a value
+        for n, k in enumerate(chain):
+            end = chain[n + 1] if n + 1 < len(chain) else hi
+            if _re_opt.match(r'^case\b', lines[k].lstrip()):
+                continue
+            # a case's `of` lines sit one level in; their bodies are deeper still
+            _wrap_option_tail_lines(lines, k + 1, end, inner)
+        # a case's branches are at one level deeper than the `case` line
+        if _re_opt.match(r'^case\b', head):
+            deeper = [k for k in code if k > first and len(lines[k]) - len(lines[k].lstrip()) > base]
+            if deeper:
+                b2 = min(len(lines[k]) - len(lines[k].lstrip()) for k in deeper)
+                arms = [k for k in deeper if len(lines[k]) - len(lines[k].lstrip()) == b2]
+                for n, k in enumerate(arms):
+                    end = arms[n + 1] if n + 1 < len(arms) else hi
+                    _wrap_option_tail_lines(lines, k + 1, end, inner)
+        return
+    last = lines[idx]
+    last_s = last.lstrip()
+    if _re_opt.match(
+            r'^(var|let|const|result|return|for|while|try|discard|raise|except|finally|block|when|elif|else|of)\b',
+            last_s) or last_s.startswith(("some(", "none(")):
+        return
+    if last_s == "nil":
+        lines[idx] = f"{last[:len(last) - len(last_s)]}none({inner})"
+        ParserState.nim_imports.add("options")
+        return
+    _sym_o = ParserState.symbol_table.lookup(last_s.split("(")[0].split(".")[0].split("[")[0].strip())
     _sym_type_o = (_sym_o.get("type", "") if isinstance(_sym_o, dict) else "") if _sym_o else ""
     # a call to a routine that already returns an Option, here or in a
     # nimported module, is the value itself; so is an Optional field
-    _called_o = hek_nim_expr._outer_call_name(_last_o_s)
+    _called_o = hek_nim_expr._outer_call_name(last_s)
     if _called_o and (hek_nim_expr._proc_ret_nim(_called_o) or "").startswith("Option["):
         _sym_type_o = "Option["
-    if hek_nim_expr._expr_is_option(_last_o_s):
+    if hek_nim_expr._expr_is_option(last_s):
         _sym_type_o = "Option["
     if _sym_type_o.startswith("Option["):
-        return body
-    _indent_o = _last_o[:len(_last_o) - len(_last_o_s)]
-    _blines_o[_idx_o] = f"{_indent_o}some({_last_o_s})"
-    return chr(10).join(_blines_o) + chr(10)
+        return
+    lines[idx] = f"{last[:len(last) - len(last_s)]}some({last_s})"
 
 
 def _wrap_union_tail(body, ret_ann):
@@ -5440,6 +5484,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                 for child in node.nodes:
                     yield from _extract_deco_names(child)
 
+    method_type_params = ""      # the method's own: `def echo[U](self, x: U)`
     is_contextmanager = False
     for node in func_node.nodes:
         for deco_node, deco_text in _extract_deco_names(node):
@@ -5459,6 +5504,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         elif tname == "Several_Times":
             for st in node.nodes:
                 st_name = type(st).__name__
+                if st_name == "type_alias_params":
+                    method_type_params = st.to_nim()
                 if st_name == "param_list":
                     for p in st.nodes:
                         ptype_name = type(p).__name__
@@ -5760,6 +5807,10 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         keyword = "proc"
 
     generic_params = type_params if type_params else ""
+    if method_type_params:
+        # the class's parameters first, then the method's own: [T, U]
+        generic_params = (generic_params[:-1] + ", " + method_type_params[1:]
+                          if generic_params else method_type_params)
     # Translate dunder names to Nim operator procs
     nim_name, nim_kw = _nim_proc_name(name)
     if nim_name is None:

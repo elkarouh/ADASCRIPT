@@ -3192,6 +3192,12 @@ def to_nim(self, prec=None):
     has_call = (len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
                 and self.nodes[1].nodes
                 and type(self.nodes[1].nodes[0]).__name__ == "call_trailer")
+    if (not has_call and len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes")
+            and len(self.nodes[1].nodes) > 1
+            and type(self.nodes[1].nodes[0]).__name__ == "slice_trailer"
+            and type(self.nodes[1].nodes[1]).__name__ == "call_trailer"
+            and (ParserState.symbol_table.lookup(raw_name) or {}).get("kind") in ("class", "ref_class")):
+        has_call = True         # `Box[int](3)`: a generic class's constructor
     if has_call:
         # Auto-import for known Nim stdlib functions used as calls
         _NIM_CALL_IMPORTS = {
@@ -3650,7 +3656,12 @@ def to_nim(self, prec=None):
         else:
             sym = ParserState.symbol_table.lookup(raw_name)
             if sym and sym.get("kind") in ("class", "ref_class"):
-                result = _constructor_name(raw_name, _first_trailer if _is_call else None)
+                _trs = self.nodes[1].nodes if len(self.nodes) > 1 and hasattr(self.nodes[1], 'nodes') else []
+                # `Box[int](3)`: the type arguments, then the call -- newBox[int](3)
+                _generic_call = (len(_trs) > 1 and type(_trs[0]).__name__ == "slice_trailer"
+                                 and type(_trs[1]).__name__ == "call_trailer")
+                result = _constructor_name(
+                    raw_name, _first_trailer if _is_call else _trs[1] if _generic_call else None)
     base_name = result  # save for type-aware method lookup
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         trailer_list = list(self.nodes[1].nodes)

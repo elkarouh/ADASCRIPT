@@ -20,16 +20,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       a JavaScript global like `htmx` yet: `js/jsffi` has no way to fetch one, and Adascript
       has no way to declare an external JavaScript global. Needs a stdlib binding or a
       transpiler feature.
-- [ ] an imported function named like a builtin is read as the builtin. A
-      same-file `def run` overrides the builtin `run([...])` (the tutorial says
-      so), but `from loop import run` does not: the call is the builtin's, and the
-      importer is given the process runtime (`adascriptRun` and the rest) and its
-      imports -- `osproc`, `posix`, `streams`, `strtabs`, `times` -- which can
-      clash with the importer's own: illwill's `Key` against posix's, "ambiguous
-      identifier", in a file that never mentions a process. Found moving the vi
-      loop into a module of its own, where it is called `edit` to stay clear of it. The
-      builtins (`run`, `die`, `warn`, ...) should give way to an imported name as
-      they do to a local one.
 - [ ] a method's parameter is made `var` only for a direct write to it
       (`p.x = 1`, `p.items.add(..)`), where a plain proc's is also for a call of
       a method that mutates its object (`p.scroll()`). So `def draw(self, ed:
@@ -88,20 +78,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       types, naming a list type first is the only spelling; accept
       `[]T`, `{K}V` and the like in the brackets, or keep it a deliberate
       rule and say so in the error.
-- [ ] a generic method does not build on Nim. `def echo[T](self, x: T) ->
-      T` inside a class is emitted without `T` among the proc's generic
-      parameters ("undeclared identifier: 'T'"); Python takes it (PEP 695).
-      Generic functions and generic classes are fine. It also means the rule
-      that a generic call names its types is checked for module-level
-      functions only: a generic method called as `h.echo(5)` is not, since
-      no such call can build on Nim anyway. Emit the method's own `[T]`, and
-      extend `check_generic_calls` to `obj.method(...)` once it does.
-- [ ] directly constructing a generic class does not build on Nim.
-      `class Box[T]` with `let a: Box[int] = Box[int](3)` is emitted as
-      `Box[int](3)` -- a conversion of the literal -- instead of the
-      constructor call `newBox[int](3)`; Python takes it. Generic classes are
-      used by subclassing with named arguments (`class X(Maximizer[S, D,
-      R])`), which works, so nothing in the repo constructs one.
 - [ ] a subrange is bounds-checked on Nim only, so the same source behaves
       differently. With `type Quantity_T is 0 .. Max_Allowed_Quantity`, on
       Nim `let q: Quantity_T = 101` does not compile and a computed value
@@ -179,12 +155,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       both sides; the lexical `os.path.join` rule is the easier one to
       match, but it means shadowing the `/` that std/paths exports.
       `git1.ady` sidesteps it by joining in two steps.
-- [ ] ady2nim: a value-returning call used as a statement gets `discard` inside
-      a plain `def` but not inside a *method body* or at module level, so the
-      same source compiles on Python and fails on Nim with "expression ... has
-      to be used (or discarded)". The richer logic in `hek_nim_stmt.py` is the
-      disabled fallback; the active `stmt_line.to_nim` in `hek_nim_parser.py`
-      only discards `pop` and nimpy calls.
 - [ ] Nim identifiers ignore case and underscores, so an Adascript class
       `Container` and a constant `CONTAINER` are one name there and two on
       Python. Worth a transpile-time warning: the Nim error names a
@@ -287,18 +257,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       name shared by two classes with different types could then narrow
       the wrong way -- which is why it is written down rather than done
       alongside the char-default fix.
-- [ ] implicit return does not work under a `?T` return type, so every
-      branch of an optional-returning function needs an explicit `return`.
-      Two different failures, depending on the branch. A value as the tail
-      expression is wrapped one level too deep -- `def f(s: str) -> ?BT`
-      ending in `when others: OP` gives "got 'Option[BT]' for 'some(OP)'
-      but expected 'BT'", because the case itself is typed `BT` and the
-      `some()` lands inside it. A bare `None` as the tail reaches Nim as
-      `nil`, where `isNil` is ambiguous between its `ptr T` and `ref T`
-      overloads. The `if/else` form fails the same way as the `case` one,
-      so it is the implicit return rather than the construct around it.
-      `TOOLS/TCHECK/Tcheck_tact.ady`'s `build_type_from` says so where it
-      spells out the returns it would otherwise leave implicit.
 - [ ] distinct types and units, what is left (the feature itself --
       `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
@@ -328,12 +286,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       which Adascript does not import for it ("undeclared identifier"),
       returns a float, and rounds half away from zero. Give it one
       meaning -- an int, and say which way halves go -- and emit the import.
-- [ ] a `?T` compared with a plain value compiles on Python and not on Nim.
-      `let x: ?int = f(...)` then `x == 7` is True on Python; Nim has no
-      `==` between `Option[int]` and an int ("type mismatch"). The same
-      through a function-typed variable, `p("7") == 7` for `p: (str) ->
-      ?int`. `x is not None and x == 7` is the spelling that works on both,
-      or the emitter could unwrap for the comparison.
 - [ ] a `def` returning a `lambda` does not build on Nim. `def twice(f: (int)
       -> int) -> (int) -> int: return lambda x: f(f(x))` is emitted as a
       nested `proc(x: auto): auto`, which Nim rejects ("a nested proc can

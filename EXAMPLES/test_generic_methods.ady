@@ -1,0 +1,21 @@
+#!/usr/bin/env ady2nim
+"""A generic class built directly (Box[int](3)), and a generic method with a type parameter of its own."""
+class Box[T]:
+    var item: T
+    def __init__(self, item: T):
+        self.item = item
+    def value(self) -> T:
+        return self.item
+    def echo[U](self, x: U) -> U:
+        return x
+
+def first_of[T](xs: []T) -> T:
+    return xs[0]
+
+def main():
+    let a: Box[int] = Box[int](3)
+    assert a.value() == 3
+    assert a.echo("hi") == "hi"
+    print "ok"
+
+main()

@@ -12,7 +12,7 @@ with no .ady (`math` here) stays a Nim-only import.
 """
 nimport math
 from NIMPORT_TEST/shapes import Shape_T, Canvas, parse
-from NIMPORT_TEST/names import Kind_T, Failure_T, label
+from NIMPORT_TEST/names import Kind_T, Failure_T, label, run
 
 def describe(text: str) -> str:
     let parsed: Shape_T | !Failure_T = parse(text)
@@ -31,4 +31,5 @@ canvas.add(Shape_T(SQUARE, 2.5))
 canvas.add(Shape_T(CIRCLE, 0.5))
 print f"total {canvas.total()}"
 assert canvas.total() == 3.0
+assert run(21) == 42                  # the module's run, not the builtin
 print "test_nimport_modules OK"

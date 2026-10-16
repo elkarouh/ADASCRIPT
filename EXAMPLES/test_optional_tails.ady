@@ -1,0 +1,60 @@
+#!/usr/bin/env ady2nim
+"""A ?T return from the tail of a function, a method, an if or a case; a ?T compared with a plain value."""
+type BT is enum:
+    OP
+    CL
+
+def f(s: str) -> ?BT:
+    case s:
+        when "a": OP
+        when "b": CL
+        when others: None
+
+def g(n: int) -> ?int:
+    if n > 0:
+        n * 2
+    else:
+        None
+
+def h(n: int) -> ?str:
+    if n > 0:
+        "pos"
+    elif n < 0:
+        "neg"
+    else:
+        None
+
+def parse7(s: str) -> ?int:
+    if s == "7":
+        return 7
+    return None
+
+class Parser:
+    var n: int
+    def __init__(self, n: int):
+        self.n = n
+    def find(self, k: int) -> ?int:
+        if k == self.n:
+            self.n * 2
+        else:
+            None
+
+def main():
+    assert f("a") == OP
+    assert f("z") is None
+    assert g(2) == 4
+    assert g(0) is None
+    assert h(-1) == "neg"
+    assert h(0) is None
+    let x: ?int = parse7("7")
+    assert x == 7
+    assert parse7("7") == 7
+    let p: (str) -> ?int = parse7
+    assert p("7") == 7
+    assert p("8") != 7
+    var pr: Parser = Parser(3)
+    assert pr.find(3) == 6
+    assert pr.find(4) is None
+    print "test_optional_tails: ok"
+
+main()

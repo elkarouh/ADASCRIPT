@@ -11,3 +11,7 @@ def label(kind: Kind_T) -> str:
         when CIRCLE: "circle"
         when SQUARE: "square"
         when TRIANGLE: "triangle"
+
+# Named like a builtin (run, die, ...): an importer that asks for it by name gets this one.
+def run(n: int) -> int:
+    return n * 2

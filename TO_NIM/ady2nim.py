@@ -790,6 +790,14 @@ def translate(code, export_symbols=False):
     import re as _re_udef
     ParserState.user_top_level_procs = set(
         _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
+    # ...and the ones it imports from another module of its own: `from loop
+    # import run` means loop's run, not the builtin, as a local def does.
+    for _imp in _re_udef.finditer(
+            r'^from\s+[\w./]+\s+n?import\s+(\(.*?\)|[^\n]+)', code, _re_udef.M | _re_udef.S):
+        for _item in _imp.group(1).strip("()").replace("\n", " ").split(","):
+            _nm = _item.split("#")[0].split(" as ")[-1].strip()
+            if _re_udef.fullmatch(r"[A-Za-z_]\w*", _nm):
+                ParserState.user_top_level_procs.add(_nm)
 
     ParserState.symbol_table.push_scope("module")
     # PROG, the program's name, is predeclared for a module that uses it and
