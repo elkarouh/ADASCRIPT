@@ -706,6 +706,8 @@ def translate(code, export_symbols=False):
         return code
 
     from hek_parsec import ParserState
+    from ady_decorators import expand_decorators
+    code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     from ady_html import expand_html_blocks

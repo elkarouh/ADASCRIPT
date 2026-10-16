@@ -1,0 +1,45 @@
+#!/usr/bin/env ady2nim
+"""Stateless decorators: a wrapper marked @decorator is handed the function it wraps."""
+
+@decorator
+def aligned(width: int, f: (str) -> str, s: str) -> str:
+    return f"{f(s):<{width}}"
+
+@decorator
+def shout(f: (str) -> str, s: str) -> str:
+    return f(s).upper()
+
+@decorator
+def twice(f: (int) -> int, n: int) -> int:
+    return f(f(n))
+
+@aligned(8)
+def tag(name: str) -> str:
+    return "<" + name + ">"
+
+# stacked: applied bottom-up, so shout sees the padded text
+@shout
+@aligned(6)
+def loud(name: str) -> str:
+    return name + "!"
+
+@twice
+def add_three(n: int) -> int:
+    return n + 3
+
+# a recursive call inside the body goes through the decorated name
+@twice
+def countdown(n: int) -> int:
+    if n <= 0:
+        return 0
+    return countdown(n - 1) + 1
+
+def main():
+    assert tag("a") == "<a>     "
+    assert loud("hi") == "HI!   "
+    assert add_three(1) == 7
+    assert countdown(3) == 3
+    print "test_decorators: ok"
+
+if __name__ == "__main__":
+    main()

@@ -3599,6 +3599,17 @@ reference), `@proc` (a method emitted as a plain proc), `@export` and
 decorator passes through: `@property`, `@functools.cache`, one of your own.
 A program meant for both backends keeps to the five.
 
+A function of your own can be a decorator on both backends if it is a
+*wrapper* marked `@decorator`: an ordinary top-level function handed the
+function it wraps. `@aligned(64)` on `def f` means `f = aligned(64, f)`; the
+transpiler keeps the original as `fBody` and writes a `def f` that calls
+`aligned(64, fBody, ...)`, so no closures are involved. The wrapper's `f`
+parameter must have the decorated function's type, the parameters after it
+must be the decorated function's, and the leading ones are the decorator's
+arguments; each mismatch is a one-line error. Stacked decorators apply
+bottom-up. A wrapper keeps no state of its own, and lives in the same file as
+what it decorates (`EXAMPLES/test_decorators.ady`).
+
 **Exhaustiveness is a Nim-build property** — a `case` block is checked for
 completeness only when the Nim backend can make it a native `case`: an
 ordinal subject whose branches are all constants. A string subject is not

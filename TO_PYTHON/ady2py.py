@@ -317,6 +317,8 @@ def translate(code):
     if not code.strip():
         return code
 
+    from ady_decorators import expand_decorators
+    code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
     from ady_stmt import resolve_unit_aliases

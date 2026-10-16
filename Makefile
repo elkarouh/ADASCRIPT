@@ -131,6 +131,7 @@ STANDALONE := \
     test_nim_quirks.ady \
     test_small_fixes.ady \
     test_union_optional.ady \
+    test_decorators.ady \
     test_format_zero_decimals.ady \
     test_region_operators.ady \
     test_vi_save.ady \
@@ -331,7 +332,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators
 
 # -----------------------------------------------------------------------
 # Skipped when this machine cannot build them -- a Nim package that is not
@@ -1014,6 +1015,22 @@ test: compile
 	    grep -q "type mismatch" $(TMPDIR)/ady_mco.out \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_mco.out; exit 1; }
 	@rm -rf $(TMPDIR)/ady_mco*
+	@# A decorator is checked against the function it wraps, at transpile time, on both backends.
+	@for case in "wrong type:@d wraps" "wrong arguments:@d gives 0 argument" "wrong return:d returns str"; do \
+	    why=$${case%%:*}; want=$${case#*:}; \
+	    case "$$why" in \
+	      "wrong type")      body='def g(n: str) -> int:\n    return 1\n'; head='def d(f: (int) -> int, n: int) -> int:' ;; \
+	      "wrong arguments") body='def g(n: int) -> int:\n    return 1\n'; head='def d(k: int, f: (int) -> int, n: int) -> int:' ;; \
+	      *)                 body='def g(n: int) -> int:\n    return 1\n'; head='def d(f: (int) -> int, n: int) -> str:' ;; \
+	    esac; \
+	    printf '@decorator\n%s\n    return f(n)\n\n@d\n%b' "$$head" "$$body" > $(TMPDIR)/ady_deco.ady; \
+	    printf '  %-42s' "decorator refused: $$why"; \
+	    if (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_deco_cache $(ADY2NIM) c ady_deco.ady) > $(TMPDIR)/ady_deco.out 2>&1 \
+	        || $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_deco.ady > $(TMPDIR)/ady_deco.out2 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
+	    grep -q "$$want" $(TMPDIR)/ady_deco.out && grep -q "$$want" $(TMPDIR)/ady_deco.out2 \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_deco.out $(TMPDIR)/ady_deco.out2; exit 1; }; \
+	done
+	@rm -rf $(TMPDIR)/ady_deco*
 	@for t in $(BOTH_BACKENDS_COMPARED); do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
 	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
