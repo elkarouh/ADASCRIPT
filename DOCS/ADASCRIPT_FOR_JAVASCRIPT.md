@@ -76,9 +76,9 @@ and a module-level `var` only for state that really lives across events.
 
 <!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-def names_of(net: Network_T) -> []str:
+def names(self) -> []str:
     var names: []str = []
-    for n in net.nodes:
+    for n in self.nodes:
         names.append(n.name)
     return names
 ```
@@ -151,7 +151,7 @@ A record is built by calling its type with the fields in order, or by name:
 
 <!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-return Network_T(nodes, edges)
+self.edges.append(Edge_T(a, b, cost))
 ```
 
 Fields are read with a dot, as in JavaScript. A record with one fixed set of
@@ -261,29 +261,31 @@ Strings are `"..."`, and an `f"..."` is a template literal with the same
 idea: `{expr}` in braces, with an optional format after a colon, as in `:.1f`
 for one decimal place.
 
-A function that can fail for a reason the caller should read can return the
-reason as a string, with `""` meaning success. The model does this for every
-change it accepts:
+A function that can fail for a reason the caller should read returns the
+reason as a value of its own type, `T | !F`: "a `T`, or a failure `F`" that
+the caller must look at, as it must look at an optional. The model does this
+for every change it accepts. `None` means it was done; a `Refusal_T` says why
+it was not:
 
 <!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-def add_node(net: Network_T, name: str) -> str:
+def add_node(self, name: str) -> None | !Refusal_T:
     if len(name) == 0 or len(name) > 8:
-        return "A name is 1 to 8 letters or digits."
+        return Refusal_T(message="A name is 1 to 8 letters or digits.")
 ```
 
-The caller checks the result, and the tests in `test_dijkstra.ady` do the same:
+The caller asks which it got with `is`, and the tests in `test_dijkstra.ady`
+do the same:
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/test_dijkstra.ady -->
+<!-- from: EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady -->
 ```python
-assert add_node(net, "G") == ""
-assert add_node(net, "G") == "There is a node G already."
+assert net.add_node("G") is None
+assert net.add_node("G") is Refusal_T
 ```
 
-Adascript also has a failure type, `T | !F`, for "a value or a failure" that
-must be handled, as an optional is. It is in `DOCS/BOOK/10-optionals.md`,
-§10.12. The model above returns a string rather than using it, because the
-page shows the message to the user.
+A failure that is dropped without a look is refused at compile time. The
+type is in `DOCS/BOOK/10-optionals.md`, §10.12. The page shows the
+refusal's `message` to the user.
 
 ---
 
@@ -375,7 +377,7 @@ from browser import Element_T, page, set_attr, number, Click_T, click_of, on
 ```
 
 The model is kept apart from the page. `dijkstra_model.ady` does no file I/O
-and no HTML, and `EXAMPLES/DIJKSTRA_HTMX/test_dijkstra.ady` runs it with
+and no HTML, and `EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady` runs it with
 `ady2nim c -r`, with no server and no browser.
 
 ---
