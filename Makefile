@@ -97,6 +97,7 @@ STANDALONE := \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     DB_REMEDIATION/db_remediation.ady \
+    DB_REMEDIATION/atc_cluster.ady \
     PROJECT/dispatch.ady \
     PROJECT/test_geometry.ady \
     test_do_block.ady \

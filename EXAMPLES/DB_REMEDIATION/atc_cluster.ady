@@ -1,0 +1,273 @@
+#!/usr/bin/env ady2nim
+"""
+atc_cluster -- the db_remediation recipe on an air traffic control cluster.
+
+Three machines serve one sector of airspace.  A machine is ACTIVE (the
+controllers' display is fed by it), STANDBY (hot, ready to take over) or OFF.
+The state is each machine's role, software version and health.  The
+operations are repair, upgrade, switchover and role changes.  The invariants
+hold in EVERY intermediate state:
+
+  * exactly one ACTIVE machine, and it is up;
+  * at least one STANDBY, every STANDBY is up, and runs a version at least
+    as new as the ACTIVE one's (a newer standby can follow an older active,
+    an older one cannot follow a newer active);
+  * a machine is upgraded only while OFF and healthy.
+
+The search finds the order -- a rolling upgrade, or a failover before the
+repair -- that no hand-written runbook listed.  It only PROPOSES the plan;
+in ATC a human approves it before the executor runs it.
+
+Same planners as db_remediation.ady: BFS via state_search.ady, Dijkstra via
+shortest_path.ady (weight = misconfiguration(state) * time(op)).
+"""
+
+from state_search import StateSearcher, Step_T
+from shortest_path import Minimizer
+
+type Host_T is enum M1, M2, M3
+type Role_T is enum OFF, STANDBY, ACTIVE
+
+type Node_T is tuple:
+    role: Role_T
+    ver: int        # software version, 1 or 2
+    up: int         # 1 healthy, 0 down
+
+type Cluster_T is [Host_T]Node_T
+
+type OpKind_T is enum REPAIR, UPGRADE, TO_STANDBY, TO_OFF, SWITCH
+type Op_T is tuple:
+    kind: OpKind_T
+    host: Host_T
+
+type Cost_T is int
+
+def op_time(kind: OpKind_T) -> int:
+    case kind:
+        when REPAIR:
+            return 60
+        when UPGRADE:
+            return 100
+        when others:
+            return 3
+
+# --------------------------------------------------------------------------
+# Invariants
+# --------------------------------------------------------------------------
+
+def is_valid(s: Cluster_T) -> bool:
+    var actives: int = 0
+    var standbys: int = 0
+    var active_ver: int = 0
+    var active_up: int = 0
+    for h in Host_T:
+        if s[h].role == ACTIVE:
+            actives += 1
+            active_ver = s[h].ver
+            active_up = s[h].up
+    if actives != 1 or active_up == 0:
+        return False
+    for h in Host_T:
+        if s[h].role == STANDBY:
+            standbys += 1
+            if s[h].up == 0 or s[h].ver < active_ver:
+                return False
+    return standbys >= 1
+
+# --------------------------------------------------------------------------
+# Composable misconfiguration rules, scored against the target state
+# --------------------------------------------------------------------------
+
+type Rule_T is tuple:
+    name: str
+    score: int
+
+def rule_scores(s: Cluster_T, sot: Cluster_T) -> []Rule_T:
+    var down: int = 0
+    var old: int = 0
+    var role: int = 0
+    for h in Host_T:
+        if s[h].up == 0:
+            down += 1
+        if s[h].ver != sot[h].ver:
+            old += 1
+        if s[h].role != sot[h].role:
+            role += 1
+    return [(name: "machine down", score: 4 * down),
+            (name: "old software", score: 2 * old),
+            (name: "wrong role", score: role)]
+
+def misconfiguration(s: Cluster_T, sot: Cluster_T) -> int:
+    var total: int = 0
+    for r in rule_scores(s, sot):
+        total += r.score
+    return total
+
+# --------------------------------------------------------------------------
+# One transition function, shared by planners and executor
+# --------------------------------------------------------------------------
+
+def apply(s: Cluster_T, op: Op_T) -> Cluster_T:
+    var n: Cluster_T = s
+    case op.kind:
+        when REPAIR:
+            n[op.host].up = 1
+        when UPGRADE:
+            n[op.host].ver = 2
+        when TO_STANDBY:
+            n[op.host].role = STANDBY
+        when TO_OFF:
+            n[op.host].role = OFF
+        when SWITCH:
+            # atomic failover: the old active drops out, op.host takes over
+            for h in Host_T:
+                if n[h].role == ACTIVE:
+                    n[h].role = OFF
+            n[op.host].role = ACTIVE
+    return n
+
+# `dead` is a host whose hardware cannot be repaired (-1: none).
+def valid_ops(s: Cluster_T, dead: int) -> []Op_T:
+    var ops: []Op_T = []
+    for h in Host_T:
+        let nd: Node_T = s[h]
+        if nd.up == 0 and ord(h) != dead:
+            ops.append((kind: REPAIR, host: h))
+        if nd.role == OFF and nd.ver == 1 and nd.up == 1:
+            ops.append((kind: UPGRADE, host: h))
+        if nd.role == OFF and nd.up == 1:
+            ops.append((kind: TO_STANDBY, host: h))
+        if nd.role == STANDBY:
+            ops.append((kind: TO_OFF, host: h))
+            ops.append((kind: SWITCH, host: h))
+    var ok: []Op_T = []
+    for op in ops:
+        if is_valid(apply(s, op)):
+            ok.append(op)
+    return ok
+
+# --------------------------------------------------------------------------
+# Planners
+# --------------------------------------------------------------------------
+
+class BreadthPlanner(StateSearcher[Cluster_T, Op_T]):
+    var sot: Cluster_T
+    var dead: int
+    def __init__(self, sot: Cluster_T, dead: int = -1):
+        self.sot = sot
+        self.dead = dead
+
+    def get_next_states(self, current_state: Cluster_T) -> []Step_T[Cluster_T, Op_T]:
+        return [(from_state: current_state, action: op, next_state: apply(current_state, op))
+                for op in valid_ops(current_state, self.dead)]
+
+    def is_goal(self, state: Cluster_T) -> bool:
+        return state == self.sot
+
+class WeightedPlanner(Minimizer[Cluster_T, Op_T, Cost_T]):
+    var sot: Cluster_T
+    var dead: int
+    var target: int
+    def __init__(self, sot: Cluster_T, dead: int = -1):
+        self.sot = sot
+        self.dead = dead
+        self.target = 0
+
+    def get_next_state(self, current_state: Cluster_T, decision: Op_T) -> Cluster_T:
+        return apply(current_state, decision)
+
+    def get_next_decisions(self, current_state: Cluster_T) -> [](Op_T, Cost_T):
+        let m: int = misconfiguration(current_state, self.sot) + 1
+        return [(op, m * op_time(op.kind)) for op in valid_ops(current_state, self.dead)]
+
+    def is_end_state(self, state: Cluster_T) -> bool:
+        return misconfiguration(state, self.sot) <= self.target
+
+# Sweeps every reachable state, remembering the least misconfigured score.
+class Sweeper(StateSearcher[Cluster_T, Op_T]):
+    var sot: Cluster_T
+    var dead: int
+    var best: int
+    def __init__(self, sot: Cluster_T, dead: int):
+        self.sot = sot
+        self.dead = dead
+        self.best = 1000
+
+    def get_next_states(self, current_state: Cluster_T) -> []Step_T[Cluster_T, Op_T]:
+        return [(from_state: current_state, action: op, next_state: apply(current_state, op))
+                for op in valid_ops(current_state, self.dead)]
+
+    def is_goal(self, state: Cluster_T) -> bool:
+        self.best = min(self.best, misconfiguration(state, self.sot))
+        return False
+
+# --------------------------------------------------------------------------
+# Executor (replays through the same `apply`, re-checking invariants)
+# --------------------------------------------------------------------------
+
+def show(s: Cluster_T) -> str:
+    var parts: []str = []
+    for h in Host_T:
+        let nd: Node_T = s[h]
+        parts.append(f"{h}[{nd.role} v{nd.ver} {'up' if nd.up == 1 else 'DOWN'}]")
+    return " ".join(parts)
+
+def execute(start: Cluster_T, plan: []Op_T, sot: Cluster_T) -> Cluster_T:
+    var cur: Cluster_T = start
+    var step: int = 0
+    for op in plan:
+        step += 1
+        cur = apply(cur, op)
+        assert is_valid(cur)
+        print(f"  {step}. {op.kind:<10} {op.host}  m={misconfiguration(cur, sot)}")
+    return cur
+
+def plan_weighted(start: Cluster_T, sot: Cluster_T, dead: int = -1) -> []Op_T:
+    sw: Sweeper = Sweeper(sot, dead)
+    sw.search(start)
+    wp: WeightedPlanner = WeightedPlanner(sot, dead)
+    wp.target = sw.best
+    for cost, path in wp.shortest_path(start, False):
+        print(f"  target m={sw.best}, weighted cost {cost}")
+        return path
+    return []
+
+def node(role: Role_T, ver: int, up: int) -> Node_T:
+    return (role: role, ver: ver, up: up)
+
+def main():
+    # 1. Rolling upgrade to v2 with M3 down: the search finds that a spare
+    #    standby must exist before M2 goes offline, and that the switchover
+    #    comes only after the new active has a v2 standby ready.
+    var s1: Cluster_T = [M1: node(ACTIVE, 1, 1), M2: node(STANDBY, 1, 1), M3: node(OFF, 1, 0)]
+    let g1: Cluster_T = [M1: node(STANDBY, 2, 1), M2: node(ACTIVE, 2, 1), M3: node(STANDBY, 2, 1)]
+    print("== Scenario 1: rolling upgrade to v2, M3 down")
+    print(f"  start {show(s1)}")
+    let b1: BreadthPlanner = BreadthPlanner(g1)
+    let p1b: []Op_T = [st.action for st in b1.search(s1)]
+    print(f"  BFS: {len(p1b)} operations")
+    let p1: []Op_T = plan_weighted(s1, g1)
+    assert execute(s1, p1, g1) == g1
+    print(f"  -> goal reached, sector never without a standby\n")
+
+    # 2. The active crashed: the only safe first move is the failover, and
+    #    only because a standby is already in place to take over.
+    var s2: Cluster_T = [M1: node(ACTIVE, 1, 0), M2: node(STANDBY, 1, 1), M3: node(STANDBY, 1, 1)]
+    let g2: Cluster_T = [M1: node(STANDBY, 1, 1), M2: node(ACTIVE, 1, 1), M3: node(STANDBY, 1, 1)]
+    print("== Scenario 2: active M1 crashed")
+    print(f"  start {show(s2)}")
+    let p2: []Op_T = plan_weighted(s2, g2)
+    assert execute(s2, p2, g2) == g2
+    print(f"  -> failover first, repair second\n")
+
+    # 3. As scenario 1 but M3's hardware is dead: no complete plan, so the
+    #    planner does what it can, which here is nothing: every upgrade step would leave the sector without a standby.
+    print("== Scenario 3: rolling upgrade, M3 cannot be repaired (partial plan)")
+    let b3: BreadthPlanner = BreadthPlanner(g1, ord(M3))
+    print(f"  BFS finds {len(b3.search(s1))} operations (no complete plan)")
+    let p3: []Op_T = plan_weighted(s1, g1, ord(M3))
+    let end3: Cluster_T = execute(s1, p3, g1)
+    print(f"  -> {len(p3)} safe operations: with no spare machine every step would leave the sector")
+    print(f"     without a standby, so the planner changes nothing (m={misconfiguration(end3, g1)}); page the operator for M3")
+
+main()

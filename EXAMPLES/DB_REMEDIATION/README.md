@@ -55,3 +55,17 @@ Run it:
 
 Simplifications: three fixed nodes, no hidden flag, oplog or regions; one
 cost per operation kind.
+
+## Second example: air traffic control cluster
+
+`atc_cluster.ady` applies the same recipe to three machines serving one
+sector. State is each machine's role (ACTIVE, STANDBY, OFF), software version
+and health. Invariants on every intermediate state: exactly one healthy
+ACTIVE, at least one STANDBY, every STANDBY healthy and at least as new as the
+ACTIVE, and a machine is upgraded only while OFF and healthy. Scenarios:
+(1) a rolling upgrade with one machine down (the search finds the spare-first,
+switch-after ordering), (2) the active crashed (failover first, repair second),
+(3) a dead machine, where no safe step exists and the planner changes nothing.
+The planner only proposes; a human would approve the plan before it runs.
+
+    python3 TO_NIM/ady2nim.py c -r EXAMPLES/DB_REMEDIATION/atc_cluster.ady
