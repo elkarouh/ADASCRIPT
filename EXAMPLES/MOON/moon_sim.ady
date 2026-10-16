@@ -24,7 +24,7 @@ Fidelity notes
 
 The geometry is MAP_UTILS/map_flat.ady's flat plane: a `Position` is a point,
 a `Vector` a displacement, a `Velocity` has its parts in m/s and an `Acceleration` in
-m/s^2, and `Meters_T`, `Degree_T`, `Duration_T`, `Speed_T` and `Accel_T` are its units.
+m/s^2, and `metre_T`, `Degree_T`, `second_T`, `Speed_T` and `Accel_T` are its units.
 A time turns one into the next: `velocity * t` is a `Vector`, `vector / t` a `Velocity`,
 `acceleration * t` a `Velocity`, `velocity / t` an `Acceleration`.
 
@@ -34,7 +34,8 @@ Nim only (map_flat is):  ady2nim c -r moon_sim.ady
 """
 
 from math nimport sqrt, exp, ln, PI
-from MAP_UTILS/map_base import Accel_T, AngMom_T, Bearing_T, Degree_T, Duration_T, Kilometers_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
+from units import metre_T, second_T
+from MAP_UTILS/map_base import Accel_T, AngMom_T, Bearing_T, Degree_T, Kilometers_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
 from MAP_UTILS/map_flat import Acceleration, Position, Vector, Velocity
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
@@ -47,9 +48,9 @@ type Mass_T        is distinct float                # kg
 type Force_T       is Mass_T * Accel_T              # N
 type Sense_T       is enum COUNTER_CLOCKWISE, CLOCKWISE   # the way round the origin
 type Mu_T          is Accel_T * SquareMeters_T      # a body's GM, m^3/s^2
-type AngularRate_T is Degree_T / Duration_T        # deg/s
-type Hours_T       is 3600.0 * Duration_T           # for the log: Hours_T(t) is t in hours
-type Days_T        is 86400.0 * Duration_T
+type AngularRate_T is Degree_T / second_T        # deg/s
+type Hours_T       is 3600.0 * second_T           # for the log: Hours_T(t) is t in hours
+type Days_T        is 86400.0 * second_T
 
 # ============================================================
 # CONSTANTS
@@ -60,10 +61,10 @@ const MU_MOON: Mu_T = 4.9048695e12
 const M_EARTH: Mass_T = 5.972e24
 const M_MOON: Mass_T = 7.342e22
 
-const R_EARTH: Meters_T = 6.371e6
-const R_MOON: Meters_T = 1.7374e6
-const MOON_DISTANCE: Meters_T = 384.4e6
-const SOI_MOON: Meters_T = MOON_DISTANCE * ((M_MOON / M_EARTH) ** 0.4)
+const R_EARTH: metre_T = 6.371e6
+const R_MOON: metre_T = 1.7374e6
+const MOON_DISTANCE: metre_T = 384.4e6
+const SOI_MOON: metre_T = MOON_DISTANCE * ((M_MOON / M_EARTH) ** 0.4)
 
 const G0: Accel_T = 9.80665
 
@@ -72,16 +73,16 @@ const G0: Accel_T = 9.80665
 # ============================================================
 
 let ORIGIN: Position = Position(0.0, 0.0)                # the body being orbited
-const SECOND: Duration_T = 1.0
-const APPROACH_LIMIT: Duration_T = 432000.0     # 5 days: no coast to the Moon's periapsis takes longer
-const ORBIT_LIMIT: Duration_T = 259200.0        # 3 days: nor a coast to the next apsis
+const SECOND: second_T = 1.0
+const APPROACH_LIMIT: second_T = 432000.0     # 5 days: no coast to the Moon's periapsis takes longer
+const ORBIT_LIMIT: second_T = 259200.0        # 3 days: nor a coast to the next apsis
 const EAST: Degree_T = 0.0        # a direction, for the constructors that take a length and an angle
 const NORTH: Degree_T = 90.0
 const HALF_TURN: Degree_T = 180.0
 let AT_REST: Velocity = Velocity(Speed_T(0.0), Speed_T(0.0))
 let NO_ACCEL: Acceleration = Acceleration(Accel_T(0.0), Accel_T(0.0))
 
-def radius_of(p: Position) -> Meters_T:
+def radius_of(p: Position) -> metre_T:
     return (p - ORIGIN).length()
 
 def along(v: Velocity, direction: Vector) -> Speed_T:
@@ -89,7 +90,7 @@ def along(v: Velocity, direction: Vector) -> Speed_T:
     let d: Vector = direction.unit()
     return (v * d) / d.length()
 
-def along_vec(v: Vector, direction: Vector) -> Meters_T:
+def along_vec(v: Vector, direction: Vector) -> metre_T:
     """The part of V in the direction of DIRECTION."""
     let d: Vector = direction.unit()
     return (v * d) / d.length()
@@ -142,9 +143,9 @@ def fraction(i: int, n: int) -> float:
     """i / n as a plain number: Nim does not mix an int with a float."""
     return float(i) / float(n)
 
-def arc(radius: Meters_T, angle: Degree_T) -> Meters_T:
+def arc(radius: metre_T, angle: Degree_T) -> metre_T:
     """Arc length. A radian carries no unit, so radius * angle-in-radians is a length."""
-    return Meters_T(float(radius) * float(Radians_T(angle)))
+    return metre_T(float(radius) * float(Radians_T(angle)))
 
 def clip[T](x: T, lo: T, hi: T) -> T:
     return max(lo, min(x, hi))
@@ -156,28 +157,28 @@ def sign(x: float) -> float:
         return -1.0
     return 0.0
 
-def circular_velocity(mu: Mu_T, radius: Meters_T) -> Speed_T:
+def circular_velocity(mu: Mu_T, radius: metre_T) -> Speed_T:
     return Speed_T(sqrt(float(mu) / float(radius)))
 
-def vis_viva(mu: Mu_T, radius: Meters_T, a: Meters_T) -> Speed_T:
+def vis_viva(mu: Mu_T, radius: metre_T, a: metre_T) -> Speed_T:
     return Speed_T(sqrt(float(mu) * (2.0 / float(radius) - 1.0 / float(a))))
 
-def half_period(mu: Mu_T, a: Meters_T) -> Duration_T:
-    return Duration_T(PI * sqrt(float(a) * float(a) * float(a) / float(mu)))
+def half_period(mu: Mu_T, a: metre_T) -> second_T:
+    return second_T(PI * sqrt(float(a) * float(a) * float(a) / float(mu)))
 
-def period(mu: Mu_T, a: Meters_T) -> Duration_T:
+def period(mu: Mu_T, a: metre_T) -> second_T:
     return half_period(mu, a) * 2.0
 
 type Elements_T is record:
-    radius: Meters_T
+    radius: metre_T
     speed: Speed_T
     h: AngMom_T              # signed: + is counter-clockwise
     e: float
-    periapsis: Meters_T
+    periapsis: metre_T
 
 def orbital_elements(r: Position, v: Velocity, mu: Mu_T) -> Elements_T:
     let rv: Vector = r - ORIGIN
-    let r_len: Meters_T = rv.length()
+    let r_len: metre_T = rv.length()
     let v_spd: Speed_T = v.speed()
     let rmag: float = float(r_len)
     let vmag: float = float(v_spd)
@@ -188,7 +189,7 @@ def orbital_elements(r: Position, v: Velocity, mu: Mu_T) -> Elements_T:
     let ey: float = ((vmag * vmag - m / rmag) * float(rv.y) - rdotv * float(v.y)) / m
     let e: float = sqrt(ex * ex + ey * ey)
     return Elements_T(r_len, v_spd, h, e,
-                      Meters_T(float(h) * float(h) / (m * (1.0 + e))))
+                      metre_T(float(h) * float(h) / (m * (1.0 + e))))
 
 # ============================================================
 # NOISE -- L'Ecuyer's combined generator
@@ -220,7 +221,7 @@ class Rng:
         let u2: float = self.uniform()
         return sqrt(-2.0 * ln(u1)) * cos(2.0 * PI * u2)
 
-    def meters(self, sigma: Meters_T) -> Vector:
+    def meters(self, sigma: metre_T) -> Vector:
         """A vector whose parts are each drawn from N(0, sigma)."""
         let a: float = self.normal()
         let b: float = self.normal()
@@ -250,7 +251,7 @@ type Stage_T is record:
     id: StageId_T
     dry: Mass_T
     prop: Mass_T
-    isp: Duration_T
+    isp: second_T
     max_thrust: Force_T
 
 type BurnRecord_T is record:
@@ -343,7 +344,7 @@ class Delta_T:
     def __mul__(self, k: float) -> Delta_T:
         return Delta_T(self.dr * k, self.dv * k)
 
-    def __mul__(self, t: Duration_T) -> Increment_T:
+    def __mul__(self, t: second_T) -> Increment_T:
         """What it comes to in the time T."""
         return Increment_T(self.dr * t, self.dv * t)
 
@@ -369,10 +370,10 @@ class MoonEphemeris:
         let rate: float = sqrt(float(MU_EARTH + MU_MOON) / float(MOON_DISTANCE) ** 3)
         self.n = Degree_T(Radians_T(rate)) / SECOND     # rad/s -> deg/s
 
-    def position(self, t: Duration_T) -> Position:
+    def position(self, t: second_T) -> Position:
         return ORIGIN + Vector(MOON_DISTANCE, self.phase0 + self.n * t)
 
-    def velocity(self, t: Duration_T) -> Velocity:
+    def velocity(self, t: second_T) -> Velocity:
         let speed: Speed_T = arc(MOON_DISTANCE, self.n * SECOND) / SECOND
         return Velocity(speed, self.phase0 + self.n * t + 90.0)
 
@@ -384,13 +385,13 @@ const EVENT_DIRECTION: [Event_T]int = [SOI_ENTRY: -1, PERILUNE: 1, APOLUNE: -1, 
 class Dynamics:
     """What is being integrated: the derivative, and the events that end it."""
 
-    def rhs(self, t: Duration_T, y: State_T) -> Delta_T:
+    def rhs(self, t: second_T, y: State_T) -> Delta_T:
         raise NotImplementedError("subclass responsibility")
 
     def watching(self) -> []Event_T:
         return []
 
-    def event_value(self, kind: Event_T, t: Duration_T, y: State_T) -> float:
+    def event_value(self, kind: Event_T, t: second_T, y: State_T) -> float:
         """Only its sign, and where it is zero, matter."""
         return 0.0
 
@@ -402,7 +403,7 @@ class EarthDynamics(Dynamics):
     def __init__(self, moon: MoonEphemeris):
         self.moon = moon
 
-    def rhs(self, t: Duration_T, y: State_T) -> Delta_T:
+    def rhs(self, t: second_T, y: State_T) -> Delta_T:
         let rm: Position = self.moon.position(t)
         let from_earth: Vector = y.r - ORIGIN
         let from_moon: Vector = y.r - rm
@@ -418,7 +419,7 @@ class EarthDynamics(Dynamics):
     def watching(self) -> []Event_T:
         return [SOI_ENTRY]
 
-    def event_value(self, kind: Event_T, t: Duration_T, y: State_T) -> float:
+    def event_value(self, kind: Event_T, t: second_T, y: State_T) -> float:
         return float((y.r - self.moon.position(t)).length() - SOI_MOON)
 
 class MoonDynamics(Dynamics):
@@ -429,7 +430,7 @@ class MoonDynamics(Dynamics):
     def __init__(self, kinds: []Event_T):
         self.kinds = kinds
 
-    def rhs(self, t: Duration_T, y: State_T) -> Delta_T:
+    def rhs(self, t: second_T, y: State_T) -> Delta_T:
         let from_moon: Vector = y.r - ORIGIN
         let pull: Accel_T = MU_MOON / (from_moon.length() * from_moon.length())
         return Delta_T(y.v, pull_toward(from_moon, pull))
@@ -437,7 +438,7 @@ class MoonDynamics(Dynamics):
     def watching(self) -> []Event_T:
         return self.kinds
 
-    def event_value(self, kind: Event_T, t: Duration_T, y: State_T) -> float:
+    def event_value(self, kind: Event_T, t: second_T, y: State_T) -> float:
         case kind:
             when PERILUNE | APOLUNE:
                 return float(radial_rate(y.r - ORIGIN, y.v))
@@ -452,7 +453,7 @@ class MoonDynamics(Dynamics):
 # ============================================================
 
 type Solution_T is record:
-    ts: []Duration_T
+    ts: []second_T
     ys: []State_T
     hit: ?Event_T            # the event that ended it, or None if it ran to t_end
 
@@ -469,7 +470,7 @@ type Step_T is record:
     f: Delta_T               # its derivative (first stage of the next step)
     err: Increment_T         # the error estimate
 
-def dp_step(dyn: Dynamics, t: Duration_T, y: State_T, k1: Delta_T, step: Duration_T) -> Step_T:
+def dp_step(dyn: Dynamics, t: second_T, y: State_T, k1: Delta_T, step: second_T) -> Step_T:
     let k2: Delta_T = dyn.rhs(t + step * (1.0 / 5.0), y.advance((k1 * (1.0 / 5.0)) * step))
     let k3: Delta_T = dyn.rhs(t + step * (3.0 / 10.0),
                               y.advance((k1 * (3.0 / 40.0) + k2 * (9.0 / 40.0)) * step))
@@ -495,10 +496,10 @@ def scaled[T](e: T, a: T, b: T, rtol: float, atol: T) -> float:
     """The error in one component, as a fraction of what is allowed (a part in rtol, or atol)."""
     return (e / (atol + rtol * max(abs(a), abs(b)))) ** 2
 
-def error_ratio(s: Step_T, y: State_T, rtol: float, atol_r: Meters_T, atol_v: Speed_T) -> float:
+def error_ratio(s: Step_T, y: State_T, rtol: float, atol_r: metre_T, atol_v: Speed_T) -> float:
     """RMS over the four components of error / tolerance; below 1 is accepted."""
-    let total: float = (scaled[Meters_T](s.err.dr.x, y.r.x, s.y.r.x, rtol, atol_r)
-                        + scaled[Meters_T](s.err.dr.y, y.r.y, s.y.r.y, rtol, atol_r)
+    let total: float = (scaled[metre_T](s.err.dr.x, y.r.x, s.y.r.x, rtol, atol_r)
+                        + scaled[metre_T](s.err.dr.y, y.r.y, s.y.r.y, rtol, atol_r)
                         + scaled[Speed_T](s.err.dv.x, y.v.x, s.y.v.x, rtol, atol_v)
                         + scaled[Speed_T](s.err.dv.y, y.v.y, s.y.v.y, rtol, atol_v))
     return sqrt(total / 4.0)
@@ -508,8 +509,8 @@ def crossed(kind: Event_T, g_old: float, g_new: float) -> bool:
         return g_old < 0.0 and g_new >= 0.0
     return g_old > 0.0 and g_new <= 0.0
 
-def locate(dyn: Dynamics, kind: Event_T, t: Duration_T, y: State_T, f: Delta_T,
-           step: Duration_T, g_old: float) -> float:
+def locate(dyn: Dynamics, kind: Event_T, t: second_T, y: State_T, f: Delta_T,
+           step: second_T, g_old: float) -> float:
     """Where in the step (0..1) the event happens: bisection, one fresh step per guess."""
     var lo: float = 0.0
     var hi: float = 1.0
@@ -523,18 +524,18 @@ def locate(dyn: Dynamics, kind: Event_T, t: Duration_T, y: State_T, f: Delta_T,
             hi = mid
     return hi
 
-def integrate(dyn: Dynamics, y0: State_T, t_end: Duration_T, rtol: float, atol_r: Meters_T, atol_v: Speed_T,
-              max_step: Duration_T) -> Solution_T:
+def integrate(dyn: Dynamics, y0: State_T, t_end: second_T, rtol: float, atol_r: metre_T, atol_v: Speed_T,
+              max_step: second_T) -> Solution_T:
     """From t = 0 to t_end, or to the first event the dynamics watch for."""
-    var t: Duration_T = 0.0
+    var t: second_T = 0.0
     var y: State_T = y0
     var f: Delta_T = dyn.rhs(t, y)
-    var h: Duration_T = min(SECOND, max_step)
+    var h: second_T = min(SECOND, max_step)
     var sol: Solution_T = Solution_T(ts=[t], ys=[y], hit=None)
     let watch: []Event_T = dyn.watching()
     var g_old: []float = [dyn.event_value(k, t, y) for k in watch]
     while t < t_end:
-        var hh: Duration_T = min(min(h, max_step), t_end - t)
+        var hh: second_T = min(min(h, max_step), t_end - t)
         var s: Step_T = dp_step(dyn, t, y, f, hh)
         var ratio: float = error_ratio(s, y, rtol, atol_r, atol_v)
         while ratio >= 1.0:                      # rejected: shrink and try again
@@ -630,9 +631,9 @@ def lunar_accel(r: Position, a_ext: Acceleration) -> Acceleration:
     let from_moon: Vector = r - ORIGIN
     return pull_toward(from_moon, MU_MOON / (from_moon.length() * from_moon.length())) + a_ext
 
-def rk4_step(r: Position, v: Velocity, a_ext: Acceleration, dt: Duration_T) -> (Position, Velocity):
+def rk4_step(r: Position, v: Velocity, a_ext: Acceleration, dt: second_T) -> (Position, Velocity):
     """One RK4 step of lunar two-body gravity + constant external accel."""
-    let half: Duration_T = dt * 0.5
+    let half: second_T = dt * 0.5
     let k1r: Velocity = v
     let k1v: Acceleration = lunar_accel(r, a_ext)
     let k2r: Velocity = v + k1v * half
@@ -641,7 +642,7 @@ def rk4_step(r: Position, v: Velocity, a_ext: Acceleration, dt: Duration_T) -> (
     let k3v: Acceleration = lunar_accel(r + k2r * half, a_ext)
     let k4r: Velocity = v + k3v * dt
     let k4v: Acceleration = lunar_accel(r + k3r * dt, a_ext)
-    let sixth: Duration_T = dt / 6.0
+    let sixth: second_T = dt / 6.0
     return (r + (k1r + k2r * 2.0 + k3r * 2.0 + k4r) * sixth,
             v + (k1v + k2v * 2.0 + k3v * 2.0 + k4v) * sixth)
 
@@ -664,7 +665,7 @@ class IMU:
         self.walk = 1e-6
         self.noise = 2e-4
 
-    def measure(self, specific_force: Acceleration, dt: Duration_T) -> Acceleration:
+    def measure(self, specific_force: Acceleration, dt: second_T) -> Acceleration:
         self.bias = self.bias + self.rng.accels(self.walk) * sqrt(float(dt))
         return specific_force + self.bias + self.rng.accels(self.noise)
 
@@ -680,24 +681,24 @@ class Navigation:
 
     def initialize(self, r: Position, v: Velocity):
         """State handed over from the pre-PDI ground/orbit solution (with error)."""
-        let pos_sigma: Meters_T = 100.0
+        let pos_sigma: metre_T = 100.0
         let vel_sigma: Speed_T = 0.1
         self.r = r + self.rng.meters(pos_sigma)
         self.v = v + self.rng.speeds(vel_sigma)
 
-    def propagate(self, measured_specific_force: Acceleration, dt: Duration_T):
+    def propagate(self, measured_specific_force: Acceleration, dt: second_T):
         let (r, v) = rk4_step(self.r, self.v, measured_specific_force, dt)
         self.r = r
         self.v = v
 
     def radar_update(self, true_r: Position, true_v: Velocity):
         """Landing radar: altitude + Doppler velocity (valid below ~10 km)."""
-        let alt_true: Meters_T = radius_of(true_r) - R_MOON
-        let sigma: Meters_T = 2.0 + 0.005 * alt_true
-        let z_alt: Meters_T = alt_true + sigma * self.rng.normal()
+        let alt_true: metre_T = radius_of(true_r) - R_MOON
+        let sigma: metre_T = 2.0 + 0.005 * alt_true
+        let z_alt: metre_T = alt_true + sigma * self.rng.normal()
         let z_vel: Velocity = true_v + self.rng.speeds(0.3)
         let radial: Vector = (self.r - ORIGIN).unit()
-        let d_alt: Meters_T = z_alt - (radius_of(self.r) - R_MOON)
+        let d_alt: metre_T = z_alt - (radius_of(self.r) - R_MOON)
         self.r = self.r + Vector(0.5 * d_alt, radial.angle())   # position (radial only)
         self.v = self.v + (z_vel - self.v) * 0.3          # velocity (full vector)
 
@@ -706,8 +707,8 @@ type Mode_T is enum P63, P64, P65
 const MODE_NAME: [Mode_T]str = [P63: "P63-BRAKING", P64: "P64-APPROACH", P65: "P65-TERMINAL"]
 
 type Gate_T is record:
-    alt: Meters_T
-    uprange: Meters_T        # back along the track from the site
+    alt: metre_T
+    uprange: metre_T        # back along the track from the site
     vh: Speed_T              # horizontal
     vv: Speed_T              # vertical
 
@@ -718,14 +719,14 @@ type Target_T is record:                 # where guidance is aiming
 # target gates
 const HIGH_GATE: Gate_T = Gate_T(2000.0, 7000.0, 85.0, -25.0)
 const LOW_GATE: Gate_T = Gate_T(50.0, 150.0, 2.0, -3.0)
-const FADE_ALT: Meters_T = 30.0          # P65: horizontal speed is nulled below this height
-const SETTLE: Duration_T = 10.0          # P65: closes a tenth of the gap each second
+const FADE_ALT: metre_T = 30.0          # P65: horizontal speed is nulled below this height
+const SETTLE: second_T = 10.0          # P65: closes a tenth of the gap each second
 const SIDE_MAX: Speed_T = 2.0             # P65: sideways correction, at most
 const DOWN_MIN: Speed_T = 1.0
 const DOWN_MAX: Speed_T = 3.0            # P65: the sink rate wanted lies between these
-const P65_TAU: Duration_T = 1.5          # P65: time constant of the velocity tracking
-const MIN_TGO_FIRST: Duration_T = 15.0   # the first estimate of time-to-go is at least this
-const MIN_TGO_USED: Duration_T = 3.0     # the law is never fed a time-to-go below this
+const P65_TAU: second_T = 1.5          # P65: time constant of the velocity tracking
+const MIN_TGO_FIRST: second_T = 15.0   # the first estimate of time-to-go is at least this
+const MIN_TGO_USED: second_T = 3.0     # the law is never fed a time-to-go below this
 
 class Guidance:
     """P63 braking / P64 approach / P65 terminal, in the spirit of the AGC.
@@ -739,7 +740,7 @@ class Guidance:
     var s: Sense_T
     var site: Position
     var mode: Mode_T
-    var t_go: Duration_T
+    var t_go: second_T
     var has_t_go: bool
 
     def __init__(self, site_up: Vector, travel_sign: Sense_T):
@@ -757,15 +758,15 @@ class Guidance:
         return Target_T(ORIGIN + Vector(R_MOON + gate.alt, up.angle()),
                         Velocity(gate.vh, east.angle()) + Velocity(gate.vv, up.angle()))
 
-    def estimate_tgo(self, r: Position, v: Velocity, t: Target_T) -> Duration_T:
-        let dist: Meters_T = (t.r - r).length()
+    def estimate_tgo(self, r: Position, v: Velocity, t: Target_T) -> second_T:
+        let dist: metre_T = (t.r - r).length()
         return max(MIN_TGO_FIRST, 2.0 * dist / (v.speed() + t.v.speed() + 1e-9))
 
-    def compute(self, r: Position, v: Velocity, elapsed: Duration_T) -> Acceleration:
+    def compute(self, r: Position, v: Velocity, elapsed: second_T) -> Acceleration:
         """Return commanded THRUST acceleration."""
         let from_moon: Vector = r - ORIGIN
         let g: Acceleration = pull_toward(from_moon, MU_MOON / (from_moon.length() * from_moon.length()))
-        let alt: Meters_T = from_moon.length() - R_MOON
+        let alt: metre_T = from_moon.length() - R_MOON
         var aim: Target_T = Target_T(ORIGIN, AT_REST)
 
         if self.has_t_go:
@@ -793,7 +794,7 @@ class Guidance:
         if self.mode == P65:
             let up: Vector = from_moon.unit()
             let east: Vector = perp(up) * turn(self.s)
-            let dx: Meters_T = along_vec(self.site - r, east)
+            let dx: metre_T = along_vec(self.site - r, east)
             # horizontal velocity is nulled as the surface approaches
             let fade: float = clip[float](alt / FADE_ALT, 0.0, 1.0)
             let v_side: Speed_T = fade * clip[Speed_T](dx / SETTLE, -SIDE_MAX, SIDE_MAX)
@@ -801,7 +802,7 @@ class Guidance:
             let v_des: Velocity = Velocity(v_side, east.angle()) + Velocity(-v_down, up.angle())
             a_total = (v_des - v) / P65_TAU
         else:
-            let big_t: Duration_T = max(self.t_go, MIN_TGO_USED)
+            let big_t: second_T = max(self.t_go, MIN_TGO_USED)
             a_total = ((aim.r - r) / big_t / big_t * 6.0
                        - (v * 4.0 + aim.v * 2.0) / big_t)
         return a_total - g          # thrust must cancel gravity
@@ -819,7 +820,7 @@ class Autopilot:
         self.tmin = 0.10
         self.tmax = 1.0
 
-    def command(self, a_cmd: Acceleration, mass: Mass_T, max_thrust: Force_T, dt: Duration_T) -> (Vector, Throttle_T):
+    def command(self, a_cmd: Acceleration, mass: Mass_T, max_thrust: Force_T, dt: second_T) -> (Vector, Throttle_T):
         let mag: Accel_T = a_cmd.magnitude()
         if mag > 0.0:
             let ang: Degree_T = wrapped(a_cmd.angle() - self.dir.angle())
@@ -836,7 +837,7 @@ class Propulsion:
         self.sc = spacecraft
         self.id = id
 
-    def thrust(self, direction: Vector, throttle: Throttle_T, dt: Duration_T) -> (Acceleration, Force_T):
+    def thrust(self, direction: Vector, throttle: Throttle_T, dt: second_T) -> (Acceleration, Force_T):
         """Returns thrust acceleration; burns propellant."""
         let st: Stage_T = self.sc.stage(self.id)
         if st.prop <= 0.0:
@@ -856,13 +857,13 @@ class Propulsion:
 type Phase_T is enum LEO, TRANS_LUNAR, LUNAR_APPROACH, LOI_1, LUNAR_ORBIT, LOI_2, LUNAR_CIRCULAR, DOI, PDI, LANDED, HARD_LANDING, TIMEOUT
 
 type Telemetry_T is record:              # one second of the descent, for the plots
-    t: Duration_T                        # since PDI
-    alt: Meters_T
+    t: second_T                        # since PDI
+    alt: metre_T
     vv: Speed_T
     vh: Speed_T
     throttle: Throttle_T
     fuel: Mass_T                         # descent propellant
-    pos_err: Meters_T                    # navigation estimate vs truth
+    pos_err: metre_T                    # navigation estimate vs truth
     vel_err: Speed_T
     mode: Mode_T
 
@@ -874,10 +875,10 @@ type Result_T is record:
     touched_down: bool
     vv: Speed_T
     vh: Speed_T
-    miss: Meters_T
-    t: Duration_T
+    miss: metre_T
+    t: second_T
     fuel: Mass_T
-    nav_pos_err: Meters_T
+    nav_pos_err: metre_T
     nav_vel_err: Speed_T
 
 class PhaseError(Scalar_Fn):
@@ -886,18 +887,18 @@ class PhaseError(Scalar_Fn):
     var tli_r: Position
     var tli_v: Velocity
     var phase_nominal: Degree_T
-    var t_max: Duration_T
-    var target: Meters_T
+    var t_max: second_T
+    var target: metre_T
 
     def __init__(self, tli_r: Position, tli_v: Velocity, phase_nominal: Degree_T,
-                 t_max: Duration_T, target: Meters_T):
+                 t_max: second_T, target: metre_T):
         self.tli_r = tli_r
         self.tli_v = tli_v
         self.phase_nominal = phase_nominal
         self.t_max = t_max
         self.target = target
 
-    def signed_periapsis(self, delta: Degree_T) -> ?Meters_T:
+    def signed_periapsis(self, delta: Degree_T) -> ?metre_T:
         """Signed perilune radius (negative: the Moon would be passed on the other side),
         None if the transfer never reaches the Moon's sphere of influence."""
         let moon: MoonEphemeris = MoonEphemeris(self.phase_nominal + delta)
@@ -905,14 +906,14 @@ class PhaseError(Scalar_Fn):
                                         self.t_max, 1e-10, 1e-3, 1e-3, 1800.0)
         if sol.hit is None:
             return None
-        let t: Duration_T = sol.ts[len(sol.ts) - 1]
+        let t: second_T = sol.ts[len(sol.ts) - 1]
         let y: State_T = sol.ys[len(sol.ys) - 1]
         let el: Elements_T = orbital_elements(ORIGIN + (y.r - moon.position(t)),
                                               y.v - moon.velocity(t), MU_MOON)
         return -el.periapsis if el.h < 0.0 else el.periapsis
 
     def value(self, x: float) -> float:
-        let p: ?Meters_T = self.signed_periapsis(Degree_T(x))
+        let p: ?metre_T = self.signed_periapsis(Degree_T(x))
         if p is None:
             return 1e30
         return float(p - self.target)
@@ -923,17 +924,17 @@ class Mission:
     const LOI1_APO_ALT: Kilometers_T = 300.0
     const DOI_PERI_ALT: Kilometers_T = 15.0
     const DESCENT_ARC: Degree_T = Degree_T(Radians_T(0.36))   # lunar arc between PDI and the site
-    const DT: Duration_T = 0.2                           # physics step in powered descent
-    const GUIDANCE_CYCLE: Duration_T = 2.0               # AGC guidance cycle
+    const DT: second_T = 0.2                           # physics step in powered descent
+    const GUIDANCE_CYCLE: second_T = 2.0               # AGC guidance cycle
 
     var rng: Rng
     var sc: Spacecraft
     var lander: Spacecraft
-    var t: Duration_T                           # since TLI
+    var t: second_T                           # since TLI
     var r: Position
     var v: Velocity
     var phase: Phase_T
-    var earth_ts: []Duration_T
+    var earth_ts: []second_T
     var earth_track: []Position
     var moon_tracks: []Track_T
     var moon_ephem: MoonEphemeris
@@ -942,7 +943,7 @@ class Mission:
     var tli_r: Position
     var tli_v: Velocity
     var phase_nominal: Degree_T
-    var t_max: Duration_T
+    var t_max: second_T
 
     def __init__(self, seed: int):
         self.rng = Rng(seed)
@@ -971,8 +972,8 @@ class Mission:
     # --------------------------------------------------------
     def plan_tli(self):
         print "PHASE: TLI"
-        let r0: Meters_T = R_EARTH + Meters_T(self.LEO_ALT)
-        let a_t: Meters_T = (r0 + MOON_DISTANCE) / 2.0
+        let r0: metre_T = R_EARTH + metre_T(self.LEO_ALT)
+        let a_t: metre_T = (r0 + MOON_DISTANCE) / 2.0
         let v_c: Speed_T = circular_velocity(MU_EARTH, r0)
         let v_t: Speed_T = vis_viva(MU_EARTH, r0, a_t)
         self.tli_r = ORIGIN + Vector(r0, EAST)
@@ -982,25 +983,25 @@ class Mission:
         self.sc.separate(S_IVB)
         print f"  TLI dv = {dv:.1f} m/s  (S-IVB jettisoned, stack = {self.sc.mass():,.0f} kg)"
 
-        let t_transfer: Duration_T = half_period(MU_EARTH, a_t)
+        let t_transfer: second_T = half_period(MU_EARTH, a_t)
         self.phase_nominal = HALF_TURN - MoonEphemeris(0.0).n * t_transfer
         self.t_max = t_transfer * 1.4
         print f"  Nominal transfer time = {Days_T(t_transfer):.2f} d"
 
     def solve_moon_phase(self):
         """Shooting method: choose the Moon's phase so that perilune = 100 km."""
-        let target: Meters_T = R_MOON + Meters_T(self.LOI_PERI_ALT)
+        let target: metre_T = R_MOON + metre_T(self.LOI_PERI_ALT)
         print "  Solving Moon phasing (shooting method)..."
         let miss: PhaseError = PhaseError(self.tli_r, self.tli_v, self.phase_nominal,
                                           self.t_max, target)
         let steps: int = 30
         var root: float = 0.0
         var found: bool = False
-        var prev: ?Meters_T = None
+        var prev: ?metre_T = None
         var prev_delta: float = 0.0
         for i in 0 .. steps:
             let delta: float = float(Degree_T(Radians_T(-0.45 + 0.9 * fraction(i, steps))))
-            let p: ?Meters_T = miss.signed_periapsis(Degree_T(delta))
+            let p: ?metre_T = miss.signed_periapsis(Degree_T(delta))
             if p is not None and prev is not None and not found:
                 if (prev - target) * (p - target) < 0.0:
                     root = brentq(miss, prev_delta, delta, 1e-9)
@@ -1036,7 +1037,7 @@ class Mission:
     # --------------------------------------------------------
     # Lunar-frame propagation helper
     # --------------------------------------------------------
-    def coast_moon(self, duration: Duration_T, events: []Event_T, label: str) -> Solution_T:
+    def coast_moon(self, duration: second_T, events: []Event_T, label: str) -> Solution_T:
         let sol: Solution_T = integrate(MoonDynamics(events), State_T(self.r, self.v),
                                         duration, 1e-10, 1e-3, 1e-3, 30.0)
         self.moon_tracks.append(Track_T(label, [y.r for y in sol.ys]))
@@ -1071,8 +1072,8 @@ class Mission:
     # --------------------------------------------------------
     def loi1(self):
         self.phase = LOI_1
-        let rp: Meters_T = radius_of(self.r)
-        let ra: Meters_T = R_MOON + Meters_T(self.LOI1_APO_ALT)
+        let rp: metre_T = radius_of(self.r)
+        let ra: metre_T = R_MOON + metre_T(self.LOI1_APO_ALT)
         let speed: Speed_T = vis_viva(MU_MOON, rp, (rp + ra) / 2.0)
         let dv: Speed_T = self.tangential_burn(self.sc, CSM, speed, LOI_1)
         print (f"LOI-1 dv = {dv:.1f} m/s   (-> {Kilometers_T(rp - R_MOON):.0f} x "
@@ -1105,8 +1106,8 @@ class Mission:
 
     def doi(self):
         self.phase = DOI
-        let r: Meters_T = radius_of(self.r)
-        let rp: Meters_T = R_MOON + Meters_T(self.DOI_PERI_ALT)
+        let r: metre_T = radius_of(self.r)
+        let rp: metre_T = R_MOON + metre_T(self.DOI_PERI_ALT)
         let speed: Speed_T = vis_viva(MU_MOON, r, (r + rp) / 2.0)
         let dv: Speed_T = self.tangential_burn(self.lander, LM, speed, DOI)
         print f"DOI dv = {dv:.1f} m/s   (-> periapsis {self.DOI_PERI_ALT:.0f} km)"
@@ -1137,13 +1138,13 @@ class Mission:
                f"speed = {v.speed():.0f} m/s, mass = {lander.mass():,.0f} kg")
         print f"  Landing site is {Kilometers_T(arc(R_MOON, self.DESCENT_ARC)):.0f} km downrange"
 
-        let dt: Duration_T = self.DT
-        var t: Duration_T = 0.0
-        var next_guid: Duration_T = 0.0
-        var next_radar: Duration_T = 0.0
-        var next_tm: Duration_T = 0.0
+        let dt: second_T = self.DT
+        var t: second_T = 0.0
+        var next_guid: second_T = 0.0
+        var next_radar: second_T = 0.0
+        var next_tm: second_T = 0.0
         var a_cmd: Acceleration = NO_ACCEL
-        var last_cycle: Duration_T = 0.0
+        var last_cycle: second_T = 0.0
         var touched_down: bool = False
         var last_mode: Mode_T = P63
         var announced: bool = False
@@ -1175,10 +1176,10 @@ class Mission:
             nav.propagate(imu.measure(a_thrust, dt), dt)
             t = t + dt
 
-            let alt_new: Meters_T = radius_of(r_new) - R_MOON
+            let alt_new: metre_T = radius_of(r_new) - R_MOON
             if alt_new <= 0.0:
                 # linear interpolation to the instant of contact
-                let alt_old: Meters_T = radius_of(r) - R_MOON
+                let alt_old: metre_T = radius_of(r) - R_MOON
                 let f: float = alt_old / (alt_old - alt_new)    # alt_old > 0 >= alt_new
                 r = r + (r_new - r) * f
                 v = v + (v_new - v) * f
@@ -1196,7 +1197,7 @@ class Mission:
         let vv: Speed_T = along(v, up)
         let vh: Speed_T = along(v, east)
         let along_track: Degree_T = wrapped(up.angle() - site_up.angle()) * turn(s)
-        let miss: Meters_T = arc(R_MOON, along_track)   # + = overshoot (beyond site)
+        let miss: metre_T = arc(R_MOON, along_track)   # + = overshoot (beyond site)
 
         let good: bool = touched_down and abs(vv) < 3.0 and abs(vh) < 1.5
         if good:
@@ -1261,21 +1262,21 @@ class Mission:
 # PLOTS
 # ============================================================
 
-def plot_xs(pts: []Position, scale: Meters_T) -> []float:
+def plot_xs(pts: []Position, scale: metre_T) -> []float:
     return [p.x / scale for p in pts]
 
-def plot_ys(pts: []Position, scale: Meters_T) -> []float:
+def plot_ys(pts: []Position, scale: metre_T) -> []float:
     return [p.y / scale for p in pts]
 
 def make_plots(m: Mission, path: str, show: bool):
     # a statement that is a call on a PyObject must be discarded on Nim; `let _` does it
     let fig: PyObject = plt.figure(figsize=(17, 9.5))
-    let mega: Meters_T = 1e6                     # axes are in 10^3 km
-    let kilo: Meters_T = 1e3
+    let mega: metre_T = 1e6                     # axes are in 10^3 km
+    let kilo: metre_T = 1e3
 
     # 1 - Earth frame
     let a1: PyObject = fig.add_subplot(2, 3, 1)
-    let t_end: Duration_T = m.earth_ts[len(m.earth_ts) - 1]
+    let t_end: second_T = m.earth_ts[len(m.earth_ts) - 1]
     a1.plot(plot_xs(m.earth_track, mega), plot_ys(m.earth_track, mega),
                               lw=1.2, label="spacecraft")
     let ring: []Position = [ORIGIN + Vector(MOON_DISTANCE, Degree_T(360.0 * fraction(i, 399))) for i in 0 ..< 400]

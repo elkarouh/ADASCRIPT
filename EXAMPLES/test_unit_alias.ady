@@ -1,11 +1,11 @@
-# An alias of a unit is the unit: `type Distance_T is Metre_T` names the quantity where
-# Metre_T names how it is measured, and both are one type. A derived unit, a scaled one, a
+# An alias of a unit is the unit: `type Distance_T is metre_T` names the quantity where
+# metre_T names how it is measured, and both are one type. A derived unit, a scaled one, a
 # literal and a check made over the alias take it as the unit it is. The alias is read in
 # this module; it is written out as an alias for a module that nimports this one.
-type Metre_T is distinct float                         # the basic unit of length
-type Second_T is distinct float where s: float(s) >= 0.0   # the basic unit of time, never negative
-type Distance_T is Metre_T                             # the quantity, as a signature says it
-type Duration_T is Second_T
+from units import metre_T, second_T
+
+type Distance_T is metre_T                             # the quantity, as a signature says it
+type Duration_T is second_T
 type Speed_T is Distance_T / Duration_T                # a unit made of aliases
 type Altitude_T is 30.48 * Distance_T                  # a flight level: hundreds of feet
 type Legal_Speed_T is Speed_T where v: float(v) <= 299_792_458.0
@@ -16,7 +16,7 @@ def flown(speed: Speed_T, time: Duration_T) -> Distance_T:
 let leg: Distance_T = 10.0
 let took: Duration_T = 2.0
 let pace: Speed_T = leg / took
-let metres: Metre_T = leg                              # one type: no cast
+let metres: metre_T = leg                              # one type: no cast
 let level: Altitude_T = 350.0
 let legal: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(pace)
 assert float(pace) == 5.0 and float(metres) == 10.0

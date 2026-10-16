@@ -2235,8 +2235,20 @@ def main(argv=None):
 
         _enqueue_checked(code, _ady_dir_pre)
 
-        while _prepass_worklist:
-            _ppname, _ppady, _ppdir = _prepass_worklist.pop(0)
+        _pp_done = []
+        _pp_second = False
+        while _prepass_worklist or (_pp_done and not _pp_second):
+            if not _prepass_worklist:
+                # a second round over the same modules: the first met a module
+                # before the ones it builds on (map_base before the units it
+                # scales), so a base only a later module declared was unknown
+                _pp_second = True
+                _prepass_worklist.extend(_pp_done)
+                _pp_done = []
+            _pp_item = _prepass_worklist.pop(0)
+            if not _pp_second:
+                _pp_done.append(_pp_item)
+            _ppname, _ppady, _ppdir = _pp_item
             with open(_ppady, encoding="utf-8") as _f:
                 _ppcode = _resolved_imports(_f.read(), _ppdir)
             try:

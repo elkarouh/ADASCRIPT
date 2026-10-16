@@ -212,7 +212,7 @@ the six plots have the same shape as `moon_mission.png`. Matplotlib is needed to
 | `scipy.optimize.brentq` | `brentq`, Brent's method, ported |
 | numpy arrays | map_flat's `Position` (a point) and `Vector` (a displacement); `State_T` is a position and a velocity, `Delta_T` what it changes by per second. numpy is not imported at all |
 | `np.random.default_rng(seed)` | `Rng`, L'Ecuyer's combined generator with Box-Muller, so the Python and Nim runs draw the same noise. The descent's noise therefore differs from numpy's for the same seed |
-| `Stage` dataclass, `Spacecraft` | `Stage_T`, a record whose fields are `Mass_T`, `Duration_T` and `Force_T`, held by `Spacecraft`. The original shares one `Stage` object between the stack, the burn and `Propulsion`; here a stage is found by its `StageId_T`, so nothing is shared |
+| `Stage` dataclass, `Spacecraft` | `Stage_T`, a record whose fields are `Mass_T`, `second_T` and `Force_T`, held by `Spacecraft`. The original shares one `Stage` object between the stack, the burn and `Propulsion`; here a stage is found by its `StageId_T`, so nothing is shared |
 | `dict(...)` for orbital elements, gates, telemetry | records: `Elements_T`, `Gate_T`, `Target_T`, `Telemetry_T`, `Result_T` |
 | strings for stage names, burn labels, guidance modes, phases | enums (`StageId_T`, `Burn_T`, `Mode_T`, `Phase_T`, `Event_T`) with name tables (`STAGE_NAME`, `BURN_NAME`, `MODE_NAME`) |
 | event functions with `.terminal` / `.direction` attributes | `Event_T` and `EVENT_DIRECTION`; a `Dynamics` class (`EarthDynamics`, `MoonDynamics`) says what it watches |
@@ -224,9 +224,9 @@ the six plots have the same shape as `moon_mission.png`. Matplotlib is needed to
 
 ## Units
 
-No bare floats in signatures. From map_base and map_flat: `Meters_T`, `Degree_T`, `SquareMeters_T`, `Vector`,
+No bare floats in signatures. From map_base and map_flat: `metre_T`, `Degree_T`, `SquareMeters_T`, `Vector`,
 `Position`, `Kilometers_T` and `Radians_T` (scaled units: `Kilometers_T(m)`, `Degree_T(r)`), `modulo`, and `rotated_by` / `angle` / `unit` / `cross` for the rotations and
-signs the original did with `rot`, `arctan2` and `np.sign`. Declared here: `Mass_T`, `Duration_T`
+signs the original did with `rot`, `arctan2` and `np.sign`. Declared here: `Mass_T`, `second_T`
 (distinct), `Speed_T`, `Accel_T`, `Force_T`, `Mu_T` (a body's GM), `AngularRate_T` and `AngMom_T` (derived).
 The rocket equation is `ve = isp * G0` (a `Speed_T`), `used = m0 * (1 - exp(-dv / ve))` (a `Mass_T`),
 gravity is `MU_MOON / (r * r)` (an `Accel_T`), the Moon's phase is a `Degree_T` advancing at an
@@ -235,7 +235,7 @@ gravity is `MU_MOON / (r * r)` (an `Accel_T`), the Moon's phase is a `Degree_T` 
 Dot and cross products keep their unit: `r . v` and `r x v` are `AngMom_T` (m^2/s), `along` divides one by
 the unit vector's length to get a `Speed_T`, and the integrator's error control is a generic `scaled[T]` that
 compares an error in metres with a tolerance in metres and one in m/s with one in m/s. A rate is a
-`Duration_T` away from its distance (`dx / SETTLE` is a `Speed_T`), a throttle is a `Throttle_T`, and the
+`second_T` away from its distance (`dx / SETTLE` is a `Speed_T`), a throttle is a `Throttle_T`, and the
 log prints a time as `Hours_T(t)` or `Days_T(t)` and a distance as `Kilometers_T(d)`.
 
 What still goes through a plain float (each is in `TODO.md`):
@@ -248,6 +248,6 @@ radian has no unit; an `int` beside a float (`fraction`); and the numbers handed
 Velocities and accelerations are map_flat's `Velocity` (`Speed_T` along a bearing) and
 `Acceleration` (`Accel_T` along a bearing), with `Vector / t -> Velocity`,
 `Velocity * t -> Vector`, `Velocity / t -> Acceleration` and `Acceleration * t -> Velocity` (`*` and `/` are
-overloaded on the type of the right-hand side: a plain number scales, a `Duration_T` changes the unit);
+overloaded on the type of the right-hand side: a plain number scales, a `second_T` changes the unit);
 the integrator's state is a `Position` and a `Velocity`, and a step of it is a `Vector` and a `Velocity`.
 So `r + v * dt` checks, and `r + v` does not.

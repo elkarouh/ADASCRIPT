@@ -19,9 +19,11 @@
 # conversion, written where it happens. Scaled units are Nim only (ady2py refuses the
 # declaration).
 
-type Mass_T     is distinct float                          # kg
-type Distance_T is distinct float                          # m
-type Duration_T is distinct float where d: float(d) >= 0.0   # s, never negative
+from units import kilogram_T, metre_T, second_T
+
+type Mass_T     is kilogram_T
+type Distance_T is metre_T
+type Duration_T is second_T
 type Speed_T    is Distance_T / Duration_T                 # m/s
 type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 

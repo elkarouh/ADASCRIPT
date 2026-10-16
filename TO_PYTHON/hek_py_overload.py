@@ -9,7 +9,7 @@ the types of the arguments at the call -- the exact type first, so that a
 Duration_T, which is a float in Python, finds the overload that names it
 before the one that names float, then what the argument is an instance of,
 and last a plain number for a distinct type of numbers: arithmetic on a
-distinct value gives the base type in Python, so `Meters_T(a.x + b.x)` is the
+distinct value gives the base type in Python, so `metre_T(a.x + b.x)` is the
 way to say which one a sum is when overloads differ only in such types.
 Two defs with the same parameter types are one name defined twice, and
 refused. Calls are by position: the dispatcher has no parameter names.

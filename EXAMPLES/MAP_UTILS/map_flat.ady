@@ -8,7 +8,8 @@ Distances are in metres, angles in degrees; a time turns a Vector into a Velocit
 and a Velocity into an Acceleration, by `/`, and back by `*`.
 """
 
-from map_base import Accel_T, AngMom_T, Degree_T, Duration_T, Meters_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
+from units import metre_T, second_T
+from map_base import Accel_T, AngMom_T, Degree_T, Radians_T, Speed_T, SquareMeters_T, arctan2, cos, sin
 nimport math
 from math nimport floor, sqrt, round, hypot
 
@@ -23,23 +24,23 @@ class Vector:
     counter-clockwise from the positive x axis (the usual convention); the parts
     are kept as x and y.  Vector(x, y), from its parts, is the other way to make one.
     """
-    var x: Meters_T
-    var y: Meters_T
+    var x: metre_T
+    var y: metre_T
 
-    def __init__(self, length: Meters_T, angle: Degree_T) -> None:
+    def __init__(self, length: metre_T, angle: Degree_T) -> None:
         let radians: float = float(Radians_T(angle))
-        self.x = Meters_T(float(length) * cos(radians))
-        self.y = Meters_T(float(length) * sin(radians))
+        self.x = metre_T(float(length) * cos(radians))
+        self.y = metre_T(float(length) * sin(radians))
 
     # -- components ----------------------------------------------------------
 
-    def __init__(self, x: Meters_T, y: Meters_T) -> None:
+    def __init__(self, x: metre_T, y: metre_T) -> None:
         self.x = x
         self.y = y
 
-    def length(self) -> Meters_T:
+    def length(self) -> metre_T:
         """Magnitude of the vector."""
-        Meters_T(hypot(float(self.x), float(self.y)))
+        metre_T(hypot(float(self.x), float(self.y)))
 
     def angle(self) -> Degree_T:
         """Direction of the vector."""
@@ -51,7 +52,7 @@ class Vector:
         """A new vector rotated counter-clockwise by the given angle."""
         Vector(self.length(), self.angle() + relative_angle)
 
-    def shortened_by(self, delta: Meters_T) -> Vector:
+    def shortened_by(self, delta: metre_T) -> Vector:
         """A new vector with its length reduced by DELTA."""
         Vector(self.length() - delta, self.angle())
 
@@ -92,7 +93,7 @@ class Vector:
         let u: Vector = onto.unit()
         u * float(self * u)          # u is 1 m long: the dot product, in metres
 
-    def __truediv__(self, t: Duration_T) -> Velocity:
+    def __truediv__(self, t: second_T) -> Velocity:
         """The velocity that covers this vector in the time T."""
         Velocity(self.x / t, self.y / t)
 
@@ -127,10 +128,10 @@ class Position:
     A Position plus a Vector is a Position; one Position minus another is the
     Vector between them.
     """
-    var x: Meters_T
-    var y: Meters_T
+    var x: metre_T
+    var y: metre_T
 
-    def __init__(self, x: Meters_T, y: Meters_T) -> None:
+    def __init__(self, x: metre_T, y: metre_T) -> None:
         self.x = x
         self.y = y
 
@@ -188,13 +189,13 @@ class Velocity:
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""
-        Vector(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
+        Vector(metre_T(float(self.x)), metre_T(float(self.y))).unit()
 
-    def __mul__(self, t: Duration_T) -> Vector:
+    def __mul__(self, t: second_T) -> Vector:
         """The displacement in the time T."""
         Vector(self.x * t, self.y * t)
 
-    def __truediv__(self, t: Duration_T) -> Acceleration:
+    def __truediv__(self, t: second_T) -> Acceleration:
         """The acceleration that changes it by this much in the time T."""
         Acceleration(self.x / t, self.y / t)
 
@@ -248,9 +249,9 @@ class Acceleration:
 
     def direction(self) -> Vector:
         """The unit Vector (1 m) it points along."""
-        Vector(Meters_T(float(self.x)), Meters_T(float(self.y))).unit()
+        Vector(metre_T(float(self.x)), metre_T(float(self.y))).unit()
 
-    def __mul__(self, t: Duration_T) -> Velocity:
+    def __mul__(self, t: second_T) -> Velocity:
         """The change of velocity in the time T."""
         Velocity(self.x * t, self.y * t)
 

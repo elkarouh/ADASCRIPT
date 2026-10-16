@@ -24,10 +24,10 @@ What changed in the translation
 -------------------------------
 * No bare floats.  The original mixes metres (the flat plane, the Vincenty
   internals) and kilometres (the geodetic interface); here a distance is
-  `Meters_T` or `Kilometers_T`, an angle of any size is `Degree_T`, a compass
+  `metre_T` or `Kilometers_T`, an angle of any size is `Degree_T`, a compass
   direction is a `Bearing_T`, and a position is a `Latitude_T` / `Longitude_T`
   (two types, so that the two cannot be swapped).
-  `Meters_T * Meters_T` is a `SquareMeters_T`, which is what a dot product is.
+  `metre_T * metre_T` is a `SquareMeters_T`, which is what a dot product is.
 * A DMS string that does not parse is a failure value (`!GeoFailure_T`), not a
   ValueError.  So is one whose last letter is not a side of its axis (the original
   took any letter for north or east, and `E` on a latitude for a good one).
@@ -51,7 +51,8 @@ What changed in the translation
   demo.  The demo's assertions and the flat-plane prints are kept.
 """
 
-from map_base import Bearing_T, Degree_T, GeoFailure_T, Kilometers_T, Latitude_T, Longitude_T, Meters_T, Radians_T, SquareMeters_T, Unit_T, arcsin, arctan, arctan2, cos, dec2human_latlong, human_latlong2dec, modulo, sin, tan
+from units import metre_T
+from map_base import Bearing_T, Degree_T, GeoFailure_T, Kilometers_T, Latitude_T, Longitude_T, Radians_T, SquareMeters_T, Unit_T, arcsin, arctan, arctan2, cos, dec2human_latlong, human_latlong2dec, modulo, sin, tan
 from map_flat import Vector
 nimport math
 from math nimport floor, sqrt, round, hypot
@@ -60,9 +61,9 @@ from math nimport floor, sqrt, round, hypot
 # WGS-84 ellipsoid parameters
 # ---------------------------------------------------------------------------
 
-const WGS84_A: Meters_T = 6378137.0                  # semi-major axis
+const WGS84_A: metre_T = 6378137.0                  # semi-major axis
 const WGS84_F: float = 1.0 / 298.257223563           # flattening
-const WGS84_B: Meters_T = Meters_T(6378137.0 * (1.0 - 1.0 / 298.257223563))   # semi-minor axis
+const WGS84_B: metre_T = metre_T(6378137.0 * (1.0 - 1.0 / 298.257223563))   # semi-minor axis
 
 # ---------------------------------------------------------------------------
 # Vincenty direct formula
@@ -73,7 +74,7 @@ type Direct_T is record:
     longitude: Degree_T         # not wrapped: lon1 + L can leave (-180, 180]
     azimuth:   Bearing_T         # the reverse azimuth
 
-def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degree_T, dist: Meters_T) -> Direct_T:
+def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degree_T, dist: metre_T) -> Direct_T:
     """Given a start point, an azimuth and a distance, the end point and the
     reverse azimuth."""
     let a: float = float(WGS84_A)
@@ -140,7 +141,7 @@ def vincenty_direct(lat1: Latitude_T, lon1: Longitude_T, az1: Degree_T, dist: Me
 # ---------------------------------------------------------------------------
 
 type Inverse_T is record:
-    distance: Meters_T
+    distance: metre_T
     forward:  Bearing_T
     reverse:  Bearing_T
 
@@ -201,7 +202,7 @@ def vincenty_inverse(lat1: Latitude_T, lon1: Longitude_T, lat2: Latitude_T, lon2
         az1 += 360
     let az2: Degree_T = Degree_T(arctan2(cos(u1) * sin(lon), -sin(u1) * cos(u2) + cos(u1) * sin(u2) * cos(lon))) + 180
 
-    Inverse_T(Meters_T(dist_m), Bearing_T(az1), Bearing_T(az2))
+    Inverse_T(metre_T(dist_m), Bearing_T(az1), Bearing_T(az2))
 
 # ---------------------------------------------------------------------------
 # Geodetic geometry -- GeoVector
@@ -219,18 +220,18 @@ class GeoVector:
     Made from a distance and a bearing, `GeoVector(100.0, 45.0)`, or from its
     parts, `geo_vector_from_components(east=70.0, north=70.0)`.
     """
-    var north: Meters_T
-    var east:  Meters_T
+    var north: metre_T
+    var east:  metre_T
 
     def __init__(self, distance: Kilometers_T, bearing: Degree_T) -> None:
         """A displacement of DISTANCE along BEARING (clockwise from true north)."""
         let radians: float = float(Radians_T(bearing))
         let metres: float = float(distance) * 1000.0
-        self.north = Meters_T(metres * cos(radians))
-        self.east  = Meters_T(metres * sin(radians))
+        self.north = metre_T(metres * cos(radians))
+        self.east  = metre_T(metres * sin(radians))
 
-    def length(self) -> Meters_T:
-        Meters_T(hypot(float(self.north), float(self.east)))
+    def length(self) -> metre_T:
+        metre_T(hypot(float(self.north), float(self.east)))
 
     def magnitude(self) -> Kilometers_T:
         """Length of the vector in kilometres."""
@@ -452,8 +453,8 @@ def demo():
     print "All point-in-region assertions passed."
 
     # -- flat-plane Vector demo ----------------------------------------------
-    let v1: Vector = Vector(Meters_T(1.0), Degree_T(30.0)) * 5.0
-    let v2: Vector = Vector(Meters_T(2.0), Degree_T(40.0)) * 5.0
+    let v1: Vector = Vector(metre_T(1.0), Degree_T(30.0)) * 5.0
+    let v2: Vector = Vector(metre_T(2.0), Degree_T(40.0)) * 5.0
     print ""
     print f"v1 = {v1}"
     print f"v2 = {v2}"

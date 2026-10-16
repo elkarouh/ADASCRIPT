@@ -12,7 +12,7 @@
 type Failure_T is record:
     message: str
 
-type Metre_T is distinct float
+from units import metre_T
 type Id_T is distinct int
 
 def describe(x: int | !Failure_T) -> str:
@@ -29,7 +29,7 @@ def show(x: int | float) -> str:
         return "int " + str(x)
     return "float " + str(x)
 
-def total(t: {Id_T}Metre_T) -> float:
+def total(t: {Id_T}metre_T) -> float:
     var s: float = 0.0
     for k, v in t.items():
         s += float(v)
@@ -44,6 +44,6 @@ assert describe(r) == "ok 4"
 assert show(2.5) == "float 2.5"
 assert show(7) == "int 7"
 assert total({1: 1.5, 2: 2.5}) == 4.0
-let m: {str}Metre_T = {"a": 3.0}
+let m: {str}metre_T = {"a": 3.0}
 assert float(m["a"]) == 3.0
 print "test_union_args: ok"

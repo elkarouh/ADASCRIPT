@@ -23,7 +23,8 @@ A route through four airports is flown over a restricted area.  The program:
 and checks what it printed: the legs add up, the pattern is a circle, the plane is
 the distance to the side it was put at.
 """
-from map_base import Bearing_T, Degree_T, GeoFailure_T, Kilometers_T, LatLong_T, Meters_T, SquareMeters_T, human_latlong2dec
+from units import metre_T
+from map_base import Bearing_T, Degree_T, GeoFailure_T, Kilometers_T, LatLong_T, SquareMeters_T, human_latlong2dec
 from map_flat import Position, Vector
 from map_geo import GeoPoint, GeoVector, must
 from regions import Region, Circle, Sector, Polygon, HalfAngle_T
@@ -69,7 +70,7 @@ let CRUISE: Speed_T = 780.0
 # being the counter-clockwise side.
 type Side_T is enum LEFT, RIGHT, ON_TRACK
 
-def side_of_track(cross_track: Meters_T) -> Side_T:
+def side_of_track(cross_track: metre_T) -> Side_T:
     """Which side a cross-track distance is on; within half a metre of the track is on it."""
     return ON_TRACK if -0.5 <= cross_track <= 0.5
     return RIGHT if cross_track < -0.5
@@ -147,9 +148,9 @@ def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
     let offset: Vector = Vector(off.east, off.north)
     let cross: SquareMeters_T = track.cross(offset)
     let dot: SquareMeters_T = track * offset
-    let length: Meters_T = track.length()
-    let across: Meters_T = cross / length                    # a square over a length: a length
-    let along: Meters_T = dot / length
+    let length: metre_T = track.length()
+    let across: metre_T = cross / length                    # a square over a length: a length
+    let along: metre_T = dot / length
     return Fix_T(Kilometers_T(float(along) / 1000.0), Kilometers_T(abs(float(across)) / 1000.0), side_of_track(across))
 
 type Airspace_T is record:

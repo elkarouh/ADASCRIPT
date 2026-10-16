@@ -13,9 +13,11 @@ units are two types, and one line says how they relate:
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
-type Mass_T     is distinct float                          # kg
-type Distance_T is distinct float                          # m
-type Duration_T is distinct float where d: float(d) >= 0.0   # s, never negative
+from units import kilogram_T, metre_T, second_T
+
+type Mass_T     is kilogram_T
+type Distance_T is metre_T
+type Duration_T is second_T
 type Speed_T    is Distance_T / Duration_T                 # m/s
 type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s
@@ -808,8 +810,11 @@ generated from that one line:
 ```python
 const METRES_PER_MILE: float = 1609.344         # exact, by definition
 
-type Distance_T          is distinct float      # metres
-type Duration_T          is distinct float      # seconds
+from units import metre_T, second_T, kilogram_T
+
+type Distance_T          is metre_T             # the quantity, as a signature reads it
+type Duration_T          is second_T
+type Mass_T              is kilogram_T
 
 type Distance_in_km_T    is 1000.0 * Distance_T            # a km is 1000 m
 type Distance_in_miles_T is METRES_PER_MILE * Distance_T   # a mile is 1609.344 m
@@ -891,10 +896,10 @@ the arithmetic that needs metres says so on the line that needs them:
 
 <!-- from: EXAMPLES/MOON/moon_sim.ady -->
 ```python
-        let r0: Meters_T = R_EARTH + Meters_T(self.LEO_ALT)
+        let r0: metre_T = R_EARTH + metre_T(self.LEO_ALT)
 ```
 
-There are two reasons to prefer it to `const LEO_ALT: Meters_T = Meters_T(Kilometers_T(200.0))`.
+There are two reasons to prefer it to `const LEO_ALT: metre_T = metre_T(Kilometers_T(200.0))`.
 The declaration reads like the number in the mission plan, with no conversion
 to check by eye, and it prints in its own unit (`{self.LEO_ALT:.0f} km`)
 without converting back. And the compiler holds every use to it: write
@@ -1237,15 +1242,13 @@ The rungs above are tools, and a program uses them in a fixed order. It helps
 to know the order before reading the declarations.
 
 1. **Declare the base units distinct, once, in the unit the program computes
-   in.** Metres, seconds, kilograms: one `distinct float` each, with the unit
-   in a comment, and nothing else in the program is a bare `float` that means
+   in.** Metres, seconds, kilograms: the stdlib's `units` module has them
+   (`metre_T`, `second_T`, `kilogram_T`), each a `distinct float`, and nothing else in the program is a bare `float` that means
    a length. A program that wants its signatures to read as quantities names
    the unit for how it is measured and the alias for what it is, `Distance_T
-   is metre_T`; the Orbiter below names its basic units for the quantity and
-   needs no alias. Give a base unit the check it really has: a duration is
-   never negative, so `Duration_T` says `where d: float(d) >= 0.0`, and a
-   negative duration stops the program where it is made. (`range` says the
-   same for plain bounds; `where` takes any test.)
+   is metre_T`; the Orbiter below does so for mass, distance and duration. Do not
+   declare your own `distinct float` for a metre or a second: two libraries that
+   did would hold two types that never mix.
 2. **Derive the rest from them.** A speed is `Distance_T / Duration_T`, an impulse
    is `Mass_T * Speed_T`. Do not declare a speed as a second `distinct float`:
    then nothing relates it to the distance and the time it came from, and the
@@ -1261,9 +1264,11 @@ to know the order before reading the declarations.
 
 <!-- from: EXAMPLES/mars_climate_orbiter.ady -->
 ```python
-type Mass_T     is distinct float                          # kg
-type Distance_T is distinct float                          # m
-type Duration_T is distinct float where d: float(d) >= 0.0   # s, never negative
+from units import kilogram_T, metre_T, second_T
+
+type Mass_T     is kilogram_T
+type Distance_T is metre_T
+type Duration_T is second_T
 type Speed_T    is Distance_T / Duration_T                 # m/s
 type Impulse_T  is Mass_T * Speed_T                        # N s, which is kg m/s: what the navigation expects
 type Impulse_in_lbf_s_T is 4.4482216152605 * Impulse_T    # one pound-force second is 4.448 N s

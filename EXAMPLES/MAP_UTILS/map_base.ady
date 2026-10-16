@@ -5,7 +5,7 @@ map_base -- the units, the angles and the coordinate text of map_utils
 The first of three parts (map_base, map_flat, map_geo) of the translation of
 map_utils.py; the notes on what changed in the translation are in map_geo.ady.
 
-  * the units: Meters_T, Kilometers_T, Degree_T, Radians_T, Duration_T, Speed_T,
+  * the units: metre_T, Kilometers_T, Degree_T, Radians_T, second_T, Speed_T,
     Accel_T, Bearing_T, Latitude_T, Longitude_T
   * sin, cos, tan, arctan2, arctan, arcsin on Radians_T, and modulo
   * the failure type of a coordinate (GeoFailure_T) and the DMS <-> decimal
@@ -14,20 +14,19 @@ map_utils.py; the notes on what changed in the translation are in map_geo.ady.
 
 nimport math
 from math nimport floor, sqrt, round, hypot
+from units import metre_T, second_T
 
 # ---------------------------------------------------------------------------
 # Units
 # ---------------------------------------------------------------------------
 
-type Meters_T       is distinct float
-type Kilometers_T   is 1000.0 * Meters_T      # a km is 1000 m: Kilometers_T(m) and Meters_T(km) convert
-type SquareMeters_T is Meters_T * Meters_T       # a dot or cross product, a triangle's area
+type Kilometers_T   is 1000.0 * metre_T      # a km is 1000 m: Kilometers_T(m) and metre_T(km) convert
+type SquareMeters_T is metre_T * metre_T       # a dot or cross product, a triangle's area
 type Degree_T      is distinct float            # an angle of any size and sign
 type Radians_T      is 57.29577951308232 * Degree_T   # a radian is 180/pi degrees: Radians_T(d), Degree_T(r)
-type Duration_T     is distinct float            # seconds
-type Speed_T        is Meters_T / Duration_T     # metres per second
-type Accel_T        is Speed_T / Duration_T      # metres per second squared
-type AngMom_T       is Meters_T * Speed_T        # a position times a velocity: r . v and r x v, m^2/s
+type Speed_T        is metre_T / second_T     # metres per second
+type Accel_T        is Speed_T / second_T      # metres per second squared
+type AngMom_T       is metre_T * Speed_T        # a position times a velocity: r . v and r x v, m^2/s
 
 # A direction clockwise from true north: a Degree_T that wraps, so 360 is 0 and
 # Bearing_T(-10.0) is 350.0.

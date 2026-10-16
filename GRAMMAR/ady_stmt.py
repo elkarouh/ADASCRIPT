@@ -500,7 +500,7 @@ _CLASS_DECL = _re_dup.compile(r"^[ \t]*class[ \t]+([A-Za-z_]\w*)", _re_dup.MULTI
 
 def resolve_unit_aliases(code, known=()):
     """CODE with every alias of a unit written as the unit. `type Distance_T is
-    Metre_T`, Metre_T being `distinct float` or a unit made from others, names
+    metre_T`, metre_T being `distinct float` or a unit made from others, names
     the same type, so a derived unit (`Speed_T is Distance_T / Duration_T`), a
     scaled one and a literal take it as the unit they are: the uses in this
     module are rewritten, and the alias line stays, so that the name is there
