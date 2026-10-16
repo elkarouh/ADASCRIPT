@@ -776,18 +776,6 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
       body (`setTimeout(pick_shown, 50)` with `pick_shown` defined below) is
       "undeclared identifier" in the Nim, though calling one before its def
       works elsewhere: forward declarations miss a function passed as a value.
-- [ ] a union of two records (`type Selection_T is Node_T | Edge_T`) held in an
-      optional (`var selection: ?Selection_T = None`) cannot be read back:
-      assigning `node_of(n)` into `?Selection_T` is a type mismatch unless the
-      value is first bound with a `let` of the union type, and after
-      `if picked is None: return`, `if picked is Node_T: let n: Node_T = picked`
-      stays "cannot tell which member ... bind it first" (native and JS alike).
-      A plain union narrows fine as a parameter. Fix in TO_NIM/hek_nim_expr.py:
-      `_narrow_add` refuses a name already unwrapped by `.get()`, so a member
-      test inside it never narrows; `_union_type_of` cannot see `x.get()`. A
-      partial try (kept in the scratchpad, not committed) reached the probe but
-      not `if o is Node_T` on an optional parameter. Dijkstra's selection is a
-      variant record meanwhile (EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady).
 - [x] a local `let x: str` made a field of the same name on another value
       a string too: in accounting_gui.ady's box_html, with `let x: str =
       px(...)` in scope, `px(p.x + shape.half_w - 8.0)` came out as

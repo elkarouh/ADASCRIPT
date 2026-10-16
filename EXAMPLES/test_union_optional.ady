@@ -1,0 +1,44 @@
+#!/usr/bin/env ady2nim
+"""A union of two records held in an optional: tested, narrowed to a member and read back, as a plain union is."""
+type Node_T is record:
+    name: str
+
+type Edge_T is record:
+    a: str
+    b: str
+
+type Selection_T is Node_T | Edge_T
+
+var selection: ?Selection_T = None
+
+def node_of(n: str) -> Selection_T:
+    return Node_T(n)
+
+def describe(picked: ?Selection_T) -> str:
+    if picked is None:
+        return "none"
+    if picked is Node_T:
+        let n: Node_T = picked
+        return "node " + n.name
+    if picked is Edge_T:
+        let e: Edge_T = picked
+        return "edge " + e.a + e.b
+    return "?"
+
+def is_node(picked: ?Selection_T) -> bool:
+    return picked is not None and picked is Node_T
+
+def main():
+    print describe(selection)
+    selection = node_of("A")
+    print describe(selection)
+    let e: Selection_T = Edge_T("x", "y")
+    selection = e
+    print describe(selection)
+    selection = None
+    print describe(selection)
+    assert not is_node(selection) and is_node(node_of("Q")) and not is_node(e)
+    print "test_union_optional: ok"
+
+if __name__ == "__main__":
+    main()

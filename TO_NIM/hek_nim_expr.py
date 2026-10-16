@@ -807,6 +807,12 @@ def _union_type_of(expr_str):
     _t = (sym.get("type") or "") if sym else ""
     if _t.startswith(("Result[", "OneOf")):
         return _t
+    if expr_str.endswith(".get()"):
+        # an optional union read through its .get(): the union it holds
+        _o = ParserState.symbol_table.lookup(expr_str[:-6].strip("`"))
+        _ot = (_o.get("type") or "") if _o else ""
+        if _ot.startswith("Option[OneOf") and _ot.endswith("]"):
+            return _ot[len("Option["):-1]
     _called = _outer_call_name(expr_str)
     if _called == "adascriptParseEnum":
         # parse_enum(E, s) is an `E | !ParseFailure_T`, whichever enum E is:
@@ -913,7 +919,8 @@ def _result_is_test(chain, right, negated):
     # proved it, where r reads as r.error, asks r, not its failure.
     _nm = _re.match(r"^(" + NARROW_NAME + r")(\.get\(\)|\.value|\.error|\.[mv]\d)$", chain)
     if (_nm and _nm.group(1) in getattr(ParserState, "_option_unwrap_vars", ())
-            and _narrow_suffix(_nm.group(1)) == _nm.group(2)):
+            and _narrow_suffix(_nm.group(1)) == _nm.group(2)
+            and _union_info(_union_type_of(_nm.group(1))) is not None):
         chain = _nm.group(1)
     _ut = _union_type_of(chain)
     info = _union_info(_ut)
@@ -945,12 +952,20 @@ _NARROW_IN_ELSE = {"isNone": ".get()", "is_err": ".value", "is_ok": ".error"}
 NARROW_TESTS = r"isSome|isNone|is_ok|is_err|is_m\d|is_v\d"
 # The name a test is on: a plain name, a field path, an index -- or a Nim
 # keyword in backticks, which is how a variable named `out` is spelled.
-NARROW_NAME = r"`?[A-Za-z_]\w*`?(?:\.\w+)*(?:\[\d+\])?"
+NARROW_NAME = r"`?[A-Za-z_]\w*`?(?:\.\w+)*(?:\[\d+\])?(?:\.get\(\))?"
 
 
 def narrow_suffix(name, test, in_body):
     """How NAME reads where TEST (one of NARROW_TESTS) is known true
     (IN_BODY) or known false; None when that proves nothing."""
+    import re as _re
+    sfx = _narrow_suffix_of(name, test, in_body)
+    # `p.get().is_m0` asks a member of the union an optional p holds: p reads
+    # as p.get().m0 there, on top of the .get() already proved
+    return ".get()" + sfx if sfx and name.endswith(".get()") else sfx
+
+
+def _narrow_suffix_of(name, test, in_body):
     import re as _re
     if in_body:
         if test in _NARROW_IN_BODY:
@@ -973,7 +988,18 @@ def _narrow_add(name, suffix):
     _vars = getattr(ParserState, "_option_unwrap_vars", None)
     if _vars is None:
         _vars = ParserState._option_unwrap_vars = set()
+    name = _narrow_base(name)
     if name in _vars:
+        # an optional union already unwrapped may narrow further, to a member;
+        # the unwrapped reading comes back when that ends
+        if (_narrow_suffix(name) == ".get()" and suffix.startswith(".get().")):
+            _prev = getattr(ParserState, "_narrow_prev", None)
+            if _prev is None:
+                _prev = ParserState._narrow_prev = {}
+            _prev.setdefault(name, []).append(".get()")
+            ParserState._unwrap_suffix = getattr(ParserState, "_unwrap_suffix", None) or {}
+            ParserState._unwrap_suffix[name] = suffix
+            return True
         return False
     _vars.add(name)
     if suffix != ".get()":
@@ -986,7 +1012,17 @@ def _narrow_add(name, suffix):
     return True
 
 
+def _narrow_base(name):
+    return name[:-6] if name.endswith(".get()") else name
+
+
 def _narrow_drop(name):
+    name = _narrow_base(name)
+    _prev = getattr(ParserState, "_narrow_prev", {}).get(name)
+    if _prev:
+        _prev.pop()
+        ParserState._unwrap_suffix.pop(name, None)
+        return              # still unwrapped, as before the member test
     getattr(ParserState, "_option_unwrap_vars", set()).discard(name)
     getattr(ParserState, "_unwrap_suffix", {}).pop(name, None)
 
