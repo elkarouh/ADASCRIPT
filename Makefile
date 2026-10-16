@@ -175,6 +175,7 @@ STANDALONE := \
     test_money.ady \
     accounting.ady \
     test_scaled_units.ady \
+    test_units_stdlib.ady \
     test_cents.ady \
     mars_climate_orbiter.ady \
     distance_units.ady \

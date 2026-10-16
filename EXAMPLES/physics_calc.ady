@@ -27,9 +27,11 @@ which the Python backend cannot always see.
 
 const METRES_PER_MILE: float = 1609.344         # exact, by definition
 
-type Distance_T          is distinct float      # metres
-type Duration_T          is distinct float      # seconds
-type Mass_T              is distinct float      # kilograms
+from units import metre_T, second_T, kilogram_T
+
+type Distance_T          is metre_T             # the quantity, as a signature reads it
+type Duration_T          is second_T
+type Mass_T              is kilogram_T
 
 # a multiple of a unit is a unit of its own: a mile plus a metre is refused, and
 # Distance_in_miles_T(d) of a Distance_T is d / METRES_PER_MILE miles
