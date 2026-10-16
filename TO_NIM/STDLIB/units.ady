@@ -1,0 +1,23 @@
+# units.ady -- the base units, one definition for every program and library
+#
+#   from units import metre_T, second_T
+#   type Distance_T is metre_T          # the quantity, named where a signature reads it
+#   type Duration_T is second_T
+#   type Speed_T    is Distance_T / Duration_T
+#
+# The names are lowercase so that they read as the language's own, as `int`
+# does, and not as a type the program declared.  A type is distinct, so a
+# `metre_T` from one library is the same type in every other.  Everything
+# else -- speed, area, a flight level, a km -- is made from these with
+# `/`, `*` and `FACTOR * unit_T`, in the program.
+#
+# `second_T` has no lower bound: the difference of two instants is negative.
+# A duration that may not be, narrows it: `type Elapsed_T is second_T where s: float(s) >= 0.0`.
+
+type metre_T    is distinct float   # length
+type kilogram_T is distinct float   # mass
+type second_T   is distinct float   # time
+type ampere_T   is distinct float   # electric current
+type kelvin_T   is distinct float   # temperature; no offset units, so no Celsius
+type mole_T     is distinct float   # amount of substance
+type candela_T  is distinct float   # luminous intensity

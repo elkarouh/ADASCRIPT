@@ -1,0 +1,17 @@
+#!/usr/bin/env ady2nim
+# test_units_stdlib.ady -- the base units come from the stdlib `units` module
+#
+#   ady2nim EXAMPLES/test_units_stdlib.ady -r
+from units import metre_T, second_T
+
+type Distance_T       is metre_T
+type Duration_T       is second_T
+type Speed_T          is Distance_T / Duration_T
+type Distance_in_km_T is 1000.0 * Distance_T
+
+let d: Distance_T = 42195.0
+let t: Duration_T = 3600.0
+let s: Speed_T = d / t
+assert abs(float(s) - 11.720833333333333) < 1e-9
+assert abs(float(Distance_in_km_T(d)) - 42.195) < 1e-9
+print "ok"
