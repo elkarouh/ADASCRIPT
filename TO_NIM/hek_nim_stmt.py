@@ -383,7 +383,8 @@ def to_nim(self):
     if len(parts) == 2 and prefix == "":
         sym = ParserState.symbol_table.lookup(lhs)
         # Also handle field access: obj.field where field type is Option[T]
-        if not sym:
+        # (a field first assigned `None` was recorded as a void variable)
+        if not sym or sym.get("type") in ("void", ""):
             import re as _re_field
             _field_m2 = _re_field.match(r'^(\w+)\.(\w+)$', lhs)
             if _field_m2:
@@ -417,6 +418,10 @@ def to_nim(self):
                 elif not _is_regex_call and not rhs.startswith("some(") and not rhs.startswith("none(") and not _rhs_is_option:
                     _m = _re_opt2.search(r"Option\[(.+)\]", stype)
                     if _m:
+                        # an optional union takes a member as the union's own
+                        _inner_t = _m.group(1)
+                        if _inner_t.startswith("OneOf"):
+                            rhs = hek_nim_expr._result_wrap(rhs, _inner_t)
                         parts[1] = f"some({rhs})"
                         ParserState.nim_imports.add("options")
     # A bare `x: T` earlier left its type here rather than declaring: this is

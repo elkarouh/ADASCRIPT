@@ -235,38 +235,28 @@ def dropped_cb(node: Element_T, at: Spot_T):
 
 # ---- The selection: the node or edge the reader last clicked ----
 
-# What the reader selected. Which field exists depends on the kind: a node, an edge, or nothing.
-# NOTHING() is the empty selection; NODE(n) and EDGE(e) hold the node or the edge.
-type Kind_T is enum NOTHING, NODE, EDGE
-
-type Selection_T (kind: Kind_T) is record:
-    case kind is
-        when NODE:
-            node: NodeView
-        when EDGE:
-            edge: EdgeView
-        when others:
-            pass
+# What the reader selected: a node's view or an edge's view; None when nothing is.
+type Selected_T is NodeView | EdgeView
 
 # The reader's selection: what it holds, and what the gestures do with it.
 class Selection:
-    var what: Selection_T
+    var what: ?Selected_T
 
     def __init__(self):
-        self.what = NOTHING()
+        self.what = None
 
     # Take the outline off everything selected, and forget it.
     def clear(self):
         for el in page.all(".selected"):
             set_selected(el, false)
-        self.what = NOTHING()
+        self.what = None
 
     # Select the node EL, in place of what was selected.
     def select_node(self, el: Element_T):
         self.clear()
         let view: ?NodeView = network.drawing.node_at(el)
         if view is not None:
-            self.what = NODE(view)
+            self.what = view
             set_selected(el, true)
 
     # Select the edge EL, in place of what was selected.
@@ -274,27 +264,27 @@ class Selection:
         self.clear()
         let view: ?EdgeView = network.drawing.edge_at(el)
         if view is not None:
-            self.what = EDGE(view)
+            self.what = view
             set_selected(el, true)
 
     # Ask the cost of the selected edge, if an edge is selected.
     def change_cost(self):
-        if self.what.kind == EDGE:
-            self.what.edge.change_cost()
+        if self.what is EdgeView:
+            let edge: EdgeView = self.what
+            edge.change_cost()
 
     # Delete what is selected, after asking.
     def remove(self):
-        case self.what.kind:
-            when NODE:
-                self.what.node.delete()
-            when EDGE:
-                self.what.edge.delete()
-            when NOTHING:
-                pass                        # nothing is selected
+        if self.what is NodeView:
+            let node: NodeView = self.what
+            node.delete()
+        elif self.what is EdgeView:
+            let edge: EdgeView = self.what
+            edge.delete()
 
     # Forget the selection without unmarking it: the page it was on has been drawn again.
     def forget(self):
-        self.what = NOTHING()
+        self.what = None
 
 var selection: Selection = Selection()
 

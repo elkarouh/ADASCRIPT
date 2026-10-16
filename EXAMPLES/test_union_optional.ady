@@ -28,6 +28,55 @@ def describe(picked: ?Selection_T) -> str:
 def is_node(picked: ?Selection_T) -> bool:
     return picked is not None and picked is Node_T
 
+# the same, held in a field of a class
+class NodeView:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+
+class EdgeView:
+    var cost: int
+
+    def __init__(self, cost: int):
+        self.cost = cost
+
+type Viewed_T is NodeView | EdgeView
+
+class Picked:
+    var what: ?Viewed_T
+
+    def __init__(self):
+        self.what = None
+
+    def pick_node(self, v: NodeView):
+        self.what = v
+
+    def pick_edge(self, v: EdgeView):
+        self.what = v
+
+    def clear(self):
+        self.what = None
+
+    def show(self) -> str:
+        if self.what is NodeView:
+            let n: NodeView = self.what
+            return "node " + n.name
+        elif self.what is EdgeView:
+            let e: EdgeView = self.what
+            return "edge " + str(e.cost)
+        return "nothing"
+
+def field_case():
+    var p: Picked = Picked()
+    assert p.show() == "nothing"
+    p.pick_node(NodeView("A"))
+    assert p.show() == "node A"
+    p.pick_edge(EdgeView(5))
+    assert p.show() == "edge 5"
+    p.clear()
+    assert p.show() == "nothing"
+
 def main():
     print describe(selection)
     selection = node_of("A")
@@ -38,6 +87,7 @@ def main():
     selection = None
     print describe(selection)
     assert not is_node(selection) and is_node(node_of("Q")) and not is_node(e)
+    field_case()
     print "test_union_optional: ok"
 
 if __name__ == "__main__":

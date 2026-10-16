@@ -827,6 +827,19 @@ def _union_type_of(expr_str):
     return ""
 
 
+def _opt_union_inner(expr_str):
+    """The union an optional EXPR_STR (a name or a field path, not yet
+    narrowed) may hold -- `?Sel_T` where Sel_T is a OneOfN -- or ""."""
+    expr_str = expr_str.strip()
+    sym = ParserState.symbol_table.lookup(expr_str.strip("`"))
+    t = (sym.get("type") or "") if sym and sym.get("type") != "void" else ""
+    if not t and "." in expr_str:
+        t = _nim_expr_type(expr_str) or ""
+    if t.startswith("Option[OneOf") and t.endswith("]"):
+        return t[len("Option["):-1]
+    return ""
+
+
 def _arith_nim_type(v):
     """The Nim type of an arithmetic expression, from its operator and its
     operands: `div` and `mod` are int, `/` is float, `+ - *` are float when
@@ -923,6 +936,8 @@ def _result_is_test(chain, right, negated):
             and _union_info(_union_type_of(_nm.group(1))) is not None):
         chain = _nm.group(1)
     _ut = _union_type_of(chain)
+    if not _ut and right != "nil":
+        _ut = _opt_union_inner(chain)       # `p is T` on an optional union p
     info = _union_info(_ut)
     if info is None:
         return None
@@ -960,6 +975,9 @@ def narrow_suffix(name, test, in_body):
     (IN_BODY) or known false; None when that proves nothing."""
     import re as _re
     sfx = _narrow_suffix_of(name, test, in_body)
+    if (sfx and sfx[:2] in (".m", ".v") and not name.endswith(".get()")
+            and _opt_union_inner(name)):
+        sfx = ".get()" + sfx            # a member of what an optional holds
     # `p.get().is_m0` asks a member of the union an optional p holds: p reads
     # as p.get().m0 there, on top of the .get() already proved
     return ".get()" + sfx if sfx and name.endswith(".get()") else sfx
