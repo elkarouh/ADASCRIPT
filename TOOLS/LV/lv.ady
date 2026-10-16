@@ -18,6 +18,12 @@ def state_rank(state: str) -> int:
             return i
     return len(STATES)
 
+# A column: the text of a function, padded on the right to WIDTH.
+@decorator
+def aligned(width: int, f: (str) -> str, s: str) -> str:
+    return f"{f(s):<{width}}"
+
+@aligned(64)
 def colored_viewname(view_name: str) -> str:
     let parts: []str = view_name.split('.')
     let login_name: str = parts[0]
@@ -27,6 +33,7 @@ def colored_viewname(view_name: str) -> str:
     else:
         return f"{login_name}.{view | dim | bold | fg_black | bg_white}"
 
+@aligned(105)
 def colored_baseline(baseline: str) -> str:
     let parts: []str = baseline.split('.')
     output: str = f"{parts[0] | bold | fg_yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | fg_yellow}"
@@ -35,6 +42,7 @@ def colored_baseline(baseline: str) -> str:
     else:
         return f"{output}.{parts[4] | bold | bg_blue | fg_white}"
 
+@aligned(40)
 def colored_env_id(env_id: str) -> str:
     let parts: []str = env_id.split('.')
     if parts[1] == "OP":
@@ -42,11 +50,16 @@ def colored_env_id(env_id: str) -> str:
     else:
         return f"{parts[0]}.{parts[1] | bold | fg_blue | bg_white}.{parts[2]}"
 
+@aligned(36)
 def colored_status(state: str) -> str:
     case state:
         when "OPS-BUG": state | bold | blink | fg_black | bg_white
         when "BUSY":    state | bold | fg_black | bg_yellow
         when others:    state | bold | fg_yellow | bg_green
+
+@aligned(35)
+def colored_comment(comment: str) -> str:
+    return comment.strip() | bold | fg_black | bg_white
 
 class Cls_View_Line:
     var view: str
@@ -108,10 +121,10 @@ def main():
         if not first and R.state != previous_state:
             print("-" * 120)
         var colored_line: str = (
-            f"{colored_viewname(R.view).alignLeft(64)} {colored_baseline(R.baseline).alignLeft(105)} "
-            f"{colored_env_id(R.env_id).alignLeft(40)} {colored_status(R.state).alignLeft(36)}")
+            f"{colored_viewname(R.view)} {colored_baseline(R.baseline)} "
+            f"{colored_env_id(R.env_id)} {colored_status(R.state)}")
         if R.state != "MERGED":
-            colored_line += f" {(R.comment.strip() | bold | fg_black | bg_white).alignLeft(35)}"
+            colored_line += f" {colored_comment(R.comment)}"
         print(colored_line)
         previous_state = R.state
         first = False
