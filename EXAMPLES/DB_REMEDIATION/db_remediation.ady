@@ -1,0 +1,301 @@
+#!/usr/bin/env ady2nim
+"""
+db_remediation -- auto-remediation as graph search, after Stripe's article
+"How Stripe uses graph search and state machines to auto-remediate a global
+database fleet" (stripe.dev, 2025).
+
+A replica set (shard) is a state.  An atomic operation (add a vote, remove a
+priority, rebuild a node) is an edge.  The goal is the shard's source of
+truth.  Invalid states -- an even number of votes, no healthy majority of
+voters, a priority on a non-voting node -- are pruned, so every path the
+search returns keeps quorum at every intermediate step.
+
+    V1  BreadthPlanner   BFS over the generic EXAMPLES/state_search.ady:
+                         fewest operations to the source of truth.
+    V2  WeightedPlanner  Dijkstra over EXAMPLES/shortest_path.ady:
+                         edge weight = misconfiguration(state) * time(op),
+                         so quick fixes that cut exposure come first.  When
+                         the goal cannot be reached (a node whose hardware
+                         is gone) it returns a PARTIAL plan to the least
+                         misconfigured reachable state.
+
+Simulation and execution share one `apply`, as in the article's
+CommonContext: what the planner simulates is what the executor runs.
+"""
+
+from state_search import StateSearcher, Step_T
+from shortest_path import Minimizer
+
+type Host_T is enum A, B, C
+
+type Node_T is tuple:
+    vote: int       # 0 or 1
+    prio: int       # 0 or 1; only a voting node may carry priority
+    up: int         # 1 healthy, 0 down
+
+type Shard_T is [Host_T]Node_T
+
+type OpKind_T is enum VOTE_ON, VOTE_OFF, PRIO_ON, PRIO_OFF, REBUILD
+type Op_T is tuple:
+    kind: OpKind_T
+    host: Host_T
+
+type Cost_T is int
+
+# Rough duration weights, as in the article: a config change is cheap, a
+# node rebuild is ~33x a config change.
+def op_time(kind: OpKind_T) -> int:
+    case kind:
+        when REBUILD:
+            return 101
+        when others:
+            return 3
+
+# --------------------------------------------------------------------------
+# Invariants: a state the shard may pass through
+# --------------------------------------------------------------------------
+
+def votes(s: Shard_T) -> int:
+    var n: int = 0
+    for h in Host_T:
+        n += s[h].vote
+    return n
+
+def healthy_votes(s: Shard_T) -> int:
+    var n: int = 0
+    for h in Host_T:
+        n += s[h].vote * s[h].up
+    return n
+
+def is_valid(s: Shard_T) -> bool:
+    let v: int = votes(s)
+    if v % 2 == 0:
+        return False                      # even votes: ties break quorum
+    if 2 * healthy_votes(s) <= v:
+        return False                      # no healthy majority of voters
+    for h in Host_T:
+        if s[h].prio == 1 and s[h].vote == 0:
+            return False                  # priority without a vote
+    return True
+
+# --------------------------------------------------------------------------
+# Composable misconfiguration rules, each scored against the source of truth
+# --------------------------------------------------------------------------
+
+type Rule_T is tuple:
+    name: str
+    score: int
+
+def rule_scores(s: Shard_T, sot: Shard_T) -> []Rule_T:
+    var down: int = 0
+    var vote: int = 0
+    var prio: int = 0
+    for h in Host_T:
+        if s[h].up == 0:
+            down += 1
+        if s[h].vote != sot[h].vote:
+            vote += 1
+        if s[h].prio != sot[h].prio:
+            prio += 1
+    return [(name: "node down", score: 4 * down),
+            (name: "vote mismatch", score: 2 * vote),
+            (name: "priority mismatch", score: prio)]
+
+def misconfiguration(s: Shard_T, sot: Shard_T) -> int:
+    var total: int = 0
+    for r in rule_scores(s, sot):
+        total += r.score
+    return total
+
+# --------------------------------------------------------------------------
+# The one transition function -- planner and executor both call it
+# --------------------------------------------------------------------------
+
+def apply(s: Shard_T, op: Op_T) -> Shard_T:
+    var n: Shard_T = s
+    case op.kind:
+        when VOTE_ON:
+            n[op.host].vote = 1
+        when VOTE_OFF:
+            n[op.host].vote = 0
+        when PRIO_ON:
+            n[op.host].prio = 1
+        when PRIO_OFF:
+            n[op.host].prio = 0
+        when REBUILD:
+            n[op.host].up = 1
+    return n
+
+# Every applicable atomic operation that lands on a valid state.
+# `dead` is a host whose hardware cannot be rebuilt.
+def valid_ops(s: Shard_T, dead: int) -> []Op_T:
+    var ops: []Op_T = []
+    for h in Host_T:
+        let nd: Node_T = s[h]
+        if nd.vote == 0:
+            ops.append((kind: VOTE_ON, host: h))
+        else:
+            ops.append((kind: VOTE_OFF, host: h))
+        if nd.prio == 0:
+            ops.append((kind: PRIO_ON, host: h))
+        else:
+            ops.append((kind: PRIO_OFF, host: h))
+        if nd.up == 0 and ord(h) != dead:
+            ops.append((kind: REBUILD, host: h))
+    var ok: []Op_T = []
+    for op in ops:
+        if is_valid(apply(s, op)):
+            ok.append(op)
+    return ok
+
+# --------------------------------------------------------------------------
+# V1: BFS -- fewest operations, via the generic StateSearcher
+# --------------------------------------------------------------------------
+
+class BreadthPlanner(StateSearcher[Shard_T, Op_T]):
+    var sot: Shard_T
+    var dead: int
+    def __init__(self, sot: Shard_T, dead: int = -1):
+        self.sot = sot
+        self.dead = dead
+
+    def get_next_states(self, current_state: Shard_T) -> []Step_T[Shard_T, Op_T]:
+        return [(from_state: current_state, action: op, next_state: apply(current_state, op))
+                for op in valid_ops(current_state, self.dead)]
+
+    def is_goal(self, state: Shard_T) -> bool:
+        return state == self.sot
+
+# --------------------------------------------------------------------------
+# V2: Dijkstra with weights = misconfiguration x time, via Minimizer.
+# `target` is the misconfiguration score to stop at: 0 for the full goal,
+# or the best score reachable when the goal is out of reach.
+# --------------------------------------------------------------------------
+
+class WeightedPlanner(Minimizer[Shard_T, Op_T, Cost_T]):
+    var sot: Shard_T
+    var dead: int
+    var target: int
+    def __init__(self, sot: Shard_T, dead: int = -1):
+        self.sot = sot
+        self.dead = dead
+        self.target = 0
+
+    def get_next_state(self, current_state: Shard_T, decision: Op_T) -> Shard_T:
+        return apply(current_state, decision)
+
+    # Exposure: time spent in the state you are leaving, weighted by how
+    # misconfigured it is (+1 so a clean state still costs its operation).
+    def get_next_decisions(self, current_state: Shard_T) -> [](Op_T, Cost_T):
+        let m: int = misconfiguration(current_state, self.sot) + 1
+        return [(op, m * op_time(op.kind)) for op in valid_ops(current_state, self.dead)]
+
+    def is_end_state(self, state: Shard_T) -> bool:
+        return misconfiguration(state, self.sot) <= self.target
+
+# Least misconfiguration anywhere reachable from `start` (plain BFS sweep).
+class Sweeper(StateSearcher[Shard_T, Op_T]):
+    var sot: Shard_T
+    var dead: int
+    var best: int
+    def __init__(self, sot: Shard_T, dead: int):
+        self.sot = sot
+        self.dead = dead
+        self.best = 1000
+
+    def get_next_states(self, current_state: Shard_T) -> []Step_T[Shard_T, Op_T]:
+        return [(from_state: current_state, action: op, next_state: apply(current_state, op))
+                for op in valid_ops(current_state, self.dead)]
+
+    def is_goal(self, state: Shard_T) -> bool:
+        self.best = min(self.best, misconfiguration(state, self.sot))
+        return False
+
+# --------------------------------------------------------------------------
+# Executor: replays a plan through the same `apply`, re-checking invariants
+# --------------------------------------------------------------------------
+
+def show(s: Shard_T) -> str:
+    var parts: []str = []
+    for h in Host_T:
+        let nd: Node_T = s[h]
+        parts.append(f"{h}[v{nd.vote} p{nd.prio} {'up' if nd.up == 1 else 'DOWN'}]")
+    return " ".join(parts)
+
+def execute(start: Shard_T, plan: []Op_T, sot: Shard_T) -> Shard_T:
+    var cur: Shard_T = start
+    var step: int = 0
+    for op in plan:
+        step += 1
+        cur = apply(cur, op)
+        assert is_valid(cur)
+        print(f"  {step}. {op.kind:<9} {op.host}   m={misconfiguration(cur, sot)}  {show(cur)}")
+    return cur
+
+def explain(s: Shard_T, sot: Shard_T):
+    for r in rule_scores(s, sot):
+        if r.score > 0:
+            print(f"     rule {r.name}: {r.score}")
+
+# --------------------------------------------------------------------------
+# Scenarios
+# --------------------------------------------------------------------------
+
+let SOT: Shard_T = [A: (vote: 1, prio: 1, up: 1),
+                    B: (vote: 1, prio: 1, up: 1),
+                    C: (vote: 1, prio: 1, up: 1)]
+
+def plan_bfs(start: Shard_T, dead: int = -1) -> []Op_T:
+    bp: BreadthPlanner = BreadthPlanner(SOT, dead)
+    return [step.action for step in bp.search(start)]
+
+def plan_weighted(start: Shard_T, dead: int = -1) -> []Op_T:
+    sw: Sweeper = Sweeper(SOT, dead)
+    sw.search(start)                 # visits every reachable state
+    wp: WeightedPlanner = WeightedPlanner(SOT, dead)
+    wp.target = sw.best
+    for cost, path in wp.shortest_path(start, False):
+        print(f"  target m={sw.best}, weighted cost {cost}")
+        return path
+    return []
+
+def main():
+    # B lost its vote and priority, C is down: 2 votes (even) and 1 of 2
+    # healthy.  V1's fixed plugin order (rebuild before votes) is stuck here;
+    # the search finds that the vote must be fixed FIRST to regain quorum.
+    var s1: Shard_T = SOT
+    s1[B] = (vote: 0, prio: 0, up: 1)
+    s1[C] = (vote: 1, prio: 1, up: 0)
+    print("== Scenario 1: lost vote on B + C down  (BFS, fewest ops)")
+    print(f"  start {show(s1)}  m={misconfiguration(s1, SOT)}")
+    explain(s1, SOT)
+    let p1: []Op_T = plan_bfs(s1)
+    assert execute(s1, p1, SOT) == SOT
+    print(f"  -> {len(p1)} operations, goal reached\n")
+
+    # Same shard, Dijkstra: cheap fixes before the slow rebuild.
+    print("== Scenario 1 again with Dijkstra (exposure-weighted)")
+    let p1w: []Op_T = plan_weighted(s1)
+    assert execute(s1, p1w, SOT) == SOT
+    print(f"  -> {len(p1w)} operations, goal reached\n")
+
+    # C's hardware is gone: no complete plan exists.  Partial remediation
+    # fixes B's vote and priority and leaves C for an operator.
+    print("== Scenario 2: same shard, C cannot be rebuilt (partial plan)")
+    let bp: BreadthPlanner = BreadthPlanner(SOT, ord(C))
+    print(f"  BFS finds {len(bp.search(s1))} operations (no complete plan)")
+    let p2: []Op_T = plan_weighted(s1, ord(C))
+    let end2: Shard_T = execute(s1, p2, SOT)
+    print(f"  -> stopped at m={misconfiguration(end2, SOT)}; page the operator for C\n")
+
+    # Two simultaneous faults whose naive ordering breaks quorum.
+    var s3: Shard_T = SOT
+    s3[A] = (vote: 0, prio: 0, up: 0)
+    s3[B] = (vote: 1, prio: 0, up: 1)
+    print("== Scenario 3: A down and non-voting, B lost priority")
+    print(f"  start {show(s3)}  m={misconfiguration(s3, SOT)}")
+    let p3: []Op_T = plan_weighted(s3)
+    assert execute(s3, p3, SOT) == SOT
+    print(f"  -> {len(p3)} operations, goal reached")
+
+main()
