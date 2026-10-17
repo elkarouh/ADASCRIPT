@@ -14,14 +14,13 @@ how it leaves its start, and data_stop, how short of its end it stops), and hold
 which svg_path's connector_d draws, as the server does.
 
 While a box is dragged it moves with everything that belongs to it, and the arrows that end
-at it are drawn again, here in the browser, at once. Letting go writes the block's name and
-new centre into the hidden form `#move` and clicks its button, which sends PUT /move: the
-server keeps the place and draws the page again.
+at it are drawn again, here in the browser, at once. Letting go sends the block's name and
+new centre, PUT /move: the server keeps the place and draws the page again.
 
 Only the rectangle can be taken hold of, not the fields on it, so they can still be clicked.
 The drag itself is the standard library's svg_drag, and the page its browser module.
 """
-from browser import Element_T, page, find, all, data, number, fill, press
+from browser import Element_T, page, find, all, data, number, request
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_of, between, shift, trace, no_click_cb, draggable
 
@@ -76,14 +75,9 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     redraw_arrows_of(node, now)
     return now
 
-# NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
-# block's name and new centre, and its button #redraw sends it (hx-put="/move", see
-# roi_gui.ady); htmx puts the page the server answers with in place of this one.
+# NODE let go at AT: tell the server the block's name and new centre (PUT /move, see
+# roi_events.ady); the page the server answers with takes the place of #all.
 def dropped_cb(node: Element_T, at: Spot_T):
-    let form: Element_T = page.element("#move")
-    form.fill("name", node.data_name)
-    form.fill("x", f"{at.x:.0f}")
-    form.fill("y", f"{at.y:.0f}")
-    page.press("#redraw")
+    request("PUT", "/move", {"name": node.data_name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}, "#all")
 
 draggable("rect.node", "svg.drawing", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=no_click_cb))

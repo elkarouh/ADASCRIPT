@@ -1186,7 +1186,6 @@ def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> 
                 input type="hidden" name="tries" value=str(tries)
                 + act_button("help", help_label)
                 button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
-                button type="button" id="redraw" class="redraw" data_hx_get="/h/all" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML": "Redraw"
                 if ex >= 0:
                     p class="replay":
                         if asked:
@@ -1241,7 +1240,6 @@ body { max-width: 80em; }
 form#state { background: #eaf2fb; padding: 0.5em 0.8em; border-radius: 4px; margin: 0.5em 0; }
 path.split { stroke: #999; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
 text.side { font-size: 14px; font-weight: bold; fill: #666; }
-button.redraw { display: none; }
 svg.graph { user-select: none; }
 form.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #333; border-radius: 6px; padding: 1em 1.5em; box-shadow: 0 4px 24px #0006; z-index: 10; min-width: 24em; }
 form.popup label { display: block; margin-top: 0.6em; font-weight: bold; }

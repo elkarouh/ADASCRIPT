@@ -186,11 +186,6 @@ def all_html(portfolio: Portfolio, layout: Layout) -> Html:
     let box: str = f"0 0 {WIDE:.0f} {HIGH:.0f}"
     html:
         div id="all":
-            form id="move":
-                input type="hidden" name="name" value=""
-                input type="hidden" name="x" value=""
-                input type="hidden" name="y" value=""
-                button type="button" id="redraw" class="redraw" data_hx_put="/move" data_hx_include="#move" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
             svg viewBox=box width=str(int(WIDE)) height=str(int(HIGH)) class="drawing":
                 defs:
                     + head_html(INVEST_COLOR)
@@ -213,7 +208,6 @@ svg.drawing { display: block; user-select: none; }
 rect.body, rect.node { stroke: #333; stroke-width: 2; }
 rect.node { cursor: grab; }
 foreignObject { pointer-events: none; }
-button.redraw { display: none; }
 path.outline { fill: none; stroke: #000; stroke-width: 8; stroke-linejoin: round; }
 path.line { fill: none; stroke-width: 4; stroke-linejoin: round; }
 fieldset { border: none; margin: 0; padding: 0; }

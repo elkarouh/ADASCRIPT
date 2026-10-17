@@ -8,14 +8,14 @@ The accounts and arrows are the page's own text (the JSON in script#books, see a
 read into a BooksView when htmx has drawn the page. Where each account is drawn is computed from
 them (shared/layout.ady), not read off the drawing: while one is dragged, every account is laid
 out again and every arrow routed again, here, by the same code the server uses (shared/routes.ady).
-Letting go writes the new centre into the form's hidden field `pos`, and clicks the hidden Redraw
-button, which asks the server for the page again, with the arrows drawn to the new place.
+Letting go asks the server for the page again (`redraw`), with the new centre in the field `pos`
+and the rest of the form #state as it is, and the arrows are drawn to the new place.
 A press that does not move is a click, and goes on to htmx; with the shift key
 held it picks the account, to be merged with others (the field `pick`).
 
 The frozen account (class "from") is not moved: dragging from it draws an
 arrow, a red line to the mouse. Let go over another account, and its name goes
-into the hidden field `target` before the same Redraw: the server answers with
+with the same request as the field `target`: the server answers with
 the popup that asks when, what and how much.
 The drag itself (the mouse, when a press becomes a drag, the click after it) is the standard
 library's svg_drag, and the page (finding elements, forms, clicks) its browser module, both
@@ -24,7 +24,7 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`,
 """
 from shared/routes import Point_T, Route_T, BOX_HALF_W, boxes, routes_of
 from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
-from browser import Element_T, Event_T, Click_T, Change, page, text, field, on, stop, listen
+from browser import Element_T, Event_T, Click_T, request, page, text, field, on, stop, listen
 from svg_drag import Hooks_T, Unit_T, Spot_T, shift, draggable
 
 const WIDTH: Unit_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
@@ -143,36 +143,34 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     books.move(data_id(node), now)
     return spot
 
+# Ask the server for the page again with the form #state, FIELDS taking the place of its own
+# fields of the same name; the page it answers with takes the place of #all.
+def redraw(fields: {str}str):
+    request("GET", "/h/all", fields, "#all", "#state")
+
 # NODE let go at AT.
 def dropped_cb(node: Element_T, at: Spot_T):
     if node.has_class("from"):
-        # the arrow: let go over another account, its name goes into the hidden field target,
+        # the arrow: let go over another account, its name goes as the field target,
         # and the server answers with the popup that asks when, what and how much. Let go over
         # nothing, the arrow is just dropped.
         rubber("")
         let over: str = books.account_at(point_of(at), data_name(node))
         if over != "":
-            let change: Change = Change("#state")
-            change.set("target", over)
-            change.send("#redraw")
+            redraw({"target": over})
         return
-    # an account moved: its new place goes into the hidden field pos
-    let change: Change = Change("#state")
-    change.set("pos", with_position(page.field("pos"), data_id(node), point_of(at)))
-    change.send("#redraw")
+    # an account moved: its new place goes as the field pos
+    redraw({"pos": with_position(page.field("pos"), data_id(node), point_of(at))})
 
-# A click with shift held picks an account to merge with others, or lets it go: its name goes
-# into the hidden field pick, and the page is asked for again. Other clicks go on to htmx.
+# A click with shift held picks an account to merge with others, or lets it go: the page is
+# asked for again with its name as the field pick. Other clicks go on to htmx.
 def clicked_cb(c: Click_T):
     if not c.shift:
         return
     let node: ?Element_T = c.on("g.node")
     if node is not None and not node.has_class("group"):
         c.stop()                        # not an ordinary click: htmx must not see it
-        let change: Change = Change("#state")
-        change.set("pick", data_name(node))
-        change.send("#redraw")
-        change.set("pick", "")          # htmx has read the form by now: the next redraw picks nothing
+        redraw({"pick": data_name(node)})
 
 # The page was drawn again by the server: the books are read off the new drawing's text.
 def page_drawn(e: Event_T):

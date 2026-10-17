@@ -175,14 +175,18 @@ jsvar htmx: JsObject
 
 # Send a request to the server and put its answer in the page, as a button with hx-* attributes
 # does, with no form or button for it. METHOD is "GET", "POST", "PUT" or "DELETE", and URL where it
-# goes. FIELDS are sent by name, after the inputs within INCLUDE, CSS selectors such as "#state,
+# goes. FIELDS are sent by name, after the fields within INCLUDE, CSS selectors such as "#state,
 # #move" ("" for none), so a field named in both is sent as FIELDS has it. The answer takes the
 # place of TARGET, a CSS selector, the whole element (htmx's outerHTML swap).
 def request(method: str, url: str, fields: {str}str, target: str, include: str = ""):
     var values: JsObject = newJsObject()
     if include != "":
         for part in include.split(","):
-            for input in page.all(part.strip() + " input[name]"):
+            let within: str = part.strip()
+            for input in page.all(f"{within} input[name], {within} select[name], {within} textarea[name]"):
+                let kind: str = input.attr("type")
+                if (kind == "checkbox" or kind == "radio") and not InputElement(input).checked:
+                    continue                # sent only when ticked, as a form sends it
                 values[cstring(input.attr("name"))] = cstring(str(InputElement(input).value))
     for name, value in fields.items():
         values[cstring(name)] = cstring(value)
