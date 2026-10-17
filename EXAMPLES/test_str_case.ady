@@ -1,0 +1,11 @@
+#!/usr/bin/env ady2nim
+"""str case changes, Unicode-aware on both backends: capitalize, title, swapcase, casefold."""
+
+def main():
+    for s in ["hELLo wORLD", "they're 1st", "élan VITAL", ""]:
+        print f"[{s.capitalize()}] [{s.title()}] [{s.swapcase()}] [{s.casefold()}]"
+    let n: int = 3
+    print str(n).capitalize()
+
+if __name__ == "__main__":
+    main()

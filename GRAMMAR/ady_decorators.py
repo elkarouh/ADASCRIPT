@@ -74,7 +74,7 @@ class _Def:
     """A def: header lines, name, params as (name, type), return type. A
     method's `self` is not among the params; `method` says it was there."""
 
-    def __init__(self, lines, start):
+    def __init__(self, lines, start, wrapper=False):
         self.start = start
         j, depth = start, 0
         header = []
@@ -102,12 +102,17 @@ class _Def:
         rm = re.match(r"->\s*(.*?)\s*:\s*(#.*)?$", rest)
         self.ret = rm.group(1) if rm else None
         self.params = []
+        self.defaults = {}                # a wrapper's state: name -> default
         parts = _split_top(inner)
         self.method = bool(parts) and re.match(r"self\s*(:|$)", parts[0]) is not None
         if self.method:
             parts = parts[1:]
         for p in parts:
-            if "=" in re.sub(r"\([^)]*\)", "", p.split(":", 1)[-1]).replace("->", ""):
+            dm = re.match(r"(\w+)\s*:\s*([^=]+?)\s*=\s*(.+)$", p) if wrapper else None
+            if dm:
+                self.defaults[dm.group(1)] = dm.group(3).strip()
+                p = f"{dm.group(1)}: {dm.group(2)}"
+            elif "=" in re.sub(r"\([^)]*\)", "", p.split(":", 1)[-1]).replace("->", ""):
                 raise SyntaxError(f"line {start + 1}: {self.name}: a default value on a "
                                   f"parameter cannot be decorated")
             pm = re.match(r"(\w+)\s*(?::\s*(.*))?$", p)
@@ -131,7 +136,9 @@ def _bind(pattern, actual, tvars):
         else:
             rx += re.escape(tok)
     m = re.fullmatch(rx, _norm(actual))
-    return m.groupdict() if m else None
+    if not m or any(len(_split_top(v)) != 1 for v in m.groupdict().values()):
+        return None                       # T is one type, never `int, str`
+    return m.groupdict()
 
 
 def _subst(typ, binding):
@@ -160,11 +167,22 @@ def expand_decorators(code):
                 j += 1
             if j >= len(lines) or not lines[j].startswith("def "):
                 raise SyntaxError(f"line {i + 1}: @decorator must stand on a top-level def")
-            d = _Def(lines, j)
+            d = _Def(lines, j, wrapper=True)
             fi = [k for k, (_, t) in enumerate(d.params) if t.startswith("(") and "->" in t]
             if not fi:
                 raise SyntaxError(f"line {j + 1}: {d.name}: a decorator takes the function "
                                   f"it wraps as a parameter of a function type, f: (T) -> R")
+            if any(a not in d.defaults for a, _ in d.params[:fi[0]][
+                    next((k for k, (a, _) in enumerate(d.params) if a in d.defaults), fi[0]):]):
+                raise SyntaxError(f"line {j + 1}: {d.name}: a parameter with a default, "
+                                  f"its state, is followed only by others before f")
+            if d.defaults:
+                # the defaults are the decoration's business: the def has none
+                plist = ", ".join(f"{a}: {t}" for a, t in d.params)
+                ret = f" -> {d.ret}" if d.ret else ""
+                lines[j] = f"def {d.name}{d.generics or ''}({plist}){ret}:"
+                for h in range(j + 1, d.end + 1):
+                    lines[h] = ""
             wrappers[d.name] = (d, fi[0])
             marks.append(i)
     if not wrappers:
@@ -172,8 +190,18 @@ def expand_decorators(code):
     # pass 2: rewrite
     out = []
     i, in_doc = 0, False
+    top_start, cls, after_deco = 0, "", False     # where the top-level block began
     while i < len(lines):
         ln = lines[i]
+        if not in_doc and ln[:1] not in ("", " ", "\t", "#"):
+            if not after_deco:
+                top_start = len(out)
+            after_deco = ln.startswith("@")
+            cm = re.match(r"class\s+(\w+)", ln)
+            if cm:
+                cls = cm.group(1)
+            elif not after_deco:
+                cls = ""
         if ln.count('"""') % 2 or ln.count("'''") % 2:
             in_doc = not in_doc
             out.append(ln)
@@ -222,13 +250,15 @@ def expand_decorators(code):
             while out and not out[-1].strip():
                 out.pop()
             out.append("")
+            after_deco = False
             # forwarding defs, innermost decorator first
             prev = body_name
             for level, ((ln_no, text), n) in enumerate(reversed(list(zip(decos, names)))):
                 w, fidx = wrappers[n]
                 am = re.match(r"\w+\s*\((.*)\)$", text, re.S)
                 dargs = _split_top(am.group(1)) if am else []
-                if len(dargs) != fidx:
+                state = [a for a, _ in w.params[len(dargs):fidx]]
+                if len(dargs) > fidx or any(a not in w.defaults for a in state):
                     raise SyntaxError(
                         f"line {ln_no + 1}: @{n} gives {len(dargs)} argument(s), but "
                         f"{n} has {fidx} parameter(s) before its function")
@@ -236,11 +266,20 @@ def expand_decorators(code):
                 # a generic wrapper, [T, R], takes any function of its shape
                 tvars = _split_top(w.generics[1:-1]) if w.generics else []
                 binding = _bind(fparam, d.fn_type(), set(tvars))
+                # (T) -> R takes a function of several arguments too, T being
+                # their tuple: the wrapper is handed them packed
+                packed = None
+                if binding is None and len(d.params) > 1:
+                    packed = f"({', '.join(t for _, t in d.params)})"
+                    binding = _bind(fparam, f"({packed}) -> {d.ret or 'None'}", set(tvars))
+                    if binding is None:
+                        packed = None
                 if binding is None:
                     raise SyntaxError(
                         f"line {ln_no + 1}: @{n} wraps {fparam}, but {d.name} is {d.fn_type()}")
                 after = w.params[fidx + 1:]
-                if [_subst(t, binding) for _, t in after] != [_norm(t) for _, t in d.params]:
+                given = [_norm(packed)] if packed else [_norm(t) for _, t in d.params]
+                if [_subst(t, binding) for _, t in after] != given:
                     raise SyntaxError(
                         f"line {ln_no + 1}: the parameters of {n} after its function must be "
                         f"those of {d.name}")
@@ -255,18 +294,35 @@ def expand_decorators(code):
                 ret = f" -> {d.ret}" if d.ret else ""
                 gen = d.generics or ""
                 give = "return " if d.ret else ""
-                if d.method:
-                    # the wrapper is handed the method bound to self
-                    bound = f"{fname}Bound"
-                    out.append(f"{ind}def {fname}{gen}({', '.join(['self'] + ([plist] if plist else []))}){ret}:")
-                    out.append(f"{ind}    def {bound}({plist}){ret}:")
-                    out.append(f"{ind}        {give}self.{prev}({args})")
-                    fn = bound
+                # the state the decoration leaves out: a table of its own
+                hidden = []
+                for a in state:
+                    ptype = _subst(dict(w.params)[a], binding)
+                    hname = (f"adascript{cls}{d.name[:1].upper()}{d.name[1:]}"
+                             f"{a[:1].upper()}{a[1:]}{level if level else ''}")
+                    out.insert(top_start, f"var {hname}: {ptype} = {w.defaults[a]}")
+                    top_start += 1
+                    hidden.append(hname)
+                if d.method or packed:
+                    # the wrapper is handed the method bound to self, or the
+                    # function taking its arguments as one tuple
+                    fn = f"{fname}Fn"
+                    head = ", ".join(["self"] * d.method + ([plist] if plist else []))
+                    out.append(f"{ind}def {fname}{gen}({head}){ret}:")
+                    own = "self." if d.method else ""
+                    if packed:
+                        unpack = ", ".join(f"args[{k}]" for k in range(len(d.params)))
+                        out.append(f"{ind}    def {fn}(args: {packed}){ret}:")
+                        out.append(f"{ind}        {give}{own}{prev}({unpack})")
+                    else:
+                        out.append(f"{ind}    def {fn}({plist}){ret}:")
+                        out.append(f"{ind}        {give}{own}{prev}({args})")
                 else:
                     out.append(f"{ind}def {fname}{gen}({plist}){ret}:")
                     fn = prev
                 targs = f"[{', '.join(binding.get(v, v) for v in tvars)}]" if tvars else ""
-                call = f"{n}{targs}({', '.join(dargs + [fn] + [a for a, _ in d.params])})"
+                passed = [f"({args})"] if packed else [a for a, _ in d.params]
+                call = f"{n}{targs}({', '.join(dargs + hidden + [fn] + passed)})"
                 out.append(f"{ind}    {give}{call}")
                 out.append("")
                 prev = fname

@@ -194,3 +194,33 @@ proc `$`*[T](xs: seq[T]): string =
     result.add adascriptRepr(x)
   result.add "]"\
 """
+
+
+# Python's case changes on a whole string, Unicode-aware as Python's are:
+# capitalize and title have no strutils counterpart (capitalizeAscii leaves
+# the rest as it is), swapcase none at all. casefold is lower() here: the
+# full case folding (German ß to ss) is not in std/unicode.
+_CASE_HELPER = """\
+proc adascriptCapitalize(s: string): string =
+  var first = true
+  for r in s.runes:
+    result.add toUTF8(if first: toUpper(r) else: toLower(r))
+    first = false
+
+proc adascriptTitle(s: string): string =
+  var inWord = false
+  for r in s.runes:
+    let cased = isAlpha(r)
+    result.add toUTF8(if cased and not inWord: toUpper(r)
+                      elif cased: toLower(r) else: r)
+    inWord = cased
+
+proc adascriptSwapcase(s: string): string =
+  for r in s.runes:
+    result.add toUTF8(if isUpper(r): toLower(r)
+                      elif isLower(r): toUpper(r) else: r)
+
+proc adascriptCasefold(s: string): string =
+  for r in s.runes:
+    result.add toUTF8(toLower(r))
+"""

@@ -269,30 +269,38 @@ written without parentheses. Stacked decorators apply from the bottom up, so
 recursive call inside the body goes through the decorated name, so every
 level is wrapped.
 
-A wrapper keeps no state of its own, so a decorator that remembers passes
-what it remembers in as an argument. A cache is a table declared beside the
-function it serves:
+A wrapper that remembers keeps what it remembers in a parameter with a
+default, before `f`. A decoration that leaves it out gets a table of its own,
+which the transpiler declares; one that gives it names the table, which the
+program can then read or clear:
 
 ```python
 # EXAMPLES/test_decorators.ady
 var fib_cache: {int}int = {:}
 
 @decorator
-def cached(cache: {int}int, f: (int) -> int, n: int) -> int:
-    if n not in cache:
-        cache[n] = f(n)
-    return cache[n]
+def cached[T, R](cache: {T}R = {:}, f: (T) -> R, x: T) -> R:
+    if x not in cache:
+        cache[x] = f(x)
+    return cache[x]
 
 @cached(fib_cache)
 def fib(n: int) -> int:
     if n < 2:
         return n
     return fib(n - 1) + fib(n - 2)
+
+@cached
+def binom(n: int, k: int) -> int:
+    if k == 0 or k == n:
+        return 1
+    return binom(n - 1, k - 1) + binom(n - 1, k)
 ```
 
 The recursive calls go through `fib`, so they hit the cache too, and
-`fib(40)` makes 41 calls of the body instead of hundreds of millions. Each cached
-function names its own table, and the program can read or clear it.
+`fib(40)` makes 41 calls of the body instead of hundreds of millions.
+`[T, R]` makes `cached` generic, as the next wrappers are; `binom` takes two
+arguments, so its table is keyed on the pair `(n, k)`.
 
 A wrapper that does not care what the function computes, one that times or
 logs it, is written generic. `T` and `R` are bound from the function it
@@ -329,8 +337,9 @@ def sum_to(n: int) -> int:
 
 `sum_to(100)` prints `-> sum_to(100)` and `<- sum_to = 5050`, and adds its
 time to `timings["sum_to"]`, which the program can print when it ends. A
-generic wrapper takes the shape it names: `(T) -> R` is any function of one
-argument, and one of two arguments needs a wrapper written `(T, U) -> R`.
+function of several arguments is wrapped too, `T` being their tuple: the
+wrapper is handed them packed, so `@logged("add")` on `add(a: int, b: int)`
+prints `-> add((2, 3))`.
 `time.perf_counter()` is wall-clock seconds on every backend, the browser
 included.
 

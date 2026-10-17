@@ -14,14 +14,15 @@ def shout(f: (str) -> str, s: str) -> str:
 def twice(f: (int) -> int, n: int) -> int:
     return f(f(n))
 
-# the cache is the decorator's argument, so each function names its own
+# a parameter with a default before f is state: each decoration that leaves
+# it out gets a table of its own; fib names its table, to read it
 var fib_cache: {int}int = {:}
 
 @decorator
-def cached(cache: {int}int, f: (int) -> int, n: int) -> int:
-    if n not in cache:
-        cache[n] = f(n)
-    return cache[n]
+def cached[T, R](cache: {T}R = {:}, f: (T) -> R, x: T) -> R:
+    if x not in cache:
+        cache[x] = f(x)
+    return cache[x]
 
 # generic wrappers take any function of one argument: T and R are bound from
 # the function decorated, so one @timed serves an (int) -> int and a (str) -> str
@@ -105,6 +106,28 @@ def sum_to(n: int) -> int:
 def stripped(s: str) -> str:
     return s.strip()
 
+# several arguments: T is their tuple, (int, int) here
+@cached
+def binom(n: int, k: int) -> int:
+    if k == 0 or k == n:
+        return 1
+    return binom(n - 1, k - 1) + binom(n - 1, k)
+
+@logged("add")
+def add(a: int, b: int) -> int:
+    return a + b
+
+class Shapes:
+    var computed: int
+
+    def __init__(self):
+        self.computed = 0
+
+    @cached
+    def area(self, side: int) -> int:
+        self.computed += 1
+        return side * side
+
 def main():
     assert tag("a") == "<a>     "
     assert loud("hi") == "HI!   "
@@ -120,6 +143,11 @@ def main():
     assert sum_to(100) == 5050
     assert stripped(" ada ") == "ada"
     assert "sum_to" in timings and "strip" in timings
+    assert binom(30, 15) == 155117520
+    assert add(2, 3) == 5
+    var sh: Shapes = Shapes()
+    assert sh.area(4) + sh.area(4) == 32
+    assert sh.computed == 1
     print "test_decorators: ok"
 
 if __name__ == "__main__":

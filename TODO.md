@@ -46,15 +46,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       `let r = Row(..); r.x = 1` fails there where Python allows it; kilo writes
       through `self.rows[i].x`. Refuse the write on both backends, or make `let`
       of a class a reference.
-- [ ] decorators beyond `@decorator` wrappers. Stateless wrappers marked
-      `@decorator` work on every backend, with arguments and stacked
-      (EXAMPLES/test_decorators.ady, book 8.7), on functions and methods.
-      Still open: one that returns a function of another type. State
-      (a cache) is passed in as the decorator's argument; a decorator that
-      owns its state, `@cached` with no table to declare, is not done. Nim
-      refuses any other decorator, while Python passes it through;
-      `@property`, `@staticmethod`, `@classmethod`, `@functools.*` have no
-      Nim counterpart and keep their refusal.
+- [ ] decorators beyond `@decorator` wrappers. Wrappers marked `@decorator`
+      work on every backend, with arguments, stacked, generic, with state of
+      their own (`@cached`), on functions of any arity and on methods
+      (EXAMPLES/test_decorators.ady, book 8.7). Still open: one that returns
+      a function of another type, and a cache on a method keyed on its
+      object too. Nim refuses any other decorator, while Python passes it
+      through; `@property`, `@staticmethod`, `@classmethod`, `@functools.*`
+      have no Nim counterpart and keep their refusal.
 - [ ] whether a class is a `ref object` on Nim is decided twice, and the two
       can disagree. An exact check over the field declarations runs first
       and the constructor follows it (`new(result)` or not); a search of the

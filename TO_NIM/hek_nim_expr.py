@@ -458,6 +458,21 @@ def _ensure_isdigit_helper():
         ParserState.nim_top_decls = decls
 
 
+_CASE_METHODS = {"adascriptCapitalize", "adascriptTitle", "adascriptSwapcase",
+                 "adascriptCasefold"}
+
+
+def _ensure_case_helper():
+    """Add capitalize, title, swapcase and casefold the first time one is used."""
+    from hek_nim_unicode import _CASE_HELPER
+    ParserState.nim_from.setdefault("std/unicode", set()).update(
+        {"runes", "isAlpha", "isLower", "isUpper", "toLower", "toUpper", "toUTF8"})
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptCapitalize" in d for d in decls):
+        decls.append(_CASE_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 def _ensure_zfill_helper():
     """Add the zfill helper to nim_top_decls the first time zfill is used."""
     ParserState.nim_imports.add("strutils")          # repeat()
@@ -1295,6 +1310,7 @@ def _nim_expr_type(expr):
     }
     _STRING_METHODS_RETURN_STRING = {
         "strip", "lstrip", "rstrip", "upper", "lower", "title",
+        "capitalize", "swapcase", "casefold",
         "replace", "join", "format", "removePrefix", "removeSuffix",
     }
 
@@ -2947,7 +2963,9 @@ _PY_METHOD_TO_NIM = {
     "string": {"lower": "toLowerAscii", "upper": "toUpperAscii",
                "strip": "strip", "split": "split", "join": "join",
                "startswith": "startsWith", "endswith": "endsWith",
-               "replace": "replace", "find": "find", "index": "find"},
+               "replace": "replace", "find": "find", "index": "find",
+               # on a str only: `title` is a field of many a class
+               "title": "adascriptTitle"},
 }
 
 @method(attr_trailer)
@@ -2996,6 +3014,9 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "ljust": "alignLeft",
     "rjust": "align",       # strutils spells right-align `align`
     "zfill": "adascriptZfill",
+    "capitalize": "adascriptCapitalize",
+    "swapcase": "adascriptSwapcase",
+    "casefold": "adascriptCasefold",
     "removeprefix": "adascriptRemovePrefix",
     "removesuffix": "adascriptRemoveSuffix",
     "isalpha": "adascriptIsAlpha",
@@ -3112,6 +3133,8 @@ def _translate_method(obj_name, method_name):
         ParserState.nim_imports.add("strmisc")
     if nim_method == "adascriptZfill":
         _ensure_zfill_helper()
+    if nim_method in _CASE_METHODS:
+        _ensure_case_helper()
     if nim_method == "adascriptSplitLines":
         _ensure_splitlines_helper()
     if nim_method in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):
@@ -3621,6 +3644,8 @@ def to_nim(self, prec=None):
                             ParserState.nim_imports.add("strutils")
                         if _nim_meth == "adascriptZfill":
                             _ensure_zfill_helper()
+                        if _nim_meth in _CASE_METHODS:
+                            _ensure_case_helper()
                         if _nim_meth in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):
                             _ensure_affix_helper()
                         rest = "." + _nim_meth + rest[_m_meth.end() - 1:]

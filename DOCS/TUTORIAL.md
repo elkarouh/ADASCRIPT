@@ -1978,8 +1978,11 @@ def tag(name: str) -> str:
 ```
 
 `tag("a")` is `"<a>     "`. A wrapper can be generic, `def timed[T, R](label: str,
-f: (T) -> R, x: T) -> R`, and then serves any one-argument function, which is
-how a timing or logging decorator is written (both are in the test). Stacked decorators apply bottom-up; a recursive
+f: (T) -> R, x: T) -> R`, and then serves any function, its arguments packed
+into one tuple when there are several: that is how a timing or logging
+decorator is written (both are in the test). A parameter with a default
+before `f`, `cache: {T}R = {:}`, is state: a bare `@cached` gets a table of
+its own. Stacked decorators apply bottom-up; a recursive
 call goes through the decorated name. The transpiler rewrites this before
 the parse (the body becomes `tagBody`, and `tag` returns
 `aligned(8, tagBody, name)`), so it works the same on Nim, Python and JS.
