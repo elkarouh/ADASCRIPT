@@ -1088,10 +1088,9 @@ test: compile
 	    grep -q "$$want" $(TMPDIR)/ady_scaled.out \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_scaled.out; exit 1; }; \
 	done
-	@printf '  %-42s' "refused by ady2py"; \
-	    if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_scaled_hdr.ady \
-	            > $(TMPDIR)/ady_scaled.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
-	    grep -q "built by ady2nim only" $(TMPDIR)/ady_scaled.out \
+	@printf '  %-42s' "built by ady2py too"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_scaled_hdr.ady > $(TMPDIR)/ady_scaled_hdr.py \
+	        && $(PYTHON) $(TMPDIR)/ady_scaled_hdr.py > $(TMPDIR)/ady_scaled.out 2>&1 \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_scaled.out; exit 1; }
 	@rm -rf $(TMPDIR)/ady_scaled_* $(TMPDIR)/ady_scaled.out
 	@# The Mars Climate Orbiter's call: pound-force seconds where newton-seconds
