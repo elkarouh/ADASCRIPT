@@ -470,9 +470,39 @@ relations run the other way too — `kinetic(m, v) / v` is a `Momentum_T`, and
 
 Writing `type Energy_T is Mass_T * Speed_T * Speed_T` is refused, with a message
 that says to name the middle. So is `m * (v * v)`: `Speed_T * Speed_T` has no
-unit unless you declare one, such as `type SpeedSq_T is Speed_T * Speed_T`,
-and then `Energy_T` would be `Mass_T * SpeedSq_T` instead. Pick the
-decomposition that names quantities you actually use.
+unit unless you declare one, such as `type SpeedSq_T is Speed_T * Speed_T`.
+Declare it, and `m * (v * v)` is an `Energy_T` as well, by dimension (below).
+
+### Units by dimension
+
+Every declared unit is a dimension, worked out from its declaration: a
+`distinct float` is its own, and `Force_T is Mass_T * Accel_T` with `Accel_T
+is Speed_T / Duration_T` is mass × length / time². Two units multiplied or
+divided are the declared unit of the dimension that comes out, whether or not
+a declaration names that pair:
+
+```python
+# EXAMPLES/test_units_dims.ady
+type Force_T    is kilogram_T * Accel_T
+type MassFlow_T is kilogram_T / second_T
+
+def flow_of(thrust: Force_T, exhaust: Speed_T) -> MassFlow_T:
+    return thrust / exhaust                   # mass x length / time^2 over length / time
+```
+
+A chain works the same way: `Area_T(4.0) * metre_T(2.0)` is a `Volume_T` if
+one is declared. Three rules keep this from guessing:
+
+- a result of **no dimension** is a plain number, as `d / d` always was;
+- a dimension **two declared units share** -- torque and energy are both
+  N·m -- is neither: the error names both, and you convert to the one meant;
+- a dimension **no unit has** is refused, and the error says what it is,
+  `metre_T^2`, so you know what to declare.
+
+A unit of no dimension is declared as the ratio it is: `type Radians_T is
+metre_T / metre_T`, an arc over its radius. It scales a length into a length,
+`radius * angle`, and `metre_T / metre_T` itself stays a plain ratio. There
+are no powers: `Length_T ** 2` is not a unit, `Area_T` is.
 
 ### A multiple of a unit: kilometres and miles
 

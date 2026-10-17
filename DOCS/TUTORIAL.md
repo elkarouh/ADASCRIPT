@@ -463,8 +463,15 @@ let v: Velocity_T = d / t             # Distance / Duration is a Velocity
 `type C is A / B` says A / B is a C, so C * B and B * C are an A, and A / C
 is a B. `type C is A * B` says A * B and B * A are a C, so C / A is a B and
 C / B an A -- `type Area_T is Length_T * Length_T`, `type Total_T is
-Cents_T * Qty_T`. Everything else between the units is refused: `d * t`,
-`v + d`, `1.0 / t`. A derived unit can be made from another (`type Accel_T
+Cents_T * Qty_T`. Beyond what a declaration says, units relate by
+dimension: two units multiplied or divided are the one declared unit with
+that dimension, so with `Force_T is Mass_T * Accel_T` and `MassFlow_T is
+Mass_T / Duration_T` declared, `force / speed` is a `MassFlow_T` with no
+declaration naming that pair. A result of no dimension is a plain number, and
+one two declared units share is refused with both named. Everything else
+between the units is refused: `d * t`, `v + d`, `1.0 / t`. A unit of no
+dimension is the ratio it is, `type Radians_T is Length_T / Length_T`, and
+scales a length into a length. A derived unit can be made from another (`type Accel_T
 is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
 `int` for a product. Nim gets a small proc per relation, so it costs nothing
 at run time.
@@ -580,8 +587,10 @@ print kinetic(m, v) / v           # an Energy over a Speed is a Momentum
 
 `type Energy_T is Mass_T * Speed_T * Speed_T` is refused, and the message
 says how to split it. The ½ scales for free. `m * (v * v)` is refused too,
-because `Speed_T * Speed_T` has no unit unless one is declared. It is all in
-`EXAMPLES/test_units.ady`.
+because `Speed_T * Speed_T` has no unit unless one is declared; declare
+`type SpeedSq_T is Speed_T * Speed_T` and `m * (v * v)` is an `Energy_T` too,
+by dimension. It is all in `EXAMPLES/test_units.ady` and
+`EXAMPLES/test_units_dims.ady`.
 
 ### Money: `Dollar_T`, and converting to `Euro_T`
 

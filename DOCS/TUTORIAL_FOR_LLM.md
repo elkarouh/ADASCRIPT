@@ -186,7 +186,9 @@ type Energy_T   is Momentum_T * Speed_T      # NOT: Mass_T * Speed_T * Speed_T (
 def kinetic(m: Mass_T, v: Speed_T) -> Energy_T:
     return 0.5 * m * v * v                   # (0.5*m)*v is a Momentum, *v an Energy
 ```
-`m * (v * v)` is refused (Speed*Speed has no unit) unless `type SpeedSq_T is Speed_T * Speed_T` exists. Relations run both ways: `e / v` is a Momentum, `p / m` a Speed.
+`m * (v * v)` is refused (Speed*Speed has no unit) unless `type SpeedSq_T is Speed_T * Speed_T` exists -- then it is an Energy, by dimension. Relations run both ways: `e / v` is a Momentum, `p / m` a Speed.
+
+**Units relate by dimension** (both backends): each declared unit's dimension is worked out from its declaration, and `A * B` or `A / B` is the ONE declared unit with the resulting dimension even if no declaration names that pair (`Force_T / Speed_T` is a `MassFlow_T`; `Area_T * metre_T` a `Volume_T`). No dimension -> plain float; a dimension two declared units share (torque, energy) -> refused, both named; no declared unit -> refused, the dimension named (`metre_T^2`). A dimensionless unit: `type Radians_T is metre_T / metre_T` (`radius * angle` is a metre_T; `metre_T / metre_T` stays a plain ratio). No powers (`Length_T ** 2`). `EXAMPLES/test_units_dims.ady`.
 
 **A fixed multiple of a unit** is declared with a number (or a `const` float) times the unit -- Nim only, `ady2py` refuses it:
 ```adascript

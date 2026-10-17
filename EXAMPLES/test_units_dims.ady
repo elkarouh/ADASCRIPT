@@ -1,0 +1,44 @@
+#!/usr/bin/env ady2nim
+"""Units by dimension: a declared unit is a dimension, worked out from its
+declaration, and two units multiplied or divided are the one declared unit of
+that dimension -- with no declaration naming the pair.
+
+Force_T is kilogram_T * Accel_T, so it is mass x length / time^2; a
+MassFlow_T is mass / time; so Force_T / Speed_T is a MassFlow_T, and a
+MassFlow_T times a second_T is a kilogram_T. A unit of no dimension is
+declared as the ratio it is, `type Radians_T is metre_T / metre_T`, and
+scales a length into a length. Two of one unit divided stay a plain number."""
+
+type metre_T    is distinct float
+type second_T   is distinct float
+type kilogram_T is distinct float
+type Speed_T    is metre_T / second_T
+type Accel_T    is Speed_T / second_T
+type Force_T    is kilogram_T * Accel_T
+type MassFlow_T is kilogram_T / second_T
+type Area_T     is metre_T * metre_T
+type Volume_T   is Area_T * metre_T
+type Radians_T  is metre_T / metre_T         # an angle: an arc over its radius
+
+def flow_of(thrust: Force_T, exhaust: Speed_T) -> MassFlow_T:
+    return thrust / exhaust                   # mass x length / time^2 over length / time
+
+def arc(radius: metre_T, angle: Radians_T) -> metre_T:
+    return radius * angle
+
+def main():
+    let flow: MassFlow_T = flow_of(10.0, 2.0)
+    assert flow == 5.0
+    let burnt: kilogram_T = flow * second_T(3.0)
+    assert burnt == 15.0
+    let tank: Volume_T = Area_T(4.0) * metre_T(2.0)    # a chain: area x length
+    assert tank == 8.0
+    assert arc(5.0, 0.5) == 2.5
+    let ratio: float = metre_T(5.0) / metre_T(2.0)    # still a plain ratio
+    assert ratio == 2.5
+    let thrust: Force_T = flow * Speed_T(2.0)
+    assert thrust == 10.0
+    print f"{float(flow)} {float(burnt)} {float(tank)} {float(thrust)}"
+    print "test_units_dims: all checks passed"
+
+main()

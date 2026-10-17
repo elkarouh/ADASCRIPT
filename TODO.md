@@ -186,7 +186,8 @@ history of this file if the reasoning behind one of them is ever wanted.
         returned or passed as a known routine's argument.
       - a derived unit is float, or int for a product, and a unit cannot be
         raised to a power: `Area_T` is `Length_T * Length_T`, and there is
-        no `Length_T ** 2`. Nim's `unchained` does full dimensional
+        no `Length_T ** 2`. Units relate by dimension (book 2.7), but only
+        to the units declared: Nim's `unchained` does full dimensional
         analysis; this is deliberately smaller.
       - a conversion between two distinct types no declaration relates,
         `Duration_T(d)` for a `Distance_T` d, is refused on Nim, naming
@@ -443,15 +444,8 @@ and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a funct
 
 Each open one has a workaround in that file.
 
-- [ ] units: `SquareMeters_T * metre_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_base import` works from a sibling directory only because the
       parent is searched. (The map_* modules stay Nim-only, by decision.)
-- [ ] units: a unit with two derivations. `Force_T` is `Mass_T * Accel_T`, but the mass flow wants
-      `Force_T / Speed_T` and `MassFlow_T * Duration_T`; `v^2 - mu/r` (`Mu_T / metre_T`) and the
-      products `AngMom_T * AngMom_T` have no unit either. `Propulsion.thrust` and `orbital_elements`
-      keep a float block.
-- [ ] units: an angle times a length. A radian is dimensionless, so `radius * angle` is a length;
-      `arc` (the one place that takes `float(Radians_T(angle))`) says so.
 
 ### Met on the way and since fixed
 

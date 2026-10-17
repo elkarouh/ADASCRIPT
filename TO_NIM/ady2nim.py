@@ -65,7 +65,7 @@ _nimport_tuple_field_order: dict = {}
 # iterators and context managers, the procs taking nothing as `var` -- and
 # its module-level names with their types: globals and type aliases. Each is
 # (ParserState attribute, merged into the importer's at its reset).
-_NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations",
+_NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations", "unit_dims",
                     "scaled_units", "narrowed_types", "mod_types", "overloaded_procs",
                     "generic_funcs",
                     "class_field_types", "noreturn_procs",
@@ -110,6 +110,9 @@ def _nim_reset():
     ParserState.ady_type_decls = {}
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
+    ParserState.unit_dims = {}           # unit -> its dimension, see ady_declarations.unit_dims
+    ParserState.inferred_unit_ops = {}   # (op, l, r) -> unit, from the dimensions alone
+    ParserState._units_declared = set()
     ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
     ParserState.narrowed_types = {}     # `type N is P range ..`: name -> P
     ParserState.mod_types = {}          # `type N is [P] mod M`: name -> (P or None, M)
@@ -778,6 +781,14 @@ def translate(code, export_symbols=False):
                        _consts))
     ParserState.unit_relations.update(
         unit_relations(ParserState.ady_type_decls, _scaled))
+    # and what the units' dimensions say beyond what is declared
+    from ady_declarations import unit_dims, inferred_relations
+    ParserState.unit_dims.update(
+        unit_dims(ParserState.ady_type_decls, _scaled, ParserState.unit_dims))
+    ParserState.inferred_unit_ops = inferred_relations(
+        ParserState.unit_dims, ParserState.distinct_types, ParserState.unit_relations,
+        set(ParserState.ady_type_decls))
+    ParserState.unit_relations.update(ParserState.inferred_unit_ops)
     # Generic functions, this module's and those it nimports, must be called
     # with their type arguments written out: see check_generic_calls.
     from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls

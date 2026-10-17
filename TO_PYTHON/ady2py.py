@@ -128,6 +128,7 @@ def _py_reset():
     ParserState.ady_type_decls = {}
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
+    ParserState.unit_dims = {}
     ParserState.narrowed_types = {}
     ParserState.mod_types = {}
     ParserState.record_types = set()
@@ -363,6 +364,11 @@ def translate(code):
     _PS_rp.mod_types = mod_types(_PS_rp.ady_type_decls)
     _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls, consts=scan_consts(code))
     _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
+    from ady_declarations import unit_dims, inferred_relations
+    _PS_rp.unit_dims = unit_dims(_PS_rp.ady_type_decls)
+    _PS_rp.unit_relations.update(inferred_relations(
+        _PS_rp.unit_dims, _PS_rp.distinct_types, _PS_rp.unit_relations,
+        set(_PS_rp.ady_type_decls)))
     # a generic function must be called with its type arguments written out
     from ady_stmt import scan_generic_funcs, scan_plain_defs, check_generic_calls
     check_generic_calls(stmts, scan_generic_funcs(code), scan_plain_defs(code))

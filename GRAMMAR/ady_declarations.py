@@ -973,10 +973,10 @@ def _check_derived(name, a, op, b, kinds):
         raise SyntaxError(
             f"type {name} is {a} / {b}: a quotient of ints is not an int -- "
             f"make the operands distinct float")
-    if op == "/" and a == b:
+    if op == "/" and a == b and ka != "float":
         raise SyntaxError(
-            f"type {name} is {a} / {a}: a ratio of one unit is a plain "
-            f"number, and `{a} / {a}` already gives one")
+            f"type {name} is {a} / {a}: a unit of no dimension is a "
+            f"distinct float -- make {a} one")
     return ka
 
 
@@ -985,6 +985,10 @@ def derived_ops(name, a, op, b):
     result): A / B is a NAME, so NAME * B and B * NAME are an A and A / NAME
     is a B; or A * B is a NAME, so NAME / A is a B and NAME / B an A. Where
     A and B are one type there is one of each."""
+    if op == "/" and a == b:
+        # a unit of no dimension -- an angle is a length over a length: it
+        # scales A and leaves it an A; A / A stays the plain ratio it was
+        return [("*", name, a, a), ("*", a, name, a), ("/", a, name, a)]
     if op == "/":
         return [("/", a, b, name), ("*", name, b, a),
                 ("*", b, name, a), ("/", a, name, b)]
@@ -1011,6 +1015,89 @@ def unit_relations(decls, scaled=None):
                     f"type {name} is derived from the same units as "
                     f"{rel[(op, l, r)]}: `{l} {op} {r}` cannot be both")
     return rel
+
+
+# --- units by dimension -------------------------------------------------------
+# A declared unit is a dimension: a base unit (`distinct float` or `distinct
+# int`) its own, and a derived one what its declaration multiplies or divides
+# out -- Force_T is Mass_T * Accel_T, Accel_T is Velocity_T / Duration_T, so a
+# Force_T is mass x length / time^2. Two units multiplied or divided whose
+# result has the dimension of exactly one declared unit are that unit, with no
+# declaration saying so: Force_T / Speed_T is a MassFlow_T. A result of no
+# dimension stays a plain number, and one that two declared units share
+# (torque and energy) is none of them: the conversion is written.
+
+def _dims_key(d):
+    return tuple(sorted((u, e) for u, e in d.items() if e))
+
+
+def _dims_combine(a, op, b):
+    out = dict(a)
+    for u, e in b:
+        out[u] = out.get(u, 0) + (e if op == "*" else -e)
+    return _dims_key(out)
+
+
+def unit_dims(decls, scaled=None, known=None):
+    """{unit: dimension} for every distinct float or int unit and every
+    derived unit in DECLS; KNOWN is what imported modules worked out. A
+    dimension is a sorted tuple of (base unit, exponent); () is none."""
+    dims = dict(known or {})
+    scaled = scaled or {}
+    for name, rhs in decls.items():
+        if rhs is not None and _re_du.match(r"distinct\s+(?:float|int)\b", rhs.strip()) \
+                and not _re_du.search(r"\bwhere\b", rhs):
+            dims[name] = ((name, 1),)
+    pending = {n: parse_derived(r) for n, r in decls.items()
+               if r is not None and n not in scaled and parse_derived(r) is not None}
+    while pending:
+        moved = False
+        for name, (a, op, b) in list(pending.items()):
+            if a in dims and b in dims:
+                dims[name] = _dims_combine(dict(dims[a]), op, dims[b])
+                del pending[name]
+                moved = True
+        if not moved:
+            break
+    return dims
+
+
+def inferred_relations(dims, kinds, declared, local):
+    """{(op, left, right): result} for the products and quotients of units in
+    DIMS whose dimension is that of exactly one unit, beyond what DECLARED
+    says already. Only those touching a unit in LOCAL: an imported module
+    worked out its own. KINDS says what each unit is made of: an int unit
+    takes part only in products of int units."""
+    by_dim = {}
+    for u, d in dims.items():
+        by_dim.setdefault(d, []).append(u)
+    out = {}
+    for l in dims:
+        for r in dims:
+            for op in ("*", "/"):
+                if (op, l, r) in declared or (op == "/" and l == r):
+                    continue
+                d = _dims_combine(dict(dims[l]), op, dims[r])
+                if not d:
+                    continue                     # no dimension: a plain number
+                found = by_dim.get(d, [])
+                if len(found) != 1:
+                    continue                     # none, or two: say which in the error
+                res = found[0]
+                if not (l in local or r in local or res in local):
+                    continue
+                ks = {kinds.get(l), kinds.get(r), kinds.get(res)}
+                if ks == {"float"} or (ks == {"int"} and op == "*"):
+                    out[(op, l, r)] = res
+    return out
+
+
+def dimension_text(d):
+    """`Mass_T * Length_T / Duration_T^2` for a dimension, for an error."""
+    num = [u + (f"^{e}" if e > 1 else "") for u, e in d if e > 0]
+    den = [u + (f"^{-e}" if e < -1 else "") for u, e in d if e < 0]
+    text = " * ".join(num) or "1"
+    return text + ("".join(f" / {x}" for x in den))
 
 
 def unit_relation(op, left, right):
@@ -1222,6 +1309,19 @@ def unit_mix_error(lu, op, ru):
                 return None
             verb = "multiplying" if op == "*" else "dividing"
             sign = "*" if op == "*" else "/"
+            from hek_parsec import ParserState
+            dims = getattr(ParserState, "unit_dims", None) or {}
+            if lu in dims and ru in dims:
+                d = _dims_combine(dict(dims[lu]), sign, dims[ru])
+                same = sorted(u for u, x in dims.items() if x == d)
+                if len(same) > 1:
+                    return (f"{verb} a {lu} by a {ru} has no unit: it is a "
+                            f"{dimension_text(d)}, which {' and '.join(same)} both are "
+                            f"-- convert to the one meant, {same[0]}(...)")
+                if d:
+                    return (f"{verb} a {lu} by a {ru} has no unit: it is a "
+                            f"{dimension_text(d)}, and no unit declared is one -- name "
+                            f"it with `type X is {lu} {sign} {ru}`")
             return (f"{verb} a {lu} by a {ru} has no unit: name the result "
                     f"with `type X is {lu} {sign} {ru}`")
         if rd and op != "*" and lu in (UNIT_LIT, UNIT_PLAIN):

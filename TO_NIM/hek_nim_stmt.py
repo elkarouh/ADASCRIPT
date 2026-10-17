@@ -2608,9 +2608,30 @@ def _distinct_type_nim(name, params, rhs, indent):
     from ady_declarations import distinct_kind
     # registered as itself, so a variable of it resolves to its name and not
     # to its base: that is what tells `v + 2.0` to convert the 2.0
-    lines, _ = _distinct_lines(name, params, rhs.nodes[0].to_nim(),
-                               distinct_kind(name), indent)
+    lines, _exp = _distinct_lines(name, params, rhs.nodes[0].to_nim(),
+                                  distinct_kind(name), indent)
+    lines += _inferred_op_lines(name, indent, _exp)
     return "\n".join(lines)
+
+
+def _inferred_op_lines(name, indent, exp):
+    """The operators the units' dimensions give (ady_declarations.
+    inferred_relations) that NAME, now declared, completes: each is written
+    once, after the last of its three units, which Nim needs declared."""
+    done = getattr(ParserState, "_units_declared", None)
+    if done is None:
+        done = ParserState._units_declared = set()
+    done.add(name)
+    local = set(getattr(ParserState, "ady_type_decls", None) or {})
+    out = []
+    for (op, l, r), res in (getattr(ParserState, "inferred_unit_ops", None) or {}).items():
+        units = {l, r, res}
+        if name not in units or any(u in local and u not in done for u in units):
+            continue
+        base = _DISTINCT_BASE_NIM.get(ParserState.distinct_types.get(res), "float")
+        out.append(f"{_ind(indent)}proc `{op}`{exp}(a: {l}, b: {r}): {res} = "
+                   f"{res}({base}(a) {op} {base}(b))")
+    return out
 
 
 def _derived_type_nim(name, params, indent):
@@ -2627,6 +2648,7 @@ def _derived_type_nim(name, params, indent):
         nim_op = "div" if (o == "/" and kind == "int") else o
         lines.append(f"{ind}proc `{nim_op}`{_exp}(a: {l}, b: {r}): {res} = "
                      f"{res}({base}(a) {nim_op} {base}(b))")
+    lines += _inferred_op_lines(name, indent, _exp)
     if op == "*" and a == b and kind == "float":
         # a square has a root, in the unit it is the square of
         ParserState.nim_qualified.add("math")
