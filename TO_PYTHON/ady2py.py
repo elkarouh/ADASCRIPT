@@ -417,6 +417,26 @@ def translate(code):
             if _m:
                 _members[_owner].add(_m.group(1))
     _PS_udef.py_type_members = _members
+    # each top-level function's parameter types, by position, for the unit
+    # check of a call's arguments (hek_py_expr._refuse_argument_units); a name
+    # defined twice is an overload, and left out
+    _params, _seen_defs = {}, set()
+    for _m in _re_udef.finditer(r'^def\s+(\w+)\s*\(', code, _re_udef.M):
+        _name, _k, _depth = _m.group(1), _m.end(), 1
+        while _k < len(code) and _depth:
+            _depth += {"(": 1, ")": -1}.get(code[_k], 0)
+            _k += 1
+        if _name in _seen_defs:
+            _params.pop(_name, None)
+            continue
+        _seen_defs.add(_name)
+        from hek_py_overload import _split_top as _split_params
+        _types = []
+        for _p in _split_params(code[_m.end():_k - 1]):
+            _pm = _re_udef.match(r'\s*\w+\s*:\s*([^=]+?)\s*(?:=.*)?$', _p, _re_udef.S)
+            _types.append(_pm.group(1).strip() if _pm else "")
+        _params[_name] = _types
+    _PS_udef.py_param_types = _params
     # PROG, the program's name, is predeclared for a module that uses it and
     # does not declare its own -- as on the Nim backend.
     if (_re_udef.search(r'\bPROG\b', code)

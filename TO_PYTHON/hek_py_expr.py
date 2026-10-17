@@ -1530,6 +1530,32 @@ def _refuse_unrelated_unit(name, arg):
            "that the units are meant"))
 
 
+def _refuse_argument_units(func, args):
+    """A call of FUNC with an argument of one unit where its parameter is of
+    another, `travel(t)` for a Duration_T t where travel takes a Distance_T:
+    refused, as Nim's own type check refuses it. Python has no such check, and
+    the number went through relabelled."""
+    from hek_parsec import ParserState
+    from ady_declarations import is_distinct, expr_unit, narrow_ancestors
+    from hek_py_stmt import _py_atom_unit, _py_resolve_alias
+    from hek_py_overload import _split_top
+    types = ParserState.py_param_types[func]
+    for n, arg in enumerate(_split_top(args)):
+        if n >= len(types) or not arg.strip() or _re_mod_pfx.match(r"\s*\w+\s*=(?!=)", arg):
+            break                          # by name from here on: not checked
+        want = _py_resolve_alias(types[n].replace("?", "").strip())
+        if not is_distinct(want):
+            continue
+        try:
+            unit = expr_unit(arg, _py_atom_unit)
+        except Exception:
+            continue
+        if unit and is_distinct(unit) and unit != want and want not in narrow_ancestors(unit):
+            raise SyntaxError(
+                f"{func}({args.strip()}): its argument {n + 1}, {arg.strip()}, is a {unit}, "
+                f"where {func} takes a {want}")
+
+
 @method(primary)
 def to_py(self, prec=None):
     """primary: atom trailer*"""
@@ -1589,6 +1615,8 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and tr_str.startswith("(") and not _is_scaled_name(result):
                 _refuse_unrelated_unit(result, tr_str[1:-1])
+            if i == 0 and tr_str.startswith("(") and result in getattr(ParserState, "py_param_types", {}):
+                _refuse_argument_units(result, tr_str[1:-1])
             if i == 0 and tr_str.startswith("(") and _is_scaled_name(result):
                 result = _scaled_conversion(result, tr_str[1:-1])
                 i += 1
