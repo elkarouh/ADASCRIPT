@@ -2909,9 +2909,9 @@ def _reject_unit_mix(name, annotation, value):
     Length_T = t` for a Duration_T t, with the words ady2py uses, rather than
     leaving it to Nim's compiler at a line of generated code."""
     from ady_declarations import is_distinct, narrow_ancestors
-    from hek_nim_expr import _unit_of
+    from hek_nim_expr import _unit_of, _unit_is_sure
     target = (annotation or "").strip()
-    if not is_distinct(target) or not (value or "").strip():
+    if not is_distinct(target) or not (value or "").strip() or not _unit_is_sure(value):
         return
     try:
         source = _unit_of(value)

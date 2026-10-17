@@ -4554,6 +4554,18 @@ def _split_top_commas(text):
     return out + ([cur.strip()] if cur.strip() else [])
 
 
+def _unit_is_sure(value):
+    """Can VALUE's unit be trusted enough to refuse on it? Not through a method
+    call, `track.cross(offset)`: the return type is looked up by the method's
+    name, which two classes may both use, each returning another unit; nor
+    through an overloaded routine. Nim's own check still has those."""
+    import re as _re_us
+    if _re_us.search(r"\.\w+\(", value):
+        return False
+    return not any(_re_us.search(rf"(?<![\w.]){_re_us.escape(n)}\(", value)
+                   for n in getattr(ParserState, "overloaded_procs", ()) or ())
+
+
 def _refuse_argument_units(func, args_str, args, param_types):
     """A call of FUNC with an argument of one unit where its parameter is of
     another, `wait(d)` for a Distance_T d where wait takes a Duration_T: refused
@@ -4565,7 +4577,7 @@ def _refuse_argument_units(func, args_str, args, param_types):
         if _re_ru.match(r"\s*\w+\s*=(?!=)", arg):
             break                          # by name from here on: not checked
         want = _re_ru.sub(r"^(?:var|sink|lent)\s+", "", want.strip())
-        if not is_distinct(want):
+        if not is_distinct(want) or not _unit_is_sure(arg):
             continue
         try:
             unit = _unit_of(arg)
