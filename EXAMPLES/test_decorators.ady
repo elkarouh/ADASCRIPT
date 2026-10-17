@@ -13,6 +13,15 @@ def shout(f: (str) -> str, s: str) -> str:
 def twice(f: (int) -> int, n: int) -> int:
     return f(f(n))
 
+# the cache is the decorator's argument, so each function names its own
+var fib_cache: {int}int = {:}
+
+@decorator
+def cached(cache: {int}int, f: (int) -> int, n: int) -> int:
+    if n not in cache:
+        cache[n] = f(n)
+    return cache[n]
+
 @aligned(8)
 def tag(name: str) -> str:
     return "<" + name + ">"
@@ -34,11 +43,19 @@ def countdown(n: int) -> int:
         return 0
     return countdown(n - 1) + 1
 
+@cached(fib_cache)
+def fib(n: int) -> int:
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
 def main():
     assert tag("a") == "<a>     "
     assert loud("hi") == "HI!   "
     assert add_three(1) == 7
     assert countdown(3) == 3
+    assert fib(80) == 23416728348467685
+    assert len(fib_cache) == 81
     print "test_decorators: ok"
 
 if __name__ == "__main__":

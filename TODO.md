@@ -4,6 +4,10 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
+- [ ] `{int: int}` written as a table type is taken as a set: Python emits
+      `fib_cache: {int: int} = set()` and fails at the first write. The table
+      type is `{int}int`; the Python-style spelling should be refused with a
+      one-line error naming it, on both backends.
 - [ ] JSON for the browser. The accounting page hands the browser its accounts and
       arrows as tab-separated lines in a hidden `pre` (`TOOLS/ACCOUNTING/shared/layout.ady`,
       `books_text`/`slots_of`), with the fields matched by position and escaped by hand.
@@ -49,8 +53,9 @@ history of this file if the reasoning behind one of them is ever wanted.
 - [ ] decorators beyond `@decorator` wrappers. Stateless wrappers marked
       `@decorator` work on every backend, with arguments and stacked
       (EXAMPLES/test_decorators.ady, book 8.7). Still open: a wrapper on a
-      method (self), a decorator that keeps state between calls (memoizing,
-      counting), and one that returns a function of another type. Nim
+      method (self), and one that returns a function of another type. State
+      (a cache) is passed in as the decorator's argument; a decorator that
+      owns its state, `@cached` with no table to declare, is not done. Nim
       refuses any other decorator, while Python passes it through;
       `@property`, `@staticmethod`, `@classmethod`, `@functools.*` have no
       Nim counterpart and keep their refusal.

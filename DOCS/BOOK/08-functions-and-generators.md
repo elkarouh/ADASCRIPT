@@ -269,6 +269,31 @@ written without parentheses. Stacked decorators apply from the bottom up, so
 recursive call inside the body goes through the decorated name, so every
 level is wrapped.
 
+A wrapper keeps no state of its own, so a decorator that remembers passes
+what it remembers in as an argument. A cache is a table declared beside the
+function it serves:
+
+```python
+# EXAMPLES/test_decorators.ady
+var fib_cache: {int}int = {:}
+
+@decorator
+def cached(cache: {int}int, f: (int) -> int, n: int) -> int:
+    if n not in cache:
+        cache[n] = f(n)
+    return cache[n]
+
+@cached(fib_cache)
+def fib(n: int) -> int:
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+```
+
+The recursive calls go through `fib`, so they hit the cache too, and
+`fib(80)` makes 81 calls of the body instead of billions. Each cached
+function names its own table, and the program can read or clear it.
+
 The transpiler does the wrapping itself, before either backend sees the
 code: the body is kept under a hidden name, and the decorated name becomes a
 def that passes it to the wrapper. So the same decorator works on Nim, on
