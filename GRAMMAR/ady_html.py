@@ -204,8 +204,8 @@ def expand_html_blocks(code):
         i = end
     # An event handler needs the browser side of karax (karax/karax), which
     # only compiles under `ady2nim js`; a page without one also builds native.
-    karax = "karax/[karax, karaxdsl, vdom]" if "__on(" in "\n".join(out) \
-        else "karax/[karaxdsl, vdom]"
+    karax = "karax/[karax, karaxdsl, vdom, vstyles]" if "__on(" in "\n".join(out) \
+        else "karax/[karaxdsl, vdom, vstyles]"
     head = [f"# nimraw: import {karax}", "# nimraw: type Html = VNode"]
     if out and out[0].startswith("#!"):               # keep the shebang first
         return "\n".join([out[0]] + head + out[1:])
@@ -230,7 +230,33 @@ def _karax(tag, args):
     # Nim name cannot, so it goes in backticks -- karax takes it as written
     args = re.sub(r"(^|, )([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)\s*=",
                   lambda m: m.group(1) + "`" + m.group(2).replace("_", "-") + "`=", args)
+    # karax's style= is a VStyle; the page writes it as CSS text
+    if (m := re.search(r"(^|, )style\s*=\s*", args)):
+        end = _arg_end(args, m.end())
+        args = f"{args[:m.end()]}toCss({args[m.end():end]}){args[end:]}"
     return tag, args
+
+
+def _arg_end(args, i):
+    """Where the argument starting at I of ARGS ends: its top-level comma, or the end."""
+    depth, quote = 0, None
+    while i < len(args):
+        ch = args[i]
+        if quote:
+            if ch == "\\":
+                i += 1
+            elif ch == quote:
+                quote = None
+        elif ch == '"':
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            return i
+        i += 1
+    return i
 
 
 def _handlers(line):

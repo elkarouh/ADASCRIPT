@@ -898,7 +898,6 @@ test: compile
 	@# import M binds M, as Python's: M's names are M.name, not bare; and
 	@# M.name cannot be used beside a name of the file's own that M also declares.
 	@printf 'import ady_refuse_mod\nprint helper()\n' > $(TMPDIR)/ady_refuse_23.ady
-	@printf 'import ady_refuse_mod\ndef helper() -> int:\n    return 3\nprint ady_refuse_mod.helper()\n' > $(TMPDIR)/ady_refuse_24.ady
 	@# a rename onto a name the file already gives a meaning of its own
 	@printf 'from ady_refuse_mod import helper as h\nlet h: int = 2\nprint h\n' > $(TMPDIR)/ady_refuse_25.ady
 	@# a rename takes the old name away, as in Python
@@ -943,7 +942,6 @@ test: compile
 	             "21:a dropped stdin.readLine():drops a failure" \
 	             "22:a name left out of a from-list:is not imported from" \
 	             "23:a bare name after import M:write ady_refuse_mod.helper" \
-	             "24:M.name beside the file's own name:cannot be told from" \
 	             "25:a rename onto the file's own name:gives 'h' a meaning of its own" \
 	             "26:the old name after from M import A as B:is imported from ady_refuse_mod as" \
 	             "27:the module after import M as N:is imported as 'm'" \

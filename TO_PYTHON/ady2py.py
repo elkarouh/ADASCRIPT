@@ -548,6 +548,9 @@ def include_ady_modules(code, search_dir, _seen=None):
             if text.startswith("#!"):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = include_ady_modules(text, os.path.dirname(path), seen)
+            # its names the importing file declares too, reached as `M.name`
+            from ady_modules import RENAMED, rename_in
+            text = rename_in(text, RENAMED.get(name.rsplit("/", 1)[-1], {}))
             pieces.append(f"# ---- {name}.ady, imported ----\n{text.rstrip()}\n# ---- end of {name}.ady ----")
         head = [f"nimport {', '.join(kept)}"] if kept and names else ([match.group(0)] if kept else [])
         return "\n".join(head + pieces)

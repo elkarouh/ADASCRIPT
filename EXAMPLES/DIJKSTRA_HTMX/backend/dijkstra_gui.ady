@@ -5,8 +5,7 @@ What the page shows is a function of the network (the model, which the server ke
 and of what the reader has picked: the start and the goal, the fields of the form
 `#state`. Every request sends that form along and gets the whole page back, which
 htmx swaps in. Reading is GET /all. The drawing's gestures and the menus (dijkstra_js_events.ady)
-fill in the hidden form `#gesture` and press one of its buttons, which sends POST, PUT or
-DELETE to /nodes or /edges (see server.ady). `pick` is the node clicked, for the start or the
+send POST, PUT or DELETE to /nodes or /edges themselves, with the form #state (see server.ady). `pick` is the node clicked, for the start or the
 goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
@@ -41,18 +40,6 @@ def to_html(e: Edge_T, on_way: bool, p1: Place_T, p2: Place_T) -> Html:
             path class="hit" d=d
             stext class="cost" x=lx y=ly: label
 
-# The buttons that act on the edges, sent through the hidden form #gesture (see all_html): add one, set its
-# cost, delete it.
-def edge_buttons_html() -> Html:
-    html:
-        span class="edge-actions":
-            input type="hidden" name="a" value=""
-            input type="hidden" name="b" value=""
-            input type="hidden" name="cost" value=""
-            button type="button" id="make_edge" data_hx_post="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add edge"
-            button type="button" id="set_cost" data_hx_put="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Set cost"
-            button type="button" id="drop_edge" data_hx_delete="/edges" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete edge"
-
 # ------------------------------------------------------------
 # The nodes: their look, how each is drawn, and the buttons that act on them.
 # ------------------------------------------------------------
@@ -83,20 +70,6 @@ def to_html(n: Node_T, at: Place_T, role: str) -> Html:
             circle cx=cx cy=cy r="24"
             stext class="name" x=cx y=ty: n.name
             circle class="port" cx=px cy=cy r="6"
-
-# The buttons that act on the nodes, sent through the hidden form #gesture (see all_html):
-# choose one for the route, add one, delete one.
-def node_buttons_html() -> Html:
-    html:
-        span class="node-actions":
-            input type="hidden" name="name" value=""
-            input type="hidden" name="x" value=""
-            input type="hidden" name="y" value=""
-            input type="hidden" name="pick" value=""
-            input type="hidden" name="act" value=""
-            button type="button" id="pick" data_hx_get="/all" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Choose"
-            button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
-            button type="button" id="drop_node" data_hx_delete="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Delete node"
 
 # The menus' own look (see menus_html).
 const MENU_STYLE: str = """
@@ -174,15 +147,6 @@ def all_html(net: Network, p0: Params_T, problem: None | !Refusal_T) -> Html:
             form id="state":
                 input type="hidden" name="start" value=p.start
                 input type="hidden" name="goal" value=p.goal
-            form id="move":
-                input type="hidden" name="name" value=""
-                input type="hidden" name="x" value=""
-                input type="hidden" name="y" value=""
-                button type="button" id="redraw" class="redraw" data_hx_put="/nodes" data_hx_include="#move, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Move"
-            # form#gesture: the drawing and the menus (dijkstra_js_events.ady) fill it in, then press one button
-            form id="gesture" class="gesture":
-                + node_buttons_html()
-                + edge_buttons_html()
             div class="toolbar":
                 button type="button" class="quiet" data_hx_post="/relayout" data_hx_confirm="Put every node where the layout puts it? Nodes you moved go back to the layout." data_hx_target="#all" data_hx_swap="outerHTML": "Relayout"
                 button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
@@ -216,7 +180,7 @@ button:hover { background: var(--bg); }
 button.quiet { color: var(--soft); }
 button.danger { color: var(--bad); }
 div.toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 0.8em; }
-button.redraw, form.gesture, pre#network { display: none; }
+pre#network { display: none; }
 svg.graph { width: 100%; height: auto; user-select: none; display: block; }
 path.wire { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
 """

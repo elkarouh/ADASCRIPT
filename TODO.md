@@ -4,13 +4,6 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
-- [ ] a direct request from the browser. The Dijkstra gestures send their changes by
-      filling the hidden form `#gesture` and pressing a button (`Change` in
-      `EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady`). A call such as
-      `htmx.ajax(method, url, values)` would skip the form. The browser build cannot reach
-      a JavaScript global like `htmx` yet: `js/jsffi` has no way to fetch one, and Adascript
-      has no way to declare an external JavaScript global. Needs a stdlib binding or a
-      transpiler feature.
 - [ ] a method's parameter is made `var` only for a direct write to it
       (`p.x = 1`, `p.items.add(..)`), where a plain proc's is also for a call of
       a method that mutates its object (`p.scroll()`). So `def draw(self, ed:
@@ -83,8 +76,6 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] karax's `style=` attribute is a typed `VStyle`, so `style="fill:#fff"`
-      in an `html:` block is refused; classes and a `<style>` element do.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake. The message names
@@ -141,8 +132,9 @@ Each is worked around there, and none is needed for Python:
 `ady2py` replaces `import X` by X.ady's text (see `include_ady_modules`).
 Known, and not done:
 
-- `geometry.distance(a, b)` is rewritten to `distance(a, b)` (ady_modules.resolve_imports),
-  so it works, but not beside a `distance` of the importing file's own.
+- `geometry.distance(a, b)` beside a `distance` of the importing file's own merges the
+  module's as `geometry__distance`; a third file that takes `distance` from geometry
+  unqualified then gets the importing file's.
 - One namespace: a name defined in two modules is the later definition.
 - A parse error's line number is a line of the merged text.
 - The libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) are not merged.

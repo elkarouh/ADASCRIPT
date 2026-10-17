@@ -211,8 +211,8 @@ end at it.
 ![The page, part by part](page_parts.svg)
 
 The whole page is `all_html`, which puts its parts in one `div`. The
-hidden forms (`#state`, `#move`, `#gesture`) carry values that the
-buttons send, so the requests carry the choice the reader has made.
+hidden form `#state` holds the start and the goal, and every request
+sends it along, so the requests carry the choice the reader has made.
 
 ### The look goes beside the code that uses it
 
@@ -242,12 +242,11 @@ does best.
 attributes. The browser does nothing itself:
 
 ```adascript
-button type="button" id="make_node" data_hx_post="/nodes" data_hx_include="#gesture, #state" data_hx_target="#all" data_hx_swap="outerHTML": "Add node"
+button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
 ```
 
-`data_hx_post` names the request. `data_hx_include` names the forms
-whose fields are sent. `data_hx_target` and `data_hx_swap` say where
-the answer goes.
+`data_hx_post` names the request, and `data_hx_confirm` asks first.
+`data_hx_target` and `data_hx_swap` say where the answer goes.
 
 **The server decides what a request does.** `server.ady` only matches
 the path and hands the request on. `Session.answer` does the work, one `case`
@@ -289,8 +288,17 @@ whole page, which htmx swaps in. A request with an unknown path returns
 **Some events stay in the browser.** A drag must follow the mouse many
 times a second, and a server round trip for each move would be too slow.
 Those are in `frontend/dijkstra_js_events.ady`, which is compiled to
-JavaScript with `ady2nim js`. It sends its final result the same way a
-button does: it fills a hidden form, then presses the button.
+JavaScript with `ady2nim js`. It sends its final result with the
+browser module's `request`, which does what such a button does, with no
+button: the method, the path, the fields by name, where the answer goes,
+and the forms whose fields go along:
+
+```adascript
+def send_gesture(method: str, url: str, fields: {str}str):
+    request(method, url, fields, "#all", "#state")
+
+send_gesture("DELETE", "/nodes", {"name": self.node.name})
+```
 
 ```adascript
 class Selection:
@@ -325,8 +333,8 @@ Read it from the top:
 1. **While the mouse moves**, `moved_cb` runs in the browser. It puts the
    node where the mouse is, the model takes the new place, and `Drawing.redraw_edges`
    draws every edge that ends at it. Nothing goes to the server yet.
-2. **On release**, `dropped_cb` fills in the hidden form `#move` with
-   the node's name and its new place, and presses `#redraw`.
+2. **On release**, `dropped_cb` sends the node's name and its new place
+   with `request`.
 3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model,
    saves the file, and returns the page.
 4. **htmx swaps** the page into `#all`. The new page is the same as the
@@ -354,20 +362,16 @@ the server last drew, so there is nothing to keep in step.
 |---|---|
 | `data_hx_get="/all"` | send GET to `/all` |
 | `data_hx_post`, `data_hx_put`, `data_hx_delete` | send that method |
-| `data_hx_include="#gesture, #state"` | send the fields of these forms with it |
+| `data_hx_include="#state"` | send the fields of these forms with it |
 | `data_hx_target="#all"` | put the answer in this element |
 | `data_hx_swap="outerHTML"` | replace the target, not its contents |
 | `data_hx_confirm="..."` | ask first, and send only on yes |
 | `data_hx_trigger="load"` | send when the element appears (the first page) |
 
 The attributes are written with underscores, since an Adascript name
-cannot contain a dash. `hyphens()` in `dijkstra_gui.ady` turns the whole
-page's `data_hx_` into `data-hx-`, the names htmx reads:
-
-```adascript
-def hyphens(text: str) -> str:
-    return text.replace("data_hx_", "data-hx-")
-```
+cannot contain a dash; the `html:` block writes each `_` of an
+attribute's name as `-`, so the page has `data-hx-post`, the name htmx
+reads.
 
 **State.** The network is on the server. The choice the reader has made
 (the start and the goal) is in the form `#state`, which every request

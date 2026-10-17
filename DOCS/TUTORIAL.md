@@ -3613,7 +3613,8 @@ An attribute value is a string or an expression (`id=self.id`); a space
 ends it unless it is inside brackets or a string, so `x=str(a + b)`,
 `class=("on" if lit else "off")` and `marker="url(#"+name+")"` each read
 whole. `class` and `for` are fine as attribute
-names, and `data-id` is written `data_id`. The text of a `style:` or
+names, and `data-id` is written `data_id`. `style=` takes CSS text,
+`style=f"fill: {c}"`. The text of a `style:` or
 `script:` tag is written as it is, not escaped, so CSS keeps its `>` and
 quotes. The block needs exactly one root tag.
 
@@ -3702,7 +3703,9 @@ are not built.
 page through the standard library's `browser` module, in the page's own words
 rather than JavaScript's: `page.find("#move")`, `page.all("g.node")`,
 `node.data("name")` (what the server wrote in `data_name`), `node.has_class("from")`,
-`form.fill("x", "120")`, `page.press("#redraw")`. Its doc comment lists the rest.
+`form.fill("x", "120")`, `page.press("#redraw")`, and `request("PUT", "/nodes",
+{"name": "A"}, "#all", "#state")`, which sends a request with no form or button for
+it and puts the answer in the page, as htmx does. Its doc comment lists the rest.
 
 **A function called with a dot.** Any function can be called on its first
 argument with a dot (Nim's uniform call syntax): with

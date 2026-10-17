@@ -4,13 +4,13 @@
 <text x="30" y="34" font-size="16" fill="#1f2933" font-weight="700" text-anchor="start" >One request, from a click to the new page</text>
 <rect x="40" y="70" width="180" height="90" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
 <text x="130.0" y="101.0" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Browser</text>
-<text x="130.0" y="120.0" text-anchor="middle" font-size="13" fill="#52606d"  >a button with</text>
-<text x="130.0" y="139.0" text-anchor="middle" font-size="13" fill="#52606d"  >data-hx-post="/nodes"</text>
+<text x="130.0" y="120.0" text-anchor="middle" font-size="13" fill="#52606d"  >a button, or request()</text>
+<text x="130.0" y="139.0" text-anchor="middle" font-size="13" fill="#52606d"  >POST /nodes, its fields</text>
 <rect x="260" y="70" width="180" height="90" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
 <text x="350.0" y="91.5" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">htmx</text>
 <text x="350.0" y="110.5" text-anchor="middle" font-size="13" fill="#52606d"  >sends POST /nodes</text>
-<text x="350.0" y="129.5" text-anchor="middle" font-size="13" fill="#52606d"  >with the fields of</text>
-<text x="350.0" y="148.5" text-anchor="middle" font-size="13" fill="#52606d"  >#gesture and #state</text>
+<text x="350.0" y="129.5" text-anchor="middle" font-size="13" fill="#52606d"  >with those fields</text>
+<text x="350.0" y="148.5" text-anchor="middle" font-size="13" fill="#52606d"  >and the form #state</text>
 <rect x="480" y="70" width="180" height="90" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
 <text x="570.0" y="101.0" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">server.ady</text>
 <text x="570.0" y="120.0" text-anchor="middle" font-size="13" fill="#52606d"  >matches the path,</text>

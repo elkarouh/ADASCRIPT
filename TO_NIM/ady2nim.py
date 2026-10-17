@@ -709,7 +709,7 @@ def _resolved_imports(code, search_dir):
             path = find(mod)
             if path:
                 with open(path, encoding="utf-8") as f:
-                    code = resolve_imports(code, mod, listed, f.read())
+                    code = resolve_imports(code, mod, listed, f.read(), clash="keep")
     except SyntaxError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)

@@ -205,6 +205,20 @@ def exported(source):
     return out
 
 
+def rename_in(source, renames):
+    """SOURCE with each name in RENAMES ({old: new}) written new, where it is
+    code: not inside a string or a comment, nor a field after a dot."""
+    if not renames:
+        return source
+    text = _blank(source)
+    pat = re.compile(r'(?<![\w.$])(' + "|".join(map(re.escape, renames)) + r')\b')
+    out, last = [], 0
+    for m in pat.finditer(text):
+        out.append(source[last:m.start()]); out.append(renames[m.group(1)]); last = m.end()
+    out.append(source[last:])
+    return "".join(out)
+
+
 def _binds(text, name):
     """Does the (blanked) TEXT give NAME a meaning of its own: declared, a loop
     variable, a parameter or field, an assignment target, a keyword argument --
@@ -214,9 +228,20 @@ def _binds(text, name):
         rf'|(?:^|[(,])[ \t]*{re.escape(name)}[ \t]*(?::|=(?!=))', text, re.MULTILINE)
 
 
-def resolve_imports(code, module, listed, module_source):
+# {M: {name: the name it is merged under}}, M a module's last path part: a module's names that the
+# importing file also declares, reached as `M.name` (see resolve_imports)
+RENAMED = {}
+
+
+def resolve_imports(code, module, listed, module_source, clash="rename"):
     """CODE with `M.name` written `name`, after refusing a use of a name of
-    MODULE's that is neither qualified nor in LISTED (STAR: nothing to refuse)."""
+    MODULE's that is neither qualified nor in LISTED (STAR: nothing to refuse).
+
+    `M.name` beside a `name` of the file's own is two things, and CLASH says how
+    they are kept apart: "keep" leaves `M.name` as written (Nim links modules,
+    and qualifies), "rename" writes it `M__name` and records that in RENAMED,
+    so the merged module is given the same name (Python merges into one
+    namespace)."""
     qual = module.rsplit("/", 1)[-1]
     names = exported(module_source)
     # `M.name` is Python's too: only `import M` binds M. `from M import A, B` (or `*`) binds
@@ -260,10 +285,11 @@ def resolve_imports(code, module, listed, module_source):
         if name not in names:
             continue
         if _binds(text, name):
-            line = text.count("\n", 0, m.start()) + 1
-            raise SyntaxError(
-                f"line {line}: '{qual}.{name}' cannot be told from this file's own '{name}': "
-                f"the modules are merged into one namespace, so rename one of them")
+            if clash == "keep":
+                continue
+            RENAMED.setdefault(qual, {})[name] = f"{qual}__{name}"
+            out.append(code[last:m.start()]); out.append(f"{qual}__{name}"); last = m.end()
+            continue
         out.append(code[last:m.start()]); out.append(name); last = m.end()
     out.append(code[last:])
     return "".join(out)

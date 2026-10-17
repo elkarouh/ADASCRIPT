@@ -30,7 +30,7 @@ assert "Click a node to start from." in session.answer("GET", "/all", "")
 assert "click a node to go to." in session.answer("GET", "/all", "start=A&pick=A")
 assert "Shortest way from A to E: A → C → F → E, cost 20." in session.answer("GET", "/all", "start=A&goal=E")
 assert "name=\"start\" value=\"C\"" in session.answer("GET", "/all", "start=A&goal=B&pick=C")    # a third click starts again
-assert "data-hx-get=\"/all\"" in session.answer("GET", "/all", "")
+assert "<form id=\"state\">" in session.answer("GET", "/all", "")         # what every request the script sends includes
 assert session.answer("GET", "/nowhere", "") == ""
 
 assert "A → F → E, cost 23" in session.answer("PUT", "/edges", "start=A&goal=E&a=C&b=F&cost=40")   # C-F made dear
@@ -51,11 +51,11 @@ assert "A → C → F → E, cost 20" in session.answer("POST", "/reset", "start
 assert "at A " not in session.answer("POST", "/relayout", "")         # no kept places: the layout draws every node
 assert "data-hx-post=\"/relayout\"" in session.answer("GET", "/all", "")
 session.answer("POST", "/reset", "")                                   # the sample again, for the tests that follow
-# the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
+# the drawing's own gestures: a node where it was double-clicked, and the wire
 let placed: str = session.answer("POST", "/nodes", "name=K&x=120&y=200")
 assert "data-x=\"120\"" in placed
 assert "There is a node K already." in session.answer("POST", "/nodes", "name=K&x=5&y=5")
-assert "id=\"gesture\"" in session.answer("GET", "/all", "") and "id=\"wire\"" in session.answer("GET", "/all", "")
+assert "id=\"gesture\"" not in session.answer("GET", "/all", "") and "id=\"wire\"" in session.answer("GET", "/all", "")
 assert "id=\"menu-node\"" in session.answer("GET", "/all", "") and "data-tool=\"delete\"" in session.answer("GET", "/all", "")
 assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "at A 60 190\n" in session.answer("GET", "/all", "")   # what the browser builds its NetworkView from
 print "dijkstra: all checks passed"

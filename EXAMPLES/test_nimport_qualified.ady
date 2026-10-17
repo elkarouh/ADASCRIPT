@@ -4,7 +4,8 @@ reached as `M.name`, on both backends. A module nimported by a path is
 qualified by its last part, as in Nim: `NIMPORT_TEST/shapes` is `shapes`.
 `from M nimport A` still gives A unqualified, and both forms meet in one file:
 `sh.Shape_T` and `names.SQUARE` below are qualified, `label` is from the
-from-list.
+from-list. A name of the file's own may be a module's name too: `run` below
+is this file's, `names.run` the module's.
 The output is compared between the backends (see the Makefile).
 """
 import NIMPORT_TEST/shapes as sh, NIMPORT_TEST/names
@@ -22,4 +23,9 @@ for text in ["circle", "square", "hexagon"]:
 var canvas: sh.Canvas = sh.Canvas()
 canvas.add(sh.Shape_T(names.SQUARE, 2.5))
 print f"total {canvas.total()}"
+
+def run(n: int) -> int:
+    return n + 1
+
+print names.run(21), run(21)
 print "test_nimport_qualified OK"

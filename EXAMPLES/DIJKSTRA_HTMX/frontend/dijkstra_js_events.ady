@@ -16,8 +16,8 @@ reader a question is here. The gestures, the usual ones of a diagram:
     Delete, Backspace            removes the selection (asks first)
     Escape                       closes the menu
 
-A change the server must keep is written into the hidden form #gesture, whose button then sends it
-(see dijkstra_gui.ady).
+A change the server must keep is sent to it as a request, with the form #state, and the page the
+server answers with takes the place of #all (see dijkstra_gui.ady).
 
 The nodes and edges here are the model's own (backend/dijkstra_model.ady), with the places the
 reader put them, and where a node without one is drawn is the layout's (backend/dijkstra_layout.ady):
@@ -38,7 +38,7 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click_T, Change, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
+from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, between, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, Place_T
 from backend/dijkstra_layout import WIDTH, inside, place_of
@@ -73,13 +73,10 @@ def set_selected(el: Element_T, lit: bool):
     else:
         el.set_attr("class", cls.replace(" selected", ""))
 
-# Write a change to the hidden form #gesture and press BUTTON. The fields the request does not use
-# are sent empty, as the form holds them by default; the server ignores them.
-def send_gesture(button: str, fields: {str}str):
-    let change: Change = Change("#gesture")
-    for name in ["name", "a", "b", "cost", "x", "y"]:
-        change.set(name, fields.get(name, ""))
-    change.send(button)
+# Send a change: METHOD to URL with FIELDS, and the reader's choice (the form #state). The page the
+# server answers with takes the place of #all.
+def send_gesture(method: str, url: str, fields: {str}str):
+    request(method, url, fields, "#all", "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
@@ -100,23 +97,16 @@ class NodeView:
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        let change: Change = Change("#gesture")
-        change.set("pick", self.node.name)
-        change.set("act", ("unpick" if unpick else ""))
-        change.send("#pick")
+        send_gesture("GET", "/all", {"pick": self.node.name, "act": ("unpick" if unpick else "")})
 
-    # Let it go at AT: the form #move gets its name and new centre, and #redraw sends them (see dijkstra_gui.ady).
+    # Let it go at AT: its name and new centre are sent.
     def drop_at(self, at: Spot_T):
-        let change: Change = Change("#move")
-        change.set("name", self.node.name)
-        change.set("x", f"{at.x:.0f}")
-        change.set("y", f"{at.y:.0f}")
-        change.send("#redraw")
+        send_gesture("PUT", "/nodes", {"name": self.node.name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.node.name} and its edges?"):
-            send_gesture("#drop_node", {"name": self.node.name})
+            send_gesture("DELETE", "/nodes", {"name": self.node.name})
 
 class EdgeView:
     var edge: Edge_T
@@ -129,14 +119,14 @@ class EdgeView:
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
-            send_gesture("#drop_edge", {"a": self.edge.a, "b": self.edge.b})
+            send_gesture("DELETE", "/edges", {"a": self.edge.a, "b": self.edge.b})
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
         if cost == "":
             return
-        send_gesture("#set_cost", {"a": self.edge.a, "b": self.edge.b, "cost": cost})
+        send_gesture("PUT", "/edges", {"a": self.edge.a, "b": self.edge.b, "cost": cost})
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -315,7 +305,7 @@ def ask_name() -> str:
 
 # Send a new node NAME: placed at X, Y (drawing units, as text) when given, else where the server puts it.
 def send_node(name: str, x: str, y: str):
-    send_gesture("#make_node", {"name": name, "x": x, "y": y})
+    send_gesture("POST", "/nodes", {"name": name, "x": x, "y": y})
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
@@ -482,7 +472,7 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
         if cost == "":
             return
-        send_gesture("#make_edge", {"a": self.from_node.name, "b": to.name, "cost": cost})
+        send_gesture("POST", "/edges", {"a": self.from_node.name, "b": to.name, "cost": cost})
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
