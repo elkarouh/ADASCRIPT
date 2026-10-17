@@ -402,17 +402,15 @@ ALL_COMPILE := \
     $(COMPILE_ONLY)
 
 # -----------------------------------------------------------------------
-# compile_one_tool — compile as the examples are, for a program that lives in its own
-# directory rather than under EXAMPLES/: $(1) is a path from the repository
-# root, so the tool keeps its README and its editor integration beside it.
+# compile_quietly — compile $(1) with nothing printed, or print $(2) FAIL and its
+# error lines and end xargs (exit 255 stops it starting more). An example is
+# $(EXDIR)/name; a tool, which lives in its own directory rather than under
+# EXAMPLES/ so it keeps its README and editor integration beside it, is a path
+# from the repository root. JOBS are compiled at a time: one per processor.
 # -----------------------------------------------------------------------
-define compile_one_tool
-	if ! $(ADY2NIM) c $(CURDIR)/$(1) >/dev/null 2>&1; then \
-	    printf '  %-42s%s\n' "$(1)" FAIL; \
-	    $(ADY2NIM) c $(CURDIR)/$(1) 2>&1 | grep -E 'Error:' | head -5; \
-	    exit 1; \
-	fi
-endef
+JOBS ?= $(shell nproc 2>/dev/null || echo 4)
+
+compile_quietly = $(ADY2NIM) c $(1) >/dev/null 2>&1 || { printf "  %-42s%s\n" "$(2)" FAIL; $(ADY2NIM) c $(1) 2>&1 | grep -E "Error:" | head -5; exit 255; }
 
 # The programs under TOOLS/, built here so that `make clean`
 # followed by `make test` leaves both of them on disk.
@@ -495,21 +493,16 @@ check-quotes:
 compile: lint-emitters check-quotes
 	@for n in $(SKIP_NOTES); do echo "  SKIPPED, not installed: $$n"; done
 	@command -v nim >/dev/null || { echo "  nim is not on PATH: nothing can be built"; exit 1; }
-	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
+	@echo "=== Compiling $(words $(sort $(ALL_COMPILE))) examples ==="
 	@# Each one silently when it builds (it is listed where it is run); on a
-	@# failure, its name and its error lines, and the run stops. One loop, not
-	@# a command per example: spelled out, they made a shell line too long for
-	@# a long checkout path.
-	@for f in $(ALL_COMPILE); do \
-	    if ! $(ADY2NIM) c $(EXDIR)/$$f >/dev/null 2>&1; then \
-	        printf '  %-42s%s\n' "$$f" FAIL; \
-	        $(ADY2NIM) c $(EXDIR)/$$f 2>&1 | grep -E 'Error:' | head -5; \
-	        exit 1; \
-	    fi; \
-	done
-	@printf '  %-42s%s\n' "all $(words $(ALL_COMPILE))" OK
+	@# failure, its name and its error lines, and the run stops. JOBS of them
+	@# at a time: each example has its own cache, so they do not meet. The
+	@# names go through xargs, not one shell line: spelled out, they made a
+	@# line too long for a long checkout path.
+	@printf '%s\n' $(sort $(ALL_COMPILE)) | xargs -P $(JOBS) -I{} sh -c '$(call compile_quietly,$(EXDIR)/{},{})'
+	@printf '  %-42s%s\n' "all $(words $(sort $(ALL_COMPILE)))" OK
 	@echo "=== Compiling $(words $(TOOL_PROGRAMS)) tools ==="
-	@$(foreach t,$(TOOL_PROGRAMS),$(call compile_one_tool,$(t));)
+	@printf '%s\n' $(TOOL_PROGRAMS) | xargs -P $(JOBS) -I{} sh -c '$(call compile_quietly,$(CURDIR)/{},{})'
 	@printf '  %-42s%s\n' "all $(words $(TOOL_PROGRAMS))" OK
 	@echo "=== Compile step complete ==="
 
