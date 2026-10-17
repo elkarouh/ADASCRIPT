@@ -1624,7 +1624,7 @@ def to_py(self, prec=None):
                 # Anything else keeps `.lines` as the attribute it looks
                 # like, which fails loudly rather than iterating a record.
                 _rsym = ParserState.symbol_table.lookup(result)
-                _rtype = (_rsym.get("type", "") if isinstance(_rsym, dict) else "") if _rsym else ""
+                _rtype = ((_rsym.get("type") or "") if isinstance(_rsym, dict) else "") if _rsym else ""
                 _rtype = _rtype.replace("| None", "").replace("Optional[", "").strip(" []")
                 _is_file = (result in ("stdin", "sys.stdin")
                             or result.startswith("open(")

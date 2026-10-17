@@ -435,7 +435,7 @@ def _note_loop_var_type(target, iterable):
     t = ((sym.get("type") or "") if isinstance(sym, dict) else "").strip()
     m = _re_lv.fullmatch(r"(?:list|tuple|Sequence|set|frozenset)\[(\w+)(?:, \.\.\.)?\]", t)
     # a loop rebinds its name: one of no known type forgets an earlier one
-    ParserState.symbol_table.add(target.strip(), m.group(1) if m else None, "let")
+    ParserState.symbol_table.add(target.strip(), m.group(1) if m else "", "let")
 
 
 @method(for_stmt)
