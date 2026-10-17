@@ -1684,7 +1684,9 @@ are not built.
 page through the standard library's `browser` module, in the page's own words
 rather than JavaScript's: `page.find("#move")`, `page.all("g.node")`,
 `node.data("name")` (what the server wrote in `data_name`), `node.has_class("from")`,
-`form.fill("x", "120")`, `page.press("#redraw")`. Its doc comment lists the rest.
+`form.fill("x", "120")`, `page.press("#redraw")`, and `request("PUT", "/nodes",
+{"name": "A"}, "#all", "#state")`, which sends a request with no form or button for
+it and puts the answer in the page, as htmx does. Its doc comment lists the rest.
 
 **A function called with a dot.** Any function can be called on its first
 argument with a dot (Nim's uniform call syntax): with
@@ -1917,7 +1919,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import graphs`   | `dijkstra`, `shortest_path` and `shortest_route` (with its cost) over a weighted digraph, generic in the node type |
 | `import db`       | thin SQLite wrapper                                        |
 | `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
-| `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, a `Click` |
+| `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, `request(method, url, fields, target, include)`, a `Click` |
 | `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
 | `import svg_path` | paths for an SVG drawing, as the `d` of a `<path>`; plain arithmetic, so it compiles both to C and to JavaScript: `connector_d(x1, y1, x2, y2, leave, stop_short)`, an S-shaped curve between two boxes; `EXAMPLES/ROI_HTMX` uses it |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_curses.ady` uses it |
