@@ -582,6 +582,16 @@ def _lines(_f):
 '''
 
 
+_LINES_OF_HELPER = '''\
+def _lines_of(_x):
+    """`.lines` on a receiver of no known type: a file's lines when it is
+    one, its field `lines` when it is a record that has one."""
+    if hasattr(_x, "readline"):
+        return _lines(_x)
+    return _x.lines\
+'''
+
+
 def _ensure_lines_helper():
     """Define _lines the first time `.lines` is used."""
     decls = getattr(ParserState, 'py_top_decls', [])
@@ -1491,6 +1501,18 @@ def to_py(self, prec=None):
                 if _is_file:
                     _ensure_lines_helper()
                     result = f"_lines({result})"
+                    i += 1
+                    continue
+                if not _rtype:
+                    # a receiver the emitter cannot type -- a `[]File`
+                    # element, a field holding a handle, a call returning one:
+                    # which it is is asked when the program runs
+                    _ensure_lines_helper()
+                    _decls = getattr(ParserState, 'py_top_decls', [])
+                    if not any("def _lines_of(" in d for d in _decls):
+                        _decls.append(_LINES_OF_HELPER)
+                        ParserState.py_top_decls = _decls
+                    result = f"_lines_of({result})"
                     i += 1
                     continue
             if (tr_str == ".get"

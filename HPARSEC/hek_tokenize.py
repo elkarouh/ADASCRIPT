@@ -436,8 +436,9 @@ def _prefix_is_tick_name(src, i, pfx_len, line_no, col, lines):
     would open is never closed, *and* a known attribute name follows it. So
     `b'x'`, `r'First'` and `r'Image thing'` stay the literals they look like,
     an unterminated `b'oops` still reports as the broken string it is, and
-    `b'Image` at the end of a line is the attribute. `b'Image + c'Image` is
-    genuinely ambiguous and reads as a literal, as it would in Python.
+    `b'Image` at the end of a line is the attribute. `b'Image + c'Image` reads
+    as two ticks: a literal closed by a quote with an attribute glued to it is
+    no Python.
     """
     if pfx_len == 0 or src[i + pfx_len] != "'":
         return False                      # a double quote is never a tick
@@ -447,7 +448,15 @@ def _prefix_is_tick_name(src, i, pfx_len, line_no, col, lines):
     s_str, _, _ = _read_string(src, i, line_no, col, lines)
     if s_str is None:
         return True                       # not a literal at all
-    return not (len(s_str) > pfx_len + 1 and s_str.endswith("'"))
+    if not (len(s_str) > pfx_len + 1 and s_str.endswith("'")):
+        return True
+    # `b'Length, f'Length`: the "literal" closes on the next name's tick, and
+    # a known attribute glued to its closing quote is no Python at all
+    if "\n" not in s_str:
+        after = _TICK_ATTR_RE.match(src, i + len(s_str))
+        if after and after.group(0) in _TICK_ATTRS:
+            return True
+    return False
 
 
 def _read_string(src, pos, line_no, col, lines):

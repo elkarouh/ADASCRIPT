@@ -831,6 +831,32 @@ def translate(code, export_symbols=False):
             if _re_udef.fullmatch(r"[A-Za-z_]\w*", _nm):
                 ParserState.user_top_level_procs.add(_nm)
 
+    # Nim takes two names for one when they differ only in case or
+    # underscores after the first letter: a class `Container` and a constant
+    # `CONTAINER` are one there and two on Python. Nim's error is a
+    # "redefinition" at a line the author did not write; this says which two.
+    _seen_nim = {}
+    for _ln_no, _ln in enumerate(code.split("\n"), 1):
+        _dm = _re_udef.match(r"(?:def|class|type|const|var|let)\s+([A-Za-z_]\w*)", _ln)
+        if not _dm:
+            continue
+        _nm = _dm.group(1)
+        _key = _nm[0] + _nm[1:].replace("_", "").lower()
+        _prev = _seen_nim.get(_key)
+        if _prev and _prev[0] != _nm:
+            raise SyntaxError(
+                f"line {_ln_no}: '{_nm}' and '{_prev[0]}' (line {_prev[1]}) are one "
+                f"name on Nim, which ignores case and underscores after the first "
+                f"letter; rename one")
+        _seen_nim.setdefault(_key, (_nm, _ln_no))
+
+    # `Path(p).name` with no `: Path` anywhere: the prelude is injected when a
+    # type names Path, which an expression does too late to reach the output
+    _no_text = _re_udef.sub(r'"[^"\n]*"|\'[^\'\n]*\'|#[^\n]*', "", code)
+    if _re_udef.search(r"\bPath\s*\(", _no_text):
+        from hek_nim_declarations import _ensure_path_helper
+        _ensure_path_helper()
+
     ParserState.symbol_table.push_scope("module")
     # PROG, the program's name, is predeclared for a module that uses it and
     # does not declare its own. From the source text, so an f-string's

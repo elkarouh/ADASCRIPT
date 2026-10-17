@@ -326,8 +326,8 @@ Python wins wherever it can, so the quote is read as a tick only when the
 literal it would open is never closed *and* a known attribute follows it.
 `b'Image` at the end of a line is the attribute; `r'First'` and
 `r'Image thing'` are the raw strings they look like; and `b'Image + c'Image`
-is genuinely ambiguous and reads as a literal, exactly as it would in
-Python. Rename the variable if you need that last one.
+is two ticks, because a literal whose closing quote has an attribute glued to
+it is no Python.
 
 ## 3.6 Why this matters: a checklist
 

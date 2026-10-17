@@ -1,0 +1,49 @@
+#!/usr/bin/env ady2nim
+"""Test: five spellings that ran on one backend only.
+
+A `char` field compared to a one-letter string; `Path(p).name` where no
+variable is declared a Path; a tick on a variable named b, r, f or u, which
+looks like a byte, raw, f- or unicode string prefix; and `.lines` on a file
+reached through a list element, next to a record whose field is named
+`lines`. Compared between the backends.
+"""
+
+class Cell:
+    var fill: char
+
+    def __init__(self, c: char):
+        self.fill = c
+
+    def blank(self) -> bool:
+        return self.fill == "."
+
+class Trace:
+    var lines: []str
+
+    def __init__(self):
+        self.lines = ["x", "y"]
+
+def main():
+    # a char field against a string
+    let r: Cell = Cell('.')
+    print r.fill == ".", r.blank(), r.fill != "#"
+    # Path() with no `: Path` anywhere
+    let p: str = "/tmp/a/b.txt"
+    print Path(p).name
+    # ticks on names that look like string prefixes
+    let b: []int = [1, 2, 3]
+    let f: str = "abcd"
+    print b'Length, f'Length
+    # .lines through a list element, and a field named lines
+    let dir: Path = Path(${TMPDIR:-"/tmp"})
+    let name: str = str(dir / "ady_test_gaps5.txt")
+    assert Path(name).write_text("one\ntwo\n") is None
+    var files: []File = [open(name)]
+    for l in files[0].lines:
+        print l
+    var tr: Trace = Trace()
+    tr.lines = ["a", "b", "c"]
+    print len(tr.lines)
+
+if __name__ == "__main__":
+    main()

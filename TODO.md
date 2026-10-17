@@ -64,24 +64,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       keyed form was mostly wanted for. What is still missing is filling
       the slots out of domain order, the way the `[BLUE: 3, RED: 1]`
       literal does.
-- [ ] a variable named `b`, `r`, `f` or `u` cannot take a tick: `b'Length`
-      lexes as the start of a bytes literal and fails to parse on both
-      backends. Consistent, so not a divergence, but the error names the
-      wrong thing.
-- [ ] Nim identifiers ignore case and underscores, so an Adascript class
-      `Container` and a constant `CONTAINER` are one name there and two on
-      Python. Worth a transpile-time warning: the Nim error names a
-      "redefinition" at a line the author did not write.
-- [ ] `Path` in expression position needs a `: Path` annotation somewhere in
-      the same file. `let base: str = Path(p).name` on its own does not
-      compile on Nim -- "undeclared identifier: 'Path'" -- because the Path
-      prelude is injected by `_ensure_path_helper`, and only `type_name` calls
-      it. Hooking the identifier instead does fire, and is still too late:
-      `nim_top_decls` has been flushed by the time expressions are emitted, so
-      the appended helper never reaches the output. The fix is a pre-scan, the
-      way `user_top_level_procs` already works in `ady2nim.py`, not another
-      emission-time hook. Binding the path to a name is the workaround, and
-      reads better anyway when both `.parent` and `.name` are wanted.
 - [ ] no spelling for a pattern that is not known until run time. Regex
       literals are syntax, which is the point, but it leaves a program that
       reads a pattern out of a database or builds one from parts with nowhere
@@ -90,27 +72,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       drags CPython into a Nim binary. `re(expr)` appears in a couple of older
       CFMU files as if it existed; it does not. Either a `Regex(s)` value that
       `==` accepts on the right, or interpolation inside a literal.
-- [ ] `.lines` on the Python backend now applies only to a receiver it can
-      see is a file -- stdin, an `open(...)` call, a string literal, or a
-      `File`/`str`/`Path` binding -- because `lines` is also an ordinary field
-      name and `trace.lines` was being rewritten into `_lines(trace)`. The
-      cases left over are a file reached through an expression the emitter
-      cannot type: a `[]File` element, a field holding a handle, a call
-      returning one. Those now keep `.lines` as an attribute and raise
-      AttributeError, which is at least loud. A receiver-type pass would
-      settle it properly.
-- [ ] a `char` reached through a *field* is not recognised as one by the
-      comparison narrowing, so `r.fill == "."` over a `fill: char` fails on
-      Nim ("type mismatch", string against char) and passes on Python. A
-      char *variable* is fine, and so is `s[0]`, because
-      `_is_nim_char_expr` looks the expression up in the symbol table by
-      its whole spelling and a field access is not a name there. The `&`
-      case and the `*`/repeat() case both answer this by looking the last
-      dotted component up on its own; the same fallback in
-      `_is_nim_char_expr` would settle it, with the caveat that a field
-      name shared by two classes with different types could then narrow
-      the wrong way -- which is why it is written down rather than done
-      alongside the char-default fix.
 - [ ] distinct types and units, what is left (the feature itself --
       `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):

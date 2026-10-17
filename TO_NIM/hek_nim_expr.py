@@ -1697,6 +1697,9 @@ def _is_nim_char_expr(expr):
     sym = ParserState.symbol_table.lookup(expr)
     if sym and (sym.get("type") or "") == "char":
         return True
+    # a field, `r.fill` over `fill: char`, by the type its class declares
+    if _re_ce.fullmatch(r"[\w.]+\.\w+", expr) and _field_type(expr).strip() == "char":
+        return True
     m = _re_ce.match(r"^(\w+)\[", expr)
     # A subscript has to *be* the expression, not merely start it: without
     # the closing bracket `s[0] & e` counts as one, and the `"a"` it is

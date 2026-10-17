@@ -63,6 +63,21 @@ def to_py(self):
 
 
 # --- assignment ---
+def _unlines_target(target):
+    """`r.lines = ...`: the `.lines` the expression emitter left to be asked
+    at run time is, as a target, the field itself."""
+    if target.startswith("_lines_of(") and target.endswith(")"):
+        depth = 0
+        for k, ch in enumerate(target):
+            depth += ch == "("
+            depth -= ch == ")"
+            if depth == 0 and k > 8:
+                if k == len(target) - 1:
+                    return target[len("_lines_of("):-1] + ".lines"
+                break
+    return target
+
+
 @method(assign_stmt)
 def to_py(self):
     """assign_stmt: star_expressions ('=' star_expressions)+"""
@@ -76,6 +91,7 @@ def to_py(self):
         for seq in node.nodes:
             if hasattr(seq, "nodes") and len(seq.nodes) >= 2:
                 parts.append(seq.nodes[1].to_py())
+    parts[:-1] = [_unlines_target(x) for x in parts[:-1]]
     # `p = s` where p was declared a Path: the same refusal as at declaration.
     if len(parts) > 1:
         _t = ParserState.symbol_table.lookup(parts[0])
@@ -97,7 +113,7 @@ def to_py(self):
 def to_py(self):
     """aug_assign_stmt: star_expressions augop expressions"""
     reject_dollar_assignment(self.nodes[0], "+=")
-    target = self.nodes[0].to_py()
+    target = _unlines_target(self.nodes[0].to_py())
     # augop is an Fmap whose nodes[0] is a plain string like '+='
     op_node = self.nodes[1]
     op = (
