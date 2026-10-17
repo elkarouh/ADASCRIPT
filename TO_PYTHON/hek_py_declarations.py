@@ -785,6 +785,12 @@ def to_py(self, prec=None):
     return self.nodes[0].to_py()
 
 
+@method(var_param_type)
+def to_py(self, prec=None):
+    """var T  ->  T  (Python passes the object itself: a change to it is the caller's)"""
+    return self.nodes[0].to_py()
+
+
 @method(own_param_type)
 def to_py(self, prec=None):
     """own T  ->  T  (own annotation stripped for Python; GC handles ownership)"""

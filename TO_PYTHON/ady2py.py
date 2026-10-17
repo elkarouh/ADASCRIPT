@@ -214,7 +214,8 @@ def parse_module(code):
         if not result:
             import sys
             ParserState.parse_error = stream.format_error()
-            print(ParserState.parse_error, file=sys.stderr)
+            if not getattr(ParserState, "defer_parse_error", False):
+                print(ParserState.parse_error, file=sys.stderr)
             break
 
         node = result[0]
@@ -592,6 +593,7 @@ def include_ady_modules(code, search_dir, _seen=None):
             if path in seen:
                 continue
             seen.add(path)
+            MODULE_PATHS[name] = path
             if text.startswith("#!"):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = include_ady_modules(text, os.path.dirname(path), seen)
@@ -603,6 +605,34 @@ def include_ady_modules(code, search_dir, _seen=None):
         return "\n".join(head + pieces)
 
     return _NIMPORT_LINE.sub(expand, code)
+
+
+# {name: path} of each .ady module merged into the file, for an error found in one
+MODULE_PATHS = {}
+
+
+def _module_parse_error(code, error):
+    """ERROR, a parse error in CODE (the file with its modules merged in), told at the
+    module's own file and line when it is inside one: that module is parsed alone."""
+    import re as _re
+    m = _re.match(r"Parse error at line (\d+)", error)
+    if not m:
+        return error
+    inside = None
+    for i, text in enumerate(code.split("\n")[:int(m.group(1))], 1):
+        start = _re.match(r"# ---- (.+)\.ady, imported ----$", text)
+        end = _re.match(r"# ---- end of (.+)\.ady ----$", text)
+        if start:
+            inside = (inside or []) + [start.group(1)]
+        elif end and inside:
+            inside = inside[:-1] or None
+    if not inside or inside[-1] not in MODULE_PATHS:
+        return error
+    path = MODULE_PATHS[inside[-1]]
+    with open(path, encoding="utf-8") as f:
+        translate(f.read())
+    from hek_parsec import ParserState as _PS
+    return f"{path}: {_PS.parse_error or error}"
 
 
 def main(args=None):
@@ -628,11 +658,15 @@ def main(args=None):
     # A refusal from an emitter is an answer, not a crash: ady2nim prints it
     # and exits 1, and this printed a traceback with the message at the
     # bottom of it.
+    from hek_parsec import ParserState as _PS_main
+    _PS_main.defer_parse_error = True
     try:
         output = translate(code)
     except SyntaxError as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)
+    if getattr(_PS_main, "parse_error", None):
+        print(_module_parse_error(code, _PS_main.parse_error), file=sys.stderr)
     # A parse error was printed, and what came before it translated -- for the
     # language server's sake. A command must not pass that off as success: the
     # partial output would build, and exit 0 says nothing was wrong.

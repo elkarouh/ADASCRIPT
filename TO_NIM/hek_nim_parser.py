@@ -296,6 +296,55 @@ def _has_toplevel_assignment(s):
         i += 1
     return False
 
+# {(class, method): [(parameter, is it var)]} of each virtual method, for its overrides
+_method_var_params = {}
+
+
+def _check_override_vars(class_name, name, params):
+    """Refuse a method whose parameters are `var` where the one it overrides has
+    them by value, or the other way round: Nim makes that a different method,
+    and calls the base's without a word."""
+    mine = [(p.split(":")[0].strip(), ": var " in p) for p in params[1:]]
+    _method_var_params[(class_name, name)] = mine
+    parent = _class_parents.get(class_name)
+    while parent:
+        base = _strip_generic(parent)
+        theirs = _method_var_params.get((base, name))
+        if theirs is not None:
+            for (pn, pv), (_bn, bv) in zip(mine, theirs):
+                if pv != bv:
+                    raise SyntaxError(
+                        f"{class_name}.{name}: its parameter {pn} is "
+                        f"{'var' if pv else 'not var'}, where {base}.{name}'s is "
+                        f"{'var' if bv else 'not'}: an override takes its parameters as the "
+                        f"method it overrides does. Declare it `{pn}: var T` in both, "
+                        f"or in neither")
+            return
+        parent = _class_parents.get(base)
+
+
+def _refuse_hidden_param_write(class_name, name, param, body):
+    """Refuse a method that changes what a by-value parameter holds -- a field
+    written (`ed.top = 1`) or a method called that changes its object
+    (`ed.scroll()`) -- naming the `var` to declare. A method does not guess it
+    from its body, as a plain function does: an override must take its
+    parameters as the base does, so the declaration says it."""
+    pname, ptype = (x.strip() for x in param.split(":", 1))
+    sym = ParserState.symbol_table.lookup(ptype)
+    if ((sym and sym.get("kind") == "ref_class") or ptype in getattr(ParserState, "ref_records", ())
+            or not (sym and sym.get("kind") in ("class", "type"))):
+        return                         # a reference, or not a type of the program's own
+    mutators = "|".join(re.escape(m) for m in sorted(ParserState.var_self_methods))
+    write = re.search(
+        rf"(?<![=(,.\w])\b{re.escape(pname)}((?:\.\w+|\[[^\]\n]*\])+\s*[+\-*/&]?=(?!=)"
+        + (rf"|\.(?:{mutators})\(" if mutators else "") + ")", body)
+    if write:
+        raise SyntaxError(
+            f"{class_name}.{name}: `{pname}{write.group(1).rstrip('(').strip()}` changes the {ptype} "
+            f"its caller passed, and {pname} is taken by value: declare it `{pname}: var {ptype}` "
+            f"(and the same in the method it overrides, and in its overrides)")
+
+
 def _is_new_method(class_name, method_name):
     """Return True if method_name is not defined in any ancestor of class_name.
     Conservatively returns False if any ancestor's method set is unknown (e.g.
@@ -3309,7 +3358,7 @@ def _func_def_to_nim_inner(self, indent=0):
                                      or _ptype_str in getattr(ParserState, "ref_records", ()))
                     if " = " in p:
                         _shadow_vars.append(pname)
-                    elif not p.startswith("var ") and ": " in p and not _is_ref_param:
+                    elif ": var " not in p and ": " in p and not _is_ref_param:
                         # Nim syntax: param: var T
                         parts = p.split(": ", 1)
                         p = parts[0] + ": var " + parts[1]
@@ -5922,12 +5971,16 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)
-                elif not p.startswith("var ") and ": " in p:
+                elif ": var " not in p and ": " in p:
                     # Nim syntax: param: var T
                     parts = p.split(": ", 1)
                     p = parts[0] + ": var " + parts[1]
+            elif pname and pname != "self" and ": " in p and ": var " not in p and " = " not in p:
+                _refuse_hidden_param_write(class_name, name, p, _body_no_strings)
             new_params.append(p)
         params = new_params
+        if is_virtual and class_name and name and _probe is None:
+            _check_override_vars(class_name, name, params)
         if _probe is not None and name and any(": var " in p for p in params[1:]):
             ParserState._probe_var_params.add(name)
         if _shadow_vars:

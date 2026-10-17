@@ -331,6 +331,7 @@ type_name = fw("type_name")
 elem_type = fw("elem_type")
 lent_type = fw("lent_type")
 own_param_type = fw("own_param_type")
+var_param_type = fw("var_param_type")
 
 ###############################################################################
 # Grammar rules
@@ -411,6 +412,8 @@ callable_type = ((empty_tuple_type | no_param_type | single_param_type
 # are used as type prefixes in function parameter or return annotations.
 lent_type = ikw("lent") + elem_type
 own_param_type = ikw("own") + elem_type
+# var T  -- a parameter the function changes for its caller (Nim's `var T`)
+var_param_type = ikw("var") + elem_type
 
 # --- basic_type: a non-union, non-optional type ---
 # Order matters: try container/callable before primitive/name (both start differently)
@@ -420,6 +423,7 @@ own_param_type = ikw("own") + elem_type
 # the standalone identifiers 'lent' or 'own'.
 basic_type = (
     lent_type
+    | var_param_type
     | own_param_type
     | seq_type
     | openarray_type

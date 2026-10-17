@@ -633,6 +633,12 @@ def to_nim(self, prec=None):
     return inner
 
 
+@method(var_param_type)
+def to_nim(self, prec=None):
+    """var T  ->  var T  (the caller's own value, changed in place)"""
+    return f"var {self.nodes[0].to_nim()}"
+
+
 @method(own_param_type)
 def to_nim(self, prec=None):
     """own T  ->  sink T  (Nim ownership-transfer annotation; callee takes ownership)"""
