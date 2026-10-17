@@ -359,7 +359,11 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
 # every list above, compiled and run alike, with a line saying so. Every other
 # failure is still a failure.
 # -----------------------------------------------------------------------
-nim_has = $(shell d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
+# $(shell) is not given the exported PATH above by every make (before 4.4 it
+# is not), so the probe says which PATH to use: without it, a nim found only
+# there was "not installed" and every test that needs a nimble package was
+# skipped, quietly.
+nim_has = $(shell PATH="$(PATH)"; d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
 NEEDS_NIMPY := pyimport_similar.ady test_pyobject_calls.ady tsp.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
 NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
@@ -397,21 +401,7 @@ ALL_COMPILE := \
     $(COMPILE_ONLY)
 
 # -----------------------------------------------------------------------
-# _compile_one — internal helper: compile a single file, silently when it
-# builds: each file is listed where it is run, and a second line for its
-# compilation only doubled the report. On failure, name the file, re-run
-# and show the error lines, then abort.
-# -----------------------------------------------------------------------
-define compile_one
-	if ! $(ADY2NIM) c $(EXDIR)/$(1) >/dev/null 2>&1; then \
-	    printf '  %-42s%s\n' "$(1)" FAIL; \
-	    $(ADY2NIM) c $(EXDIR)/$(1) 2>&1 | grep -E 'Error:' | head -5; \
-	    exit 1; \
-	fi
-endef
-
-# -----------------------------------------------------------------------
-# compile_one_tool — the same, for a program that lives in its own
+# compile_one_tool — compile as the examples are, for a program that lives in its own
 # directory rather than under EXAMPLES/: $(1) is a path from the repository
 # root, so the tool keeps its README and its editor integration beside it.
 # -----------------------------------------------------------------------
@@ -503,8 +493,19 @@ check-quotes:
 
 compile: lint-emitters check-quotes
 	@for n in $(SKIP_NOTES); do echo "  SKIPPED, not installed: $$n"; done
+	@command -v nim >/dev/null || { echo "  nim is not on PATH: nothing can be built"; exit 1; }
 	@echo "=== Compiling $(words $(ALL_COMPILE)) examples ==="
-	@$(foreach f,$(ALL_COMPILE),$(call compile_one,$(f));)
+	@# Each one silently when it builds (it is listed where it is run); on a
+	@# failure, its name and its error lines, and the run stops. One loop, not
+	@# a command per example: spelled out, they made a shell line too long for
+	@# a long checkout path.
+	@for f in $(ALL_COMPILE); do \
+	    if ! $(ADY2NIM) c $(EXDIR)/$$f >/dev/null 2>&1; then \
+	        printf '  %-42s%s\n' "$$f" FAIL; \
+	        $(ADY2NIM) c $(EXDIR)/$$f 2>&1 | grep -E 'Error:' | head -5; \
+	        exit 1; \
+	    fi; \
+	done
 	@printf '  %-42s%s\n' "all $(words $(ALL_COMPILE))" OK
 	@echo "=== Compiling $(words $(TOOL_PROGRAMS)) tools ==="
 	@$(foreach t,$(TOOL_PROGRAMS),$(call compile_one_tool,$(t));)
