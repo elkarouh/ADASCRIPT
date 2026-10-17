@@ -418,6 +418,8 @@ def to_py(self, prec=None):
 @method(enum_array_comp)
 def to_py(self, prec=None):
     """enum_array_comp: '[' dictcomp ']' -> Python: _EnumArray({k: v for k in E})"""
+    from ady_expr import refuse_keyed_filter
+    refuse_keyed_filter(self)
     from hek_py_declarations import _ensure_enum_array_alias
     _ensure_enum_array_alias()
     return "_EnumArray({" + self.nodes[1].to_py() + "})"

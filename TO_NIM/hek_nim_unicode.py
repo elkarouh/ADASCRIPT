@@ -214,6 +214,17 @@ proc `$`*[T](xs: seq[T]): string =
   for i, x in xs:
     if i > 0: result.add ", "
     result.add adascriptRepr(x)
+  result.add "]"
+
+proc `$`*[I, T](xs: array[I, T]): string =
+  ## An array prints as a list does, its values in index order -- an [E]T
+  ## too, as Python prints it.
+  result = "["
+  var first = true
+  for x in xs:
+    if not first: result.add ", "
+    first = false
+    result.add adascriptRepr(x)
   result.add "]"\
 """
 

@@ -280,6 +280,23 @@ list_display = LBRACKET_NODE + (listcomp | star_expressions) + RBRACKET
 enum_array_display = LBRACKET_NODE + dictmaker + RBRACKET
 # [k: v for k in E] -- an [E]T built member by member
 enum_array_comp = LBRACKET_NODE + dictcomp + RBRACKET
+
+
+def refuse_keyed_filter(node):
+    """An [E]T has a value for every member, so `[k: v for k in E if c]`, which
+    leaves some out, is refused: the condition goes in the value."""
+    def has_if(n):
+        if type(n).__name__ == "for_if_clause":
+            # its target, its iterable, then its ifs if it has any (the
+            # keywords are not kept)
+            return len(n.nodes) > 2
+        return any(has_if(c) for c in (getattr(n, "nodes", None) or []))
+    if has_if(node.nodes[1]):
+        raise SyntaxError("[k: v for k in E if c] leaves members without a value: an [E]T has "
+                          "one for each, so the condition goes in the value, "
+                          "[k: (v if c else 0) for k in E]")
+
+
 empty_list = LBRACKET + RBRACKET
 dict_display = LBRACE_NODE + (dictcomp | dictmaker) + RBRACE
 set_display = LBRACE_NODE + (setcomp | setmaker) + RBRACE

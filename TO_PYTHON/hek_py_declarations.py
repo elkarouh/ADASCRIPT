@@ -559,6 +559,10 @@ class _EnumArray(dict):
     def __contains__(self, x):
         return any(v == x for v in self.values())
 
+    def __repr__(self):
+        # printed as Nim prints the array: its values, in the domain's order
+        return repr(list(self))
+
     def _adascript_pairs(self):
         """(key, value) over the domain, in order -- what Nim's pairs gives.
 

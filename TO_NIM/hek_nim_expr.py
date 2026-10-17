@@ -2876,6 +2876,8 @@ _ekarr_counter = 0
 def to_nim(self, prec=None):
     """[k: v for k in E] -> the dictcomp's table, copied by key into an
     array[E, V]: each value lands in the slot its key names."""
+    from ady_expr import refuse_keyed_filter
+    refuse_keyed_filter(self)
     decls = getattr(ParserState, 'nim_top_decls', [])
     if not any("adascriptKeyed" in d for d in decls):
         decls.append(_KEYED_HELPER)
