@@ -268,6 +268,7 @@ Usage
     ann_assign = IDENTIFIER + COLON + type_annotation
 """
 
+from ady_words import a_
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "HPARSEC"))
@@ -923,7 +924,7 @@ def scaled_units(decls, consts, known=None):
         ctype = consts[factor]
         if ctype not in (None, "float", "int"):
             raise SyntaxError(
-                f"type {name} is {factor} * {base}: {factor} is a {ctype} -- "
+                f"type {name} is {factor} * {base}: {factor} is {a_(ctype)} -- "
                 f"the factor of a scaled unit is a plain number, a `const` "
                 f"float (or int, for a multiple of an int)")
         out[name] = (factor, base)
@@ -1279,12 +1280,75 @@ def expr_unit(expr, atom):
     """The unit of the emitted expression EXPR: a distinct type's name,
     UNIT_LIT, UNIT_PLAIN, or None. ATOM(text) says the same for anything
     that is not itself arithmetic -- a name, a call, a literal."""
+    if "\n" in expr:
+        expr = " ".join(expr.split())   # an expression continued over lines
     e = _strip_parens(expr)
+    branches = _split_conditional(e)
+    if branches:                        # `a if c else b`: the unit both have
+        a, b = (expr_unit(x, atom) for x in branches)
+        if a == b or {a, b} <= {UNIT_LIT, UNIT_PLAIN}:
+            return a if a == b else UNIT_PLAIN
+        if UNIT_LIT in (a, b) and (a and is_distinct(a) or b and is_distinct(b)):
+            return a if a != UNIT_LIT else b     # a literal takes the other's unit
+        return None
     parts = split_arith(e)
     if parts is None:
+        if e[:1] in "-+" and e[1:].strip():
+            return expr_unit(e[1:], atom)       # `-d` is of d's unit
+        power = _split_power(e)
+        if power:                               # `x ** 2`
+            bu = expr_unit(power[0], atom)
+            if bu in (UNIT_LIT, UNIT_PLAIN):
+                return UNIT_PLAIN if bu == UNIT_PLAIN or expr_unit(power[1], atom) != UNIT_LIT else UNIT_LIT
+            try:
+                return power_unit(bu, power[1]) if bu else None
+            except SyntaxError:
+                return None
         return atom(e)
     left, op, right = parts
     return unit_result(expr_unit(left, atom), op, expr_unit(right, atom))
+
+
+def _split_power(e):
+    """(base, exponent) when E is `base ** exponent` at its top level, else None."""
+    depth, quote = 0, None
+    for i, ch in enumerate(e):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and e.startswith("**", i):
+            return e[:i].strip(), e[i + 2:].strip()
+    return None
+
+
+def _split_conditional(e):
+    """(a, b) when E is `a if c else b` at its top level, else None."""
+    depth, quote, i, at_if = 0, None, 0, None
+    while i < len(e):
+        ch = e[i]
+        if quote:
+            if ch == "\\":
+                i += 1
+            elif ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and e.startswith(" if ", i) and at_if is None:
+            at_if = i
+        elif depth == 0 and e.startswith(" else ", i) and at_if is not None:
+            return e[:at_if].strip(), e[i + 6:].strip()
+        i += 1
+    return None
 
 
 def _mod_result(lu, op, ru):
@@ -1358,11 +1422,11 @@ def unit_mix_error(lu, op, ru):
         if ld and rd:
             if lu == ru:
                 return None
-            return (f"mixes a {lu} with a {ru}: a distinct type does not mix "
+            return (f"mixes {a_(lu)} with {a_(ru)}: a distinct type does not mix "
                     f"with any other -- convert one side explicitly")
         other, mine = (ru, lu) if ld else (lu, ru)
         if other == UNIT_PLAIN:
-            return (f"mixes a {mine} with a plain number: a distinct type "
+            return (f"mixes {a_(mine)} with a plain number: a distinct type "
                     f"does not mix with any other -- convert one side "
                     f"explicitly")
         return None
@@ -1378,17 +1442,17 @@ def unit_mix_error(lu, op, ru):
                 d = _dims_combine(dict(dims[lu]), sign, dims[ru])
                 same = sorted(u for u, x in dims.items() if x == d)
                 if len(same) > 1:
-                    return (f"{verb} a {lu} by a {ru} has no unit: it is a "
+                    return (f"{verb} {a_(lu)} by {a_(ru)} has no unit: it is a "
                             f"{dimension_text(d)}, which {' and '.join(same)} both are "
                             f"-- convert to the one meant, {same[0]}(...)")
                 if d:
-                    return (f"{verb} a {lu} by a {ru} has no unit: it is a "
+                    return (f"{verb} {a_(lu)} by {a_(ru)} has no unit: it is a "
                             f"{dimension_text(d)}, and no unit declared is one -- name "
                             f"it with `type X is {lu} {sign} {ru}`")
-            return (f"{verb} a {lu} by a {ru} has no unit: name the result "
+            return (f"{verb} {a_(lu)} by {a_(ru)} has no unit: name the result "
                     f"with `type X is {lu} {sign} {ru}`")
         if rd and op != "*" and lu in (UNIT_LIT, UNIT_PLAIN):
-            return (f"a plain number divided by a {ru} has no unit: name "
+            return (f"a plain number divided by {a_(ru)} has no unit: name "
                     f"the result, `type X is A / {ru}`, with A a distinct type")
     return None
 

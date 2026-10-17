@@ -11,6 +11,7 @@ Usage:
     print(ast.to_nim())  # if x:\n    discard
 """
 
+from ady_words import a_
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
@@ -1144,7 +1145,7 @@ def to_nim(self, indent=0):
         if else_node is None:
             if step_failure != routine_failure:
                 raise SyntaxError(
-                    f"do: step {shown} fails with a {step_failure}, not the "
+                    f"do: step {shown} fails with {a_(step_failure)}, not the "
                     f"routine's {routine_failure}: convert it with `else`")
             lines.append(f"{ind}if {tmp}.is_err: return {ret_ann}.err({tmp}.error)")
         else:
@@ -3144,6 +3145,10 @@ def _func_def_to_nim_inner(self, indent=0):
             ParserState.proc_return_types = {}
         _ret_type = ret_ann.lstrip(": ").strip()
         if _cls_ctx:
+            _prev = ParserState.proc_return_types.get(f"{_cls_ctx}.{name}")
+            if _prev is not None and _prev != _ret_type:
+                # overloaded within the class: the return type depends on the arguments
+                ParserState.proc_return_types[f"?{_cls_ctx}.{name}"] = "ambiguous"
             ParserState.proc_return_types[f"{_cls_ctx}.{name}"] = _ret_type
         ParserState.proc_return_types[name] = _ret_type
     # Register param types for call-site Option[T] some() coercion
@@ -3839,6 +3844,9 @@ def to_nim(self, indent=0):
             if _has_self_ref(decl, name):
                 is_virtual = True
                 break
+        # or by way of a record that holds it (scan_value_cycles)
+        if name in (getattr(ParserState, "value_cycle_classes", None) or ()):
+            is_virtual = True
     # Pre-register self-referential classes as ref_class BEFORE body processing,
     # so that ?ClassName fields inside the body emit ClassName (not Option[ClassName]).
     if is_virtual and name:
@@ -5799,6 +5807,10 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         if not hasattr(ParserState, "proc_return_types"):
             ParserState.proc_return_types = {}
         _ret_type = ret_ann.lstrip(": ").strip()
+        _prev = ParserState.proc_return_types.get(f"{class_name}.{name}")
+        if _prev is not None and _prev != _ret_type:
+            # overloaded within the class: the return type depends on the arguments
+            ParserState.proc_return_types[f"?{class_name}.{name}"] = "ambiguous"
         ParserState.proc_return_types[f"{class_name}.{name}"] = _ret_type
         ParserState.proc_return_types[name] = _ret_type
     # Push scope and register params for body translation

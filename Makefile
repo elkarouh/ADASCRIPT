@@ -128,6 +128,7 @@ STANDALONE := \
     test_vi_highlight.ady \
     test_vi_loop.ady \
     test_kilo_editor.ady \
+    test_nim_module.ady \
     test_nim_quirks.ady \
     test_small_fixes.ady \
     test_union_optional.ady \
@@ -140,6 +141,7 @@ STANDALONE := \
     test_module_rename.ady \
     test_portable_gaps8.ady \
     test_json_value.ady \
+    test_value_cycle.ady \
     test_optional_tails.ady \
     test_generic_methods.ady \
     test_round_splitlines.ady \
@@ -350,8 +352,31 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_union_wide test_units_dims \
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide \
+    MAP_UTILS/map_base MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
+    MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry test_units_dims \
     distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_stdlib test_cents
+
+# The compared examples that `ady2nim js` builds: their output under node is
+# compared with the native build's too. test_parse is left out on purpose: an
+# int on JS is a double, so the 64-bit bounds it reads do not fit.
+JS_COMPARED := test_do_block test_fstring_width test_optional_spelling test_contextmanager_fstring \
+    test_function_type test_distinct test_units test_units_fields test_tuple_assign_block \
+    test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags \
+    test_fstring_leading_newline test_call_field_literal test_local_named_like_field \
+    test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type \
+    test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics \
+    test_money test_subrange_array test_variant_literal test_set_operators trcks_example \
+    test_nimport_modules test_nimport_qualified test_format_zero_decimals test_region_operators \
+    test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand \
+    test_str_repeat test_union_optional test_decorators test_str_case test_optional_tails \
+    test_generic_methods test_round_splitlines test_portable_gaps test_optional_union_written \
+    test_portable_gaps3 test_portable_gaps4 test_portable_gaps7 test_module_rename \
+    test_portable_gaps8 test_json_value test_value_cycle test_union_wide MAP_UTILS/map_base \
+    MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
+    MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry \
+    test_units_dims distance_units mars_climate_orbiter physics_calc test_scaled_units \
+    test_units_stdlib test_cents
 
 # -----------------------------------------------------------------------
 # Skipped when this machine cannot build them -- a Nim package that is not
@@ -612,9 +637,19 @@ test-moon:
 # -----------------------------------------------------------------------
 # test — compile everything, then run the runnable subset
 # -----------------------------------------------------------------------
+# The sections of the test run side by side once everything is built: each is
+# a target of its own (`make test-part-07` runs one), and --output-sync keeps
+# a section's lines together, so the log reads as it did when they ran in turn.
+TEST_PARTS := test-part-js-compared test-part-01 test-part-02 test-part-03 test-part-04 test-part-05 test-part-06 test-part-07 test-part-08 test-part-09 test-part-10 test-part-11 test-part-12 test-part-13 test-part-14 test-part-15 test-part-16 test-part-17 test-part-18 test-part-19 test-part-20 test-part-21 test-part-22 test-part-23 test-part-24 test-part-25 test-part-26 test-part-27 test-part-28 test-part-29 test-part-30 test-part-31 test-part-32 test-part-33 test-part-34 test-part-35 test-part-36 test-part-37 test-part-38 test-part-39 test-part-40 test-part-41 test-part-42 test-part-43 test-part-44 test-part-45 test-part-46 test-part-47 test-part-48 test-part-49 test-part-50 test-part-51 test-part-52 test-part-53 test-part-54 test-part-55 test-part-56 test-part-57
+.PHONY: $(TEST_PARTS)
+
 test: compile
 	@echo ""
+	@$(MAKE) --no-print-directory -j$(JOBS) --output-sync=target $(TEST_PARTS)
+	@echo ""
+	@echo "All tests passed."
 
+test-part-01:
 	@echo "=== Self-contained examples ==="
 	@for f in $(filter-out $(addsuffix .ady,$(BOTH_BACKENDS_COMPARED)),$(STANDALONE)); do \
 	    name=$${f%.ady}; \
@@ -622,6 +657,7 @@ test: compile
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
+test-part-02:
 	@# die() and warn() end a run on purpose, so they are checked from
 	@# outside: what reaches stderr, that nothing reaches stdout, and the
 	@# exit status die() was given -- on both backends.
@@ -644,6 +680,7 @@ test: compile
 	    $(PYTHON) $(TMPDIR)/test_die_warn_own.py >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_die_warn.* $(TMPDIR)/test_die_warn.py $(TMPDIR)/test_die_warn_own.py
 
+test-part-03:
 	@# $0 is the program's path on both backends -- PROG is its name.
 	@echo "=== \$$0 is the program's path, both backends ==="
 	@printf 'let source: Path = Path($$0).parent / "ady_dollar0.ady"\nassert -f source\nprint "ok"\n' \
@@ -656,6 +693,7 @@ test: compile
 	    && cd / && $(PYTHON) $(TMPDIR)/ady_dollar0_py.py 2>&1 | grep -qx ok && echo OK || { echo FAIL; exit 1; }
 	@rm -rf $(TMPDIR)/ady_dollar0.ady $(TMPDIR)/ady_dollar0 $(TMPDIR)/ady_dollar0_py.py $(TMPDIR)/ady_dollar0_cache
 
+test-part-04:
 	@# Output cut short -- `prog | head` -- ends a Nim program quietly, with
 	@# status 141 as SIGPIPE ends a C one: no "Broken pipe" stack trace.
 	@echo "=== Output cut short: no Broken pipe trace (nim) ==="
@@ -669,6 +707,7 @@ test: compile
 	    cd $(TMPDIR) && ./ady_pipe 2>&1 >/dev/null | grep -q 'unhandled exception: other' && echo OK || { echo FAIL; exit 1; }
 	@rm -rf $(TMPDIR)/ady_pipe.ady $(TMPDIR)/ady_pipe $(TMPDIR)/ady_pipe.err $(TMPDIR)/ady_pipe.rc $(TMPDIR)/ady_pipe_cache
 
+test-part-05:
 	@# A change to a bundled support file -- TO_NIM/STDLIB/stdlib.nim -- has
 	@# to rebuild the programs using it: ady2nim used to call them up to date
 	@# and keep the old code until `make clean`. On a copy of the transpiler,
@@ -690,6 +729,7 @@ test: compile
 	    if [ "$$before" = 3 ] && [ "$$after" = 103 ]; then echo OK; \
 	    else echo "FAIL (before: $$before, after the edit: $$after, want 3 then 103)"; exit 1; fi
 
+test-part-06:
 	@# The transpiler's own tests: translations and the errors it must raise.
 	@echo "=== ady2nim --test ==="
 	@printf '  %-42s' "ady2nim.py --test"; \
@@ -697,10 +737,12 @@ test: compile
 	    && echo OK || { echo FAIL; grep -v PASS $(TMPDIR)/ady2nim_selftest.out; exit 1; }
 	@rm -f $(TMPDIR)/ady2nim_selftest.out
 
+test-part-07:
 	@# EXAMPLES/REFUSED: programs a backend must refuse, each naming what the refusal says.
 	@echo "=== EXAMPLES/REFUSED ==="
 	@EXAMPLES/REFUSED/check.sh $(PYTHON)
 
+test-part-08:
 	@# db: Nim's db_sqlite under ady2nim, Python's sqlite3 under ady2py (TO_PYTHON/STDLIB/db.ady).
 	@echo "=== db, both backends ==="
 	@printf '  %-42s' "TO_NIM/TEST/test_db.ady (nim)"; \
@@ -712,6 +754,7 @@ test: compile
 	    && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_test_db.py
 
+test-part-09:
 	@# A type declared twice is refused on both backends, naming the first.
 	@echo "=== a type declared twice, both backends ==="
 	@printf 'type A is int\n"""\ntype B is int\n"""\ntype B is int\nclass A:\n    var x: int = 0\n' \
@@ -726,6 +769,7 @@ test: compile
 	done
 	@rm -f $(TMPDIR)/ady_dup_type.ady $(TMPDIR)/ady_dup_type.out
 
+test-part-10:
 	@# A subrange holds on both backends: a value leaving it stops the program.
 	@echo "=== a subrange left, both backends ==="
 	@printf 'type Q_T is 0 .. 100\n\ndef main():\n    var q: Q_T = 1\n    q -= 2\n    print q\n\nmain()\n' \
@@ -741,6 +785,7 @@ test: compile
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_range_left.out; exit 1; }
 	@rm -f $(TMPDIR)/ady_range_left.ady $(TMPDIR)/ady_range_left.py $(TMPDIR)/ady_range_left.out
 
+test-part-11:
 	@# `{int: int}` is a dict display, not a type: refused, naming {int}int.
 	@echo "=== {K: V} written as a type, both backends ==="
 	@printf 'var a: {}int = {}\n\ndef f(t: {str: float}) -> int:\n    return 0\n' \
@@ -767,6 +812,7 @@ test: compile
 	done
 	@rm -f $(TMPDIR)/ady_paren_enum.ady $(TMPDIR)/ady_paren_enum.out
 
+test-part-12:
 	@# Two names that are one name on Nim are refused there, naming both.
 	@echo "=== names one name on Nim ==="
 	@printf 'class Container:\n    var n: int\n\nconst CONTAINER: int = 3\nprint CONTAINER\n' \
@@ -786,6 +832,7 @@ test: compile
 	    && echo OK || { echo FAIL; cat $(TMPDIR)/ady_nim_clash.out; exit 1; }
 	@rm -f $(TMPDIR)/ady_nim_clash.ady $(TMPDIR)/ady_nim_clash.out
 
+test-part-13:
 	@# A failure dropped after a receiver that is itself a call is refused too.
 	@echo "=== dropped failure after a call receiver, both backends ==="
 	@printf 'def main():\n    let base: Path = Path("/a")\n    Path("/a/b").relative_to(base)\nmain()\n' \
@@ -800,6 +847,7 @@ test: compile
 	done
 	@rm -f $(TMPDIR)/ady_drop_recv.ady $(TMPDIR)/ady_drop_recv.out
 
+test-part-14:
 	@# A bare print is an empty line on both backends: compared from outside.
 	@echo "=== bare print, both backends ==="
 	@printf 'a\n\nb\n\n\nc\n' > $(TMPDIR)/ady_print_bare.want
@@ -811,6 +859,7 @@ test: compile
 	        | cmp -s - $(TMPDIR)/ady_print_bare.want && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_print_bare.want
 
+test-part-15:
 	@# Each instance has fields of its own on Python too, set once: a field
 	@# its __init__ sets first thing is not set to its zero before.
 	@echo "=== class fields per instance (python) ==="
@@ -824,6 +873,7 @@ test: compile
 	    && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/test_class_fields_per_instance.py
 
+test-part-16:
 	@# A comment block after a case whose last branch is on one line stays
 	@# a comment after it, rather than landing in that branch's head.
 	@echo "=== a comment after a one-line case branch (python) ==="
@@ -831,6 +881,7 @@ test: compile
 	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/test_case_trailing_comment.ady | $(PYTHON) - \
 	    | grep -qx 'test_case_trailing_comment: ok' && echo OK || { echo FAIL; exit 1; }
 
+test-part-17:
 	@# rsync_time_machine against real folders, when rsync is there: a step
 	@# that fails stops the run, and a full disk expires the oldest backup.
 	@echo "=== rsync_time_machine, both backends ==="
@@ -846,6 +897,8 @@ test: compile
 	else \
 	    printf '  %-42s%s\n' "rsync_time_machine" "skipped (no rsync)"; \
 	fi
+
+test-part-18:
 	@# c500, the C to WebAssembly compiler: the module it emits for each
 	@# C program in its test/, the same from both backends.
 	@echo "=== c500, both backends ==="
@@ -854,6 +907,7 @@ test: compile
 	@$(C5DIR)/test/run_c500_tests.sh $(PYTHON) $(TMPDIR)/ady_c500.py || exit 1
 	@rm -f $(TMPDIR)/ady_c500.py
 
+test-part-19:
 	@# do: and `T | E` say the same on both backends: the Python one
 	@# used to drop a do: block altogether, leaving its names unbound.
 	@echo "=== unions, T | F and do:, both backends ==="
@@ -984,6 +1038,8 @@ test: compile
 	    if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_overload_dup.ady > $(TMPDIR)/ady_overload.out 2>&1; then echo "FAIL (accepted)"; exit 1; fi; \
 	    grep -q "is defined twice with the parameter types" $(TMPDIR)/ady_overload.out && echo OK || { echo FAIL; cat $(TMPDIR)/ady_overload.out; exit 1; }
 	@rm -f $(TMPDIR)/ady_overload_dup.ady $(TMPDIR)/ady_overload.out
+
+test-part-20:
 	@# nimport is Python's too: `nimport math` binds math, so a bare sqrt is refused, and so
 	@# is a name left out of `from math nimport floor`; both backends say so, with the line
 	@# and what to write. Only the common Nim modules are known to the check; the rest Nim refuses.
@@ -1003,6 +1059,8 @@ test: compile
 	    done; \
 	done
 	@rm -f $(TMPDIR)/ady_nimport_[0-9].ady $(TMPDIR)/ady_nimport.out
+
+test-part-21:
 	@# A distinct type mixes with nothing else: not its base, not another
 	@# distinct type on the same base. Nim's compiler refuses each of these;
 	@# the Python backend refuses those it can see -- a typed name given, or
@@ -1070,6 +1128,8 @@ test: compile
 	    && $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_distinct_ok.ady >/dev/null 2>&1 \
 	    && echo OK || { echo FAIL; exit 1; }
 	@rm -rf $(TMPDIR)/ady_distinct_* $(TMPDIR)/ady_distinct.out
+
+test-part-22:
 	@# A scaled unit, `type C is K * B`, converts from B and from a plain
 	@# number, and is a unit of its own otherwise; its factor is fixed when the
 	@# program is compiled. ady2py builds them too: the scaled examples are
@@ -1133,14 +1193,16 @@ test: compile
 	@rm -rf $(TMPDIR)/ady_deco*
 	@for t in $(BOTH_BACKENDS_COMPARED); do \
 	    printf '  %-42s' "$$t.ady (python = nim)"; \
-	    $(EXDIR)/$$t > $(TMPDIR)/ady_$$t.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/$$t.ady > $(TMPDIR)/ady_$$t.py \
-	        && $(PYTHON) $(TMPDIR)/ady_$$t.py > $(TMPDIR)/ady_$$t.py.out 2>&1 \
-	        && cmp -s $(TMPDIR)/ady_$$t.nim.out $(TMPDIR)/ady_$$t.py.out \
-	        && echo OK || { echo FAIL; diff $(TMPDIR)/ady_$$t.nim.out $(TMPDIR)/ady_$$t.py.out; exit 1; }; \
-	    rm -f $(TMPDIR)/ady_$$t.nim.out $(TMPDIR)/ady_$$t.py $(TMPDIR)/ady_$$t.py.out; \
+	    o=$(TMPDIR)/ady_$$(echo $$t | tr / _); \
+	    $(EXDIR)/$$t > $$o.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/$$t.ady > $$o.py \
+	        && $(PYTHON) $$o.py > $$o.py.out 2>&1 \
+	        && cmp -s $$o.nim.out $$o.py.out \
+	        && echo OK || { echo FAIL; diff $$o.nim.out $$o.py.out; exit 1; }; \
+	    rm -f $$o.nim.out $$o.py $$o.py.out; \
 	done
 
+test-part-23:
 	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \
 	    name=$${f%.ady}; \
@@ -1149,6 +1211,7 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }; \
 	done
 
+test-part-24:
 	@echo "=== input() is a failure-typed result (two lines piped in, on both backends) ==="
 	@printf '  %-42s' "test_input.ady (python = nim)"; \
 	    printf 'ann\nlee\n' | $(EXDIR)/test_input > $(TMPDIR)/ady_input_nim.out 2>&1; \
@@ -1157,6 +1220,7 @@ test: compile
 	    if grep -q 'test_input OK' $(TMPDIR)/ady_input_nim.out && cmp -s $(TMPDIR)/ady_input_nim.out $(TMPDIR)/ady_input_py.out; then \
 	        echo OK; else echo FAIL; diff $(TMPDIR)/ady_input_nim.out $(TMPDIR)/ady_input_py.out; exit 1; fi
 
+test-part-25:
 	@echo "=== CFMU examples (fed their own samples) ==="
 	@printf '  %-42s' "CFMU/Tstatus_monitor.ady"; \
 	    $(EXDIR)/CFMU/Tstatus_monitor < $(EXDIR)/CFMU/tstatus_sample.txt >/dev/null 2>&1 \
@@ -1167,6 +1231,7 @@ test: compile
 	    $(EXDIR)/CFMU/Vcheck_coded_flight $(EXDIR)/CFMU/vcheck_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
+test-part-26:
 	@echo "=== Examples fed their own samples, against their awk / sh twins ==="
 	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
 	@# check is on its output, not its exit status: the report is what the
@@ -1236,6 +1301,8 @@ test: compile
 	        && test -f "$(TMPDIR)/sh_janitor_sh/quiet service.log" \
 	        && test -f "$(TMPDIR)/sh_janitor_sh/editor backup~" \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_janitor_sh.out; exit 1; }
+
+test-part-27:
 	@echo "=== The documents' snippets ==="
 	@# The documents' own snippets, so that what DOCS/*.md quotes is code
 	@# that ran rather than code that was written down. check-quotes below
@@ -1258,6 +1325,7 @@ test: compile
 	$(kilo_tests)
 	$(moon_tests)
 
+test-part-28:
 	@# lispy wants a terminal for its prompt, but it can be run without one.
 	@echo "=== lispy ==="
 	@# lispy checks itself before it offers a prompt, so an empty stdin runs
@@ -1267,6 +1335,7 @@ test: compile
 	    $(TOOLDIR)/LISPY/lispy < /dev/null 2>&1 \
 	        | grep -q "lispy: all tests passed" && echo OK || { echo FAIL; exit 1; }
 
+test-part-29:
 	@echo "=== Arg examples ==="
 	@printf '  %-42s' "phonecode.ady (test_words.txt test_phones.txt)"; \
 	    $(EXDIR)/phonecode $(EXDIR)/test_words.txt $(EXDIR)/test_phones.txt \
@@ -1310,6 +1379,7 @@ test: compile
 	@printf '  %-42s' "TOOLS/PGREP/Pgrep.ady (usage)"; \
 	    $(PGDIR)/Pgrep 2>/dev/null | grep -q '^Usage:' && echo OK || { echo FAIL; exit 1; }
 
+test-part-30:
 	@# The all-subsystems path against a CM tree the test builds: $PGREP_CM_OT
 	@# points the program at it, and the cc_pattern it consults there answers
 	@# with a perl regexp, as the real one does. Three bugs hid in this path
@@ -1317,6 +1387,8 @@ test: compile
 	@# looks exactly like a site with nothing to search.
 	@echo "=== PGREP against a CM tree built for the test ==="
 	@$(PGDIR)/test/run_tests.sh $(PGDIR)/Pgrep
+
+test-part-31:
 	@# ...and the same checks against the Python transpilation, since the two
 	@# backends have to agree about every one of them.
 	@echo "=== PGREP, the same checks on the Python backend ==="
@@ -1326,12 +1398,15 @@ test: compile
 	@$(PGDIR)/test/run_tests.sh $(PGDIR)/test/pgrep_py
 	@rm -f $(PGDIR)/test/Pgrep_py.py $(PGDIR)/test/pgrep_py
 
+test-part-32:
 	@# Tblame against a throwaway git repo the test builds, standing in for
 	@# an NM workspace: both the workspace-path and the /cm/ot/ context-path
 	@# branches, batching, since/filter_unmatched, and reading files
 	@# directly for "- FILENAME".
 	@echo "=== Tblame against a git repo built for the test ==="
 	@$(TBDIR)/test/run_tests.sh $(TBDIR)/Tblame
+
+test-part-33:
 	@# ...and the same checks against the Python transpilation.
 	@echo "=== Tblame, the same checks on the Python backend ==="
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TBDIR)/Tblame.ady > $(TBDIR)/test/Tblame_py.py
@@ -1340,11 +1415,14 @@ test: compile
 	@$(TBDIR)/test/run_tests.sh $(TBDIR)/test/tblame_py
 	@rm -f $(TBDIR)/test/Tblame_py.py $(TBDIR)/test/tblame_py
 
+test-part-34:
 	@# Tdiff_lines against a superproject the test builds: four submodules,
 	@# two workspace baselines, NM baseline tags inside each submodule --
 	@# and piped into Tblame, built the same way.
 	@echo "=== Tdiff_lines against a superproject built for the test ==="
 	@$(TDDIR)/test/run_lines_tests.sh $(TDDIR)/Tdiff_lines $(TBDIR)/Tblame
+
+test-part-35:
 	@echo "=== Tdiff_lines, the same checks on the Python backend ==="
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TDDIR)/Tdiff_lines.ady > $(TDDIR)/test/Tdiff_lines_py.py
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TBDIR)/Tblame.ady > $(TDDIR)/test/Tblame_py.py
@@ -1355,6 +1433,7 @@ test: compile
 	@$(TDDIR)/test/run_lines_tests.sh $(TDDIR)/test/tdiff_lines_py $(TDDIR)/test/tblame_py
 	@rm -f $(TDDIR)/test/Tdiff_lines_py.py $(TDDIR)/test/tdiff_lines_py $(TDDIR)/test/Tblame_py.py $(TDDIR)/test/tblame_py
 
+test-part-36:
 	@# Tdiff against an alternate the test builds: two submodules, tagged
 	@# baselines, Psort/list_subsystems/list_cfmutest_subsystems/readlink
 	@# stubbed on PATH -- baseline resolution, -name/-status/-revision and
@@ -1364,6 +1443,8 @@ test: compile
 	@# checked by hand against the real Tdiff.ksh instead (TDIFF/README.md).
 	@echo "=== Tdiff against a superproject built for the test ==="
 	@$(TDDIR)/test/run_tests.sh $(TDDIR)/Tdiff
+
+test-part-37:
 	@echo "=== Tdiff, the same checks on the Python backend ==="
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TDDIR)/Tdiff.ady > $(TDDIR)/test/Tdiff_py.py
 	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TDDIR)/test/Tdiff_py.py" \
@@ -1371,16 +1452,23 @@ test: compile
 	@$(TDDIR)/test/run_tests.sh $(TDDIR)/test/tdiff_py
 	@rm -f $(TDDIR)/test/Tdiff_py.py $(TDDIR)/test/tdiff_py
 
+test-part-38:
 	@# Tcheck_tact -focus changes against a CM tree the test builds: a TACT
 	@# baseline, the CFMUTEST changes report Psort points it at, a view build.
 	@echo "=== Tcheck_tact -focus changes against a CM tree built for the test ==="
 	@$(TCDIR)/test/run_changes_tests.sh $(TCDIR)/Tcheck_tact
+
+test-part-39:
 	@# Nim only: Tcheck_tact is split into modules (LIBS/), and the Python
 	@# backend cannot follow a nimport.
 	@echo "=== Tcheck_tact -focus changes: the tests the Tlogs report failing ==="
 	@$(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/Tcheck_tact
+
+test-part-40:
 	@echo "=== Tcheck_tact -focus IP/OP/SIP: what it looked for and did not find ==="
 	@$(TCDIR)/test/run_missing_tests.sh $(TCDIR)/Tcheck_tact
+
+test-part-41:
 	@# Each of Tcheck_tact's modules carries its own tests, under
 	@# `if __name__ == "__main__"`: built alone, the module runs them.
 	@echo "=== Tcheck_tact's modules, their own tests ==="
@@ -1389,6 +1477,8 @@ test: compile
 	    $(ADY2NIM) c $(TCDIR)/LIBS/$$m.ady >/dev/null 2>&1 \
 	        && CM_ENV_ID='G!31.IP.L8' $(TCDIR)/LIBS/$$m >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
+
+test-part-42:
 	@# make_comparable, which Tcheck_tact runs on the logs it compares:
 	@# the volatile parts replaced, in place.
 	@echo "=== make_comparable ==="
@@ -1398,6 +1488,8 @@ test: compile
 	    got=$$(cat $$f); rm -f $$f; \
 	    if [ "$$got" = "$$(printf 'started pid <PID>\ncrash at <TRACE>')" ]; then echo OK; \
 	    else echo "FAIL: $$got"; exit 1; fi
+
+test-part-43:
 	@# Treport.ksh, the standalone ksh translation: the same checks
 	@# Under ksh93, and under zsh in ksh emulation -- zsh run as ksh, which
 	@# is what /bin/ksh is on some machines.
@@ -1408,6 +1500,8 @@ test: compile
 	    $(TCDIR)/test/run_changes_tests.sh $(TCDIR)/test/ksh_treport && \
 	    NO_EXIT_CODE=1 $(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/test/ksh_treport; \
 	else echo "  SKIP (no ksh93)"; fi
+
+test-part-44:
 	@echo "=== Treport.ksh, the same checks (zsh as ksh) ==="
 	@if command -v zsh >/dev/null 2>&1; then \
 	    d=$$(mktemp -d) && ln -s "$$(command -v zsh)" $$d/ksh && \
@@ -1415,18 +1509,25 @@ test: compile
 	    KSH=$$d/ksh NO_EXIT_CODE=1 $(TCDIR)/test/run_new_failures_tests.sh $(TCDIR)/test/ksh_treport; \
 	    rc=$$?; rm -rf $$d; [ $$rc -eq 0 ]; \
 	else echo "  SKIP (no zsh)"; fi
+
+test-part-45:
 	@# Tcheckout.ady, on both backends, and Tcheckout.ksh: the same checks.
 	@echo "=== Tcheckout: one file of a submodule not checked out ==="
 	@$(TCDIR)/test/run_checkout_tests.sh $(TCDIR)/Tcheckout
+
+test-part-46:
 	@echo "=== Tcheckout, the same checks on the Python backend ==="
 	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TCDIR)/Tcheckout.ady > $(TCDIR)/test/Tcheckout_py.py
 	@printf '#!/bin/sh\nexec $(PYTHON) %s "$$@"\n' "$(TCDIR)/test/Tcheckout_py.py" \
 	    > $(TCDIR)/test/tcheckout_py && chmod +x $(TCDIR)/test/tcheckout_py
 	@$(TCDIR)/test/run_checkout_tests.sh $(TCDIR)/test/tcheckout_py
 	@rm -f $(TCDIR)/test/Tcheckout_py.py $(TCDIR)/test/tcheckout_py
+
+test-part-47:
 	@echo "=== Tcheckout.ksh, the same checks ==="
 	@$(TCDIR)/test/run_checkout_tests.sh $(TCDIR)/Tcheckout.ksh
 
+test-part-48:
 	@echo "=== Expect / shell examples (require bc) ==="
 	@for f in $(EXPECT_EXAMPLES); do \
 	    name=$${f%.ady}; \
@@ -1434,6 +1535,7 @@ test: compile
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
+test-part-49:
 	@echo "=== Timetable examples (built-in default problem) ==="
 	@for f in $(TIMETABLE_EXAMPLES); do \
 	    name=$${f%.ady}; \
@@ -1441,6 +1543,7 @@ test: compile
 	    $(EXDIR)/$$name >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }; \
 	done
 
+test-part-50:
 	@echo "=== ADA_INDENT unit tests (transpile + compile + run) ==="
 	@# The output is checked, not just the exit status. A suite that never
 	@# runs exits 0 too: ada_indent.ady once lost its `__main__` guard, so
@@ -1477,6 +1580,7 @@ test: compile
 	        echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; \
 	    fi
 
+test-part-51:
 	@# Each editor integration drives the ada_indent binary itself, so each
 	@# harness needs the built binary plus its own editor. None of node,
 	@# emacs or vim is otherwise a dependency of this repo, so every one of
@@ -1496,6 +1600,7 @@ test: compile
 	@echo "=== Editor highlighting of regex literals ==="
 	@PYTHON=$(PYTHON) sh $(CURDIR)/LSP/test/run_editor_tests.sh
 
+test-part-52:
 	@echo "=== ADA_INDENT editor support ==="
 	@printf '  %-42s' "vs_code/test_extension.js"; \
 	    if ! command -v node >/dev/null 2>&1; then echo "SKIP (no node)"; \
@@ -1527,6 +1632,7 @@ test: compile
 	        else echo FAIL; printf '%s\n' "$$out" | tail -20; exit 1; fi; \
 	    fi
 
+test-part-53:
 	@# test_env_default.ady and test_env_optional.ady pass standalone, but
 	@# the cases that give each its point -- `:-` rather than plain `-`,
 	@# and presence rather than truthiness -- need a variable that is *set*
@@ -1539,6 +1645,7 @@ test: compile
 	    ADY_TEST_EMPTY= $(EXDIR)/test_env_optional >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
+test-part-54:
 	@# -t has to resolve nimport'd dependencies, not just translate the one
 	@# file: it writes to the very path a later build reads, so a .nim
 	@# emitted without the imported module's declarations poisons the cache.
@@ -1558,6 +1665,7 @@ test: compile
 	      && { echo OK; rm -rf $$tmp; } \
 	      || { echo FAIL; rm -rf $$tmp; exit 1; }
 
+test-part-55:
 	@# The js-backend modules. Each is a library, not a program, so the
 	@# check is that `nim js` accepts it -- nothing else in this target
 	@# exercises the js path, and a dict literal is emitted differently
@@ -1583,7 +1691,19 @@ test: compile
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    rm -f $(EXDIR)/test_json_value.js; \
 	fi
+	@# the same script in a real browser, whose strings are UTF-16: a character
+	@# past FFFF is a surrogate pair there
+	@printf '  %-42s' "test_json_value.ady (ady2nim js, chromium)"; \
+	if ! python3 -c 'import playwright' 2>/dev/null; then echo "SKIPPED, no playwright"; else \
+	    exe=$${CHROMIUM:-$$( [ -x /opt/pw-browsers/chromium ] && echo /opt/pw-browsers/chromium )}; \
+	    o=$(TMPDIR)/ady_json_browser; mkdir -p $$o && cp $(EXDIR)/test_json_value.ady $$o/ && \
+	    (cd $$o && $(ADY2NIM) js test_json_value.ady >/dev/null 2>&1) \
+	        && CHROMIUM=$$exe python3 $(EXDIR)/browser_run.py $$o/test_json_value.js | grep -q "all checks passed" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -rf $$o; \
+	fi
 
+test-part-56:
 	@# html: blocks: the native build prints the page, which must hold one
 	@# line of its content; the one with event handlers only builds under js,
 	@# so for it the check is that `nim js` accepts it.
@@ -1601,6 +1721,7 @@ test: compile
 	    rm -f $(EXDIR)/HTML/html_app.js; \
 	fi
 
+test-part-57:
 	@# TOOLS/ACCOUNTING: the model and the ledger it keeps in SQLite, run from
 	@# their directory, where test_ledger.ady reads accounting.conf.
 	@echo "=== TOOLS/ACCOUNTING (model, ledger, server, page) ==="
@@ -1620,9 +1741,6 @@ test: compile
 	        rm -f $(TOOLDIR)/ACCOUNTING/frontend/accounting_js_events.js; \
 	    fi; \
 	fi
-
-	@echo ""
-	@echo "All tests passed."
 
 # -----------------------------------------------------------------------
 # clean — remove caches and binary symlinks produced by ady2nim
@@ -1733,3 +1851,17 @@ clean:
 	@# for the run that stopped before it got there.
 	@for f in $(ADA_INDENT_TESTS); do rm -f $(AIDIR)/$${f%.ady}; done
 	@echo "Done."
+
+test-part-js-compared:
+	@echo "=== the compared examples under node (ady2nim js) ==="
+	@command -v node >/dev/null || echo "  SKIPPED, no node: the js comparison"
+	@if command -v node >/dev/null; then for t in $(JS_COMPARED); do \
+	    printf '  %-42s' "$$t.ady (js = nim)"; \
+	    o=$(TMPDIR)/ady_js_$$(echo $$t | tr / _); \
+	    $(EXDIR)/$$t > $$o.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
+	    $(ADY2NIM) js $(EXDIR)/$$t.ady >/dev/null 2>&1 \
+	        && node $(EXDIR)/$$t.js > $$o.js.out 2>&1 \
+	        && cmp -s $$o.nim.out $$o.js.out \
+	        && echo OK || { echo FAIL; diff $$o.nim.out $$o.js.out; rm -f $(EXDIR)/$$t.js; exit 1; }; \
+	    rm -f $$o.nim.out $$o.js.out $(EXDIR)/$$t.js; \
+	done; fi

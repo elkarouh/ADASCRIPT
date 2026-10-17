@@ -10,6 +10,7 @@ Usage:
     print(ast.to_nim())  # var x = 1
 """
 
+from ady_words import a_
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
@@ -2920,7 +2921,7 @@ def _reject_unit_mix(name, annotation, value):
     if source and is_distinct(source) and source != target and target not in narrow_ancestors(source):
         from ady_declarations import as_written, unit_fix
         raise SyntaxError(
-            f"cannot give {as_written(value.strip())}, a {source}, to {name}, a {target}: a distinct type "
+            f"cannot give {as_written(value.strip())}, {a_(source)}, to {name}, {a_(target)}: a distinct type "
             f"does not mix with any other -- {unit_fix(target, value, source)}")
 
 

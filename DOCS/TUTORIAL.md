@@ -674,6 +674,16 @@ Other types that enforce a distinction:
 
 `DOCS/WHY_ADASCRIPT.md` makes the longer argument for naming types.
 
+### Text beyond ASCII: bytes on Nim, characters on Python
+
+A `str` is UTF-8 bytes on Nim and a string of characters on Python. For
+ASCII text the two are the same; past it, `len(s)`, `s[i]`, a slice and
+`for c in s` count and give bytes on Nim and characters on Python: `len("été")`
+is 5 on Nim and 3 on Python. A program that must agree on both backends over
+such text compares and searches whole strings (`==`, `in`, `.find`,
+`.split`, `.startswith`), which agree, and leaves counting and indexing to
+ASCII text. `str(chr(n))` is the one character n on both.
+
 ---
 
 ## 3. Variable Declarations
@@ -2247,6 +2257,13 @@ library and subclasses in the importing file dispatch dynamically at runtime.
 by every name that holds it, as every object is on Python. A plain class is
 copied on assignment on Nim and shared on Python (see §6, "Copied on Nim,
 shared on Python"); a `@virtual` one is shared on both.
+
+A class that holds itself needs no `@virtual`: on Nim a value cannot contain
+itself, so a class with a field of its own type (`next: ?Node`), or one that
+holds itself by way of a record (a `Closure` whose `body: Expr_T` is a variant
+record with a `fun: Closure` case), is made a `ref object` by the transpiler,
+and is shared on assignment on both backends. EXAMPLES/test_value_cycle.ady
+is the second kind.
 
 ---
 

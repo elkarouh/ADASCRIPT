@@ -8,10 +8,11 @@ history of this file if the reasoning behind one of them is ever wanted.
       `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
       - a literal whose context Nim cannot see needs `V(x)` written: an
-        argument to a routine of a Nim module, or a method of an object
-        that is not the program's own. A known routine's argument, a function
-        value's (`let f: (Speed_T) -> float`), `xs.append(5.0)` to a
-        []Speed_T and a table literal no longer do.
+        argument to a method of an object that is not the program's own.
+        A known routine's argument, a function value's (`let f: (Speed_T)
+        -> float`), `xs.append(5.0)` to a []Speed_T, a table literal and an
+        argument to a hand-written Nim module beside the program
+        (EXAMPLES/test_nim_module.ady, which is now found there) no longer do.
       - a derived unit is float, or int for a product. `x ** n` (n a whole
         number written out) is the unit of that dimension, when one is
         declared. Units relate by dimension (book 2.7), but only to the
@@ -89,12 +90,18 @@ Worth revisiting if a program ever wants to feed a command more than it can
 hold. A cheaper middle step, if that day comes: let `stdin` accept `[]str`
 and write it element by element without ever joining it.
 
+- [ ] **For discussion:** `len`, indexing, slicing and `for c in s` of text beyond ASCII
+      count bytes on Nim and characters on Python (TUTORIAL §2, "Text beyond ASCII"). To
+      make them agree, either Nim works in runes (`std/unicode`: `runeLen`, `runeAt`,
+      O(n) indexing) or Python works in bytes (`s.encode()`, and a `str` no longer
+      Python's). Neither can be told apart at transpile time, so neither is refused.
+
 ## Union returns: what is left from rewriting lispy.ady
 
-A variant record is a value type on Nim, so a variant that holds
-itself through a field (a closure holding its body) needs the holder to be a
-class marked `@virtual` -- correct, but `@virtual` is documented as being for
-cross-module subclasses only.
+- [x] A variant record is a value type on Nim, so a variant that holds itself through a
+  field (a closure holding its body) needed the holder to be a class marked `@virtual`.
+  A class in such a cycle is now a reference by itself (`scan_value_cycles`), as a class
+  holding itself directly was; TUTORIAL §13 says so. EXAMPLES/test_value_cycle.ady.
 
 ## Modules on the Python backend (ady2py merges what ady2nim links)
 
@@ -104,10 +111,15 @@ Known, and not done:
 - The libraries bundled with ady2nim build with ady2py too; `db.ady` through its Python
   version, TO_PYTHON/STDLIB/db.ady (sqlite3). `browser`, `svg_drag` and `jointjs` are for
   `ady2nim js`, by nature.
-- [ ] Found trying db's users on Python: TOOLS/ACCOUNTING/tests/test_gnucash.ady stops at
-  `Cents_T((int(net) * rate.ord + 50) // 100)` (the unit of an int expression with an
-  enum's ordinal "cannot be told"), and EXAMPLES/timetable_engine.ady at a record field
-  whose default is another record (a dataclass's mutable default).
+- [x] Found trying db's users on Python: TOOLS/ACCOUNTING/tests/test_gnucash.ady stopped at
+  `Cents_T((int(net) * rate.ord + 50) // 100)` -- a whole-number expression now converts.
+  Fixed on the way: `T | !F` names whose unit is T's, a module's `__main__` block run by
+  its importer, a program's own `field` hiding dataclasses' `field`.
+- [ ] TOOLS/ACCOUNTING on Python now stops at `from os nimport fileExists, walkFiles, ...`
+  (Nim's os routines, which ady2py does not map as it maps `from math nimport`), and
+  test_htmx at accounting_gui.ady line 174. EXAMPLES/timetable_engine.ady now builds
+  (a record field's zero is a default_factory); timetable_sa and timetable_backtrack stop
+  at Nim's json (`parseJson`) and a `proc` type.
 
 ## Found porting EXAMPLES/MOON/moon_sim.ady
 

@@ -322,6 +322,15 @@ def resolve_imports(code, module, listed, module_source, clash="rename"):
         if names[n] in allowed:        # an enum member comes with its type
             allowed.add(n)
     text = _blank(code)
+    if clash == "rename":
+        # a name of the module's that the file declares too, and does not import:
+        # two things on Nim, which links modules; the module's is merged under
+        # another name on Python, which merges them into one namespace
+        for name, owner in names.items():
+            if owner == name and name not in allowed and re.search(
+                    rf'^[ \t]*(?:@\w+[ \t]*\n[ \t]*)?(?:type|class|def|const|let|var)[ \t]+{re.escape(name)}\b',
+                    text, re.MULTILINE):
+                RENAMED.setdefault(qual, {})[name] = f"{qual}__{name}"
 
     for name, owner in sorted(names.items()):
         if name in allowed:

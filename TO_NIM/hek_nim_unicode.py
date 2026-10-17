@@ -207,7 +207,7 @@ proc `$`[T: tuple](x: T): string {.used.} =
   if n == 1: result.add ","
   result.add ")"
 
-proc `$`*[T](xs: seq[T]): string =
+proc `$`[T](xs: seq[T]): string {.used.} =
   ## A list prints as Python prints it -- `[1, 2]`, not Nim's `@[1, 2]`, with
   ## its elements as repr shows them.
   result = "["

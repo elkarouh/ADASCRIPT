@@ -1,0 +1,4 @@
+# refused by nim: hint: an `if` line ends with `:`
+# refused by python: hint: an `if` line ends with `:`
+if 1 > 0
+    print("y")

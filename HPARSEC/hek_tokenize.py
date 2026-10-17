@@ -1475,13 +1475,38 @@ class Tokenizer:
         """
         nxt = self.tokens[idx + 1][0] if idx + 1 < len(self.tokens) else None
         prev = self.tokens[idx - 1][0] if idx > 0 else None
-        # a block's header line that ends without its colon
+        line = getattr(tok, "line", "") or ""
         if _token_said(tok) == "the end of the line" and prev is not None:
-            text = (getattr(prev, "line", "") or "").strip()
-            head = text.split(None, 1)[0] if text else ""
-            if head in ("def", "class", "if", "elif", "else", "for", "while", "try", "except",
-                        "finally", "with", "case", "when", "async") and not text.split("#")[0].rstrip().endswith(":"):
-                return f"\n  hint: a `{head}` line ends with `:`, and its block is indented under it"
+            line = getattr(prev, "line", "") or ""
+        code = _code_part(line)
+        text = line.strip()
+        head = text.split(None, 1)[0].rstrip(":") if text else ""
+        # a line indented with a tab among lines indented with spaces, or both on one line
+        indent = line[:len(line) - len(line.lstrip())]
+        other = ""
+        for k in range(idx - 1, -1, -1):        # the line before, as a token has it
+            t = self.tokens[k][0]
+            if t is not None and (getattr(t, "line", "") or "").strip() and t.line != line:
+                other = t.line
+                break
+        other_indent = other[:len(other) - len(other.lstrip())]
+        if "\t" in indent and (" " in indent or " " in other_indent) \
+                or " " in indent and "\t" in other_indent:
+            return ("\n  hint: this line and the one before it are indented, one with a tab and "
+                    "the other with spaces -- indent with spaces alone")
+        # a bracket opened on the line and not closed
+        for o, c in ("()", "[]", "{}"):
+            if code.count(o) > code.count(c):
+                return f"\n  hint: a `{o}` on this line is not closed with its `{c}`"
+        # a block's header line that ends without its colon
+        if head in ("def", "class", "if", "elif", "else", "for", "while", "try", "except",
+                    "finally", "with", "case", "when", "async") and not code.rstrip().endswith(":"):
+            article = "an" if head[0] in "aeiou" else "a"
+            return f"\n  hint: {article} `{head}` line ends with `:`, and its block is indented under it"
+        # `=` where a test is meant
+        if head in ("if", "elif", "while") and re.search(r"(?<![=!<>:+\-*/%&|^])=(?!=)", code):
+            return (f"\n  hint: a test compares with `==`; one `=` gives a name a value, "
+                    f"and is not a test")
         if (getattr(tok, "string", None) == "=="
                 and getattr(nxt, "type", None) == SUBST_TOKEN):
             return ("\n  hint: a substitution is written `target = " + nxt.string
@@ -1501,6 +1526,30 @@ class Tokenizer:
         if tok is None:
             raise StopIteration
         return tok
+
+
+def _code_part(line):
+    """LINE without its comment and with its strings blanked, so a `#`, a
+    bracket or an `=` in a string says nothing about the code."""
+    out, quote, i = [], None, 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            out.append(" ")
+        elif ch in "\"'":
+            quote = ch
+            out.append(" ")
+        elif ch == "#":
+            break
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _token_said(tok):

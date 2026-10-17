@@ -264,6 +264,45 @@ def scan_failure_types(code):
     return {a or b for a, b in _FAILURE_MARK.findall(code)}
 
 
+def scan_value_cycles(code):
+    """The classes of CODE that hold themselves by way of a record: `class
+    Lambda` with a field `body: Val_T`, a variant record with a `lam: Lambda`.
+    A record and a class are values on Nim, which cannot hold themselves; a
+    class in the cycle becomes a reference, as a class holding itself
+    directly does, and as every class is on Python. A `@virtual` class is a
+    reference already and ends a path."""
+    import re as _re_vc
+    heads = _re_vc.compile(r"^(@virtual\s*\n)?(?:type\s+([A-Z]\w*)\b[^\n]*\bis\s+record\b|class\s+([A-Z]\w*))[^\n]*:\s*(?:#.*)?$", _re_vc.M)
+    field = _re_vc.compile(r"^\s+(?:var\s+|let\s+)?[a-z_]\w*\s*:\s*([^=#\n]+)", _re_vc.M)
+    body_of, kind = {}, {}
+    for m in heads.finditer(code):
+        name = m.group(2) or m.group(3)
+        start = m.end() + 1
+        end = start
+        for line in code[start:].split("\n"):
+            if line.strip() and not line[:1].isspace():
+                break
+            end += len(line) + 1
+        body = _re_vc.split(r"\n\s+(?:async\s+)?def\s", code[start:end])[0]   # fields, not methods
+        body_of[name] = {n for t in field.findall(body) for n in _re_vc.findall(r"\b[A-Z]\w*", t)}
+        kind[name] = "virtual" if m.group(1) else ("record" if m.group(2) else "class")
+    out = set()
+    for cls, k in kind.items():
+        if k != "class":
+            continue
+        seen, todo = set(), [t for t in body_of[cls] if t != cls]
+        while todo:
+            t = todo.pop()
+            if t == cls:
+                out.add(cls)
+                break
+            if t in seen or kind.get(t) not in ("record", "class"):
+                continue
+            seen.add(t)
+            todo.extend(body_of.get(t, ()))
+    return out
+
+
 def check_failure_marks(parts, marked, failure_types):
     """The failure types of a union whose members are PARTS, MARKED[i] when
     part i was written `!T`: FAILURE_TYPES and the ones marked here. A type
@@ -312,11 +351,11 @@ def _split_commas(text):
     return parts
 
 
-def scan_constructors(code):
+def scan_constructors(code, every=False):
     """Every class's `__init__`s, as {class: [(params, failure), ...]}: PARAMS
     are (type as written, has a default) for each parameter but self, and
     FAILURE is F of `-> None | !F`, or None for a constructor that cannot fail.
-    Only classes with at least one that can fail are listed."""
+    Only classes with at least one that can fail are listed, unless EVERY."""
     found = {}
     cls = None
     for line in code.splitlines():
@@ -339,7 +378,7 @@ def scan_constructors(code):
             ptype = prm.split(":", 1)[1].split("=")[0].strip() if ":" in prm else ""
             params.append((ptype, "=" in prm))
         found.setdefault(cls, []).append((params, failure))
-    return {c: ov for c, ov in found.items() if any(f for _, f in ov)}
+    return {c: ov for c, ov in found.items() if every or any(f for _, f in ov)}
 
 
 def failing_constructors(code):
@@ -371,6 +410,25 @@ def scan_return_types(code):
         if _re_dup.match(r"(?!distinct\b).+?[ \t]+where[ \t]", m.group(2).strip()):
             types[f"to_{m.group(1)}"] = f"{m.group(1)} | !ParseFailure_T"
     return types
+
+
+def scan_method_return_types(code):
+    """Each method's return annotation by `Class.method`; None for a method
+    the class defines twice with other return types (an overload: its type
+    depends on the arguments)."""
+    out, cls = {}, None
+    for line in code.splitlines():
+        m = _re_dup.match(r"class[ \t]+(\w+)", line)
+        if m:
+            cls = m.group(1)
+            continue
+        if line[:1].strip() and not line.startswith(("#", "@")):
+            cls = None                  # a top-level line ends the class
+        m = _RETURN_DECL.match(line)
+        if cls and m and line[:1].isspace():
+            key = f"{cls}.{m.group(1)}"
+            out[key] = m.group(2) if key not in out or out[key] == m.group(2) else None
+    return out
 
 
 def check_no_where_types(code):

@@ -1,0 +1,35 @@
+# A class that holds itself by way of a record: Closure holds an Expr_T, and
+# an Expr_T holds a Closure. A record and a class are values on Nim, which
+# cannot hold themselves; the transpiler makes the class a reference, as it
+# does for a class that holds itself directly, and as every class is on Python.
+
+type Expr_Kind_T is enum:
+    NUM
+    FUN
+
+type Expr_T (kind: Expr_Kind_T) is record:
+    case kind is
+        when NUM:
+            value: int
+        when FUN:
+            fun: Closure
+
+class Closure:
+    var param: str
+    var body: Expr_T
+
+    def __init__(self, param: str, body: Expr_T):
+        self.param = param
+        self.body = body
+
+def depth(e: Expr_T) -> int:
+    case e.kind:
+        when NUM:
+            return 0
+        when FUN:
+            return 1 + depth(e.fun.body)
+
+let inner: Expr_T = Expr_T(kind = NUM, value = 7)
+let outer: Expr_T = Expr_T(kind = FUN, fun = Closure("x", Expr_T(kind = FUN, fun = Closure("y", inner))))
+print(depth(outer))
+print(outer.fun.body.fun.body.value)

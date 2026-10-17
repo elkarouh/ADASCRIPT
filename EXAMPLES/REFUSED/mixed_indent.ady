@@ -1,0 +1,5 @@
+# refused by nim: one with a tab and the other with spaces
+# refused by python: one with a tab and the other with spaces
+if True:
+    print("a")
+	print("b")

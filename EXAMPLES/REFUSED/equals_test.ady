@@ -1,0 +1,5 @@
+# refused by nim: hint: a test compares with `==`
+# refused by python: hint: a test compares with `==`
+let x: int = 3
+if x = 3:
+    print("y")

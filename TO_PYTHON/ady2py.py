@@ -303,7 +303,8 @@ def _add_stdlib_module_imports(output):
     for mod in _AUTO_STDLIB_MODULES:
         # Anchored: `nimport times` contains "import time" as a substring,
         # so a plain `in` test saw an import that is not there.
-        if _re_ai.search(rf'(?m)^\s*(?:import {mod}\b|from {mod}\b)', body):
+        # `from math import floor` does not bind `math`
+        if _re_ai.search(rf'(?m)^\s*import {mod}\b', body):
             continue
         if any(imp.split()[-1] == mod for imp in ParserState.nim_imports):
             continue
@@ -349,10 +350,14 @@ def translate(code):
     _PS_rp.failure_types = _failures | BUILTIN_FAILURE_TYPES
     _PS_rp.py_type_names |= BUILTIN_FAILURE_TYPES
     _PS_rp.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
+    from ady_stmt import scan_method_return_types
+    _PS_rp.py_method_return_types = scan_method_return_types(code)
+    from ady_stmt import scan_constructors
+    _PS_rp.py_constructors = scan_constructors(code, every=True)
     from ady_stmt import scan_union_aliases, scan_type_decls
     from ady_stmt import check_record_bodies, check_no_failing_init, check_no_where_types
     check_record_bodies(code)
-    check_no_failing_init(code)
+    pass  # check_no_failing_init(code)
     check_no_where_types(code)
     _PS_rp.union_aliases = scan_union_aliases(code)
     _PS_rp.ady_type_decls = scan_type_decls(code)
@@ -516,6 +521,13 @@ def translate(code):
 
     # Inject py_top_decls (e.g. _pymatch helper) right after imports
     py_top_decls = getattr(ParserState, 'py_top_decls', [])
+    from hek_py_stmt import _UNIT_OPS_HELPER
+    if _UNIT_OPS_HELPER in py_top_decls:
+        rels = {k: v for k, v in (getattr(ParserState, "unit_relations", None) or {}).items()
+                if k[0] in ("*", "/")}
+        py_top_decls.insert(py_top_decls.index(_UNIT_OPS_HELPER),
+                            "_UNIT_RELATIONS = {" + ", ".join(
+                                f"{k!r}: {v!r}" for k, v in sorted(rels.items())) + "}")
     if py_top_decls:
         insert_pos = 0
         for i, line in enumerate(output):
@@ -530,10 +542,45 @@ def translate(code):
             output.insert(insert_pos + len(decl_lines), '')
             insert_pos += len(decl_lines) + 1
 
-    result = chr(10).join(output)
+    result = _failing_constructors(chr(10).join(output), code)
     if not result.endswith(chr(10)):
         result += chr(10)
     return result
+
+
+_FAILING_NEW = """\
+    def __new__(cls, *args, **kwargs):
+        \"\"\"A constructor that can fail: the failure its __init__ returned, or
+        the object made. Python's own __init__ returns nothing.\"\"\"
+        self = super().__new__(cls)
+        failed = self._ada_init(*args, **kwargs)
+        return self if failed is None else failed
+
+    def __init__(self, *args, **kwargs):
+        pass  # made by __new__
+
+"""
+
+
+def _failing_constructors(text, code):
+    """TEXT with each class whose __init__ can fail (`-> None | !F`) made by a
+    __new__ that returns the failure in place of the object, as the Nim
+    backend's constructor returns `C | !F`."""
+    from ady_stmt import failing_constructors
+    for cls in failing_constructors(code):
+        m = re.search(rf"^class {re.escape(cls)}\b[^\n]*:\n", text, re.MULTILINE)
+        if not m:
+            continue
+        end = re.search(r"^\S", text[m.end():], re.MULTILINE)
+        stop = m.end() + end.start() if end else len(text)
+        body = text[m.end():stop]
+        init = re.search(r"^    def __init__\(self", body, re.MULTILINE)
+        if not init:
+            continue
+        body = (body[:init.start()] + _FAILING_NEW
+                + body[init.start():].replace("    def __init__(self", "    def _ada_init(self", 1))
+        text = text[:m.end()] + body + text[stop:]
+    return text
 # `nimport geom, util` and `from geom nimport dist`: the names a source file
 # imports as Nim modules. ady2nim's own pre-pass reads the same two spellings.
 _NIMPORT_LINE = re.compile(
@@ -623,7 +670,7 @@ def include_ady_modules(code, search_dir, _seen=None):
             MODULE_PATHS[name] = path
             if text.startswith("#!"):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
-            text = include_ady_modules(text, os.path.dirname(path), seen)
+            text = _without_main_block(include_ady_modules(text, os.path.dirname(path), seen))
             # its names the importing file declares too, reached as `M.name`
             from ady_modules import RENAMED, rename_in
             text = rename_in(text, RENAMED.get(name.rsplit("/", 1)[-1], {}))
@@ -632,6 +679,21 @@ def include_ady_modules(code, search_dir, _seen=None):
         return "\n".join(head + pieces)
 
     return _NIMPORT_LINE.sub(expand, code)
+
+
+def _without_main_block(text):
+    """TEXT without its `if __name__ == "__main__":` block: merged into the
+    importer, a module is not the program run, as on Nim it is not."""
+    out, skipping = [], False
+    for line in text.split("\n"):
+        if re.match(r"""if\s+__name__\s*==\s*["']__main__["']\s*:\s*(#.*)?$""", line):
+            skipping = True
+            continue
+        if skipping and (not line.strip() or line[0] in " \t"):
+            continue
+        skipping = False
+        out.append(line)
+    return "\n".join(out)
 
 
 # {name: path} of each .ady module merged into the file, for an error found in one

@@ -56,11 +56,10 @@ type Val_T (kind: Val_Kind_T) is record:
         when VBuiltin:
             name:      str
 
-@virtual
 class Lambda:
     """A closure: parameters, body, and the environment it closes over.
-    A class, because a record cannot hold a Val_T that holds it; @virtual
-    makes it a reference on Nim, which is what breaks that cycle."""
+    A class, because a record cannot hold a Val_T that holds it; holding
+    itself by way of Val_T, it is a reference on Nim, which breaks that cycle."""
     var parms:     []str
     var rest_parm: str            # non-empty -> variadic: extra args bound here
     var body:      Val_T

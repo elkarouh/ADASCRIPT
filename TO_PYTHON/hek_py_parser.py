@@ -5,6 +5,7 @@ Grammar definitions are in ady_compound_stmt.py. This module adds to_py() render
 methods to the grammar node classes.
 """
 
+from ady_words import a_
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
@@ -378,7 +379,7 @@ def to_py(self, indent=0):
             continue
         if else_node is None and step_failure != routine_failure:
             raise SyntaxError(
-                f"do: step {shown} fails with a {step_failure}, not the "
+                f"do: step {shown} fails with {a_(step_failure)}, not the "
                 f"routine's {routine_failure}: convert it with `else`")
         lines.append(f"{ind}if _is_a({tmp}, {step_failure}):")
         _back = else_node.to_py() if else_node is not None else tmp
@@ -2040,9 +2041,9 @@ def _dataclass_defaults(field_lines):
                 zero = hek_py_stmt._zero_value(ann)
                 if zero in factories:
                     ParserState.nim_imports.add(
-                        "from dataclasses import dataclass, field")
+                        "from dataclasses import dataclass, field as _field")
                     out.append(f"{pad}{fname}: {ann} = "
-                               f"field(default_factory={factories[zero]})")
+                               f"_field(default_factory={factories[zero]})")
                     continue
             elif _re_dd.match(r"^[A-Za-z_]\w*\(", written) and written.endswith(")"):
                 # A constructed default -- `inner: Inner_T = Inner_T()`. A
@@ -2050,17 +2051,17 @@ def _dataclass_defaults(field_lines):
                 # rejects it as a mutable default exactly as it rejects a
                 # list, and again at import time.
                 ParserState.nim_imports.add(
-                    "from dataclasses import dataclass, field")
+                    "from dataclasses import dataclass, field as _field")
                 out.append(f"{pad}{fname}: {ann} = "
-                           f"field(default_factory=lambda: {written})")
+                           f"_field(default_factory=lambda: {written})")
                 continue
             elif written[:1] in "[{" and written[-1:] in "]}":
                 # A non-empty container default is shared between every
                 # instance, which is the same bug with a later symptom.
                 ParserState.nim_imports.add(
-                    "from dataclasses import dataclass, field")
+                    "from dataclasses import dataclass, field as _field")
                 out.append(f"{pad}{fname}: {ann} = "
-                           f"field(default_factory=lambda: {written})")
+                           f"_field(default_factory=lambda: {written})")
                 continue
             out.append(line)
             continue
@@ -2068,15 +2069,16 @@ def _dataclass_defaults(field_lines):
         ann = rest
         zero = hek_py_stmt._zero_value(ann)
         if zero in factories:
-            ParserState.nim_imports.add("from dataclasses import dataclass, field")
-            out.append(f"{pad}{fname}: {ann} = field(default_factory={factories[zero]})")
-        elif zero.startswith("_EnumArray"):
+            ParserState.nim_imports.add("from dataclasses import dataclass, field as _field")
+            out.append(f"{pad}{fname}: {ann} = _field(default_factory={factories[zero]})")
+        elif zero.startswith("_EnumArray") or _re_dd.match(r"^[A-Za-z_]\w*\(.*\)$", zero):
             # An [O]T field's zero value is an _EnumArray -- itself a dict
             # under the hood, and mutable-shared exactly like a bare list or
             # dict zero above, just not spelled "[]"/"{}" so `factories`
-            # never matches it. Same fix, same reason.
-            ParserState.nim_imports.add("from dataclasses import dataclass, field")
-            out.append(f"{pad}{fname}: {ann} = field(default_factory=lambda: {zero})")
+            # never matches it. Same fix, same reason. So is a record's zero,
+            # `SAProblem_T()`: an unhashable dataclass, refused as a default.
+            ParserState.nim_imports.add("from dataclasses import dataclass, field as _field")
+            out.append(f"{pad}{fname}: {ann} = _field(default_factory=lambda: {zero})")
         else:
             out.append(f"{pad}{fname}: {ann} = {zero}")
     return out
@@ -2169,7 +2171,7 @@ def to_py(self, indent=0):
         return hek_py_stmt._emit_enum_py(name, member_names, indent)
     if variant_case_node and discrim_name:
         # Discriminated record -> Python @dataclass with all fields flattened
-        ParserState.nim_imports.add("from dataclasses import dataclass, field")
+        ParserState.nim_imports.add("from dataclasses import dataclass, field as _field")
         all_fields = []
         # Collect fields from each variant
         whens_node = None
@@ -3309,7 +3311,7 @@ def _shell_either_spec(node, render):
         return None
     if failure != "ShellFailure_T":
         raise SyntaxError(
-            f"a shell command fails with a ShellFailure_T, not a {failure}: "
+            f"a shell command fails with a ShellFailure_T, not {a_(failure)}: "
             f"take it as `... | !ShellFailure_T`, or convert it in a do: "
             f"step with `else`")
     kinds = {"str": "str", "string": "str", "None": "None",

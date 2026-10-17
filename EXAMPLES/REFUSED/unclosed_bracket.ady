@@ -1,0 +1,4 @@
+# refused by nim: hint: a `[` on this line is not closed with its `]`
+# refused by python: hint: a `[` on this line is not closed with its `]`
+let xs: []int = [1, 2
+print(xs)

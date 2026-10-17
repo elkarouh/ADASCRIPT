@@ -683,6 +683,45 @@ def _declare_before_use(lines):
     return out
 
 
+def _note_nim_module(name, search_dir):
+    """What a hand-written NAME.nim beside the program declares that a call
+    into it needs: its distinct types and its exported routines' parameter
+    types, so a literal given to `proc double*(s: Speed_T)` is a Speed_T
+    there as it is for an .ady module's routine."""
+    from ady_modules import module_dirs
+    import re as _re_nm
+    path = next((p for p in (os.path.join(d, name + ".nim") for d in module_dirs(search_dir))
+                 if os.path.exists(p)), None)
+    if path is None:
+        return
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    kinds = {"float": "float", "float64": "float", "int": "int", "int64": "int"}
+    for t, base in _re_nm.findall(r"^\s*(?:type\s+)?(\w+)\*\s*=\s*distinct\s+(\w+)", text, _re_nm.M):
+        if base in kinds:
+            _nimport_carried.setdefault("distinct_types", {})[t] = kinds[base]
+    for m in _re_nm.finditer(r"^(?:proc|func)\s+(\w+)\*\s*(?:\[[^\]]*\])?\(", text, _re_nm.M):
+        proc, depth, j = m.group(1), 1, m.end()
+        while j < len(text) and depth:
+            depth += {"(": 1, ")": -1}.get(text[j], 0)
+            j += 1
+        params = text[m.end():j - 1]
+        types, pending, depth, cur = [], 0, 0, ""
+        for ch in params + ",":
+            depth += {"(": 1, "[": 1, ")": -1, "]": -1}.get(ch, 0)
+            if ch in ",;" and depth == 0:
+                if ":" in cur:                  # `a, b: T = d`: T for each name
+                    t = cur.split(":", 1)[1].split("=")[0].strip()
+                    types += [t] * (pending + 1)
+                    pending = 0
+                elif cur.strip():
+                    pending += 1
+                cur = ""
+            else:
+                cur += ch
+        _nimport_param_types.setdefault(proc, types)
+
+
 def _resolved_imports(code, search_dir):
     """CODE with its imports held to `import` .ady / `nimport` Nim / `pyimport`
     Python, the .ady ones checked, and `M.name` written `name`.
@@ -778,6 +817,8 @@ def translate(code, export_symbols=False):
     ParserState.failure_types = (_failures | BUILTIN_FAILURE_TYPES
                                  | _nimport_carried.get("failure_types", set()))
     ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
+    from ady_stmt import scan_value_cycles
+    ParserState.value_cycle_classes = scan_value_cycles(code)
     from ady_stmt import scan_constructors
     ParserState.ctor_overloads.update(scan_constructors(code))
     from ady_stmt import scan_union_aliases, scan_type_decls
@@ -2352,6 +2393,9 @@ def main(argv=None):
         def _enqueue_prepass(src_code, search_dir):
             for _dn in _dep_names(src_code):
                 _path = _find_dep_ady_pre(_dn, search_dir)
+                if _dn not in _prepass_seen and not _path:
+                    _prepass_seen.add(_dn)
+                    _note_nim_module(_dn, search_dir)
                 if _dn not in _prepass_seen:
                     if _path:
                         _prepass_seen.add(_dn)
@@ -2608,8 +2652,10 @@ def main(argv=None):
 
         # --- tier 3: invoke nim ---
         cmd = ["nim", subcommand] + nim_flags
+        # a hand-written .nim beside the program is nimported from there; the
+        # cache, given after it, is searched first, as Nim puts a later --path first
         cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}",
-                f"--path:{cache_dir}"]
+                f"--path:{_ady_dir}", f"--path:{cache_dir}"]
         # When nimpy is used, tell it which libpython to load by passing the
         # path via -d:nimpyTestLibPython.  We ask the current python3 for its
         # library directory and shared library name so the compiled binary uses

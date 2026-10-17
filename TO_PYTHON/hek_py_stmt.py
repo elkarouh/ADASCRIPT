@@ -22,6 +22,7 @@ Usage:
     print(ast.to_py())  # x = 1
 """
 
+from ady_words import a_
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
@@ -326,6 +327,16 @@ def _py_type_of_name(value):
     return (sym.get("type") or None) if isinstance(sym, dict) else None
 
 
+def _py_value_side(t):
+    """T without its failure side: `int | ParseFailure_T` is an int where the
+    unit is asked, the failure having been ruled out or raised by then."""
+    parts = [p.strip().lstrip("!").strip() for p in (t or "").split("|")]
+    failures = getattr(ParserState, "failure_types", set())
+    if len(parts) > 1 and all(p in failures for p in parts[1:]):
+        return parts[0]
+    return (t or "").strip()
+
+
 _PY_NUMBER = _re_mod_p2s.compile(r"^-?\d[\d_]*(\.\d+)?([eE][-+]?\d+)?$")
 _PY_PLAIN_TYPES = ("float", "int", "Natural", "Positive")
 
@@ -379,22 +390,47 @@ def _py_atom_unit(e):
     if _PY_NUMBER.match(e):
         return UNIT_LIT
     t = None
+    if e.startswith("math.") and _py_call_name(e[5:]):
+        return UNIT_PLAIN               # `math.atan2(y, x)`: a plain number
+    m = _re_mod_p2s.match(r"^([A-Za-z_][\w.]*)\.(\w+)\(", e)
+    if m and _py_call_name(e[len(m.group(1)) + 1:]):
+        # `self.length()`: the method's own return type, by the receiver's class
+        from hek_py_expr import _py_receiver_type, _py_bare_type
+        parts = m.group(1).split(".")
+        cls = _py_bare_type(_py_receiver_type(parts[0], ["." + p for p in parts[1:]]))
+        t = getattr(ParserState, "py_method_return_types", {}).get(f"{cls}.{m.group(2)}")
+        if not t:
+            return None
+        t = _py_resolve_alias(_py_value_side(t))
+        return t if is_distinct(t) else (UNIT_PLAIN if t in _PY_PLAIN_TYPES else None)
     called = _py_call_name(e)
     if called:
         if is_distinct(called):
             return called
-        if called in ("float", "int"):
+        if called in ("float", "int", "_ada_ord", "len"):
             return UNIT_PLAIN
+        if called == "abs":             # `abs(x)` is of x's unit
+            from ady_declarations import expr_unit
+            return expr_unit(e[4:-1], _py_atom_unit)
         t = getattr(ParserState, "ady_return_types", {}).get(called)
+        if t is None and (called in _MATH_FOR_PYTHON or called in _MATH_NAMES):
+            return UNIT_PLAIN           # `hypot(x, y)` from math: a plain number
     else:
         t = _py_type_of_name(e)
         if t is None:
             t = _py_field_type(e)
+        if t is None and _re_mod_p2s.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+", e):
+            from hek_py_expr import _py_receiver_type   # `self.east`, `a.b.c`
+            parts = e.split(".")
+            t = _py_receiver_type(parts[0], ["." + p for p in parts[1:]]) or None
     if not t:
         return None
-    t = _py_resolve_alias(t.strip())
+    t = _py_resolve_alias(_py_value_side(t))
     if is_distinct(t):
         return t
+    from ady_declarations import narrow_root
+    if t and narrow_root(t) != t and is_distinct(narrow_root(t)):
+        return t                        # `Latitude_T`, narrowed from a Degree_T
     return UNIT_PLAIN if t in _PY_PLAIN_TYPES else None
 
 
@@ -405,6 +441,56 @@ def _in_range(v, r):
         raise ValueError(f"value out of range: {v} notin {r.start} .. {r.stop - 1}")
     return v\
 """
+
+
+_UNIT_OPS_HELPER = """\
+def _unit_ops(cls, base):
+    \"\"\"A distinct number type keeps its type through arithmetic, as on Nim:
+    a sum or difference of two, or one scaled by a plain number, is one too;
+    one over or times another is a plain number.\"\"\"
+    def same(op):
+        f = getattr(base, op)
+        def g(self, o):
+            r = f(self, o)
+            return r if r is NotImplemented else cls(r)
+        return g
+    def scaled(op):
+        f = getattr(base, op)
+        sym = "*" if "mul" in op else "/"
+        def g(self, o):
+            r = f(self, o)
+            if r is NotImplemented:
+                return r
+            if type(o) in (int, float):
+                return cls(r) if type(r) is base else r
+            # a unit times or over another: the one a derived unit names, if any
+            pair = (type(o).__name__, cls.__name__) if op == "__rmul__" else (cls.__name__, type(o).__name__)
+            made = _UNIT_RELATIONS.get((sym,) + pair)
+            return globals()[made](r) if made else r
+        return g
+    for op in ("__add__", "__radd__", "__sub__", "__rsub__", "__mod__"):
+        setattr(cls, op, same(op))
+    for op in ("__mul__", "__rmul__", "__truediv__", "__floordiv__"):
+        setattr(cls, op, scaled(op))
+    cls.__neg__ = lambda self: cls(base.__neg__(self))
+    cls.__pos__ = lambda self: self
+    cls.__abs__ = lambda self: cls(base.__abs__(self))
+    return cls\
+"""
+
+
+def _unit_class(name, base, indent):
+    """`class Velocity_T(float)`: a distinct number type, which keeps its type
+    through arithmetic (_UNIT_OPS_HELPER), so an overload chosen by type at run
+    time chooses as Nim did when it compiled."""
+    line = f"{_ind(indent)}class {name}({base}): __slots__ = ()"
+    if base not in ("float", "int"):
+        return line
+    decls = getattr(ParserState, "py_top_decls", [])
+    if _UNIT_OPS_HELPER not in decls:
+        decls.append(_UNIT_OPS_HELPER)
+        ParserState.py_top_decls = decls
+    return f"{line}\n{_ind(indent)}_unit_ops({name}, {base})"
 
 
 def _subrange_type(annotation):
@@ -449,12 +535,18 @@ def _target_range_type(target):
     return None
 
 
+def distinct_kind_of(t):
+    from ady_declarations import distinct_kind
+    return distinct_kind(t)
+
+
 def _wrap_narrowed_literal(value, annotation):
     """A number given where a narrowed type is declared is of it, and its
     range is checked: `let lat: Latitude_T = 45.0` is `Latitude_T(45.0)`."""
-    from ady_declarations import wraps_or_checks
+    from ady_declarations import wraps_or_checks, is_distinct
     t = _py_resolve_alias((annotation or "").strip())
-    if wraps_or_checks(t) and _PY_NUMBER.match((value or "").strip()):
+    if (wraps_or_checks(t) or is_distinct(t) and distinct_kind_of(t) in ("float", "int")) \
+            and _PY_NUMBER.match((value or "").strip()):
         return f"{t}({value.strip()})"
     return value
 
@@ -471,7 +563,7 @@ def _reject_distinct_mix(name, annotation, value):
     declared type, as it does on Nim; what cannot be told is left to Nim,
     which still refuses everything this lets through."""
     from ady_declarations import expr_unit, is_distinct, narrow_ancestors, UNIT_PLAIN
-    target = _py_resolve_alias((annotation or "").strip())
+    target = _py_resolve_alias(_py_value_side(annotation))     # `T | !F` holds a T
     source = expr_unit(value, _py_atom_unit)
     if not source or source == target:
         return
@@ -494,7 +586,7 @@ def _reject_distinct_mix(name, annotation, value):
     else:
         fix = f"write {target}({as_written(v)})" if target in _DISTINCT_BASES else "convert it explicitly"
     raise SyntaxError(
-        f"cannot give {as_written(v)}, a {source}, to {name}, a {target}: a distinct type "
+        f"cannot give {as_written(v)}, {a_(source)}, to {name}, {a_(target)}: a distinct type "
         f"does not mix with any other -- {fix}")
 
 
@@ -1246,6 +1338,8 @@ def to_py(self):
 
 # What Nim's math calls what Python's calls something else: a file `nimport`s math
 # and writes Nim's names (ady2py renames `math.arctan(x)`; this, a name taken bare).
+_MATH_NAMES = {n for n in dir(__import__("math")) if not n.startswith("_")}
+
 _MATH_FOR_PYTHON = {
     "arcsin": "asin", "arccos": "acos", "arctan": "atan", "arctan2": "atan2",
     "arcsinh": "asinh", "arccosh": "acosh", "arctanh": "atanh",
@@ -1439,7 +1533,7 @@ def to_py(self, indent=0):
         # called (hek_py_expr._scaled_conversion)
         _note_alias(name, name)
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
-        return f"{_ind(indent)}class {name}(float): __slots__ = ()"
+        return _unit_class(name, "float", indent)
     if rhs_type == 'distinct_def':
         # A class of its own, so `Velocity_T(x)` makes one and `float(v)`
         # takes it back out; the values are the base type's, and print and
@@ -1449,8 +1543,7 @@ def to_py(self, indent=0):
         base = rhs.nodes[0].to_py()
         _note_alias(name, name)
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
-        ind = _ind(indent)
-        return f"{ind}class {name}({base}): __slots__ = ()"
+        return _unit_class(name, base, indent)
     if rhs_type == 'derived_def':
         # `type Velocity_T is Distance_T / Duration_T`: a class of the
         # operands' base, like any distinct type. What the operators between
@@ -1460,7 +1553,7 @@ def to_py(self, indent=0):
         base = _DISTINCT_BASES.get(distinct_kind(name), "float")
         _note_alias(name, name)
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
-        return f"{_ind(indent)}class {name}({base}): __slots__ = ()"
+        return _unit_class(name, base, indent)
     if rhs_type == 'narrowed_def':
         # a subclass of the parent, so it goes up without a cast; a new one
         # is made only from a number in range
@@ -1473,10 +1566,15 @@ def to_py(self, indent=0):
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
         ind = _ind(indent)
         shown = f"[{lo}, {hi}{')' if excl else ']'}"
+        # its zero, a field's value until one is given: 0 where the range holds it
+        try:
+            zero = ("0.0" if base == "float" else "0") if float(lo) <= 0 <= float(hi) else lo
+        except ValueError:
+            zero = lo
         return "\n".join([
             f"{ind}class {name}({parent}):",
             f"{ind}    __slots__ = ()",
-            f"{ind}    def __new__(cls, x):",
+            f"{ind}    def __new__(cls, x={zero}):",
             f"{ind}        if not ({lo} <= x {'<' if excl else '<='} {hi}):",
             f'{ind}            raise AssertionError(f"{name} value {{x}} out of range {shown}")',
             f"{ind}        return super().__new__(cls, {base}(x))"])

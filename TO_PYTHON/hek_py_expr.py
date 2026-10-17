@@ -29,6 +29,7 @@ Usage:
     print(ast.to_py())  # (1 + (2 * 3))
 """
 
+from ady_words import a_
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
@@ -1462,6 +1463,29 @@ def _only_plain_numbers(arg):
     return not _re_pn.search(r"[A-Za-z_]", _re_pn.sub(r"\d[\d_.]*[eE][-+]?\d+", "0", s))
 
 
+def _whole_valued(arg):
+    """Whether ARG is a whole number for certain: int(), ord() and len()
+    calls, whole literals and names declared int, under + - * // % alone."""
+    import re as _re_wv
+    from hek_py_stmt import _py_type_of_name, _py_value_side
+    s = arg
+    while (m := _re_wv.search(r"\b(?:int|_ada_ord|len)\(", s)):
+        depth, j = 1, m.end()
+        while j < len(s) and depth:
+            depth += {"(": 1, ")": -1}.get(s[j], 0)
+            j += 1
+        s = s[:m.start()] + "0" + s[j:]
+    s = _re_wv.sub(r"\b(?:abs|min|max)\(", "(", s)       # whole of whole numbers
+
+    def _typed(n):
+        parts = n.group(0).split(".")
+        t = (_py_type_of_name(parts[0]) if len(parts) == 1
+             else _py_receiver_type(parts[0], ["." + p for p in parts[1:]]))
+        return "0" if _py_value_side(t) == "int" else "x"
+    s = _re_wv.sub(r"[A-Za-z_][\w.]*", _typed, s)
+    return not _re_wv.search(r"[^\d_\s+\-*%(),/]|(?<!/)/(?!/)", s)
+
+
 def _scaled_conversion(name, arg):
     """`Dollar_T(x)` / `Cent_T(x)` between a scaled unit and its base,
     chosen by the unit of X as the Nim backend's to_ overloads choose it:
@@ -1471,7 +1495,8 @@ def _scaled_conversion(name, arg):
     from ady_declarations import expr_unit, UNIT_LIT, UNIT_PLAIN
     from hek_py_stmt import _py_atom_unit, _PY_NUMBER
     scaled = ParserState.py_scaled_units
-    unit = expr_unit(arg, _py_atom_unit)
+    from ady_declarations import narrow_root
+    unit = narrow_root(expr_unit(arg, _py_atom_unit))
     if unit is None and _only_plain_numbers(arg):
         unit = UNIT_PLAIN                 # `(2.0 * float(g) * float(r)) ** 0.5`
     whole = _PY_NUMBER.match(arg.strip()) and not any(c in arg for c in ".eE")
@@ -1493,11 +1518,12 @@ def _scaled_conversion(name, arg):
                     ParserState.py_top_decls = decls
                 return f"{name}(_round_half_away(float({arg}) * {k}))"
         from ady_declarations import distinct_kind
-        if unit == name or whole or (distinct_kind(name) != "int" and unit in (UNIT_LIT, UNIT_PLAIN)):
+        if unit == name or whole or (distinct_kind(name) != "int" and unit in (UNIT_LIT, UNIT_PLAIN)) \
+                or (unit in (UNIT_LIT, UNIT_PLAIN, None) and _whole_valued(arg)):
             return f"{name}({arg})"
         if unit in (UNIT_LIT, UNIT_PLAIN):
             raise SyntaxError(
-                f"{name}({arg.strip()}): a {name} is made of a whole number, or "
+                f"{name}({arg.strip()}): {a_(name)} is made of a whole number, or "
                 f"of the unit it scales; write the float as that unit")
     raise SyntaxError(
         f"{name}({arg.strip()}): the unit of {arg.strip()} cannot be told here, "
@@ -1523,8 +1549,8 @@ def _refuse_unrelated_unit(name, arg):
     if unit in sources or any(a in sources for a in narrow_ancestors(unit)):
         return
     raise SyntaxError(
-        f"{name}({arg.strip()}): a {unit} does not convert to a {name} -- "
-        + ("a " + name + " converts from " + ", ".join(sorted(sources | {"a plain number"}))
+        f"{name}({arg.strip()}): {a_(unit)} does not convert to {a_(name)} -- "
+        + (a_(name) + " converts from " + ", ".join(sorted(sources | {"a plain number"}))
            if sources else
            "go through the plain number, float(...) or int(...), to say "
            "that the units are meant"))
@@ -1565,6 +1591,26 @@ def _py_receiver_type(base, trailers):
     return _py_bare_type(t)
 
 
+def _literal_arguments(cls, call_args):
+    """`(1.0, 2.0)` given to CLS's one constructor, `(x: metre_T, y: metre_T)`,
+    as `(metre_T(1.0), metre_T(2.0))`: a number given where a distinct type is
+    declared is of it, as on Nim, so the field holds one."""
+    from hek_parsec import ParserState
+    from ady_declarations import is_distinct, narrow_root
+    from hek_py_stmt import _py_resolve_alias, _PY_NUMBER
+    from hek_py_overload import _split_top
+    params = ParserState.py_constructors[cls][0][0]
+    args = _split_top(call_args[1:-1])
+    out = []
+    for n, arg in enumerate(args):
+        want = _py_resolve_alias(params[n][0].replace("?", "").strip()) if n < len(params) else ""
+        if (_PY_NUMBER.match(arg.strip()) and want
+                and (is_distinct(want) or is_distinct(narrow_root(want) or ""))):
+            arg = f"{want}({arg.strip()})"
+        out.append(arg)
+    return "(" + ", ".join(a.strip() for a in out) + ")" if args else call_args
+
+
 def _refuse_argument_units(func, args):
     """A call of FUNC with an argument of one unit where its parameter is of
     another, `travel(t)` for a Duration_T t where travel takes a Distance_T:
@@ -1587,8 +1633,8 @@ def _refuse_argument_units(func, args):
             continue
         if unit and is_distinct(unit) and unit != want and want not in narrow_ancestors(unit):
             raise SyntaxError(
-                f"{func}({args.strip()}): its argument {n + 1}, {arg.strip()}, is a {unit}, "
-                f"where {func} takes a {want}")
+                f"{func}({args.strip()}): its argument {n + 1}, {arg.strip()}, is {a_(unit)}, "
+                f"where {func} takes {a_(want)}")
 
 
 @method(primary)
@@ -1655,6 +1701,9 @@ def to_py(self, prec=None):
                 _refuse_unrelated_unit(result, tr_str[1:-1])
             if i == 0 and tr_str.startswith("(") and result in getattr(ParserState, "py_param_types", {}):
                 _refuse_argument_units(result, tr_str[1:-1])
+            if i == 0 and tr_str.startswith("(") and len(
+                    getattr(ParserState, "py_constructors", {}).get(result, ())) == 1:
+                tr_str = _literal_arguments(result, tr_str)
             if i == 0 and tr_str.startswith("(") and _is_scaled_name(result):
                 result = _scaled_conversion(result, tr_str[1:-1])
                 i += 1

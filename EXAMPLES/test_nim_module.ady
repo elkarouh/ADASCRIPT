@@ -1,0 +1,12 @@
+"""Test: a hand-written Nim module beside the program, hand_speeds.nim, is
+nimported from there, and a literal given to its routine is of the distinct
+type the routine takes, as for an .ady module's routine: `double(5.0)`, not
+`double(Speed_T(5.0))`. Nim only: ady2py cannot run Nim."""
+from hand_speeds nimport Speed_T, double, faster
+
+assert float(double(5.0)) == 10.0
+let s: Speed_T = 1.5
+assert float(double(s)) == 3.0
+assert float(faster(s, 2.0)) == 3.5
+assert float(faster(2.0)) == 3.0
+print("test_nim_module OK")

@@ -13,6 +13,7 @@ Usage:
     print(ast.to_nim())  # x ^ 2
 """
 
+from ady_words import a_
 import sys, os
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
@@ -1047,7 +1048,7 @@ def _result_wrap(val, rtype):
         return f"{rtype}.ok({_inner}.of{i}({val}))"
     raise SyntaxError(
         f"cannot tell which member of {' | '.join(values)} '{val}' is"
-        + (f" (it is a {_t})" if _t else "")
+        + (f" (it is {a_(_t)})" if _t else "")
         + " -- bind it first to a `let` of one member's type")
 
 
@@ -1079,7 +1080,7 @@ def _result_is_test(chain, right, negated):
                 else f"is_v{i}" if info["multi"] else "is_ok")
     else:
         shown = " | ".join(values + ([failure] if failure else []))
-        raise SyntaxError(f"'{chain} is {right}': {chain} is a {shown}")
+        raise SyntaxError(f"'{chain} is {right}': {chain} is {a_(shown)}")
     ParserState.nim_imports.add("stdlib")
     if negated:
         if test in ("is_err", "is_ok"):
@@ -3376,7 +3377,7 @@ def _scaled_conversion(node, name):
         if (unit and is_distinct(unit) and unit != name and unit not in narrow_ancestors(name)
                 and name not in narrow_ancestors(unit)):
             raise SyntaxError(
-                f"{name}({arg}): a {unit} does not convert to a {name} -- a {name} "
+                f"{name}({arg}): {a_(unit)} does not convert to {a_(name)} -- {a_(name)} "
                 f"is {('a ' + narrowed_parent(name) + ' that wraps') if mod_type_of(name) and narrowed_parent(name) else 'narrowed from ' + narrowed_parent(name) if narrowed_parent(name) else 'a type of its own'}; go through the plain "
                 f"number, float(...) or int(...), to say that the units are meant")
         return f"to_{name}{trailers[0]}" + "".join(trailers[1:])
@@ -3385,8 +3386,8 @@ def _scaled_conversion(node, name):
     if unit and is_distinct(unit) and unit != name and unit not in (sources or ()) and not any(
             a in (sources or ()) for a in narrow_ancestors(unit)):
         raise SyntaxError(
-            f"{name}({arg}): a {unit} does not convert to a {name} -- "
-            + ("a " + name + " converts from "
+            f"{name}({arg}): {a_(unit)} does not convert to {a_(name)} -- "
+            + (a_(name) + " converts from "
                + ", ".join(sorted(sources | {"a plain number"}))
                if sources else
                "go through the plain number, float(...) or int(...), to say "
@@ -4555,12 +4556,21 @@ def _split_top_commas(text):
 
 
 def _unit_is_sure(value):
-    """Can VALUE's unit be trusted enough to refuse on it? Not through a method
-    call, `track.cross(offset)`: the return type is looked up by the method's
-    name, which two classes may both use, each returning another unit; nor
-    through an overloaded routine. Nim's own check still has those."""
+    """Can VALUE's unit be trusted enough to refuse on it? A method call only
+    when it is the whole value and its receiver's class is known: the method's
+    name alone (`track.cross(offset)`) may be two classes', each returning
+    another unit. Not through an overloaded routine. Nim's own check still has
+    the rest."""
     import re as _re_us
-    if _re_us.search(r"\.\w+\(", value):
+    _whole = _re_us.match(r"^([A-Za-z_][\w.]*?)\.([A-Za-z_]\w*)\((.*)\)$", value.strip(), _re_us.S)
+    if _whole and _balanced(_whole.group(3)) and not _re_us.search(r"\.\w+\(", _whole.group(3)):
+        # one method call on a value whose class is known: its own return type
+        _cls = (_nim_expr_type(_whole.group(1)) or "").strip()
+        _cls = _cls[4:].strip() if _cls.startswith("var ") else _cls
+        _prt = getattr(ParserState, "proc_return_types", {})
+        if f"{_cls}.{_whole.group(2)}" not in _prt or f"?{_cls}.{_whole.group(2)}" in _prt:
+            return False               # unknown, or one of several of that name
+    elif _re_us.search(r"\.\w+\(", value):
         return False
     return not any(_re_us.search(rf"(?<![\w.]){_re_us.escape(n)}\(", value)
                    for n in getattr(ParserState, "overloaded_procs", ()) or ())
@@ -4585,8 +4595,8 @@ def _refuse_argument_units(func, args_str, args, param_types):
             continue
         if unit and is_distinct(unit) and unit != want and want not in narrow_ancestors(unit):
             raise SyntaxError(
-                f"{func}({args_str.strip()}): its argument {n + 1}, {arg.strip()}, is a {unit}, "
-                f"where {func} takes a {want}")
+                f"{func}({args_str.strip()}): its argument {n + 1}, {arg.strip()}, is {a_(unit)}, "
+                f"where {func} takes {a_(want)}")
 
 
 def _wrap_option_args(expr):
