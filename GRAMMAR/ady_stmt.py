@@ -434,12 +434,18 @@ def classify_union(parts, failure_types):
     failure = failures[0] if failures else None
     values = [p for p in parts if p not in failure_types]
     nones = values.count("None")
+    if nones == 1 and len(parts) >= 3 and failure is None:
+        # `A | B | None`, what ?(A | B) is written out as: one of the members,
+        # or nothing. The pre-pass (desugar_optional_unions) names the union
+        # for the source; this is the same thing read from an annotation that
+        # has been expanded, as the Python backend's are.
+        return {"kind": "plain", "values": list(parts), "failure": None}
     if nones:
         if len(parts) != 2 or nones > 1:
             raise SyntaxError(
                 f"'{shown}': None goes with one other type -- `T | None`, "
                 f"which is ?T, or `None | !F`, a step that can only fail. For "
-                f"an optional union, declare the union as a type and write ?Name")
+                f"an optional union write it once: `A | B | None`")
         if failure is None:
             return {"kind": "optional", "values": [p for p in parts if p != "None"],
                     "failure": None}
@@ -496,6 +502,41 @@ def scan_consts(code):
 
 
 _CLASS_DECL = _re_dup.compile(r"^[ \t]*class[ \t]+([A-Za-z_]\w*)", _re_dup.MULTILINE)
+
+
+_OPT_UNION_MEMBER = r"[A-Za-z_][\w.]*(?:\[[^\]\n]*\])?"
+_OPT_UNION = _re_dup.compile(
+    r"(?<=[:>])([ \t]*)(" + _OPT_UNION_MEMBER + r"(?:[ \t]*\|[ \t]*" + _OPT_UNION_MEMBER + r"){2,})(?![\w\[(.|])")
+
+
+def desugar_optional_unions(code):
+    """CODE with every `A | B | None` annotation written as `?AdaOpt_A_B_T`,
+    the optional of a union type that is declared at the end of the module:
+    `A | B | None` is the optional of `A | B`, and the `?Name` form is what
+    both backends already carry. Only a type position (after `:` or `->`) is
+    read, and a union with a failure member is left to its own rules. The
+    declarations go last, so that no line moves."""
+    from ady_modules import _blank
+    text = _blank(code)
+    decls = {}
+    out, last = [], 0
+    for m in _OPT_UNION.finditer(text):
+        parts = [p.strip() for p in m.group(2).split("|")]
+        if parts.count("None") != 1:
+            continue
+        members = [p for p in parts if p != "None"]
+        name = "AdaOpt_" + "_".join(_re_dup.sub(r"\W+", "", x) for x in members) + "_T"
+        decls.setdefault(name, " | ".join(members))
+        out.append(code[last:m.start(2)])
+        out.append("?" + name)
+        last = m.end(2)
+    if not decls:
+        return code
+    out.append(code[last:])
+    result = "".join(out)
+    if not result.endswith("\n"):
+        result += "\n"
+    return result + "".join(f"\ntype {n} is {u}\n" for n, u in decls.items())
 
 
 def resolve_unit_aliases(code, known=()):

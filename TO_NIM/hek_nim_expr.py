@@ -4430,8 +4430,11 @@ def _wrap_option_args(expr):
                     # the routine's own type -- nimcall, noSideEffect -- and
                     # Option[that] is not the closure type of the parameter.
                     _m_proc = _re_woa.match(r"^Option\[(proc\(.*)\]$", ptype.strip())
+                    _m_one = _re_woa.match(r"^Option\[(OneOf\d+\[.*\])\]$", ptype.strip())
                     if _m_proc:
                         new_args.append(kw_prefix + f"some[{_m_proc.group(1)}]({arg})")
+                    elif _m_one:
+                        new_args.append(kw_prefix + f"some({_result_wrap(arg, _m_one.group(1))})")
                     else:
                         new_args.append(kw_prefix + f"some({arg})")
                     changed = True

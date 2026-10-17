@@ -712,7 +712,8 @@ def translate(code, export_symbols=False):
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     from ady_html import expand_html_blocks
     code = expand_html_blocks(code)  # `html:` blocks: see ady_html
-    from ady_stmt import resolve_unit_aliases
+    from ady_stmt import resolve_unit_aliases, desugar_optional_unions
+    code = desugar_optional_unions(code)    # `A | B | None` is ?(A | B)
     code = resolve_unit_aliases(code, _nimport_carried.get("distinct_types", {}))
     # Before the parse, so that `failure` on anything but a record is
     # reported as that rather than as the parse error it also is.
@@ -1717,8 +1718,8 @@ def run_tests():
          "type B_T is record:\n    b: int\n"
          "var x: !A_T | !B_T\n",
          "at most one failure member"),
-        # None goes with one other type.
-        ("var x: int | str | None\n",
+        # None is there once: `int | str | None` is ?(int | str), not this.
+        ("var x: int | None | None\n",
          "None goes with one other type"),
         # The failure is marked where the union is written: `failure` on
         # the declaration is the old spelling, and says what the new one is.

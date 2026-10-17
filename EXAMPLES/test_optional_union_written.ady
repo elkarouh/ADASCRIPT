@@ -1,0 +1,58 @@
+#!/usr/bin/env ady2nim
+"""`A | B | None` is the optional of `A | B`: returned, passed, tested with `is` and taken apart with `case`, whichever way the backend holds it."""
+type Circle_T is record:
+    r: int
+
+type Square_T is record:
+    side: int
+
+def make(k: int) -> Circle_T | Square_T | None:
+    if k == 0:
+        return None
+    if k == 1:
+        return Circle_T(r=7)
+    return Square_T(side=3)
+
+def kind(x: Circle_T | Square_T | None) -> str:
+    if x is None:
+        return "nothing"
+    if x is Circle_T:
+        return "circle"
+    return "square"
+
+def number_of(k: int) -> int | str | None:
+    if k == 0:
+        return None
+    if k == 1:
+        return 5
+    return "five"
+
+def main():
+    var seen: str = ""
+    for k in [0, 1, 2]:
+        let x: Circle_T | Square_T | None = make(k)
+        case x:
+            when Circle_T:
+                seen += f"c{x.r} "
+            when Square_T:
+                seen += f"s{x.side} "
+            when None:
+                seen += "n "
+        seen += kind(x) + " "
+    assert seen == "n nothing c7 circle s3 square "
+    assert kind(None) == "nothing"
+
+    var shown: str = ""
+    for k in [0, 1, 2]:
+        let y: int | str | None = number_of(k)
+        case y:
+            when int:
+                shown += "int "
+            when str:
+                shown += "str "
+            when None:
+                shown += "none "
+    assert shown == "none int str "
+    print "ok"
+
+main()

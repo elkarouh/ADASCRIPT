@@ -1608,10 +1608,10 @@ Everything in this document is built, except:
   the message names the generated code rather than the line.
 - **Exceptions** do not become failures: a call that raises is not turned
   into a `T | !F` at the boundary by itself, and there is no adapter yet.
-- **Unions** are at most ten members. An optional union written out
-  (`int | float | None`) is refused, on purpose: `None` goes with one other
-  type, and an optional union is declared as a type first and written
-  `?Name`.
+- **Unions** are at most ten members. `A | B | None` is the optional of
+  `A | B`: it reads as written, `case x:` takes `when A`, `when B` and
+  `when None`, and behind the scenes it is `?Name` for a union type the
+  transpiler declares for it.
 - **Units cannot be raised to a power.** An area is `Length_T * Length_T`,
   declared by name; there is no `Length_T ** 2`. That is deliberately
   smaller than Nim's dimensional-analysis libraries.

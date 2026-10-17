@@ -321,7 +321,8 @@ def translate(code):
     code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
-    from ady_stmt import resolve_unit_aliases
+    from ady_stmt import resolve_unit_aliases, desugar_optional_unions
+    code = desugar_optional_unions(code)    # `A | B | None` is ?(A | B)
     code = resolve_unit_aliases(code)      # an alias of a unit is the unit
     from ady_stmt import scan_failure_types, scan_return_types, either_procs
     _failures = scan_failure_types(code)   # before the parse: see ady2nim

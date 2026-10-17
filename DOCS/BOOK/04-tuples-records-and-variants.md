@@ -257,6 +257,24 @@ Two members are special. `T | None` is `?T` — Chapter 10 — and a member that
 is a *failure* record makes the union a value-or-failure, which a `do:` block
 can chain (10.12). A union has at most one failure member.
 
+`None` may also join a union of several members: `A | B | None` is the
+optional of `A | B`, and a `case` over it names all three:
+
+```python
+let x: A | B | None = lookup(key)
+case x:
+    when A:
+        print x.n
+    when B:
+        print x.s
+    when None:
+        print "nothing"
+```
+
+It is written out so that a function's signature reads as it is spoken; the
+transpiler declares the union type for it. A `None` that comes twice is an
+error.
+
 ## 4.5 Type aliases
 
 The humblest `type` declaration is an alias, and the examples use them

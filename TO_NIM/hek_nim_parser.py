@@ -2296,7 +2296,7 @@ def _require_catch_all(subject, case_node):
         "none of them would do nothing at all.")
 
 
-def _either_case_to_nim(case_node, subject, rtype, indent):
+def _either_case_to_nim(case_node, subject, rtype, indent, optional=False):
     """`case x:` over a union: each `when` names a member -- `when int:`,
     `when Failure_T:`, `when None:` for a `None | !F` -- or is `when
     others:`, and x is narrowed to that member in its branch, as `x is T`
@@ -2305,7 +2305,7 @@ def _either_case_to_nim(case_node, subject, rtype, indent):
     from hek_nim_declarations import _PY_TO_NIM
     info = hek_nim_expr._union_info(rtype)
     values, failure = info["values"], info["failure"]
-    members = values + ([failure] if failure else [])
+    members = values + ([failure] if failure else []) + (["None"] if optional else [])
     shown_all = " | ".join("None" if m == "void" else m for m in members)
     if not re.fullmatch(r"[A-Za-z_]\w*", subject.strip()):
         raise SyntaxError(
@@ -2326,10 +2326,14 @@ def _either_case_to_nim(case_node, subject, rtype, indent):
         else:
             if pat == "nil" and values == ["void"]:
                 pat = "void"
+            if optional and pat == "nil":
+                pat = "None"
             if pat not in members:
                 raise SyntaxError(
                     f"case {subject}: `when {shown}` is no member of {shown_all}")
-            if pat == failure:
+            if optional and pat == "None":
+                test = "isNone"
+            elif pat == failure:
                 test = "is_err"
             elif info["kind"] == "plain":
                 test = f"is_m{values.index(pat)}"
@@ -2337,18 +2341,36 @@ def _either_case_to_nim(case_node, subject, rtype, indent):
                 test = f"is_v{values.index(pat)}"
             else:
                 test = "is_ok"
-            narrow = hek_nim_expr.narrow_suffix(subject, test, True)
+            if optional and pat == "None":
+                narrow, cond = None, f"{subject}.isNone"
+            elif optional:
+                # a member of what the optional holds: present, and that member
+                narrow = f"{subject}.get()"
+                cond = f"{subject}.isSome and {subject}.get().{test}"
+            else:
+                narrow = hek_nim_expr.narrow_suffix(subject, test, True)
+                cond = f"{subject}.{test}"
             if pat == "void":
                 narrow = None
             covered.add(pat)
-            head = f"{_ind(indent)}{keyword} {subject}.{test}:"
+            head = f"{_ind(indent)}{keyword} {cond}:"
             keyword = "elif"
-        _added = narrow is not None and hek_nim_expr._narrow_add(subject, narrow)
+        _added = False
+        if optional and narrow is not None:
+            # unwrapped first, then narrowed to the member
+            ParserState.nim_imports.add("options")
+            hek_nim_expr._narrow_add(subject, ".get()")
+            hek_nim_expr._narrow_add(narrow, hek_nim_expr.narrow_suffix(narrow, test, True))
+            _added = True
+        elif narrow is not None:
+            _added = hek_nim_expr._narrow_add(subject, narrow)
         try:
             body = block_node.to_nim(indent + 1) if block_node else _ind(indent + 1) + "discard"
         finally:
             if _added:
                 hek_nim_expr._narrow_drop(subject)
+                if optional:
+                    hek_nim_expr._narrow_drop(subject)
         hc = _block_inline_header_comment(block_node) if block_node else ""
         out.append(f"{head}{hc}\n{body}")
     missing = [m for m in members if m not in covered]
@@ -2379,6 +2401,9 @@ def to_nim(self, indent=0):
     _either_rt = hek_nim_expr._union_type_of(subject)
     if _either_rt:
         return _either_case_to_nim(self, subject, _either_rt, indent)
+    _opt_rt = hek_nim_expr._opt_union_inner(subject)
+    if _opt_rt:
+        return _either_case_to_nim(self, subject, _opt_rt, indent, optional=True)
     _require_catch_all(subject, self)
 
     # Detect tuple subject: (a, b, ...) — desugar to if/elif

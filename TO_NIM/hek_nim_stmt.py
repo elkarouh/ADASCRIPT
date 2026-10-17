@@ -1587,6 +1587,9 @@ def to_nim(self):
                 _sym_type = (_sym.get("type", "") if isinstance(_sym, dict) else "") if _sym else ""
                 if _sym_type.startswith("Option["):
                     return f"return {val}"
+                # an optional union takes a member as the union's own
+                if inner_type.startswith("OneOf") and not hek_nim_expr._expr_is_option(val):
+                    val = hek_nim_expr._result_wrap(val, inner_type)
                 return f"return some({val})"
     if val == "nil" and ret_type and "seq[" in ret_type:
         return "return @[]"

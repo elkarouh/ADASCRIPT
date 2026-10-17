@@ -286,10 +286,6 @@ it but do:. Not yet:
 - [x] a union of more than six members: stdlib.nim now has OneOf2..OneOf10
       (generated blocks). The Python backend still stops at six
       (`hek_py_declarations.py`).
-- [ ] an optional union written out, `int | float | None`, stays refused on
-      purpose: `None` goes with one other type, and `type Num_T is int |
-      float` with `?Num_T` says the same thing with a name. Revisit only if
-      the name proves a burden.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake. The message names
