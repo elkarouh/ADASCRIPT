@@ -486,12 +486,15 @@ def _reject_distinct_mix(name, annotation, value):
         return
     if not (is_distinct(target) or is_distinct(source)):
         return
-    if is_distinct(target):
-        fix = f"write {target}({v})"
+    from ady_declarations import as_written, unit_fix
+    if is_distinct(target) and is_distinct(source):
+        fix = unit_fix(target, v)       # an unrelated unit goes through the number
+    elif is_distinct(target):
+        fix = f"write {target}({as_written(v)})"
     else:
-        fix = f"write {target}({v})" if target in _DISTINCT_BASES else "convert it explicitly"
+        fix = f"write {target}({as_written(v)})" if target in _DISTINCT_BASES else "convert it explicitly"
     raise SyntaxError(
-        f"cannot give {v}, a {source}, to {name}, a {target}: a distinct type "
+        f"cannot give {as_written(v)}, a {source}, to {name}, a {target}: a distinct type "
         f"does not mix with any other -- {fix}")
 
 
@@ -1241,6 +1244,15 @@ def to_py(self):
     return f"from {source} import {names}"
 
 
+# What Nim's math calls what Python's calls something else: a file `nimport`s math
+# and writes Nim's names (ady2py renames `math.arctan(x)`; this, a name taken bare).
+_MATH_FOR_PYTHON = {
+    "arcsin": "asin", "arccos": "acos", "arctan": "atan", "arctan2": "atan2",
+    "arcsinh": "asinh", "arccosh": "acosh", "arctanh": "atanh",
+    "ln": "log", "degToRad": "radians", "radToDeg": "degrees",
+}
+
+
 @method(from_nim_abs)
 def to_py(self):
     """from_nim_abs: 'from' dotted_name 'nimport' import_names
@@ -1248,6 +1260,18 @@ def to_py(self):
     Nim-only import, so it is commented out in Python output — the same
     treatment `nimport_stmt` gets."""
     source, names = _from_import_parts(self)
+    if source == "math":
+        # Nim's math and Python's are one library under two spellings: the names
+        # taken bare are Python's, under Nim's (`arctan2` is atan2, `PI` is pi)
+        import math as _pymath
+        consts = {"PI": "pi", "TAU": "tau", "E": "e", "Inf": "inf", "NaN": "nan"}
+        taken = []
+        for n in (x.strip() for x in names.strip("()").split(",")):
+            py = consts.get(n) or _MATH_FOR_PYTHON.get(n, n)
+            if n and hasattr(_pymath, py):
+                taken.append(n if py == n else f"{py} as {n}")
+        if taken:
+            return f"from math import {', '.join(taken)}  # from math nimport {names}"
     return f"# from {source} nimport {names}"
 
 

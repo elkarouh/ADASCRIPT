@@ -1,4 +1,5 @@
 # refused by nim: Status.draw: its parameter ed is not var, where Pane.draw's is var
+# refused by python: Status.draw: its parameter ed is not var, where Pane.draw's is var
 class Editor:
     var top: int
     def __init__(self):

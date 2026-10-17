@@ -129,6 +129,7 @@ def _py_reset():
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
     ParserState.unit_dims = {}
+    ParserState.written_as = {}
     ParserState.narrowed_types = {}
     ParserState.mod_types = {}
     ParserState.record_types = set()
@@ -282,11 +283,7 @@ def _drop_type_applications(output):
 
 # What Nim's math calls what Python's calls something else: a file `nimport`s math
 # and writes Nim's names, so `math.arctan(x)` has to become `math.atan(x)` here.
-_MATH_FOR_PYTHON = {
-    "arcsin": "asin", "arccos": "acos", "arctan": "atan", "arctan2": "atan2",
-    "arcsinh": "asinh", "arccosh": "acosh", "arctanh": "atanh",
-    "ln": "log", "degToRad": "radians", "radToDeg": "degrees",
-}
+from hek_py_stmt import _MATH_FOR_PYTHON  # noqa: E402
 
 
 def _rename_math_for_python(output):
@@ -330,6 +327,8 @@ def translate(code):
     refuse_paren_enums(code)                   # `is (A, B)`: an enum is `is enum A, B`
     from ady_declarations import refuse_let_writes
     refuse_let_writes(code)                    # `let r = Row(); r.x = 1`: Nim refuses it
+    from ady_declarations import refuse_override_var_mismatch
+    refuse_override_var_mismatch(code)         # an override's `var` parameters: Nim refuses a mismatch
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
     from ady_stmt import resolve_unit_aliases, desugar_optional_unions
@@ -403,21 +402,30 @@ def translate(code):
             r'^def\s+([A-Za-z_]\w*)\s*\(\s*\w+\s*:\s*([A-Za-z_][\w.]*)\s*[,)=]', code, _re_udef.M)}
     # ... unless the type has a field or method of that name: `ed.row` of an
     # Editor with a field row is the field, whatever functions are named row
-    _members, _owner, _owner_indent = {}, None, 0
+    # and each field's type, `self.box.area` needing what self.box is
+    _members, _fields, _owner, _owner_indent, _member_indent = {}, {}, None, 0, None
     for _ln in code.split("\n"):
         _head = _re_udef.match(r'([ \t]*)(?:class\s+(\w+)|type\s+(\w+)\s+is\s+(?:record|tuple)\b)', _ln)
         if _head:
             _owner, _owner_indent = _head.group(2) or _head.group(3), len(_head.group(1))
+            _member_indent = None
             _members.setdefault(_owner, set())
             continue
         if _owner and _ln.strip():
-            if len(_ln) - len(_ln.lstrip()) <= _owner_indent:
+            _ind = len(_ln) - len(_ln.lstrip())
+            if _ind <= _owner_indent:
                 _owner = None
                 continue
             _m = _re_udef.match(r'\s+(?:var\s+|def\s+)?(\w+)\s*[:(]', _ln)
             if _m:
                 _members[_owner].add(_m.group(1))
+            if _member_indent is None and not _ln.lstrip().startswith(("#", '"')):
+                _member_indent = _ind
+            _f = _re_udef.match(r'\s+(?:var\s+)?(\w+)\s*:\s*([^=#\n]+?)\s*(?:=.*)?(?:#.*)?$', _ln)
+            if _f and _ind == _member_indent and _f.group(1) not in ("def", "class"):
+                _fields.setdefault(_owner, {})[_f.group(1)] = _f.group(2).strip()
     _PS_udef.py_type_members = _members
+    _PS_udef.py_field_types = _fields
     # each top-level function's parameter types, by position, for the unit
     # check of a call's arguments (hek_py_expr._refuse_argument_units); a name
     # defined twice is an overload, and left out
@@ -549,8 +557,10 @@ def include_ady_modules(code, search_dir, _seen=None):
     seen = set() if _seen is None else _seen
     from ady_modules import import_map, resolve_imports, normalize_imports
 
+    from ady_modules import module_dirs
+
     def find(name, here):
-        for base in (here, os.path.dirname(here)):
+        for base in module_dirs(here):
             path = os.path.join(base, name + ".ady")
             if os.path.isfile(path):
                 return path
@@ -559,10 +569,17 @@ def include_ady_modules(code, search_dir, _seen=None):
     # the rule of what the file may use of its modules, bundled libraries too
     stdlib = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "TO_NIM", "STDLIB")
 
+    # a bundled library made of what only Nim has (db.ady on db_sqlite) has its
+    # Python version beside this file, in TO_PYTHON/STDLIB, taken first
+    py_stdlib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB")
+
     def find_checked(name):
         path = find(name, search_dir)
-        bundled = os.path.join(stdlib, name + ".ady")
-        return path or (bundled if os.path.isfile(bundled) else None)
+        for lib in (py_stdlib, stdlib):
+            bundled = os.path.join(lib, name + ".ady")
+            if not path and os.path.isfile(bundled):
+                path = bundled
+        return path
     # `import M` of an .ady module, `nimport` of a Nim one, `pyimport` of a Python one
     code = normalize_imports(code, lambda name: find_checked(name) is not None)
     from ady_modules import refuse_bare_nim_names
@@ -577,6 +594,16 @@ def include_ady_modules(code, search_dir, _seen=None):
         if path:
             with open(path, encoding="utf-8") as f:
                 code = resolve_imports(code, mod, listed, f.read())
+    # a name taken from a module that is merged under another name (geometry's
+    # `distance` beside an importer's own, merged as geometry__distance) is
+    # that name here too
+    from ady_modules import RENAMED, rename_in, STAR as _STAR, _binds, _blank
+    for mod, listed in import_map(code).items():
+        renames = RENAMED.get(mod.rsplit("/", 1)[-1], {})
+        taken = {n: r for n, r in renames.items()
+                 if (listed is _STAR or n in listed) and not _binds(_blank(code), n)}
+        if taken:
+            code = rename_in(code, taken)
 
     def expand(match):
         names = match.group("names")

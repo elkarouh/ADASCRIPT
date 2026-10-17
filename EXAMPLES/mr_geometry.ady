@@ -1,0 +1,3 @@
+# a module of test_module_rename.ady
+def distance(a: float, b: float) -> float:
+    return b - a

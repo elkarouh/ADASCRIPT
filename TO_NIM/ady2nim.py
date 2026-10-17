@@ -112,6 +112,7 @@ def _nim_reset():
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
     ParserState.unit_dims = {}           # unit -> its dimension, see ady_declarations.unit_dims
+    ParserState.written_as = {}          # made-up code -> as written, see ady_declarations.note_written
     ParserState.inferred_unit_ops = {}   # (op, l, r) -> unit, from the dimensions alone
     ParserState._units_declared = set()
     ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
@@ -690,8 +691,8 @@ def _resolved_imports(code, search_dir):
     its parent, then the bundled STDLIB. A refusal is printed and ends the run.
     """
     from ady_modules import import_map, resolve_imports, normalize_imports
-    bases = (search_dir, os.path.dirname(search_dir),
-             os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB"))
+    from ady_modules import module_dirs
+    bases = module_dirs(search_dir) + (os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB"),)
 
     def find(mod):
         return next((p for p in (os.path.join(b, mod + ".ady") for b in bases)
@@ -2341,11 +2342,8 @@ def main(argv=None):
             return names
 
         def _find_dep_ady_pre(dep_name, search_dir):
-            _cands = [
-                os.path.join(search_dir, dep_name + ".ady"),
-                os.path.join(os.path.dirname(search_dir), dep_name + ".ady"),
-                os.path.join(cache_dir, dep_name + ".ady"),
-            ]
+            from ady_modules import module_dirs
+            _cands = [os.path.join(d, dep_name + ".ady") for d in module_dirs(search_dir) + (cache_dir,)]
             return next((p for p in _cands if os.path.exists(p)), None)
 
         _prepass_seen = set()
@@ -2481,11 +2479,8 @@ def main(argv=None):
             return '\n'.join(out)
 
         def _find_dep_ady(dep_name, search_dir):
-            _candidates = [
-                os.path.join(search_dir, dep_name + ".ady"),
-                os.path.join(os.path.dirname(search_dir), dep_name + ".ady"),
-                os.path.join(cache_dir, dep_name + ".ady"),
-            ]
+            from ady_modules import module_dirs
+            _candidates = [os.path.join(d, dep_name + ".ady") for d in module_dirs(search_dir) + (cache_dir,)]
             return next((p for p in _candidates if os.path.exists(p)), None)
 
         # BFS: seed from the top-level source, then follow each dep's own nimports.

@@ -1,0 +1,9 @@
+#!/usr/bin/env ady2nim
+"""Test: a module's name beside an importer's own, taken by a third file.
+
+mr_middle has a `distance` of its own and calls mr_geometry's as
+`mr_geometry.distance`; mr_far takes `distance` from mr_geometry. Each call
+reaches the function it names, on both backends: 3 + 100 + 10.
+"""
+from mr_middle import both
+print(both())

@@ -1,0 +1,60 @@
+#!/usr/bin/env ady2nim
+"""Test: spellings that ran on one backend only, or on neither.
+
+`x.f` through a field and an element (`self.box.area`, `boxes[0].area`); a
+literal given to a function value's distinct parameter, and appended to a
+[]Speed_T; a `T | !F` value whose type the Nim backend cannot tell; the
+character `str(chr(n))` past 127; names taken bare `from math nimport`.
+Compared between the backends.
+"""
+from math nimport sqrt, arctan2, PI
+
+type Speed_T is distinct float
+
+type Box_T is record:
+    w: int
+    h: int
+
+type Bad_T is record:
+    why: str
+
+def area(b: Box_T) -> int:
+    return b.w * b.h
+
+def grown(b: Box_T, k: int) -> Box_T:
+    return Box_T(b.w + k, b.h + k)
+
+class Shelf:
+    var box: Box_T
+    var boxes: []Box_T
+    def __init__(self):
+        self.box = Box_T(2, 3)
+        self.boxes = [Box_T(1, 1), Box_T(2, 2)]
+    def total(self) -> int:
+        return self.box.area + self.boxes[1].area
+
+def doubled(s: Speed_T) -> float:
+    return float(s) * 2.0
+
+def pick(n: int) -> int | !Bad_T:
+    if n > 0:
+        return n
+    return [Bad_T("first"), Bad_T("second")][n + 1]
+
+let s: Shelf = Shelf()
+print(s.total(), s.box.area, s.boxes[0].area, s.box.grown(1).area)
+
+let f: (Speed_T) -> float = doubled
+var speeds: []Speed_T = []
+speeds.append(5.0)
+print(f(4.0), len(speeds), float(speeds[0]))
+
+for n in [2, -1, 0]:
+    let r: int | !Bad_T = pick(n)
+    if r is Bad_T:
+        print("failure", r.why)
+    else:
+        print("value", r)
+
+print(str(chr(233)) == "é", str(chr(65)))
+print(sqrt(16.0), arctan2(1.0, 1.0) * 4.0 == PI)

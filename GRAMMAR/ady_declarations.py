@@ -1103,6 +1103,34 @@ def dimension_text(d):
     return text + ("".join(f" / {x}" for x in den))
 
 
+def note_written(emitted, written):
+    """EMITTED, code a backend made up, is what the program wrote as WRITTEN:
+    an error shows the program's own words (see as_written)."""
+    from hek_parsec import ParserState
+    if emitted != written:
+        if getattr(ParserState, "written_as", None) is None:
+            ParserState.written_as = {}
+        ParserState.written_as[emitted] = written
+
+
+def as_written(text):
+    """TEXT with each piece of made-up code noted by note_written put back as written."""
+    from hek_parsec import ParserState
+    for emitted, written in sorted((getattr(ParserState, "written_as", None) or {}).items(),
+                                   key=lambda kv: -len(kv[0])):
+        text = text.replace(emitted, written)
+    return text
+
+
+def unit_fix(target, value):
+    """How to give VALUE to a TARGET it is no unit of: through the plain number
+    when it is a unit of its own, which no declaration relates to TARGET."""
+    from hek_parsec import ParserState
+    v = as_written(value.strip())
+    return f"write {target}(float({v}))" if distinct_kind(target) == "float" else \
+           f"write {target}(int({v}))" if distinct_kind(target) == "int" else f"write {target}({v})"
+
+
 def power_unit(base, exp):
     """The unit `x ** EXP` is for x a BASE, or None when BASE is no unit with a
     dimension. `Length_T ** 2` is the unit declared with the dimension of a
@@ -1454,6 +1482,41 @@ def refuse_paren_enums(code):
             raise SyntaxError(
                 f"line {n}: ({m.group(2).strip()}) names no types; an enum is "
                 f"written type {m.group(1)} is enum {', '.join(names)}")
+
+
+def refuse_override_var_mismatch(code):
+    """Refuse a method whose declared `var` parameters differ from those of the
+    method it overrides, as ady2nim does: on Nim it would be another method, and
+    the base's would be called without a word. From the source, for ady2py."""
+    classes = {}                      # name -> (parent, {method: [(param, var)]})
+    current = None
+    for m in _re_du.finditer(r'^(?P<ind>[ \t]*)(?:class[ \t]+(?P<cls>\w+)[ \t]*(?:\((?P<par>\w+)[^)]*\))?[ \t]*:'
+                             r'|def[ \t]+(?P<meth>\w+)[ \t]*\((?P<params>[^)]*)\))', code, _re_du.MULTILINE):
+        if m.group("cls"):
+            current = (m.group("cls"), len(m.group("ind")))
+            classes[current[0]] = (m.group("par"), {})
+            continue
+        if not current or len(m.group("ind")) <= current[1]:
+            current = None             # a function outside any class
+            continue
+        params = []
+        for p in m.group("params").split(","):
+            if ":" in p:
+                params.append((p.split(":")[0].strip(), bool(_re_du.match(r"\s*var\s", p.split(":", 1)[1]))))
+        classes[current[0]][1].setdefault(m.group("meth"), params)
+    for name, (parent, methods) in classes.items():
+        for meth, mine in methods.items():
+            base = parent
+            while base in classes and meth not in classes[base][1]:
+                base = classes[base][0]
+            if base not in classes:
+                continue
+            for (pn, pv), (_bn, bv) in zip(mine, classes[base][1][meth]):
+                if pv != bv:
+                    raise SyntaxError(
+                        f"{name}.{meth}: its parameter {pn} is {'var' if pv else 'not var'}, where "
+                        f"{base}.{meth}'s is {'var' if bv else 'not'}: an override takes its parameters "
+                        f"as the method it overrides does. Declare it `{pn}: var T` in both, or in neither")
 
 
 def refuse_let_writes(code):

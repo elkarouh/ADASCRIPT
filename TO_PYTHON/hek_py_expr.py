@@ -1530,6 +1530,41 @@ def _refuse_unrelated_unit(name, arg):
            "that the units are meant"))
 
 
+def _py_bare_type(t):
+    """T without its optional: `?Box_T`, `Optional[Box_T]`, `Box_T | None` are Box_T."""
+    t = (t or "").replace("?", "").strip()
+    return _re_mod_pfx.sub(r"^Optional\[(.*)\]$|\s*\|\s*None$|^None\s*\|\s*", r"\1", t).strip()
+
+
+def _py_receiver_type(base, trailers):
+    """The type of BASE followed by TRAILERS (`.field`, `[i]`), or "" when it
+    cannot be told. BASE is a name, `self`, or `:T` for a value known to be a T."""
+    from hek_parsec import ParserState
+    if base.startswith(":"):
+        t = base[1:]
+    elif base == "self" and DEFINING_CLASS:
+        t = DEFINING_CLASS
+    elif _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*", base):
+        sym = ParserState.symbol_table.lookup(base)
+        t = (sym.get("type") or "") if isinstance(sym, dict) else ""
+    else:
+        return ""
+    fields = getattr(ParserState, "py_field_types", {})
+    for tr in trailers:
+        t = _py_bare_type(t)
+        if _re_mod_pfx.fullmatch(r"\.[A-Za-z_]\w*", tr):
+            t = fields.get(t, {}).get(tr[1:], "")
+        elif tr.startswith("[") and tr.endswith("]") and ":" not in tr:
+            m = (_re_mod_pfx.fullmatch(r"\[\*?\](\w+)", t)
+                 or _re_mod_pfx.fullmatch(r"(?:list|List|Sequence)\[(\w+)\]", t))
+            t = m.group(1) if m else ""
+        else:
+            return ""
+        if not t:
+            return ""
+    return _py_bare_type(t)
+
+
 def _refuse_argument_units(func, args):
     """A call of FUNC with an argument of one unit where its parameter is of
     another, `travel(t)` for a Duration_T t where travel takes a Distance_T:
@@ -1575,17 +1610,18 @@ def to_py(self, prec=None):
     if len(self.nodes) > 1 and hasattr(self.nodes[1], "nodes") and self.nodes[1].nodes:
         trailers = self.nodes[1].nodes
         i = 0
+        # what the value so far is, as far as can be told: from the name's
+        # declared type, then each field, element or dot-call taken from it
+        _t_from, _t_at = result, 0
         while i < len(trailers):
             tr = trailers[i]
             tr_str = tr.to_py()
             # `p.total` / `p.scaled(10)` with total and scaled functions whose
-            # first parameter is p's type: total(p), scaled(p, 10), as on Nim
-            if _re_mod_pfx.fullmatch(r"\.[A-Za-z_]\w*", tr_str) \
-                    and _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*", result):
+            # first parameter is p's type: total(p), scaled(p, 10), as on Nim --
+            # `self.box.area` and `rows[0].area` too
+            if _re_mod_pfx.fullmatch(r"\.[A-Za-z_]\w*", tr_str):
                 _first = getattr(ParserState, "py_first_param", {}).get(tr_str[1:])
-                _rsym = ParserState.symbol_table.lookup(result) if _first else None
-                _rtype = ((_rsym.get("type") or "") if isinstance(_rsym, dict) else "").replace("?", "")
-                _rtype = _re_mod_pfx.sub(r"^Optional\[(.*)\]$|\s*\|\s*None$|^None\s*\|\s*", r"\1", _rtype.strip()).strip()
+                _rtype = _py_receiver_type(_t_from, [t.to_py() for t in trailers[_t_at:i]]) if _first else ""
                 if _first and _rtype == _first and tr_str[1:] not in \
                         getattr(ParserState, "py_type_members", {}).get(_rtype, ()):
                     _call = trailers[i + 1].to_py() if i + 1 < len(trailers) else ""
@@ -1596,6 +1632,7 @@ def to_py(self, prec=None):
                     else:
                         result = f"{tr_str[1:]}({result})"
                         i += 1
+                    _t_from, _t_at = (":" + (getattr(ParserState, "ady_return_types", {}).get(tr_str[1:]) or "")), i
                     continue
             # .get() on an Optional-typed variable is a no-op in Python (value is already unwrapped)
             # Parsed as two trailers: attr_trailer(".get") + call_trailer("()")
@@ -1988,6 +2025,9 @@ def to_py(self, prec=None):
                 _unit = expr_unit(result, _py_atom_unit) if len(exponents) == 1 else None
                 _to = power_unit(_unit, exp) if _unit and is_distinct(_unit) else None
                 # a unit squared is the unit of its dimension: Length_T ** 2 is an Area_T
+                if _to:
+                    from ady_declarations import note_written
+                    note_written(f"{_to}({result} ** {exp})", f"{result} ** {exp}")
                 result = f"{_to}({result} ** {exp})" if _to else f"{result} ** {exp}"
         elif fname in (
             "call_trailer",

@@ -7,10 +7,11 @@ history of this file if the reasoning behind one of them is ever wanted.
 - [ ] distinct types and units, what is left (the feature itself --
       `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
-      - a literal whose context Nim cannot see (an argument to something
-        that is not a known routine) needs `V(x)` written. A table literal
-        with a distinct key or value type no longer does, when declared,
-        returned or passed as a known routine's argument.
+      - a literal whose context Nim cannot see needs `V(x)` written: an
+        argument to a routine of a Nim module, or a method of an object
+        that is not the program's own. A known routine's argument, a function
+        value's (`let f: (Speed_T) -> float`), `xs.append(5.0)` to a
+        []Speed_T and a table literal no longer do.
       - a derived unit is float, or int for a product. `x ** n` (n a whole
         number written out) is the unit of that dimension, when one is
         declared. Units relate by dimension (book 2.7), but only to the
@@ -55,10 +56,6 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] which side a returned value is on is read from its type; a value the
-      Nim backend cannot type goes on the value side, and Nim's own type
-      check then catches a failure put there by mistake. The message names
-      the generated code, not the line.
 - [ ] an adapter from exceptions at the boundary: a `T | !F` from a call
       that raises. Needs a decision first: what spells "this call's
       exception is that failure" -- a `try`-expression, a decorator on the
@@ -104,18 +101,20 @@ cross-module subclasses only.
 `ady2py` replaces `import X` by X.ady's text (see `include_ady_modules`).
 Known, and not done:
 
-- `geometry.distance(a, b)` beside a `distance` of the importing file's own merges the
-  module's as `geometry__distance`; a third file that takes `distance` from geometry
-  unqualified then gets the importing file's.
-- Of the libraries bundled with ady2nim, `db.ady` (Nim's db_sqlite) builds on Nim only;
-  `browser`, `svg_drag` and `jointjs` are for `ady2nim js`, by nature.
+- The libraries bundled with ady2nim build with ady2py too; `db.ady` through its Python
+  version, TO_PYTHON/STDLIB/db.ady (sqlite3). `browser`, `svg_drag` and `jointjs` are for
+  `ady2nim js`, by nature.
+- [ ] Found trying db's users on Python: TOOLS/ACCOUNTING/tests/test_gnucash.ady stops at
+  `Cents_T((int(net) * rate.ord + 50) // 100)` (the unit of an int expression with an
+  enum's ordinal "cannot be told"), and EXAMPLES/timetable_engine.ady at a record field
+  whose default is another record (a dataclass's mutable default).
 
 ## Found porting EXAMPLES/MOON/moon_sim.ady
 
 Each open one has a workaround in that file.
 
-- [ ] `from MAP_UTILS/map_base import` works from a sibling directory only because the
-      parent is searched. (The map_* modules stay Nim-only, by decision.)
+- `from MAP_UTILS/map_base import` from a sibling directory is the parent rule (tutorial
+  21.2), on both backends. (The map_* modules stay Nim-only, by decision.)
 
 ### Met on the way and since fixed
 

@@ -25,4 +25,7 @@ assert total == 12.5 and groups == 1
 assert len(books.json_list("arrows")) == 0          # a list it does not have
 assert books.json_text("missing") == ""
 assert read_json("{oops") is None
+let accents: ?Json_T = read_json("{\"a\": \"caf\\u00e9 \\ud83d\\ude00\"}")   # a \u escape, and a pair
+assert accents is not None and accents.json_text("a") == "café 😀"
+assert read_json("\"\\ud83d\"") is None                   # half a pair alone
 print "test_json_value: all checks passed"

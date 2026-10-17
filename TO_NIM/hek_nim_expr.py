@@ -1010,9 +1010,9 @@ def _result_wrap(val, rtype):
     Nim spelling. The member is chosen by VAL's type: a failure is the
     Result's error, a member type that member; a value of the union type
     already is itself. You never write a constructor; this is where it
-    comes from. A Result with one value member keeps its old rule: a value
-    whose type cannot be told goes on the value side, where Nim's own type
-    check catches a failure put there by mistake."""
+    comes from. A Result with one value member, given a value whose type
+    cannot be told here, leaves the side to Nim (stdlib's adaSide), which
+    knows the type."""
     ParserState.nim_imports.add("stdlib")
     info = _union_info(rtype)
     if info is None:
@@ -1033,7 +1033,10 @@ def _result_wrap(val, rtype):
     if failure and (_t == failure or (_void and _t != "void")):
         return f"{rtype}.err({val})"
     if info["kind"] == "either" and not info["multi"]:
-        return f"{rtype}.ok()" if _void else f"{rtype}.ok({val})"
+        if _void:
+            return f"{rtype}.ok()"
+        # a value whose type cannot be told here: Nim tells, and picks the side
+        return f"{rtype}.ok({val})" if _t else f"adaSide({rtype}, {val})"
     if info["multi"] and _t and _t.replace(" ", "") == _split_result(rtype)[0].replace(" ", ""):
         return f"{rtype}.ok({val})"     # the value members' union, whole
     if _t in values:
@@ -3703,6 +3706,13 @@ def to_nim(self, prec=None):
         if raw_name == "str":
             call_node = self.nodes[1].nodes[0]
             arg = _extract_call_arg(call_node)
+            # str(chr(n)) is the character n, as in Python: UTF-8 for one past 127,
+            # where Nim's chr would give a lone byte
+            import re as _re_chr
+            _c = _re_chr.fullmatch(r"chr\((.*)\)", arg.strip(), _re_chr.DOTALL)
+            if _c and _balanced(_c.group(1)):
+                ParserState.nim_from.setdefault("unicode", set()).update({"Rune", "`$`"})
+                return f"$Rune({_c.group(1)})" + "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
             # `$` binds tighter than any operator, so only a name or a dotted
             # name can follow it bare: `$-7` is read as the operator `$-`, and
             # `$x + 1` stringifies x and then adds.  Anything else is
@@ -4532,6 +4542,41 @@ def _type_generic_literals(expr):
     return f"{m.group(1)}[{m.group(2)}](" + ", ".join(out) + ")"
 
 
+def _split_top_commas(text):
+    """TEXT cut at its commas outside brackets."""
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        depth += (ch in "([{") - (ch in ")]}")
+        if ch == "," and depth == 0:
+            out.append(cur.strip()); cur = ""
+        else:
+            cur += ch
+    return out + ([cur.strip()] if cur.strip() else [])
+
+
+def _refuse_argument_units(func, args_str, args, param_types):
+    """A call of FUNC with an argument of one unit where its parameter is of
+    another, `wait(d)` for a Distance_T d where wait takes a Duration_T: refused
+    here, with the line and the same words as ady2py, rather than by Nim's
+    compiler at a line of generated code."""
+    import re as _re_ru
+    from ady_declarations import is_distinct, narrow_ancestors
+    for n, (arg, want) in enumerate(zip(args, param_types)):
+        if _re_ru.match(r"\s*\w+\s*=(?!=)", arg):
+            break                          # by name from here on: not checked
+        want = _re_ru.sub(r"^(?:var|sink|lent)\s+", "", want.strip())
+        if not is_distinct(want):
+            continue
+        try:
+            unit = _unit_of(arg)
+        except Exception:
+            continue
+        if unit and is_distinct(unit) and unit != want and want not in narrow_ancestors(unit):
+            raise SyntaxError(
+                f"{func}({args_str.strip()}): its argument {n + 1}, {arg.strip()}, is a {unit}, "
+                f"where {func} takes a {want}")
+
+
 def _wrap_option_args(expr):
     """Wrap call arguments in some() where the proc parameter expects Option[T].
 
@@ -4561,9 +4606,24 @@ def _wrap_option_args(expr):
         return expr
     proc_name = m.group(1)
     args_str = m.group(2)
+    if skip_self and proc_name == "add" and _balanced(args_str) and "," not in args_str:
+        # xs.append(5.0) to a []Speed_T: the literal is a Speed_T
+        _st = _nim_expr_type(receiver_prefix[:-1]) or ""
+        _sm = _re.fullmatch(r"seq\[(\w+)\]", _st.strip())
+        from ady_declarations import is_distinct
+        if _sm and is_distinct(_sm.group(1)):
+            from hek_nim_stmt import _wrap_distinct_literal
+            return f"{receiver_prefix}add({_wrap_distinct_literal(args_str, _sm.group(1))})"
     param_types = ParserState.proc_param_types.get(proc_name)
     if param_types and skip_self:
         param_types = param_types[1:]  # skip self param for method calls
+    if not param_types and not skip_self:
+        # a value of a function type, `let f: (Speed_T) -> float`: its parameters' types
+        _fsym = ParserState.symbol_table.lookup(proc_name)
+        _ft = ((_fsym.get("type") or "") if isinstance(_fsym, dict) else "").strip()
+        _fm = _re.match(r"^proc\s*\((.*)\)\s*(?::|\{|$)", _ft)
+        if _fm:
+            param_types = [p.split(":", 1)[1].strip() for p in _split_top_commas(_fm.group(1)) if ":" in p]
     if not param_types:
         return expr
     # Split args on top-level commas -- outside brackets *and* outside
@@ -4641,6 +4701,8 @@ def _wrap_option_args(expr):
             param_types = _fit[0]
     if len(args) > len(param_types):
         return expr
+    if proc_name not in ParserState.overloaded_procs or len(_fit) == 1:
+        _refuse_argument_units(proc_name, args_str, args, param_types)
     new_args = []
     changed = False
     import re as _re_woa
@@ -5620,7 +5682,10 @@ def to_nim(self, prec=None):
                     _to = power_unit(_unit, exp) if _unit and is_distinct(_unit) else None
                     if _to:
                         # a unit squared is the unit of its dimension: Length_T ** 2 is an Area_T
+                        _base = result
                         result = f"{_to}({distinct_kind(_unit)}({result}) ^ {exp})"
+                        from ady_declarations import note_written
+                        note_written(result, f"{_base} ** {exp}")
                     else:
                         result = f"{result} ^ {exp}"
         elif fname in ("call_trailer", "index_trailer", "slice_trailer", "attr_trailer", "trailer"):

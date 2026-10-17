@@ -150,6 +150,10 @@ proc ok*[E](R: typedesc[Result[void, E]]): Result[void, E] =
   Result[void, E](adaIsErr: false)
 proc err*[T, E](R: typedesc[Result[T, E]]; e: E): Result[T, E] =
   Result[T, E](adaIsErr: true, adaErr: e)
+proc adaSide*[T, E, V](R: typedesc[Result[T, E]]; v: V): Result[T, E] =
+  ## A value whose type the transpiler could not tell: its type, known here,
+  ## says which side it is on -- a failure is the error, anything else the value.
+  when V is E and V isnot T: R.err(v) else: R.ok(v)
 
 proc is_ok*[T, E](r: Result[T, E]): bool = not r.adaIsErr
 proc is_err*[T, E](r: Result[T, E]): bool = r.adaIsErr

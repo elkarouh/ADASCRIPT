@@ -406,7 +406,9 @@ subscripts: a `let`/`var` with a `char` annotation, an assignment to one, a
 `return`, the trailing expression of a `-> char` function, an element of a
 `[]char` literal, a record field, and an argument to a parameter typed
 `char`. So `freq['a']`, `freq["\\"]`, `let c: char = '\\t'` and
-`is_digit_ch('7')` all work on both backends.
+`is_digit_ch('7')` all work on both backends. `str(chr(n))` is the character
+n as text, as in Python, for any n: `str(chr(233))` is `"é"` (UTF-8 on Nim,
+where a bare `chr` past 127 would be one byte).
 
 `char` is also a container element type in its own right. Iterating a string
 yields characters, so a `[]char` annotation says what the loop already

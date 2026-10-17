@@ -1,0 +1,6 @@
+# refused by nim: hint: a `def` line ends with `:`, and its block is indented under it
+# refused by python: hint: a `def` line ends with `:`, and its block is indented under it
+def size() -> int
+    return 1
+
+print(size())

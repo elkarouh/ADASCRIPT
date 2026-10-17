@@ -1,0 +1,7 @@
+# refused by nim: cannot give side ** 2, a Area_T, to wrong, a Length_T: a distinct type does not mix with any other -- write Length_T(float(side ** 2))
+# refused by python: cannot give side ** 2, a Area_T, to wrong, a Length_T: a distinct type does not mix with any other -- write Length_T(float(side ** 2))
+type Length_T is distinct float
+type Area_T is Length_T * Length_T
+let side: Length_T = 3.0
+let wrong: Length_T = side ** 2
+print(wrong)

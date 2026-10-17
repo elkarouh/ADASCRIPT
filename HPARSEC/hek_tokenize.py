@@ -272,7 +272,7 @@ _FSTRING_REPLACE_NAME_RE = re.compile(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*')
 
 
 def _fstring_replace_sugar(expr_text):
-    """Recognise `name/old/new` inside an f-string's `{}` -- the shell's
+    r"""Recognise `name/old/new` inside an f-string's `{}` -- the shell's
     `${var/old/new}`, restricted to a dotted name so it stays a target
     rather than an arbitrary expression.
 
@@ -1459,7 +1459,7 @@ class Tokenizer:
                 best_expected = self.tokens[idx][1]
         tok = self.tokens[best_idx][0]
         line, col = tok.start if hasattr(tok, 'start') else (0, 0)
-        got = repr(tok.string) if hasattr(tok, 'string') and tok.string else tok.__class__.__name__
+        got = repr(tok.string) if hasattr(tok, 'string') and tok.string.strip() else _token_said(tok)
         msg = f"Parse error at line {line}, col {col}: got {got}"
         if best_expected:
             unique = sorted(set(best_expected))
@@ -1474,6 +1474,14 @@ class Tokenizer:
         the expected-token list is long and says nothing about why.
         """
         nxt = self.tokens[idx + 1][0] if idx + 1 < len(self.tokens) else None
+        prev = self.tokens[idx - 1][0] if idx > 0 else None
+        # a block's header line that ends without its colon
+        if _token_said(tok) == "the end of the line" and prev is not None:
+            text = (getattr(prev, "line", "") or "").strip()
+            head = text.split(None, 1)[0] if text else ""
+            if head in ("def", "class", "if", "elif", "else", "for", "while", "try", "except",
+                        "finally", "with", "case", "when", "async") and not text.split("#")[0].rstrip().endswith(":"):
+                return f"\n  hint: a `{head}` line ends with `:`, and its block is indented under it"
         if (getattr(tok, "string", None) == "=="
                 and getattr(nxt, "type", None) == SUBST_TOKEN):
             return ("\n  hint: a substitution is written `target = " + nxt.string
@@ -1493,6 +1501,22 @@ class Tokenizer:
         if tok is None:
             raise StopIteration
         return tok
+
+
+def _token_said(tok):
+    """What a token that is no text stands for, as a reader would say it."""
+    name = tok.__class__.__name__
+    kind = getattr(tok, "type", None)
+    import token as _tk
+    if name == "RichNL" or kind in (_tk.NEWLINE, _tk.NL):
+        return "the end of the line"
+    if kind == _tk.ENDMARKER:
+        return "the end of the file"
+    if kind == _tk.INDENT:
+        return "an indented line"
+    if kind == _tk.DEDENT:
+        return "the end of a block"
+    return name
 
 
 # ---------------------------------------------------------------------------

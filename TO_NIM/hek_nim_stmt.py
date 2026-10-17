@@ -382,6 +382,7 @@ def to_nim(self):
         from hek_nim_expr import _distinct_type_of
         _dt = _distinct_type_of(lhs)
         if _dt is not None:
+            _reject_unit_mix(lhs, _dt, parts[1])
             parts[1] = _wrap_distinct_literal(parts[1], _dt)
     # Result[T, E] assignment: `r = Err(e)`, `r = v` -> typed constructors
     if len(parts) == 2 and prefix == "":
@@ -1097,6 +1098,7 @@ def to_nim(self):
                 # [K]V over a non-ordinal K: the table literal is an ordered one
                 value = _typed_empty_inits(value, annotation)
                 value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
+                _reject_unit_mix(name, annotation, value)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -1353,6 +1355,7 @@ def to_nim(self):
                 # [K]V over a non-ordinal K: the table literal is an ordered one
                 value = _typed_empty_inits(value, annotation)
                 value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
+                _reject_unit_mix(name, annotation, value)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -2899,6 +2902,26 @@ def _typed_empty_inits(value, nim_type):
         if len(found) == 1:
             value = value.replace(f"{init}()", f"{init}[{found.pop()}]()")
     return value
+
+
+def _reject_unit_mix(name, annotation, value):
+    """Refuse a value of one distinct type given to a name of another, `let w:
+    Length_T = t` for a Duration_T t, with the words ady2py uses, rather than
+    leaving it to Nim's compiler at a line of generated code."""
+    from ady_declarations import is_distinct, narrow_ancestors
+    from hek_nim_expr import _unit_of
+    target = (annotation or "").strip()
+    if not is_distinct(target) or not (value or "").strip():
+        return
+    try:
+        source = _unit_of(value)
+    except Exception:
+        return
+    if source and is_distinct(source) and source != target and target not in narrow_ancestors(source):
+        from ady_declarations import as_written, unit_fix
+        raise SyntaxError(
+            f"cannot give {as_written(value.strip())}, a {source}, to {name}, a {target}: a distinct type "
+            f"does not mix with any other -- {unit_fix(target, value)}")
 
 
 def _wrap_distinct_literal(value, nim_type):

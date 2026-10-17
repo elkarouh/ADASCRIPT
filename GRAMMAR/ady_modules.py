@@ -23,6 +23,7 @@ backend has to know about qualified names. For `nimport lib/geom` the qualifier
 is `geom`, the last part, as in Nim. A file that declares a name of its own that
 M also declares cannot use `M.name` -- the merge has one namespace -- and is told.
 """
+import os
 import re
 
 _PLAIN_IMPORT = re.compile(r'^(?P<ind>[ \t]*)(?P<kw>import)[ \t]+(?P<names>[^\n]+?)[ \t]*$', re.MULTILINE)
@@ -121,6 +122,14 @@ def normalize_imports(code, is_ady):
         code = "".join(old if i % 2 else part for i, part in enumerate(
             _split_matches(code, [(m.start(), m.end()) for m in re.finditer(pattern, text)])))
     return code
+
+
+def module_dirs(here):
+    """Where an import in a file of the directory HERE looks for `name.ady`, in
+    order: HERE, then its parent -- which lets a program in `bin/` write `import
+    lib/util`. Each backend adds its bundled libraries after these (book 14,
+    tutorial 21.2)."""
+    return (here, os.path.dirname(here))
 
 
 def _split_matches(code, spans):

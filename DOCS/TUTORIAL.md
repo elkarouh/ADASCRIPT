@@ -2613,8 +2613,11 @@ programs that use them.
 ## 17. Nim-Only Imports and Adascript Modules
 
 `nimport` marks imports of Nim modules, which appear **only** in Nim output and are
-stripped from Python output. Use it for Nim standard-library modules. Dependencies
-between Adascript files are `import`s:
+stripped from Python output. Use it for Nim standard-library modules. One is shared:
+Nim's `math` is Python's under other spellings, so `nimport math` (`math.arctan(x)`)
+and `from math nimport sqrt, arctan2, PI` build with ady2py too, Nim's names taken
+as Python's (`arctan2` is `atan2`, `PI` is `pi`). Dependencies between Adascript
+files are `import`s:
 
 ```python
 nimport strutils, sequtils, algorithm
@@ -3531,7 +3534,11 @@ For each `import`, ady2nim looks for the `.ady` file in three places, in
 order: the importing file's own directory, that directory's parent, then the
 build cache (where the bundled `TO_NIM/STDLIB/*.ady` libraries are
 installed). The first hit wins; if nothing matches, the name is passed to Nim
-untouched, which is what makes `nimport strutils` work.
+untouched, which is what makes `nimport strutils` work. ady2py looks in the
+same two directories, then in `TO_PYTHON/STDLIB` (the Python versions of
+bundled libraries made of what only Nim has, such as `db`), then in
+`TO_NIM/STDLIB`. Both backends take the rule from one place,
+`GRAMMAR/ady_modules.py`'s `module_dirs`.
 
 So a sibling is imported by its bare name (`import geometry` inside
 `lib/fleet.ady`), and the program addresses modules by their path from the
@@ -3569,10 +3576,11 @@ depth triggers a rebuild; `ady2nim -t` transpiles the graph and stops.
 - A module's test is another entry point that imports it and asserts
   (`EXAMPLES/PROJECT/test_geometry.ady`).
 - ady2py replaces an `import` of an `.ady` module by the module's text (once),
-  so a program split across modules runs on both backends. On Python it is one
-  namespace -- two modules defining the same name clash, and `geometry.distance`
-  is refused where the file has a `distance` of its own; the libraries bundled
-  with ady2nim stay Nim-only.
+  so a program split across modules runs on both backends, the bundled
+  libraries too. A name two imported modules both define is refused where it
+  is used bare, on both backends, naming both; `geometry.distance` beside a
+  `distance` of the file's own is kept apart on Python by merging the module's
+  as `geometry__distance`, in every file that takes it.
 
 Chapter 14 of the book (`DOCS/BOOK/14-programming-in-the-large.md`) works
 through the same ground in more detail.

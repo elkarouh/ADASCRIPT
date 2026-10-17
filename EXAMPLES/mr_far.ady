@@ -1,0 +1,5 @@
+# a module of test_module_rename.ady: takes distance from mr_geometry
+from mr_geometry import distance
+
+def far_distance() -> float:
+    return distance(0.0, 10.0)

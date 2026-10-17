@@ -1,0 +1,36 @@
+#!/usr/bin/env ady2py
+"""db, as ady2py builds it: the same DB as TO_NIM/STDLIB/db.ady, on Python's sqlite3
+rather than Nim's db_sqlite. ady2py takes this file for `from db import DB`, so a
+program that keeps a database builds on both backends. Rows come back as str, as there.
+"""
+
+pyimport sqlite3
+
+
+class DB:
+    var conn: PyObject
+
+    def __init__(self, path: str):
+        self.conn = sqlite3.connect(path)
+        self.conn.isolation_level = None          # each statement takes effect, as on Nim
+
+    def close(self):
+        self.conn.close()
+
+    def exec(self, query: str, params: []str = []):
+        self.conn.execute(query, params)
+
+    def rows(self, query: str, params: []str = []) -> [][]str:
+        var out: [][]str = []
+        for row in self.conn.execute(query, params).fetchall():
+            var cells: []str = []
+            for cell in row:
+                cells.append("" if cell is None else str(cell))
+            out.append(cells)
+        return out
+
+    def value(self, query: str, params: []str = []) -> str:
+        let found: [][]str = self.rows(query, params)
+        if len(found) == 0 or len(found[0]) == 0:
+            return ""
+        return found[0][0]

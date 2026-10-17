@@ -19,9 +19,9 @@ name; a list of them as a JSON list:
 `json_string(s)` is S as a JSON string, quotes and escapes included: what to write for a
 text field. A number is written as it prints (`f"{x}"`), and a bool as `true` or `false`.
 
-What it reads is JSON, with one limit: a `\\u` escape is read for a character below 0080
-(the ones json_string writes); text with any other is not read (None), so it is never
-read differently by the backends. Characters written as themselves are read as they are.
+What it reads is JSON: a `\\u` escape is the character it names, a pair of them (`\\ud83d\\ude00`)
+one character above FFFF, on every backend; half a pair alone is not JSON (None). Characters
+written as themselves are read as they are.
 """
 
 # What a JSON value is.
@@ -163,13 +163,37 @@ class JsonReader:
         if c == "f":
             return "\f"
         if c == "u":
-            let code: str = self.text[self.at:self.at + 4].lower()
-            self.at += 4
-            if len(code) == 4 and code[0:2] == "00" and code[2:3] in ["0", "1", "2", "3", "4", "5", "6", "7"] \
-                    and HEX.find(code[3:4]) >= 0:
-                return str(chr(HEX.find(code[2:3]) * 16 + HEX.find(code[3:4])))
+            var code: int = self.read_hex4()
+            if code >= 0xDC00 and code <= 0xDFFF:
+                code = -1                       # the second half of a pair, alone
+            elif code >= 0xD800 and code <= 0xDBFF:
+                # the first half of a pair: the second follows, as \uDC00 to \uDFFF
+                var low: int = -1
+                if self.text[self.at:self.at + 2] == "\\u":
+                    self.at += 2
+                    low = self.read_hex4()
+                if low >= 0xDC00 and low <= 0xDFFF:
+                    code = 0x10000 + (code - 0xD800) * 0x400 + (low - 0xDC00)
+                else:
+                    code = -1
+            if code >= 0:
+                return str(chr(code))
         self.ok = False
         return ""
+
+    # The four hex digits at AT, as a number; -1 when they are not.
+    def read_hex4(self) -> int:
+        let digits: str = self.text[self.at:self.at + 4].lower()
+        self.at += 4
+        if len(digits) != 4:
+            return -1
+        var n: int = 0
+        for i in range(4):
+            let d: int = HEX.find(digits[i:i + 1])
+            if d < 0:
+                return -1
+            n = n * 16 + d
+        return n
 
     def read_number(self) -> float:
         let start: int = self.at
