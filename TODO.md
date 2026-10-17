@@ -46,18 +46,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       `let r = Row(..); r.x = 1` fails there where Python allows it; kilo writes
       through `self.rows[i].x`. Refuse the write on both backends, or make `let`
       of a class a reference.
-- [ ] general function decorators on Nim. Today the Nim backend knows five
-      annotations (`@contextmanager`, `@virtual`, `@proc`, `@export`,
-      `@used`) and refuses any other decorator, while Python passes every
-      one through. `@d` on `def f` means `f = d(f)`, which Nim can express:
-      emit the proc under a hidden name and bind `let f = d(fHidden)` -- a
-      closure, so `d` must take and return a proc type (`(int) -> int`).
-      That covers wrappers written in Adascript (`@twice`, timing,
-      memoizing). Not covered, having no Nim counterpart: `@property`,
-      `@staticmethod`, `@classmethod`, `@functools.*` -- those stay
-      Python-only, and keep their refusal. Open questions: a decorator on a
-      method (self), one taking arguments (`@retry(3)`), and several
-      stacked. Test on both backends, as test_union does.
+- [ ] decorators beyond `@decorator` wrappers. Stateless wrappers marked
+      `@decorator` work on every backend, with arguments and stacked
+      (EXAMPLES/test_decorators.ady, book 8.7). Still open: a wrapper on a
+      method (self), a decorator that keeps state between calls (memoizing,
+      counting), and one that returns a function of another type. Nim
+      refuses any other decorator, while Python passes it through;
+      `@property`, `@staticmethod`, `@classmethod`, `@functools.*` have no
+      Nim counterpart and keep their refusal.
 - [ ] whether a class is a `ref object` on Nim is decided twice, and the two
       can disagree. An exact check over the field declarations runs first
       and the constructor follows it (`new(result)` or not); a search of the

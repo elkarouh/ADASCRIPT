@@ -1961,6 +1961,31 @@ This is what makes an operator work on more than one type: `Velocity` has `__mul
 
 <!-- tested by EXAMPLES/test_overload_types.ady -->
 
+### Decorators
+
+A wrapper marked `@decorator` takes the decorator's own arguments, then the
+function it wraps as `f`, then that function's arguments:
+
+```python
+# from test_decorators.ady
+@decorator
+def aligned(width: int, f: (str) -> str, s: str) -> str:
+    return f"{f(s):<{width}}"
+
+@aligned(8)
+def tag(name: str) -> str:
+    return "<" + name + ">"
+```
+
+`tag("a")` is `"<a>     "`. Stacked decorators apply bottom-up; a recursive
+call goes through the decorated name. The transpiler rewrites this before
+the parse (the body becomes `tagBody`, and `tag` returns
+`aligned(8, tagBody, name)`), so it works the same on Nim, Python and JS.
+`f`'s type, the parameters after it and the return type must match the
+decorated def, or it is refused. Top-level defs only.
+
+<!-- tested by EXAMPLES/test_decorators.ady -->
+
 ### Nested functions / closures
 
 ```python

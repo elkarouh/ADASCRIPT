@@ -858,6 +858,10 @@ A type argument is a name or a tuple (`first_of[Row_T]`, `first_of[(int, str)]`)
 
 One name, several defs, differing in parameter TYPES: the call picks by the types of its arguments (Ada, Nim). Works for functions and methods, operators included -- `__mul__(self, scale: float)` and `__mul__(self, t: Duration_T)` side by side, so `v * 2.0` scales and `v * t` is a displacement. Prefer this to `over(t)` / `per(t)` helper methods. Constructors too (`Vector(length, angle)` / `Vector(x, y)`). A LITERAL argument to an overloaded name is refused on Nim: write `Meters_T(3.0)`. Same parameter types twice is an error (a name defined twice). Python: defs are renamed, a dispatcher picks by exact type, then isinstance (a distinct type is its own); call by position. Unions and generics match anything. `EXAMPLES/test_overload_types.ady`.
 
+## Decorators
+
+A wrapper is a top-level def marked `@decorator`, parameters in order: the decorator's own arguments, `f` typed as the decorated function, then the decorated function's parameters; it returns what the decorated function returns. `@decorator def aligned(width: int, f: (str) -> str, s: str) -> str: return f"{f(s):<{width}}"` then `@aligned(64) def name(...)`; no-argument ones are written `@shout`. Stacked: bottom-up. Recursion goes through the decorated name. Rewritten before the parse (body kept as `nameBody`, `name` forwards to the wrapper), no closures, so identical on Nim/Python/JS. A mismatch, or a decorator not marked `@decorator`, is a SyntaxError. Top-level defs only. Built-ins `@virtual`, `@contextmanager`, `@proc`, `@export`, `@used` need no marker. `EXAMPLES/test_decorators.ady`, `TOOLS/LV/lv.ady`.
+
 ## Generic Classes
 
 ```adascript

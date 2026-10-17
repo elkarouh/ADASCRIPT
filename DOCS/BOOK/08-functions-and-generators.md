@@ -234,6 +234,55 @@ the arguments. A literal is no argument of any type, so one given to an
 overloaded name is refused on Nim and written with its type, `T(x)`. Two defs
 with the same parameter types are one name defined twice, and refused.
 
+## 8.7 Decorators
+
+A decorator wraps a function in another one. You write the wrapper as a plain
+def marked `@decorator`: its parameters are, in order, the decorator's own
+arguments, then `f` (the function it wraps, with that function's type), then
+the arguments of a call. `lv.ady` pads the text of each column this way:
+
+```python
+# EXAMPLES/test_decorators.ady
+@decorator
+def aligned(width: int, f: (str) -> str, s: str) -> str:
+    return f"{f(s):<{width}}"
+
+@decorator
+def shout(f: (str) -> str, s: str) -> str:
+    return f(s).upper()
+
+@aligned(8)
+def tag(name: str) -> str:
+    return "<" + name + ">"
+
+# stacked: applied bottom-up, so shout sees the padded text
+@shout
+@aligned(6)
+def loud(name: str) -> str:
+    return name + "!"
+```
+
+`tag("a")` is `"<a>     "`: the body of `tag` runs, and `aligned` pads what
+it returns to 8 columns. A decorator without arguments, like `@shout`, is
+written without parentheses. Stacked decorators apply from the bottom up, so
+`loud("hi")` is padded first and shouted second, giving `"HI!   "`. A
+recursive call inside the body goes through the decorated name, so every
+level is wrapped.
+
+The transpiler does the wrapping itself, before either backend sees the
+code: the body is kept under a hidden name, and the decorated name becomes a
+def that passes it to the wrapper. So the same decorator works on Nim, on
+Python and in the browser, and costs a plain call. The checks are done
+there too: a decorator that is not marked `@decorator` is refused, as is
+one whose `f` does not have the decorated function's type, or whose
+remaining parameters are not the decorated function's, or that returns
+something else than the decorated function does.
+
+Only the top-level defs of a file can be decorated this way, and line numbers
+in error messages after a decorated def shift by the lines the rewrite adds.
+The built-in annotations (`@virtual` on a class, §9.4; `@contextmanager`,
+`@proc`, `@export`, `@used`) are not wrappers and need no `@decorator`.
+
 ---
 
 *Next: [Chapter 9 — Classes, Generics, and Inheritance](09-classes-and-generics.md)*
