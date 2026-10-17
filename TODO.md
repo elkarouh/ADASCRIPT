@@ -89,15 +89,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       lo, hi)` at each assignment and augmented assignment of a variable of
       the type, as Ada's constraint model does. The tutorial says "Nim only"
       meanwhile.
-- [ ] `p / ".."` is not the same path on the two backends. Nim's `joinPath`
-      collapses the `..` as it joins, so `Path("/a/b") / ".." / "c"` is
-      `/a/c`; pathlib keeps it, giving `/a/b/../c`. Both name the same
-      directory, so `-d` and `readFile` agree and only *printed* paths
-      differ -- which makes it easy to miss until a log or a diff report
-      shows two spellings. `.parent` agrees on both and is the spelling to
-      use (`saved_logs_dir` in `Tcheck_tact.ady` says so in its docstring).
-      Either normalise in the Python backend's `/` or reject a `".."`
-      component at transpile time with a pointer to `.parent`.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
 - [ ] containers holding enum values stringify differently. `print xs` where
@@ -119,38 +110,14 @@ history of this file if the reasoning behind one of them is ever wanted.
       keyed form was mostly wanted for. What is still missing is filling
       the slots out of domain order, the way the `[BLUE: 3, RED: 1]`
       literal does.
-- [ ] `.keys()` and `.items()` on an `[E]T` work on Python and do not exist
-      on Nim, where the type is an `array[E, T]`: `score.keys()` fails with
-      "type mismatch ... expected Table". Iteration and indexing agree now;
-      these two do not. Nim's `pairs`/`keys` iterators over an array are the
-      shape to map onto.
 - [ ] a variable named `b`, `r`, `f` or `u` cannot take a tick: `b'Length`
       lexes as the start of a bytes literal and fails to parse on both
       backends. Consistent, so not a divergence, but the error names the
       wrong thing.
-- [ ] `Path` joins diverge on a `.` segment once three terms are chained:
-      `Path(".") / ".git1" / "x.txt"` is `./.git1/x.txt` on Python and
-      `.git1/x.txt` on Nim. Two terms agree (`Path(".") / ".git1"` is
-      `./.git1` on both), and so does `Path(".") / Path(".git1/x.txt")` --
-      only the chained form differs, because Nim's `joinPath` normalizes a
-      head that already holds a separator and `os.path.join` never
-      normalizes anything. Same expression, two different strings: it
-      changes printed output, dict keys and `==`, even though both still
-      name the same file. Fixing it means one `/` doing the same thing on
-      both sides; the lexical `os.path.join` rule is the easier one to
-      match, but it means shadowing the `/` that std/paths exports.
-      `git1.ady` sidesteps it by joining in two steps.
 - [ ] Nim identifiers ignore case and underscores, so an Adascript class
       `Container` and a constant `CONTAINER` are one name there and two on
       Python. Worth a transpile-time warning: the Nim error names a
       "redefinition" at a line the author did not write.
-- [ ] a `[]?T` parameter does not accept a plain list. `def sequence[T](items:
-      []?T)` -- the combinator Feature 2 below is really about -- is written
-      and compiled, but no call reaches it: `sequence([1, 2, 3])` wraps the
-      whole literal as `some(@[1,2,3])` and `let xs: []?int = [1,2,3]` fails
-      to build at all, "got 'seq[int]' ... expected 'seq[Option[int]]'". The
-      elements need lifting, not the container. Generic syntax is no longer
-      what blocks these; this is.
 - [ ] `.isdigit()` is ASCII-only on Nim and Unicode-aware on Python:
       a string of Arabic-Indic digits answers false there and true here. It is what every
       strutils predicate does -- `TO_NIM/STDLIB/strscan.ady` says so in its
@@ -178,16 +145,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       drags CPython into a Nim binary. `re(expr)` appears in a couple of older
       CFMU files as if it existed; it does not. Either a `Regex(s)` value that
       `==` accepts on the right, or interpolation inside a literal.
-- [ ] `for x in Enum_T'Range:` iterates in a different order on each backend,
-      and on Python in a different order on each *run*. `'Range` is the set of
-      members, which the Nim backend renders as a `set[Enum_T]` -- ordinal
-      order -- and the Python backend as `set(Enum_T)`, whose order is hash
-      order. A report built that way comes out shuffled and differently
-      shuffled every time. `for x in Enum_T:` and `for x in Enum_T'First ..
-      Enum_T'Last:` both give declaration order on both backends and are what
-      the examples use; the divergence is in the set form. Either Python emits
-      something ordered for `'Range` in a for-loop, or `'Range` is documented
-      as unordered and the examples keep away from it.
 - [ ] `.lines` on the Python backend now applies only to a receiver it can
       see is a file -- stdin, an `open(...)` call, a string literal, or a
       `File`/`str`/`Path` binding -- because `lines` is also an ordinary field
@@ -472,11 +429,6 @@ are fine; a program built for both backends would meet it.
 
 Each is worked around there, and none is needed for Python:
 
-- `a[:i] + b[j:]` over two list slices, `line[:i] + tail(...)` over string slices
-  and `self.lines[i] + self.lines[j]` are emitted with Nim's `+` (a set or number
-  operator), not `&`: the operand types are not inferred from a slice or an index
-  of a field. With a typed `let` for each operand it is `&`.
-- `self.count += press.text` on a `str` field is emitted `+=`, not `&=`.
 - `xs.insert(i, x)` is Python's order on both backends; on Nim the call is Nim's
   `insert(xs, x, i)`. `xs.insert("b", 1)` works on Nim and fails on Python.
 - `Editor(path).run()` on a temporary: Nim wants a `var` receiver.

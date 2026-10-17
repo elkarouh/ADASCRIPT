@@ -432,6 +432,12 @@ def to_py(self, indent=0):
     iterable = self.nodes[1].to_py()
     from hek_py_expr import _builtin_ordinal_domain
     iterable = _builtin_ordinal_domain(iterable) or iterable
+    # `E'Range` is `set(E)`, whose order is hash order -- different on every
+    # run. Looping over it is looping over the members: Nim's set iterates in
+    # declaration order, and so does the enum itself.
+    _rng = __import__("re").fullmatch(r"set\(([A-Za-z_]\w*)\)", iterable)
+    if _rng:
+        iterable = _rng.group(1)
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_py(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"

@@ -71,6 +71,18 @@ def to_nim(self, prec=None):
 
 
 _PATH_HELPER = """\
+proc `/`*(head, tail: Path): Path =
+  ## Joining is lexical, as Python's os.path.join: `..` and `.` stay where they
+  ## were written, an absolute tail replaces the head, and an empty head is
+  ## just the tail. std/paths' own `/` normalises as it joins, so
+  ## `Path("/a/b") / ".." / "c"` came out `/a/c` there and `/a/b/../c` on
+  ## Python, and `Path(".") / ".git1" / "x"` lost its leading `./`.
+  let h = head.string
+  let t = tail.string
+  if t.len > 0 and t[0] == '/': return tail
+  if h.len == 0: return tail
+  if h[^1] == '/': Path(h & t) else: Path(h & "/" & t)
+
 proc `/`*(head: Path, tail: string): Path = head / Path(tail)
   ## Joining a Path with a plain string keeps it a Path. Without these two,
   ## overload resolution takes the converter below, finds the string `/`, and

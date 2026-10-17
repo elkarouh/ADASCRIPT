@@ -493,6 +493,10 @@ def to_nim(self):
             # `self.text += s`: a field, typed by its class
             from hek_nim_expr import _field_type
             ttype = _field_type(target)
+        if not ttype and target.rstrip().endswith("]"):
+            # `self.lines[i] += s`: an element, typed by its container
+            from hek_nim_expr import _nim_expr_type
+            ttype = _nim_expr_type(target) or ""
         if ttype in ("string", "str") or value.startswith('"') or value.startswith('fmt"'):
             nim_op = "&="
     # Ada-style &= -> string concat &= (not bitwise and=) when target is string
@@ -1080,7 +1084,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
-                value = _to_ordered_table(hek_nim_expr._type_lambdas(value, annotation), annotation)
+                value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(value, annotation), annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -1335,7 +1339,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
-                value = _to_ordered_table(hek_nim_expr._type_lambdas(value, annotation), annotation)
+                value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(value, annotation), annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -1587,7 +1591,7 @@ def to_nim(self):
     if val == "nil" and ret_type and "seq[" in ret_type:
         return "return @[]"
     if _rt_bare:
-        val = hek_nim_expr._type_lambdas(val, _rt_bare)
+        val = hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(val, _rt_bare), _rt_bare)
         val = _to_ordered_table(val, _rt_bare)
         val = _wrap_distinct_literal(val, _rt_bare)
     if val == "initTable()" and ret_type:

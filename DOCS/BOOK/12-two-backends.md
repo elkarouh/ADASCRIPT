@@ -207,7 +207,11 @@ neighbour (`round(2.5)` is 2, `round(3.5)` is 4); `round(x, n)` is a `float`
 rounded from the exact binary value (`round(2.675, 2)` is 2.67). `s.splitlines()`
 has no empty last line: `"".splitlines()` is `[]` and `"a\nb\n".splitlines()` is
 `["a", "b"]`. A true division compared with an int (`4 == n / 2`) compares as
-floats, and `sorted(d.keys())` works on a dict.
+floats, and `sorted(d.keys())` works on a dict. `p / q` joins Paths
+lexically, as Python's `os.path.join` does: `Path("/a/b") / ".." / "c"` is
+`/a/b/../c` on both backends (use `.parent` to go up), and an absolute `q`
+replaces `p`. `for c in E'Range` visits the members in declaration order, and
+`.keys()`, `.items()` and `.values()` work on an `[E]T` as on a dict.
 
 Style advice drawn from the examples: prefer the Python spelling where both
 exist (it keeps the file runnable-in-your-head for Python readers), and

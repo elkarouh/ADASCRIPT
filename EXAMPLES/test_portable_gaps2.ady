@@ -1,0 +1,81 @@
+#!/usr/bin/env ady2nim
+"""Five more spellings both backends agree on: keys/items/values of an enum-indexed array, E'Range in a for, a Path joined lexically, a list literal for a []?T, and + on slices and elements."""
+
+type Color_T is enum RED, GREEN, BLUE, CYAN
+
+class Ed:
+    var lines: []str = []
+    var text: str = ""
+
+    def join_lines(self, i: int, j: int) -> str:
+        return self.lines[i] + self.lines[j]
+
+    def add(self, t: str):
+        self.text += t
+        self.lines[0] += t
+
+def tail(s: str) -> str:
+    return s[1:]
+
+def count_some(items: []?int) -> int:
+    var n: int = 0
+    for it in items:
+        if it is not None:
+            n += 1
+    return n
+
+def main():
+    # keys, items, values of an [E]T
+    let score: [Color_T]int = [RED: 3, GREEN: 1, BLUE: 2, CYAN: 4]
+    var total: int = 0
+    for k in score.keys():
+        total += score[k] * (ord(k) + 1)
+    assert total == 3 * 1 + 1 * 2 + 2 * 3 + 4 * 4
+    var names: str = ""
+    for k, v in score.items():
+        names += f"{k'Image}{v} "
+    assert names == "RED3 GREEN1 BLUE2 CYAN4 "
+    var sum: int = 0
+    for v in score.values():
+        sum += v
+    assert sum == 10
+    assert len(list(score.keys())) == 4
+
+    # E'Range in a for: declaration order
+    var order: str = ""
+    for c in Color_T'Range:
+        order += c'Image + " "
+    assert order == "RED GREEN BLUE CYAN "
+
+    # Path joins are lexical on both backends
+    assert str(Path("/a/b") / ".." / "c") == "/a/b/../c"
+    assert str(Path(".") / ".git1" / "x.txt") == "./.git1/x.txt"
+    assert str(Path("/a") / "/b") == "/b"
+    assert str(Path("a/") / "b") == "a/b"
+
+    # a list literal where a []?T is declared
+    let xs: []?int = [1, 2, 3]
+    assert count_some(xs) == 3
+    assert count_some([1, None, 3]) == 2
+    let ys: []?int = [1, None]
+    assert len(ys) == 2
+
+    # + over slices and elements, += on a field and an element
+    let a: []int = [1, 2, 3, 4]
+    let b: []int = [5, 6, 7]
+    let c: []int = a[:2] + b[1:]
+    assert len(c) == 4
+    assert c[2] == 6
+    let line: str = "hello"
+    let d: str = line[:2] + tail(line)
+    assert d == "heello"
+    var e: Ed = Ed()
+    e.lines = ["ab", "cd"]
+    assert e.join_lines(0, 1) == "abcd"
+    e.add("x")
+    e.add("y")
+    assert e.text == "xy"
+    assert e.lines[0] == "abxy"
+    print "ok"
+
+main()

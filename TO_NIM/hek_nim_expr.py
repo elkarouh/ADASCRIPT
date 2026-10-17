@@ -380,6 +380,44 @@ proc adascriptZfill(s: string, width: int): string =
 """
 
 
+_ARRAY_KEYS_HELPER = """\
+iterator adascriptKeys[I, T](a: array[I, T]): I =
+  ## Python's keys() on an `[E]T`: the index values, in order.
+  for i in low(a)..high(a):
+    yield i
+"""
+
+
+def _ensure_array_keys_helper():
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptKeys" in d for d in decls):
+        decls.append(_ARRAY_KEYS_HELPER)
+        ParserState.nim_top_decls = decls
+
+
+def _lift_option_seq(val, declared):
+    """A list literal given where a `[]?T` is declared: the elements are what
+    get lifted, not the container -- `[1, None]` for a `seq[Option[int]]` is
+    `@[some(1), none(int)]`."""
+    import re as _re_lo
+    m = _re_lo.match(r"^\s*(?:var\s+)?seq\[Option\[(.+)\]\]\s*$", declared or "")
+    v = (val or "").strip()
+    if not m or not (v.startswith("@[") and v.endswith("]")) or not _balanced(v[2:-1]):
+        return val
+    inner = m.group(1)
+    elems = [e.strip() for e in _split_args(v[2:-1]) if e.strip()]
+    out = []
+    for e in elems:
+        if e == "nil":
+            out.append(f"none({inner})")
+        elif e.startswith(("some(", "some[", "none(")) or _expr_is_option(e):
+            out.append(e)
+        else:
+            out.append(f"some({e})")
+    ParserState.nim_imports.add("options")
+    return "@[" + ", ".join(out) + "]"
+
+
 def _sorted_operand(arg):
     """What `sorted` is applied to. `.keys()` and `.values()` are iterators on
     Nim, which `sorted` cannot take; toSeq makes them a seq first."""
@@ -1291,10 +1329,14 @@ def _nim_expr_type(expr):
             return None
 
         # subscript: base[index]
-        sub_m = _re.match(r"^(.+)\[[^\[\]]+\]$", s)
+        sub_m = _re.match(r"^(.+)\[([^\[\]]+)\]$", s)
         if sub_m:
             base_type = _resolve(sub_m.group(1))
             if base_type:
+                # a slice, `a[0..<2]` or `a[1..^1]`, is the base type again
+                if ".." in sub_m.group(2) and (base_type == "string"
+                                              or base_type.startswith("seq[")):
+                    return base_type
                 return _seq_elem(base_type)
             return None
 
@@ -1303,6 +1345,14 @@ def _nim_expr_type(expr):
         # `int(s + "2")` stayed an int() of a string.
         if len(s) >= 2 and s[-1] == '"' and (s[0] == '"' or s.startswith(("fmt\"", "$\"", "r\""))):
             return "string"
+
+        # a slice is `adascriptSlice(x, lo, hi)`: x's own type again
+        if s.startswith("adascriptSlice(") and s.endswith(")"):
+            _sl = _split_args(s[len("adascriptSlice("):-1])
+            if _sl:
+                _slt = _resolve(_sl[0])
+                if _slt == "string" or (_slt or "").startswith("seq["):
+                    return _slt
 
         # a call to a proc of this program, `clip(a, 2)`: its declared return
         # type. Only a call that is the whole expression -- the parenthesis
@@ -1872,7 +1922,7 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 # no `+` for two strings.
                 if not (left_is_seq or right_is_seq or left_is_str or right_is_str):
                     for _side in (result, right):
-                        if not _side.rstrip().endswith(")"):
+                        if not _side.rstrip().endswith((")", "]")):
                             continue
                         _st = _nim_expr_type(_side) or ""
                         if _st in ("string", "str"):
@@ -2841,6 +2891,9 @@ _PY_METHOD_TO_NIM = {
     "HashSet": {"add": "incl", "remove": "excl"},
     "Table": {"items": "pairs"},
     "OrderedTable": {"items": "pairs"},
+    # an `[E]T` is an array on Nim: pairs and items are its iterators, and
+    # keys is the index range, which the array has no iterator for
+    "array": {"items": "pairs", "values": "items", "keys": "adascriptKeys"},
     "string": {"lower": "toLowerAscii", "upper": "toUpperAscii",
                "strip": "strip", "split": "split", "join": "join",
                "startswith": "startsWith", "endswith": "endsWith",
@@ -2968,6 +3021,8 @@ def _translate_method(obj_name, method_name):
                     nim_method = mappings[method_name]
                     if nim_method in _STRUTILS_METHODS:
                         ParserState.nim_imports.add("strutils")
+                    if nim_method == "adascriptKeys":
+                        _ensure_array_keys_helper()
                     return nim_method
                 break  # type matched but method not in mapping — fall through to universal
         # Resolve type aliases: if type_str is a user type, look up its definition
@@ -2980,6 +3035,8 @@ def _translate_method(obj_name, method_name):
                         nim_method = mappings[method_name]
                         if nim_method in _STRUTILS_METHODS:
                             ParserState.nim_imports.add("strutils")
+                        if nim_method == "adascriptKeys":
+                            _ensure_array_keys_helper()
                         return nim_method
                     break
         # For PyObject / pyImport module vars, and JsObject, don't apply universal mappings
@@ -4346,7 +4403,11 @@ def _wrap_option_args(expr):
 
     for arg, ptype in zip(args, param_types):
         kw_prefix, arg = _split_kwarg(arg)
-        if "Option[" in ptype:
+        if ptype.strip().startswith("seq[Option[") and arg.strip().startswith("@["):
+            _lifted = _lift_option_seq(arg, ptype)
+            new_args.append(kw_prefix + _lifted)
+            changed = changed or _lifted != arg
+        elif "Option[" in ptype:
             if arg == "nil":
                 # None/nil passed to Option[T] param -> none(T)
                 _m_opt = _re_woa.search(r"Option\[(.+)\]", ptype)
