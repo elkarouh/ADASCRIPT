@@ -1319,6 +1319,8 @@ for key, val in counts.items():
     print(f"{key}: {val}")
 ```
 
+The table type is `{K}V`; Python's `{str: int}` written as a type is refused with an error naming `{str}int`.
+
 **Sets:**
 ```adascript
 var visited: {}str    = {}    # HashSet[string]

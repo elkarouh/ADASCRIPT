@@ -1379,3 +1379,28 @@ def refuse_undeclared_type_params(func_name, names):
         f"def {func_name}: {ns} in its signature {'are' if many else 'is'} "
         f"not declared -- write `def {func_name}[{ns}](...)`; Adascript does "
         f"not guess which names are type parameters")
+
+
+# --- {K: V} where a type is due ---------------------------------------------
+# Python spells a mapping's type dict[K, V]; written `{int: int}` it is no
+# type at all but a dict display, which the annotation's expression fallback
+# took as it stood. The emitters then made it a set, and the program failed at
+# its first write. A table is `{K}V`.
+_DICT_DISPLAY = r"\{\s*([^{}:\n]+?)\s*:\s*([^{}\n=]+?)\s*\}"
+_DICT_AS_TYPE = [
+    _re_du.compile(r"^\s*(?:var|let|const)\s+\w+\s*:\s*" + _DICT_DISPLAY),
+    _re_du.compile(r"^\s*def\b.*?[(,]\s*\w+\s*:\s*" + _DICT_DISPLAY),
+    _re_du.compile(r"^\s*def\b.*?->\s*" + _DICT_DISPLAY),
+]
+
+
+def refuse_dict_display_types(code):
+    """Raise SyntaxError at the first `{K: V}` written as a type in CODE."""
+    for n, line in enumerate(code.split("\n"), 1):
+        text = _re_du.sub(r"#.*", "", _re_du.sub(r"(\"[^\"]*\"|'[^']*')", '""', line))
+        for rx in _DICT_AS_TYPE:
+            m = rx.search(text)
+            if m:
+                k, v = m.group(1), m.group(2)
+                raise SyntaxError(f"line {n}: {{{k}: {v}}} is not a type: a table "
+                                  f"is written {{{k}}}{v}")

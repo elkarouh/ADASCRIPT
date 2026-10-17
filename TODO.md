@@ -4,10 +4,6 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
-- [ ] `{int: int}` written as a table type is taken as a set: Python emits
-      `fib_cache: {int: int} = set()` and fails at the first write. The table
-      type is `{int}int`; the Python-style spelling should be refused with a
-      one-line error naming it, on both backends.
 - [ ] JSON for the browser. The accounting page hands the browser its accounts and
       arrows as tab-separated lines in a hidden `pre` (`TOOLS/ACCOUNTING/shared/layout.ady`,
       `books_text`/`slots_of`), with the fields matched by position and escaped by hand.

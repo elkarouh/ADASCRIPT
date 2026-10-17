@@ -708,6 +708,20 @@ test: compile
 	done
 	@rm -f $(TMPDIR)/ady_dup_type.ady $(TMPDIR)/ady_dup_type.out
 
+	@# `{int: int}` is a dict display, not a type: refused, naming {int}int.
+	@echo "=== {K: V} written as a type, both backends ==="
+	@printf 'var a: {}int = {}\n\ndef f(t: {str: float}) -> int:\n    return 0\n' \
+	    > $(TMPDIR)/ady_dict_type.ady
+	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
+	    printf '  %-42s' "{str: float} as a type ($$tr)"; \
+	    if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_dict_type.ady > $(TMPDIR)/ady_dict_type.out 2>&1; then \
+	        echo "FAIL (accepted)"; exit 1; \
+	    fi; \
+	    grep -q "line 3: {str: float} is not a type: a table is written {str}float" $(TMPDIR)/ady_dict_type.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_dict_type.out; exit 1; }; \
+	done
+	@rm -f $(TMPDIR)/ady_dict_type.ady $(TMPDIR)/ady_dict_type.out
+
 	@# A failure dropped after a receiver that is itself a call is refused too.
 	@echo "=== dropped failure after a call receiver, both backends ==="
 	@printf 'def main():\n    let base: Path = Path("/a")\n    Path("/a/b").relative_to(base)\nmain()\n' \
