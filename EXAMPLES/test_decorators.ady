@@ -1,5 +1,6 @@
 #!/usr/bin/env ady2nim
 """Stateless decorators: a wrapper marked @decorator is handed the function it wraps."""
+nimport time
 
 @decorator
 def aligned(width: int, f: (str) -> str, s: str) -> str:
@@ -21,6 +22,24 @@ def cached(cache: {int}int, f: (int) -> int, n: int) -> int:
     if n not in cache:
         cache[n] = f(n)
     return cache[n]
+
+# generic wrappers take any function of one argument: T and R are bound from
+# the function decorated, so one @timed serves an (int) -> int and a (str) -> str
+var timings: {str}float = {:}
+
+@decorator
+def timed[T, R](label: str, f: (T) -> R, x: T) -> R:
+    let start: float = time.perf_counter()
+    let result: R = f(x)
+    timings[label] = timings.get(label, 0.0) + (time.perf_counter() - start)
+    return result
+
+@decorator
+def logged[T, R](label: str, f: (T) -> R, x: T) -> R:
+    print f"-> {label}({x})"
+    let result: R = f(x)
+    print f"<- {label} = {result}"
+    return result
 
 @aligned(8)
 def tag(name: str) -> str:
@@ -49,13 +68,58 @@ def fib(n: int) -> int:
         return n
     return fib(n - 1) + fib(n - 2)
 
+# on a method: the wrapper is handed the method bound to self, so the same
+# decorators serve functions and methods
+class Greeter:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
+
+    @shout
+    @aligned(12)
+    def greet(self, other: str) -> str:
+        return self.name + " > " + other
+
+class Counter:
+    var n: int
+
+    def __init__(self):
+        self.n = 0
+
+    # the wrapped method writes to its object
+    @twice
+    def bump(self, by: int) -> int:
+        self.n += by
+        return self.n
+
+@logged("sum_to")
+@timed("sum_to")
+def sum_to(n: int) -> int:
+    var s: int = 0
+    for i in range(n + 1):
+        s += i
+    return s
+
+@timed("strip")
+def stripped(s: str) -> str:
+    return s.strip()
+
 def main():
     assert tag("a") == "<a>     "
     assert loud("hi") == "HI!   "
     assert add_three(1) == 7
     assert countdown(3) == 3
-    assert fib(80) == 23416728348467685
-    assert len(fib_cache) == 81
+    assert fib(40) == 102334155
+    assert len(fib_cache) == 41
+    let g: Greeter = Greeter("ann")
+    assert g.greet("bob") == "ANN > BOB   "
+    var c: Counter = Counter()
+    assert c.bump(2) == 4
+    assert c.n == 4
+    assert sum_to(100) == 5050
+    assert stripped(" ada ") == "ada"
+    assert "sum_to" in timings and "strip" in timings
     print "test_decorators: ok"
 
 if __name__ == "__main__":

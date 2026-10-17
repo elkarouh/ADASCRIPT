@@ -1977,12 +1977,16 @@ def tag(name: str) -> str:
     return "<" + name + ">"
 ```
 
-`tag("a")` is `"<a>     "`. Stacked decorators apply bottom-up; a recursive
+`tag("a")` is `"<a>     "`. A wrapper can be generic, `def timed[T, R](label: str,
+f: (T) -> R, x: T) -> R`, and then serves any one-argument function, which is
+how a timing or logging decorator is written (both are in the test). Stacked decorators apply bottom-up; a recursive
 call goes through the decorated name. The transpiler rewrites this before
 the parse (the body becomes `tagBody`, and `tag` returns
 `aligned(8, tagBody, name)`), so it works the same on Nim, Python and JS.
 `f`'s type, the parameters after it and the return type must match the
-decorated def, or it is refused. Top-level defs only.
+decorated def, or it is refused. On a method, the wrapper is handed the
+method bound to self, so `@shout` on `def greet(self, other: str) -> str`
+wraps a `(str) -> str`, and the method may write to self.
 
 <!-- tested by EXAMPLES/test_decorators.ady -->
 

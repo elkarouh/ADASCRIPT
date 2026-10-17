@@ -52,8 +52,8 @@ history of this file if the reasoning behind one of them is ever wanted.
       of a class a reference.
 - [ ] decorators beyond `@decorator` wrappers. Stateless wrappers marked
       `@decorator` work on every backend, with arguments and stacked
-      (EXAMPLES/test_decorators.ady, book 8.7). Still open: a wrapper on a
-      method (self), and one that returns a function of another type. State
+      (EXAMPLES/test_decorators.ady, book 8.7), on functions and methods.
+      Still open: one that returns a function of another type. State
       (a cache) is passed in as the decorator's argument; a decorator that
       owns its state, `@cached` with no table to declare, is not done. Nim
       refuses any other decorator, while Python passes it through;

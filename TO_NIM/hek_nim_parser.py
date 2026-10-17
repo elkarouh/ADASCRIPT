@@ -5966,6 +5966,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         _m_wrapped = _wrap_option_tail(_wrap_union_tail(_m_text, ret_ann), ret_ann)
         if _m_wrapped.rstrip("\n") != _m_text.rstrip("\n"):
             _mbody = _m_wrapped.rstrip("\n").split("\n")
+    if any(_p.startswith("self: var ") for _p in params):
+        _mbody = _var_self_captured(_mbody)
     lines.extend(_mbody)
     # Register param types for call-site Option[T] some() coercion (_wrap_option_args)
     if nim_name and params:
@@ -5980,6 +5982,36 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     ParserState.symbol_table.pop_scope()
     ParserState._current_return_type = ""
     return lines
+
+
+def _var_self_captured(body):
+    """BODY, a method's whose self is `var`, with each nested proc that uses
+    self reaching it through its address: nim refuses to capture a var
+    parameter. A decorated method's forwarding def is such a proc."""
+    flat = "\n".join(body).split("\n")
+    out, used, i = [], False, 0
+    while i < len(flat):
+        m = re.match(r"(\s*)proc \w+", flat[i])
+        if not m:
+            out.append(flat[i])
+            i += 1
+            continue
+        pad = len(m.group(1))
+        j = i + 1
+        while j < len(flat) and (not flat[j].strip()
+                                 or len(flat[j]) - len(flat[j].lstrip()) > pad):
+            j += 1
+        block = flat[i:j]
+        if any(re.search(r"\bself\b", ln) for ln in block):
+            block = [re.sub(r"\bself\b", "selfAddr[]", ln) for ln in block]
+            used = True
+        out.extend(block)
+        i = j
+    if not used:
+        return body
+    first = next((ln for ln in out if ln.strip()), "")
+    pad = first[:len(first) - len(first.lstrip())]
+    return [f"{pad}let selfAddr = addr self"] + out
 
 
 def _by_value_calls_neutralised(text, by_value):

@@ -4209,8 +4209,10 @@ _STDLIB_PATTERNS = [
     ("os.environ.get",    "getEnv",          "os"),
     ("os.getpid",         "getCurrentProcessId", "os"),
     ("os.symlink",        "createSymlink",   "os"),
-    ("time.perf_counter", "cpuTime",         "times"),
-    ("time.monotonic",    "cpuTime",         "times"),
+    # wall-clock seconds, as Python's are; cpuTime is processor time, and the
+    # browser has none
+    ("time.perf_counter", "epochTime",       "times"),
+    ("time.monotonic",    "epochTime",       "times"),
     ("time.time",         "epochTime",       "times"),
     ("time.sleep",        "sleep",           "os"),
     ("sys.exit",          "quit",            None),

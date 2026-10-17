@@ -291,8 +291,48 @@ def fib(n: int) -> int:
 ```
 
 The recursive calls go through `fib`, so they hit the cache too, and
-`fib(80)` makes 81 calls of the body instead of billions. Each cached
+`fib(40)` makes 41 calls of the body instead of hundreds of millions. Each cached
 function names its own table, and the program can read or clear it.
+
+A wrapper that does not care what the function computes, one that times or
+logs it, is written generic. `T` and `R` are bound from the function it
+decorates, so one `@timed` serves an `(int) -> int` and a `(str) -> str`:
+
+```python
+# EXAMPLES/test_decorators.ady
+nimport time
+
+var timings: {str}float = {:}
+
+@decorator
+def timed[T, R](label: str, f: (T) -> R, x: T) -> R:
+    let start: float = time.perf_counter()
+    let result: R = f(x)
+    timings[label] = timings.get(label, 0.0) + (time.perf_counter() - start)
+    return result
+
+@decorator
+def logged[T, R](label: str, f: (T) -> R, x: T) -> R:
+    print f"-> {label}({x})"
+    let result: R = f(x)
+    print f"<- {label} = {result}"
+    return result
+
+@logged("sum_to")
+@timed("sum_to")
+def sum_to(n: int) -> int:
+    var s: int = 0
+    for i in range(n + 1):
+        s += i
+    return s
+```
+
+`sum_to(100)` prints `-> sum_to(100)` and `<- sum_to = 5050`, and adds its
+time to `timings["sum_to"]`, which the program can print when it ends. A
+generic wrapper takes the shape it names: `(T) -> R` is any function of one
+argument, and one of two arguments needs a wrapper written `(T, U) -> R`.
+`time.perf_counter()` is wall-clock seconds on every backend, the browser
+included.
 
 The transpiler does the wrapping itself, before either backend sees the
 code: the body is kept under a hidden name, and the decorated name becomes a
@@ -303,8 +343,32 @@ one whose `f` does not have the decorated function's type, or whose
 remaining parameters are not the decorated function's, or that returns
 something else than the decorated function does.
 
-Only the top-level defs of a file can be decorated this way, and line numbers
-in error messages after a decorated def shift by the lines the rewrite adds.
+A method is decorated the same way, with the same wrappers: the wrapper is
+handed the method bound to its object, a function of the method's other
+parameters, so `@shout` on `def greet(self, other: str) -> str` wraps a
+`(str) -> str`. The method may write to its object:
+
+```python
+# EXAMPLES/test_decorators.ady
+class Counter:
+    var n: int
+
+    def __init__(self):
+        self.n = 0
+
+    # the wrapped method writes to its object
+    @twice
+    def bump(self, by: int) -> int:
+        self.n += by
+        return self.n
+```
+
+`c.bump(2)` runs the body twice, the second time on what the first returned,
+and leaves `c.n` at 4. A cache on a method is keyed on the arguments alone,
+not on the object.
+
+The defs of one file can be decorated this way, and line numbers in error
+messages after a decorated def shift by the lines the rewrite adds.
 The built-in annotations (`@virtual` on a class, §9.4; `@contextmanager`,
 `@proc`, `@export`, `@used`) are not wrappers and need no `@decorator`.
 
