@@ -744,6 +744,8 @@ def translate(code, export_symbols=False):
     refuse_dict_display_types(code)            # `{int: int}` is written {int}int
     from ady_declarations import refuse_paren_enums
     refuse_paren_enums(code)                   # `is (A, B)`: an enum is `is enum A, B`
+    from ady_declarations import refuse_let_writes
+    refuse_let_writes(code)                    # `let r = Row(); r.x = 1`: Nim refuses it
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     from ady_html import expand_html_blocks

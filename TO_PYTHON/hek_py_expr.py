@@ -1526,6 +1526,23 @@ def to_py(self, prec=None):
         while i < len(trailers):
             tr = trailers[i]
             tr_str = tr.to_py()
+            # `p.total` / `p.scaled(10)` with total and scaled functions whose
+            # first parameter is p's type: total(p), scaled(p, 10), as on Nim
+            if _re_mod_pfx.fullmatch(r"\.[A-Za-z_]\w*", tr_str) \
+                    and _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*", result):
+                _first = getattr(ParserState, "py_first_param", {}).get(tr_str[1:])
+                _rsym = ParserState.symbol_table.lookup(result) if _first else None
+                _rtype = ((_rsym.get("type") or "") if isinstance(_rsym, dict) else "").replace("?", "").strip()
+                if _first and _rtype == _first:
+                    _call = trailers[i + 1].to_py() if i + 1 < len(trailers) else ""
+                    if _call.startswith("(") and _call.endswith(")"):
+                        _args = _call[1:-1].strip()
+                        result = f"{tr_str[1:]}({result}{', ' + _args if _args else ''})"
+                        i += 2
+                    else:
+                        result = f"{tr_str[1:]}({result})"
+                        i += 1
+                    continue
             # .get() on an Optional-typed variable is a no-op in Python (value is already unwrapped)
             # Parsed as two trailers: attr_trailer(".get") + call_trailer("()")
             if i == 0 and result in ("readFile", "writeFile"):

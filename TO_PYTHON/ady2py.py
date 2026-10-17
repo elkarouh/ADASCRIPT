@@ -327,6 +327,8 @@ def translate(code):
     refuse_dict_display_types(code)            # `{int: int}` is written {int}int
     from ady_declarations import refuse_paren_enums
     refuse_paren_enums(code)                   # `is (A, B)`: an enum is `is enum A, B`
+    from ady_declarations import refuse_let_writes
+    refuse_let_writes(code)                    # `let r = Row(); r.x = 1`: Nim refuses it
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
     from ady_stmt import resolve_unit_aliases, desugar_optional_unions
@@ -393,6 +395,11 @@ def translate(code):
     import re as _re_udef
     _PS_udef.user_top_level_procs = set(
         _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
+    # ... and the type of each one's first parameter: `p.total` for a P_T p is
+    # total(p), as Nim reads it, when total's first parameter is a P_T
+    _PS_udef.py_first_param = {
+        m.group(1): m.group(2) for m in _re_udef.finditer(
+            r'^def\s+([A-Za-z_]\w*)\s*\(\s*\w+\s*:\s*([A-Za-z_][\w.]*)\s*[,)=]', code, _re_udef.M)}
     # PROG, the program's name, is predeclared for a module that uses it and
     # does not declare its own -- as on the Nim backend.
     if (_re_udef.search(r'\bPROG\b', code)

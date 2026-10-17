@@ -1421,3 +1421,36 @@ def refuse_paren_enums(code):
             raise SyntaxError(
                 f"line {n}: ({m.group(2).strip()}) names no types; an enum is "
                 f"written type {m.group(1)} is enum {', '.join(names)}")
+
+
+def refuse_let_writes(code):
+    """Raise SyntaxError at a write to a field of a `let` record or class
+    value: `let r: Row = Row(); r.x = 1`. Nim refuses it (the value is
+    immutable) and Python allowed it, so a program ran on one backend only.
+    A class marked @virtual is a reference on Nim, whose fields may change
+    through a `let`, and is left alone."""
+    from ady_modules import _blank
+    text = _blank(code)
+    values = set(_re_du.findall(r"(?m)^\s*type\s+(\w+)\s+is\s+(?:record|tuple)\b", text))
+    for m in _re_du.finditer(r"(?m)^((?:[ \t]*@(\w+)[^\n]*\n)*)[ \t]*class\s+(\w+)", text):
+        if "@virtual" not in m.group(1):
+            values.add(m.group(3))
+    if not values:
+        return
+    lines = text.split("\n")
+    for n, line in enumerate(lines):
+        m = _re_du.match(r"([ \t]*)let\s+(\w+)\s*:\s*(\w+)\s*=", line)
+        if not m or m.group(3) not in values:
+            continue
+        indent, name = len(m.group(1)), m.group(2)
+        for k in range(n + 1, len(lines)):
+            later = lines[k]
+            if later.strip() and len(later) - len(later.lstrip()) < indent:
+                break                      # the block that holds the let is over
+            if _re_du.match(rf"\s*(?:let|var)\s+{name}\b", later):
+                break                      # a new binding of the name
+            w = _re_du.match(rf"\s*{name}((?:\.\w+|\[[^\]]*\])+)\s*(?:[-+*/%]|//)?=(?!=)", later)
+            if w:
+                raise SyntaxError(
+                    f"line {k + 1}: {name}{w.group(1)} changes the `let` {name} (line {n + 1}), "
+                    f"a {m.group(3)} value, which cannot change: declare it `var {name}`")
