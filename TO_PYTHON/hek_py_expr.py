@@ -1983,7 +1983,12 @@ def to_py(self, prec=None):
         if fname == "power_rhs":
             exponents = [seq.nodes[1].to_py(PREC_POWER) for seq in node.nodes]
             for exp in reversed(exponents):
-                result = f"{result} ** {exp}"
+                from ady_declarations import power_unit, expr_unit, is_distinct
+                from hek_py_stmt import _py_atom_unit
+                _unit = expr_unit(result, _py_atom_unit) if len(exponents) == 1 else None
+                _to = power_unit(_unit, exp) if _unit and is_distinct(_unit) else None
+                # a unit squared is the unit of its dimension: Length_T ** 2 is an Area_T
+                result = f"{_to}({result} ** {exp})" if _to else f"{result} ** {exp}"
         elif fname in (
             "call_trailer",
             "index_trailer",

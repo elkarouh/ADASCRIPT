@@ -5602,7 +5602,14 @@ def to_nim(self, prec=None):
                     result = f"pow(float({result}), {exp})"
                 else:
                     ParserState.nim_from.setdefault("math", set()).add("`^`")
-                    result = f"{result} ^ {exp}"
+                    from ady_declarations import power_unit, distinct_kind, is_distinct
+                    _unit = _unit_of(result) if len(exponents) == 1 else None
+                    _to = power_unit(_unit, exp) if _unit and is_distinct(_unit) else None
+                    if _to:
+                        # a unit squared is the unit of its dimension: Length_T ** 2 is an Area_T
+                        result = f"{_to}({distinct_kind(_unit)}({result}) ^ {exp})"
+                    else:
+                        result = f"{result} ^ {exp}"
         elif fname in ("call_trailer", "index_trailer", "slice_trailer", "attr_trailer", "trailer"):
             for tr in node.nodes:
                 result += tr.to_nim()

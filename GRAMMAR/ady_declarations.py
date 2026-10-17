@@ -1104,6 +1104,36 @@ def dimension_text(d):
     return text + ("".join(f" / {x}" for x in den))
 
 
+def power_unit(base, exp):
+    """The unit `x ** EXP` is for x a BASE, or None when BASE is no unit with a
+    dimension. `Length_T ** 2` is the unit declared with the dimension of a
+    length squared, Area_T; SyntaxError when no unit, or two, have it, or when
+    EXP is not a whole number written out (the unit would depend on a value)."""
+    from hek_parsec import ParserState
+    dims = getattr(ParserState, "unit_dims", None) or {}
+    if not dims.get(base):
+        return None
+    if not _re_du.fullmatch(r"[1-9]\d*", exp.strip()):
+        raise SyntaxError(
+            f"{base} ** {exp}: a unit is raised only to a whole number written out, "
+            f"as `x ** 2` -- its unit would depend on the value of {exp}")
+    n = int(exp)
+    if n == 1:
+        return base
+    d = _dims_key({u: e * n for u, e in dims[base]})
+    found = sorted(u for u, dd in dims.items() if dd == d)
+    if len(found) == 1:
+        return found[0]
+    if found:
+        raise SyntaxError(
+            f"{base} ** {n} is {dimension_text(d)}, which {' and '.join(found)} both are: "
+            f"convert it to the one meant, as {found[0]}(float(x) ** {n})")
+    how = (f"`type Name_T is {base} * {base}`" if n == 2 else
+           f"a product at a time: `type Square_T is {base} * {base}`, then `type Cube_T is Square_T * {base}`")
+    raise SyntaxError(
+        f"{base} ** {n} is {dimension_text(d)}, and no unit declared is one -- declare it, as {how}")
+
+
 def unit_relation(op, left, right):
     """The unit of `left op right` where a derived unit says one, else None."""
     from hek_parsec import ParserState
