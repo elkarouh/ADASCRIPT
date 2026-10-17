@@ -425,6 +425,19 @@ def to_py(self):
     return ", ".join(parts)
 
 
+def _note_loop_var_type(target, iterable):
+    """`for p in impulses` over a `[*]Impulse_T`: P is an Impulse_T, which a
+    unit's conversion needs to know (hek_py_expr._scaled_conversion)."""
+    import re as _re_lv
+    if not _re_lv.fullmatch(r"[A-Za-z_]\w*", target.strip()):
+        return
+    sym = ParserState.symbol_table.lookup(iterable.strip())
+    t = ((sym.get("type") or "") if isinstance(sym, dict) else "").strip()
+    m = _re_lv.fullmatch(r"(?:list|tuple|Sequence|set|frozenset)\[(\w+)(?:, \.\.\.)?\]", t)
+    # a loop rebinds its name: one of no known type forgets an earlier one
+    ParserState.symbol_table.add(target.strip(), m.group(1) if m else None, "let")
+
+
 @method(for_stmt)
 def to_py(self, indent=0):
     """for_stmt: 'for' for_target 'in' star_expressions ':' block ('else' ...)?"""
@@ -438,6 +451,7 @@ def to_py(self, indent=0):
     _rng = __import__("re").fullmatch(r"set\(([A-Za-z_]\w*)\)", iterable)
     if _rng:
         iterable = _rng.group(1)
+    _note_loop_var_type(target, iterable)
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_py(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"

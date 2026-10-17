@@ -325,6 +325,8 @@ def translate(code):
     code = expand_type_args(code)              # `f[[]int](x)`: see ady_stmt
     from ady_declarations import refuse_dict_display_types
     refuse_dict_display_types(code)            # `{int: int}` is written {int}int
+    from ady_declarations import refuse_paren_enums
+    refuse_paren_enums(code)                   # `is (A, B)`: an enum is `is enum A, B`
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
     from ady_stmt import resolve_unit_aliases, desugar_optional_unions
@@ -356,19 +358,17 @@ def translate(code):
     _PS_rp.record_fields = scan_record_fields(code)
     from ady_declarations import distinct_types, unit_relations, scaled_units
     from ady_stmt import scan_consts
-    # A scaled unit's conversions are chosen by the type of their argument,
-    # which this backend does not always know: guessing wrong would relabel
-    # metres as miles, so it is not built here.
-    for _name, (_k, _b) in scaled_units(_PS_rp.ady_type_decls, scan_consts(code)).items():
-        raise SyntaxError(
-            f"type {_name} is {_k} * {_b}: a scaled unit is built by ady2nim "
-            f"only -- its conversions depend on the type of their argument, "
-            f"which the Python backend cannot always see")
+    # A scaled unit's conversions are chosen by the unit of their argument,
+    # worked out where they are written (hek_py_expr._scaled_conversion);
+    # where it cannot be told the conversion is refused, never guessed.
+    _scaled = scaled_units(_PS_rp.ady_type_decls, scan_consts(code))
+    _PS_rp.py_scaled_units = _scaled
     from ady_declarations import narrowed_types, mod_types
     _PS_rp.narrowed_types = narrowed_types(_PS_rp.ady_type_decls)
     _PS_rp.mod_types = mod_types(_PS_rp.ady_type_decls)
-    _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls, consts=scan_consts(code))
-    _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls)
+    _PS_rp.distinct_types = distinct_types(_PS_rp.ady_type_decls, scaled=_scaled,
+                                           consts=scan_consts(code))
+    _PS_rp.unit_relations = unit_relations(_PS_rp.ady_type_decls, _scaled)
     from ady_declarations import unit_dims, inferred_relations
     _PS_rp.unit_dims = unit_dims(_PS_rp.ady_type_decls)
     _PS_rp.unit_relations.update(inferred_relations(
@@ -780,11 +780,11 @@ def run_tests():
         ),
         (
             "$1\n",
-            "import sys\nsys.argv[1]\n",
+            "import sys\n(sys.argv[1] if len(sys.argv) > 1 else \"\")\n",
         ),
         (
             "$2\n",
-            "import sys\nsys.argv[2]\n",
+            "import sys\n(sys.argv[2] if len(sys.argv) > 2 else \"\")\n",
         ),
         (
             "$@\n",
@@ -800,7 +800,7 @@ def run_tests():
         ),
         (
             "name = $1\n",
-            "import sys\nname = sys.argv[1]\n",
+            "import sys\nname = (sys.argv[1] if len(sys.argv) > 1 else \"\")\n",
         ),
         (
             "if $# < 2:\n    pass\n",

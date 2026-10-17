@@ -2474,6 +2474,18 @@ def to_nim(self, indent=0):
     # Detect tuple subject: (a, b, ...) — desugar to if/elif
     _tm = _re.match(r'^\((.+)\)$', subject.strip())
     if _tm:
+        # a tuple has a comma at its own level: `(if paramCount() >= 1:
+        # paramStr(1) else: "")`, which `$1` is, is one value in parentheses
+        _depth, _top_comma = 0, False
+        for _ch in _tm.group(1):
+            _depth += _ch in "([{"
+            _depth -= _ch in ")]}"
+            if _depth < 0:
+                break
+            _top_comma = _top_comma or (_ch == "," and _depth == 0)
+        if _depth != 0 or not _top_comma:
+            _tm = None
+    if _tm:
         subject_parts = [p.strip() for p in _tm.group(1).split(",")]
         # Collect (pattern_nim, block_node) pairs from Several_Times > Sequence_Parser > [pattern, block]
         branches = []
@@ -4136,6 +4148,10 @@ def to_nim(self, indent=0):
     result = f"{_ind(indent)}type {name}{_exp}{params} = {ref_keyword}{nim_kind}\n" + "\n".join(fields)
     # Emit an init proc for record (object) types that have field defaults,
     # since Nim object fields don't support inline default values.
+    # the defaults, for a literal that leaves fields out: `Press_T(ESCAPE)`
+    if not hasattr(ParserState, 'record_field_defaults'):
+        ParserState.record_field_defaults = {}
+    ParserState.record_field_defaults[name] = dict(field_defaults)
     if nim_kind == "object" and field_defaults:
         ind1 = _ind(indent + 1)
         init_body = "\n".join(f"{ind1}result.{fn} = {fv}" for fn, fv in field_defaults)
@@ -4984,9 +5000,42 @@ def to_nim(self, indent=0):
             nim_expr = nim_expr.replace("os.makedirs(", "createDir(")
             nim_expr = nim_expr.replace("len(", "len(")
             nim_expr = nim_expr.replace("str(", "$")
+            # an f-string inside, `{!f"HEAD {short}"}`, is Nim's fmt
+            if _re_interp.search(r'(?<![\w"])[fF]"', nim_expr):
+                ParserState.nim_imports.add("strformat")
+                nim_expr = _re_interp.sub(r'(?<![\w"])[fF]"', 'fmt"', nim_expr)
             _shell_hoists.append(f"{ind}let {tmp} = {nim_expr}")
             return "{" + tmp + "}"
-        cmd = _re_interp.sub(r'\{([^}]+)\}', _hoist_complex, cmd)
+
+        def _interpolations(text):
+            """TEXT with each {expr} handed to _hoist_complex; an expr may
+            hold braces of its own inside a string, `{!f"HEAD {short}"}`."""
+            out, k = [], 0
+            while k < len(text):
+                if text[k] != "{" or text[k + 1:k + 2] == "{":
+                    step = 2 if text[k:k + 2] in ("{{", "}}") else 1
+                    out.append(text[k:k + step])
+                    k += step
+                    continue
+                depth, j, quote = 1, k + 1, None
+                while j < len(text) and depth:
+                    ch = text[j]
+                    if quote:
+                        quote = None if ch == quote else quote
+                    elif ch in "\"'":
+                        quote = ch
+                    elif ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                    j += 1
+                if depth:
+                    out.append(text[k:])
+                    break
+                out.append(_hoist_complex(_re_interp.match(r"\{(.*)\}", text[k:j], _re_interp.S)))
+                k = j
+            return "".join(out)
+        cmd = _interpolations(cmd)
         ParserState._shell_hoist_count = _hoist_count
 
     if needs_fstring:

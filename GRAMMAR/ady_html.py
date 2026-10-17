@@ -35,7 +35,8 @@ An attribute named on... (`onclick=self.inc`) is an event handler: its value
 is run when the event fires, and the module then needs karax's browser side,
 so it builds under `ady2nim js` only.
 `class`, `for` ... take a trailing underscore on the way (`class_="x"` is
-accepted too); `data-id` is spelled `data_id`.
+accepted too); `data-id` is spelled `data_id`, and written `data-id` in the
+page, as are `marker_end`, `stroke_width` and every other name with `_`.
 """
 import re
 
@@ -225,7 +226,10 @@ def _karax(tag, args):
            "u": "underlined", "text": "stext"}.get(tag, tag)
     args = re.sub(r"\bclass_=", "class=", args)
     args = re.sub(r"\bfor_=", "`for`=", args)
-    args = re.sub(r"\b([A-Za-z]+)_([A-Za-z]+)=", r"\1-\2=", args) if False else args
+    # `data_hx_get=`, `marker_end=`: the page's own name has hyphens, which a
+    # Nim name cannot, so it goes in backticks -- karax takes it as written
+    args = re.sub(r"(^|, )([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)\s*=",
+                  lambda m: m.group(1) + "`" + m.group(2).replace("_", "-") + "`=", args)
     return tag, args
 
 

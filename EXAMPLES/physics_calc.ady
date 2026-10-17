@@ -19,8 +19,8 @@ Distance_T divides by it, `Distance_T(mi)` multiplies.
 Shown: distinct types, scaled units (the mile and the kilometre), derived units, an
 enum with enum-indexed tables, a named tuple, a speed classified from thresholds, and
 the checks at the end -- the numbers agree with the physics, and the conversions with
-each other. Nim only: a scaled unit's conversion depends on the type of its argument,
-which the Python backend cannot always see.
+each other. The output is compared between the backends: a scaled unit's conversion
+depends on the unit of its argument, which ady2py refuses to guess where it cannot tell.
 """
 
 # ---- base units (SI), the kilometre and the mile ---------------------------------------------

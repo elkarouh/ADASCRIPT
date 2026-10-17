@@ -16,8 +16,7 @@
 # Here the two units are types. The file the vendor writes is in `Impulse_in_lbf_s_T`; the
 # navigation takes `Impulse_T`. Handing one to the other is refused when the program is
 # compiled (Makefile: "the Mars Climate Orbiter's call"), so the only way across is the
-# conversion, written where it happens. Scaled units are Nim only (ady2py refuses the
-# declaration).
+# conversion, written where it happens. The output is compared between the backends.
 
 from units import kilogram_T, metre_T, second_T
 

@@ -346,7 +346,7 @@ def _py_call_name(e):
     if not m or not e.endswith(")"):
         return None
     depth = 0
-    for i, ch in enumerate(e):
+    for i, ch in enumerate(e[m.end() - 1:], m.end() - 1):
         depth += ch in "(["
         depth -= ch in ")]"
         if depth == 0 and i < len(e) - 1:
@@ -1407,6 +1407,13 @@ def to_py(self, indent=0):
     # RHS is the last node — works whether V_EQUAL is present ('=') or absent ('is')
     rhs = self.nodes[-1]
     rhs_type = type(rhs).__name__
+    if name in (getattr(ParserState, "py_scaled_units", None) or {}):
+        # `type Dollar_T is 100 * Dollar_in_cent_T`: the float view of the
+        # base; the conversions between them are written where they are
+        # called (hek_py_expr._scaled_conversion)
+        _note_alias(name, name)
+        ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+        return f"{_ind(indent)}class {name}(float): __slots__ = ()"
     if rhs_type == 'distinct_def':
         # A class of its own, so `Velocity_T(x)` makes one and `float(v)`
         # takes it back out; the values are the base type's, and print and

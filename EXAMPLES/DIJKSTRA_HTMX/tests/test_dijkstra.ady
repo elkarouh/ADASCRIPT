@@ -37,12 +37,12 @@ assert "A → F → E, cost 23" in session.answer("PUT", "/edges", "start=A&goal
 assert "A → C → F → E, cost 20" in session.answer("PUT", "/edges", "start=A&goal=E&a=F&b=C&cost=2")
 assert "A → F → E, cost 23" in session.answer("DELETE", "/edges", "start=A&goal=E&a=C&b=F")
 let added: str = session.answer("POST", "/nodes", "name=H")
-assert "data_name=\"H\"" in added or "data-name=\"H\"" in added
+assert "data-name=\"H\"" in added
 assert "There is a node H already." in session.answer("POST", "/nodes", "name=H")
 assert "A → F → E, cost 23" in session.answer("POST", "/edges", "start=A&goal=E&a=A&b=H&cost=1")      # H leads nowhere yet
 assert "A → H → E, cost 2." in session.answer("POST", "/edges", "start=A&goal=E&a=H&b=E&cost=1")
 let moved: str = session.answer("PUT", "/nodes", "name=H&x=300&y=100")
-assert "data_x=\"300\"" in moved or "data-x=\"300\"" in moved
+assert "data-x=\"300\"" in moved
 assert "A → F → E, cost 23" in session.answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
 assert "Click a node to start from." in session.answer("DELETE", "/nodes", "start=A&goal=E&name=A")
 assert "Click a node to start from." in session.answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
@@ -53,9 +53,9 @@ assert "data-hx-post=\"/relayout\"" in session.answer("GET", "/all", "")
 session.answer("POST", "/reset", "")                                   # the sample again, for the tests that follow
 # the drawing's own gestures: a node where it was double-clicked, the wire and the hidden form they fill in
 let placed: str = session.answer("POST", "/nodes", "name=K&x=120&y=200")
-assert "data_x=\"120\"" in placed or "data-x=\"120\"" in placed
+assert "data-x=\"120\"" in placed
 assert "There is a node K already." in session.answer("POST", "/nodes", "name=K&x=5&y=5")
 assert "id=\"gesture\"" in session.answer("GET", "/all", "") and "id=\"wire\"" in session.answer("GET", "/all", "")
-assert "id=\"menu-node\"" in session.answer("GET", "/all", "") and "data_tool=\"delete\"" in session.answer("GET", "/all", "")
+assert "id=\"menu-node\"" in session.answer("GET", "/all", "") and "data-tool=\"delete\"" in session.answer("GET", "/all", "")
 assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "at A 60 190\n" in session.answer("GET", "/all", "")   # what the browser builds its NetworkView from
 print "dijkstra: all checks passed"

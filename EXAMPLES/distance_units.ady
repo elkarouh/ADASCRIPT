@@ -4,8 +4,8 @@
 #   ady2nim EXAMPLES/distance_units.ady -r
 #
 # The metre is the base unit. A kilometre and a nautical mile are each declared as a
-# multiple of it, and that one line is the whole conversion, in both directions. Scaled
-# units are Nim only (ady2py refuses the declaration).
+# multiple of it, and that one line is the whole conversion, in both directions. The
+# output is compared between the backends.
 
 type Distance_T is distinct float                     # metres
 type Distance_in_km_T is 1000.0 * Distance_T          # a kilometre is 1000 m

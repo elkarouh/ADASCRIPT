@@ -1404,3 +1404,20 @@ def refuse_dict_display_types(code):
                 k, v = m.group(1), m.group(2)
                 raise SyntaxError(f"line {n}: {{{k}: {v}}} is not a type: a table "
                                   f"is written {{{k}}}{v}")
+
+
+def refuse_paren_enums(code):
+    """Raise SyntaxError at `type K_T is (ESCAPE, CHAR)`: a tuple of types,
+    none of which exists, each spelled like an enum member. It was taken as
+    the tuple type it looks like and failed later, or not at all."""
+    declared = set(_re_du.findall(r"(?m)^\s*(?:type|class)\s+(\w+)", code))
+    for n, line in enumerate(code.split("\n"), 1):
+        m = _re_du.match(r"\s*type\s+(\w+)\s+is\s*\(([^()]*)\)\s*(?:#.*)?$", line)
+        if not m:
+            continue
+        names = [x.strip() for x in m.group(2).split(",")]
+        if len(names) > 1 and all(_re_du.fullmatch(r"[A-Z][A-Z0-9_]*", x) for x in names) \
+                and not any(x in declared for x in names):
+            raise SyntaxError(
+                f"line {n}: ({m.group(2).strip()}) names no types; an enum is "
+                f"written type {m.group(1)} is enum {', '.join(names)}")

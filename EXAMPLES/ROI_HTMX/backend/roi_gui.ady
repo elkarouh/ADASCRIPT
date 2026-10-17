@@ -250,12 +250,8 @@ def shell() -> Html:
             body:
                 div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
 
-# An html: block writes an attribute with underscores (data_hx_get); htmx wants hyphens.
-def hyphens(text: str) -> str:
-    return text.replace("data_hx_", "data-hx-").replace("marker_end", "marker-end").replace("stroke_width", "stroke-width").replace("stroke_linejoin", "stroke-linejoin")
-
 def shell_text() -> str:
-    return "<!doctype html>" + hyphens(str(shell()))
+    return "<!doctype html>" + str(shell())
 
 def all_text(portfolio: Portfolio, layout: Layout) -> str:
-    return hyphens(str(all_html(portfolio, layout)))
+    return str(all_html(portfolio, layout))

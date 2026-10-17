@@ -46,10 +46,10 @@ assert "value=\"500\"" in answer("GET", "/all", "changed=funds&value=500")
 assert "2020" in answer("GET", "/all", "changed=year&value=2020")
 assert "value=\"500\"" in answer("GET", "/all", "changed=year&value=1999")  # an impossible year is ignored, the rest stays
 assert "value=\"25\"" in answer("POST", "/reset", "")
-assert "data_a=\"investment\"" in first or "data-a=\"investment\"" in first or "data_a" in first   # the arrows say what they join
-assert "data_name=\"gold\"" in first and "data_x=\"360.0\"" in first                                    # a block says where its centre is
-assert "data_x=\"200.0\"" in answer("PUT", "/move", "name=gold&x=200&y=300")                             # and a drop moves it
-assert "data_y=\"300.0\"" in answer("GET", "/all", "")                                                   # the server keeps it
-assert "data_x=\"360.0\"" in answer("POST", "/reset", "")
+assert "data-a=\"investment\"" in first                       # the arrows say what they join
+assert "data-name=\"gold\"" in first and "data-x=\"360.0\"" in first                                    # a block says where its centre is
+assert "data-x=\"200.0\"" in answer("PUT", "/move", "name=gold&x=200&y=300")                             # and a drop moves it
+assert "data-y=\"300.0\"" in answer("GET", "/all", "")                                                   # the server keeps it
+assert "data-x=\"360.0\"" in answer("POST", "/reset", "")
 assert answer("GET", "/nowhere", "") == ""
 print "ok"

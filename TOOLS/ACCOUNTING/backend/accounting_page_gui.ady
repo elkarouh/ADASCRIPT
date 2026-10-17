@@ -1292,16 +1292,12 @@ def shell() -> Html:
                 h1: "Accounting, as graph theory"
                 div id="all" data_hx_get="/h/all" data_hx_trigger="load": "Loading..."
 
-# The pages as text, for the server. An html: block writes an attribute
-# with underscores (data_hx_get), and htmx wants it with hyphens.
-def hyphens(text: str) -> str:
-    return text.replace("data_hx_", "data-hx-")
-
+# The pages as text, for the server.
 # karax turns an onerror attribute into a handler of its own, so it is added to the text.
 const MISSING: str = "<script onerror=\"addEventListener('load', function () { document.getElementById('all').textContent = 'htmx.min.js did not load: run make app, which copies it to build/.' })\" src=\"/htmx.min.js\">"
 
 def shell_text() -> str:
-    return "<!doctype html>" + hyphens(str(shell())).replace("<script src=\"/htmx.min.js\">", MISSING)
+    return "<!doctype html>" + str(shell()).replace("<script src=\"/htmx.min.js\">", MISSING)
 
 def all_text(b: Books, names: []str, titles: []str, current: str, p: Params) -> str:
-    return hyphens(str(all_html(b, names, titles, current, p)))
+    return str(all_html(b, names, titles, current, p))

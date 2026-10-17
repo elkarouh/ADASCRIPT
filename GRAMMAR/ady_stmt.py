@@ -589,7 +589,7 @@ def scan_type_decls(code):
 
 
 _RECORD_HEAD = _re_dup.compile(
-    r"^type[ \t]+([A-Za-z_]\w*)(?:[ \t]*\([^)\n]*\))?[ \t]+is[ \t]+record[ \t]*:[ \t]*$",
+    r"^type[ \t]+([A-Za-z_]\w*)(?:[ \t]*\([^)\n]*\))?[ \t]+is[ \t]+(?:record|tuple)[ \t]*:[ \t]*$",
     _re_dup.MULTILINE)
 _RECORD_FIELD = _re_dup.compile(r"^[ \t]+([A-Za-z_]\w*)[ \t]*:[ \t]*([^=#\n]+?)[ \t]*(?:=.*)?(?:#.*)?$")
 

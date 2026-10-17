@@ -61,9 +61,29 @@ type Element_T is Node
 # The whole page: what `find` and `all` search when nothing narrower is given.
 let page: Element_T = document
 
+# An attribute's name as the page has it: what Adascript spells data_x, an `html:` block
+# writes data-x (a name with `_` is written with `-`), and so does every name here.
+def page_name(name: str) -> str:
+    return name.replace("_", "-")
+
+# CSS with its attribute names as the page has them: "g[data_from]" finds data-from.
+def page_css(css: str) -> str:
+    var out: str = ""
+    var in_name: bool = False
+    for ch in css:
+        if ch == '[':
+            in_name = True
+        elif ch == '=' or ch == ']':
+            in_name = False
+        if in_name and ch == '_':
+            out = out + "-"
+        else:
+            out = out + str(ch)
+    return out
+
 # The first element below WITHIN that the CSS selector CSS matches, or None when there is none.
 def find(within: Element_T, css: str) -> ?Element_T:
-    let found: Element_T = within.querySelector(cstring(css))
+    let found: Element_T = within.querySelector(cstring(page_css(css)))
     if found is None:
         return None
     return found
@@ -71,29 +91,30 @@ def find(within: Element_T, css: str) -> ?Element_T:
 # The first element below WITHIN that CSS matches, which must be there: the script stops if it is not
 # (for an element the page is always drawn with). Use `find` when it may be missing.
 def element(within: Element_T, css: str) -> Element_T:
-    let found: Element_T = within.querySelector(cstring(css))
+    let found: Element_T = within.querySelector(cstring(page_css(css)))
     assert found is not None, f"no element matches {css}"
     return found
 
 # All the elements below WITHIN that CSS matches, in the order of the page.
 def all(within: Element_T, css: str) -> []Element_T:
     var found: []Element_T = []
-    for e in within.querySelectorAll(cstring(css)):
+    for e in within.querySelectorAll(cstring(page_css(css))):
         found.append(e)
     return found
 
 # The text of attribute NAME of NODE ("" when it has none).
 def attr(node: Element_T, name: str) -> str:
-    let v: cstring = node.getAttribute(cstring(name))
+    let v: cstring = node.getAttribute(cstring(page_name(name)))
     if v is None:
         return ""
     return str(v)
 
 # Set attribute NAME of NODE to VALUE.
 def set_attr(node: Element_T, name: str, value: str):
-    node.setAttribute(cstring(name), cstring(value))
+    node.setAttribute(cstring(page_name(name)), cstring(value))
 
-# What the server wrote in NODE's data_NAME attribute: `node.data("name")` reads data_name.
+# What the server wrote in NODE's data_NAME attribute: `node.data("name")` reads data_name
+# (data-name in the page).
 def data(node: Element_T, name: str) -> str:
     return attr(node, "data_" + name)
 
@@ -157,7 +178,7 @@ def click_of(e: Event) -> Click_T:
     return Click_T(MouseEvent(e).shiftKey, e.target, e)
 
 def on(c: Click_T, css: str) -> ?Element_T:
-    let found: Element_T = c.target.closest(cstring(css))
+    let found: Element_T = c.target.closest(cstring(page_css(css)))
     if found is None:
         return None
     return found

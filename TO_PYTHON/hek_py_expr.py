@@ -582,6 +582,19 @@ def _lines(_f):
 '''
 
 
+_OPT_MAP_HELPER = '''\
+def _opt_map(_x, _f, _name):
+    """`opt.map(f)` / `opt.and_then(f)` on a ?T: None stays None, a value is
+    handed to f. An object with a method of that name is asked instead."""
+    if _x is None:
+        return None
+    _own = getattr(type(_x), _name, None)
+    if callable(_own):
+        return _own(_x, _f)
+    return _f(_x)\
+'''
+
+
 _LINES_OF_HELPER = '''\
 def _lines_of(_x):
     """`.lines` on a receiver of no known type: a file's lines when it is
@@ -820,7 +833,18 @@ def _tick_to_py(expr, attr):
         # walks the positions of a string or sequence.
         return f"range(len({expr}))"
     if attr == "Image":
-        return f"({expr}).name"
+        # an enum member's name; anything else -- an int, a str, a field the
+        # emitter cannot type -- its text, as Nim's `$` gives it
+        _sym = ParserState.symbol_table.lookup(expr)
+        _t = ((_sym.get("type") or "") if isinstance(_sym, dict) else "")
+        _ti = ParserState.symbol_table.lookup(_t) if _t else None
+        if isinstance(_ti, dict) and _ti.get("type") == "enum":
+            return f"({expr}).name"
+        decls = getattr(ParserState, 'py_top_decls', [])
+        if not any("def _image(" in d for d in decls):
+            decls.append(_IMAGE_HELPER)
+            ParserState.py_top_decls = decls
+        return f"_image({expr})"
     if attr in ("Next", "Prev"):
         from ady_enums import refuse_if_gapped_value
         refuse_if_gapped_value(expr, "stepped with 'Next and 'Prev")
@@ -838,6 +862,16 @@ def _tick_to_py(expr, attr):
     raise SyntaxError(
         f"unknown tick attribute {attr!r} in {expr}'{attr}. Known: "
         "First, Last, Range, Next, Prev, choose, Shuffle, Image, Length")
+
+
+_IMAGE_HELPER = '''\
+def _image(_v):
+    """x'Image: an enum member's name, else str() -- an int, a str."""
+    _name = getattr(_v, "name", None)
+    if isinstance(_name, str) and hasattr(type(_v), "__members__"):
+        return _name
+    return str(_v)\
+'''
 
 
 @method(tick_trailer)
@@ -1377,6 +1411,80 @@ def _translate_stream_call(stream, expr):
     return None
 
 
+_ROUND_HALF_AWAY_HELPER = '''\
+def _round_half_away(x):
+    """To the nearest whole number, halves away from zero, as Nim's
+    adaRoundHalfAway does for a scaled unit's base: 1.005 dollars is 101
+    cents although 1.005 * 100 is 100.49999999999999."""
+    r = int(abs(x) + 0.5 + abs(x) * 8.9e-16)
+    return -r if x < 0 else r\
+'''
+
+
+def _is_scaled_name(name):
+    """Whether NAME is a scaled unit, `type Dollar_T is 100 * Cent_T`, or
+    the base of one."""
+    from hek_parsec import ParserState
+    scaled = getattr(ParserState, "py_scaled_units", None) or {}
+    return name in scaled or any(b == name for _, b in scaled.values())
+
+
+def _only_plain_numbers(arg):
+    """Whether ARG is made of literals and float()/int() calls alone, so a
+    plain number whatever its operators: `float(a) ** 0.5`."""
+    import re as _re_pn
+    s, k = arg, 0
+    while (m := _re_pn.search(r"\b(?:float|int)\(", s)):
+        depth, j = 1, m.end()
+        while j < len(s) and depth:
+            depth += {"(": 1, ")": -1}.get(s[j], 0)
+            j += 1
+        s = s[:m.start()] + "0" + s[j:]
+    return not _re_pn.search(r"[A-Za-z_]", _re_pn.sub(r"\d[\d_.]*[eE][-+]?\d+", "0", s))
+
+
+def _scaled_conversion(name, arg):
+    """`Dollar_T(x)` / `Cent_T(x)` between a scaled unit and its base,
+    chosen by the unit of X as the Nim backend's to_ overloads choose it:
+    cents divided into dollars, dollars rounded into cents, a number taken
+    as it is. A unit that cannot be told here is refused, not guessed."""
+    from hek_parsec import ParserState
+    from ady_declarations import expr_unit, UNIT_LIT, UNIT_PLAIN
+    from hek_py_stmt import _py_atom_unit, _PY_NUMBER
+    scaled = ParserState.py_scaled_units
+    unit = expr_unit(arg, _py_atom_unit)
+    if unit is None and _only_plain_numbers(arg):
+        unit = UNIT_PLAIN                 # `(2.0 * float(g) * float(r)) ** 0.5`
+    whole = _PY_NUMBER.match(arg.strip()) and not any(c in arg for c in ".eE")
+    if name in scaled:
+        k, base = scaled[name]
+        if unit == base:
+            return f"{name}(float({arg}) / {k})"
+        if unit in (name, UNIT_LIT, UNIT_PLAIN):
+            return f"{name}({arg})"
+    else:
+        for scaled_name, (k, base) in scaled.items():
+            if base == name and unit == scaled_name:
+                from ady_declarations import distinct_kind
+                if distinct_kind(name) != "int":
+                    return f"{name}(float({arg}) * {k})"
+                decls = getattr(ParserState, 'py_top_decls', [])
+                if not any("def _round_half_away(" in d for d in decls):
+                    decls.append(_ROUND_HALF_AWAY_HELPER)
+                    ParserState.py_top_decls = decls
+                return f"{name}(_round_half_away(float({arg}) * {k}))"
+        from ady_declarations import distinct_kind
+        if unit == name or whole or (distinct_kind(name) != "int" and unit in (UNIT_LIT, UNIT_PLAIN)):
+            return f"{name}({arg})"
+        if unit in (UNIT_LIT, UNIT_PLAIN):
+            raise SyntaxError(
+                f"{name}({arg.strip()}): a {name} is made of a whole number, or "
+                f"of the unit it scales; write the float as that unit")
+    raise SyntaxError(
+        f"{name}({arg.strip()}): the unit of {arg.strip()} cannot be told here, "
+        f"and {name} converts by it -- bind it to a name declared with its type")
+
+
 @method(primary)
 def to_py(self, prec=None):
     """primary: atom trailer*"""
@@ -1416,6 +1524,10 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and tr_str.startswith("(") and _is_scaled_name(result):
+                result = _scaled_conversion(result, tr_str[1:-1])
+                i += 1
+                continue
             if i == 0 and result == "enumerate" and "enumerate" not in _own:
                 helper = _enumerate_call(tr_str)
                 if helper is not None:
@@ -1515,6 +1627,40 @@ def to_py(self, prec=None):
                     result = f"_lines_of({result})"
                     i += 1
                     continue
+            # `s.sub(/pat/, repl)`: the substitution as an expression. A
+            # replacement with `$+1` / `$+{name}` names groups; any other is
+            # copied as it is, as Nim's std/re replace copies it.
+            if (tr_str == ".sub"
+                    and i + 1 < len(trailers)
+                    and trailers[i + 1].to_py().startswith("(_re_mod.compile(")):
+                import re as _re_sb
+                from hek_py_overload import _split_top as _split_sb
+                _sb_args = _split_sb(trailers[i + 1].to_py()[1:-1])
+                if len(_sb_args) == 2:
+                    _pat, _repl = _sb_args[0].strip(), _sb_args[1].strip()
+                    if (_re_sb.fullmatch(r'"(?:[^"\\]|\\.)*"', _repl)
+                            and _re_sb.search(r'\$\+(\d+|\{\w+\})', _repl)):
+                        _repl = _re_sb.sub(r'\$\+(\d+)', r'\\\\\1', _repl)
+                        _repl = _re_sb.sub(r'\$\+\{(\w+)\}', r'\\\\g<\1>', _repl)
+                    else:
+                        _repl = f"lambda _m: {_repl}"
+                    result = f"{_pat}.sub({_repl}, {result})"
+                    i += 2
+                    continue
+            # `?T`'s map and and_then: a None stays None, a value goes
+            # through f. On Python an optional is the value itself, so the
+            # call is a helper; a class's own `map` is still called.
+            if (tr_str in (".map", ".and_then")
+                    and i + 1 < len(trailers)
+                    and trailers[i + 1].to_py().startswith("(")):
+                _decls = getattr(ParserState, 'py_top_decls', [])
+                if not any("def _opt_map(" in d for d in _decls):
+                    _decls.append(_OPT_MAP_HELPER)
+                    ParserState.py_top_decls = _decls
+                _fn = trailers[i + 1].to_py()[1:-1]
+                result = f"_opt_map({result}, {_fn}, {tr_str[1:]!r})"
+                i += 2
+                continue
             if (tr_str == ".get"
                     and i + 1 < len(trailers)
                     and trailers[i + 1].to_py() == "()"):
@@ -1618,7 +1764,8 @@ def to_py(self, prec=None):
     if name.isdigit():
         n = int(name)
         ParserState.nim_imports.add("import sys")
-        return f"sys.argv[{n}]"
+        # "" past the last argument, as on Nim, not an IndexError
+        return f'(sys.argv[{n}] if len(sys.argv) > {n} else "")'
     ParserState.nim_imports.add("import os")
     return f"os.environ.get('{name}', '')"
 
@@ -2367,6 +2514,8 @@ def to_py(self, prec=None):
     tgt = self.nodes[0].to_py()
     iterable = self.nodes[1].to_py()
     iterable = _builtin_ordinal_domain(iterable) or iterable
+    from hek_py_parser import _note_loop_var_type
+    _note_loop_var_type(tgt, iterable)
     result = f"for {tgt} in {iterable}"
     # nodes[2] is Several_Times of Sequence_Parser(I_IF + disjunction).
     # I_IF is ignored so each Sequence_Parser has exactly one node: the disjunction.
@@ -2398,25 +2547,32 @@ def to_py(self, prec=None):
 @method(listcomp)
 def to_py(self, prec=None):
     """listcomp: named_expression for_if_clauses"""
-    return f"{self.nodes[0].to_py()} {self.nodes[1].to_py()}"
+    # the clauses first: they say what the loop names are
+    clauses = self.nodes[1].to_py()
+    return f"{self.nodes[0].to_py()} {clauses}"
 
 
 @method(genexpr)
 def to_py(self, prec=None):
     """genexpr: named_expression for_if_clauses"""
-    return f"{self.nodes[0].to_py()} {self.nodes[1].to_py()}"
+    # the clauses first: they say what the loop names are
+    clauses = self.nodes[1].to_py()
+    return f"{self.nodes[0].to_py()} {clauses}"
 
 
 @method(dictcomp)
 def to_py(self, prec=None):
     """dictcomp: expression ':' expression for_if_clauses"""
-    return f"{self.nodes[0].to_py()}: {self.nodes[1].to_py()} {self.nodes[2].to_py()}"
+    clauses = self.nodes[2].to_py()
+    return f"{self.nodes[0].to_py()}: {self.nodes[1].to_py()} {clauses}"
 
 
 @method(setcomp)
 def to_py(self, prec=None):
     """setcomp: expression for_if_clauses"""
-    return f"{self.nodes[0].to_py()} {self.nodes[1].to_py()}"
+    # the clauses first: they say what the loop names are
+    clauses = self.nodes[1].to_py()
+    return f"{self.nodes[0].to_py()} {clauses}"
 
 
 # --- dict/set makers ---

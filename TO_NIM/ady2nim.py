@@ -95,6 +95,7 @@ def _nim_reset():
     from hek_parsec import ParserState
     ParserState.export_symbols = False
     ParserState.nim_imports = set()
+    ParserState._options_own_repr = False
     ParserState.nim_from = {}           # `from M nimport A, B`: just these names of M
     ParserState.nim_qualified = set()   # `nimport M`: M's names only as M.name, as Python's import M
     ParserState.nim_pragmas = set()
@@ -715,6 +716,16 @@ def _resolved_imports(code, search_dir):
     return code
 
 
+def _nim_import_line():
+    """The `import` line for ParserState.nim_imports. options goes on a line of
+    its own without its `$` when the program prints a ?T its own way."""
+    mods = sorted(ParserState.nim_imports)
+    if getattr(ParserState, "_options_own_repr", False) and "options" in mods:
+        mods.remove("options")
+        return ("import " + ", ".join(mods) + "\n" if mods else "") + "import options except `$`"
+    return "import " + ", ".join(mods)
+
+
 def translate(code, export_symbols=False):
     """Parse Python source and translate to Nim via to_nim().
 
@@ -731,6 +742,8 @@ def translate(code, export_symbols=False):
     code = expand_type_args(code)              # `f[[]int](x)`: see ady_stmt
     from ady_declarations import refuse_dict_display_types
     refuse_dict_display_types(code)            # `{int: int}` is written {int}int
+    from ady_declarations import refuse_paren_enums
+    refuse_paren_enums(code)                   # `is (A, B)`: an enum is `is enum A, B`
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     from ady_html import expand_html_blocks
@@ -849,16 +862,29 @@ def translate(code, export_symbols=False):
                 f"name on Nim, which ignores case and underscores after the first "
                 f"letter; rename one")
         _seen_nim.setdefault(_key, (_nm, _ln_no))
-    # and the same inside one enum: `PAGE_UP` and `PAGEUP` are one member there
-    for _em in _re_udef.finditer(r"(?m)^\s*type\s+(\w+)\s+is\s*(?:\(([^)]*)\)|enum\s+([^#\n]*))[ \t]*(?:#.*)?$", code):
+    # and the same inside one enum: `PAGE_UP` and `PAGEUP` are one member
+    # there. `type E is enum A, B` on one line, or `type E is enum:` with a
+    # member per indented line.
+    _lines_nim = code.split("\n")
+    for _ln_no, _ln in enumerate(_lines_nim, 1):
+        _em = _re_udef.match(r"(\s*)type\s+(\w+)\s+is\s+enum\b\s*(:?)(.*)$", _ln)
+        if not _em:
+            continue
+        _body = _em.group(4)
+        if _em.group(3):                       # the block form
+            _body = ""
+            for _bl in _lines_nim[_ln_no:]:
+                if _bl.strip() and len(_bl) - len(_bl.lstrip()) <= len(_em.group(1)):
+                    break
+                _body += "\n" + _bl
+        _body = _re_udef.sub(r"#[^\n]*|=[^,\n]*", "", _body)
         _members = {}
-        for _mem in _re_udef.findall(r"[A-Za-z_]\w*", _re_udef.sub(r"#[^\n]*", "", _em.group(2) or _em.group(3))):
+        for _mem in _re_udef.findall(r"[A-Za-z_]\w*", _body):
             _key = _mem[0] + _mem[1:].replace("_", "").lower()
             if _key in _members and _members[_key] != _mem:
-                _ln_no = code.count("\n", 0, _em.start()) + 1
                 raise SyntaxError(
                     f"line {_ln_no}: the members '{_members[_key]}' and '{_mem}' of "
-                    f"{_em.group(1)} are one name on Nim, which ignores case and "
+                    f"{_em.group(2)} are one name on Nim, which ignores case and "
                     f"underscores after the first letter; rename one")
             _members.setdefault(_key, _mem)
 
@@ -1044,6 +1070,12 @@ def translate(code, export_symbols=False):
         if "tables" in (ParserState.nim_imports | set(ParserState.nim_from)
                         | ParserState.nim_qualified) or _re_order.search(r'\b(?:Ordered)?Table\[', _text):
             ParserState.nim_top_decls.append(_TABLE_REPR_HELPER)
+        # an optional prints as Python prints it, the value or None, not
+        # options' some(4) and none(int): its own `$` is left out for this one
+        if "options" in ParserState.nim_imports:
+            from hek_nim_unicode import _OPTION_REPR_HELPER
+            ParserState._options_own_repr = True
+            ParserState.nim_top_decls.append(_OPTION_REPR_HELPER)
 
     # Insert collected Nim imports at the top (after any leading comments),
     # followed by the pragmas, helper declarations and init statements the
@@ -1061,7 +1093,7 @@ def translate(code, export_symbols=False):
                 break
         extra_offset = 0
         if ParserState.nim_imports:
-            output.insert(insert_pos, "import " + ", ".join(sorted(ParserState.nim_imports)))
+            output.insert(insert_pos, _nim_import_line())
             extra_offset = 1
         # a module the file nimports and the generated code does not import for itself is
         # imported qualified-only: its names are M.name, bare ones are undeclared
@@ -1130,7 +1162,7 @@ def translate(code, export_symbols=False):
                 # Re-generate the import line with the new module
                 for k, line in enumerate(output):
                     if line.startswith("import "):
-                        output[k] = "import " + ", ".join(sorted(ParserState.nim_imports))
+                        output[k] = _nim_import_line()
                         break
 
     result = chr(10).join(output)

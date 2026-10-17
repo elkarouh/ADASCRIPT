@@ -13,7 +13,7 @@
 # What is refused is checked in the Makefile: cents times a float, cents
 # plus dollars, cents made of a float.
 #
-# Nim only, like every scaled unit: ady2py refuses the declaration.
+# The output is compared between the backends.
 
 type Dollar_in_cent_T is distinct int
 type Dollar_T         is 100 * Dollar_in_cent_T

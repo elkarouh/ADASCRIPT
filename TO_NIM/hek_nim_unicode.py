@@ -164,6 +164,12 @@ proc adascriptIsUpper*(s: string): bool =
 """
 
 
+_OPTION_REPR_HELPER = """\
+proc `$`[T](o: Option[T]): string {.used.} =
+  ## A ?T prints as Python prints it: the value, or None.
+  if o.isSome: $o.get else: "None"
+"""
+
 _SEQ_REPR_HELPER = """\
 proc adascriptRepr[T](x: T): string =
   ## What Python's repr gives an element of a list: quotes on a string or a

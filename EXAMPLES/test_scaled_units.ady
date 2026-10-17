@@ -14,8 +14,8 @@
 # float. A rate that changes as the program runs -- euros per dollar -- is a
 # unit of its own, `type Rate_T is Euro_T / Dollar_T`, passed in as a value.
 #
-# Nim only: ady2py refuses the declaration. What is refused is checked in the
-# Makefile, one line at a time.
+# The output is compared between the backends. What is refused is checked in
+# the Makefile, one line at a time.
 
 const METRES_PER_MILE: float = 1609.344          # exact, by definition
 

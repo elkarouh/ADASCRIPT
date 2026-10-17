@@ -3031,6 +3031,8 @@ _STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "end
 # Universal method mappings that apply regardless of receiver type
 _PY_UNIVERSAL_METHOD_TO_NIM = {
     "append": "add",
+    # ?T's bind: options' own name for it (map keeps its name)
+    "and_then": "flatMap",
     "extend": "add",
     "lower": "toLowerAscii",
     "upper": "toUpperAscii",
@@ -3512,6 +3514,14 @@ def to_nim(self, prec=None):
                 call_node = self.nodes[1].nodes[0]
                 args = _extract_call_args(call_node)
                 import re as _re_ctor
+                # fewer values than fields: the rest take their defaults
+                _defaults = getattr(ParserState, 'record_field_defaults', {}).get(raw_name, {})
+                _given = {(_re_ctor.match(r'^(\w+) = ', a) or [None, None])[1] for a in args}
+                _n_pos = sum(1 for a in args if not _re_ctor.match(r'^\w+ = ', a))
+                _left = [f for f in named_fields[_n_pos:] if f not in _given]
+                if 0 < len(args) < len(named_fields) and _left and all(f in _defaults for f in _left) \
+                        and len(args) + len(_left) == len(named_fields):
+                    args = list(args) + [f"{f} = {_defaults[f]}" for f in _left]
                 # If args are keyword-style (name = value), convert to colon style directly
                 if args and all(_re_ctor.match(r'^\w+ = ', a) for a in args):
                     ftype_map = ParserState.class_field_types.get(raw_name, {})
@@ -3949,6 +3959,21 @@ def to_nim(self, prec=None):
                 # Python method's name -- `r.index[k]`, `r.get`, `r.lower`
                 # -- is read as it is, not renamed to find / getOrDefault /
                 # toLowerAscii.
+                # `Editor(path).run()`: a method that changes its object, on a
+                # temporary, which Nim will not pass as `var`. The temporary
+                # is given a name for the length of the call.
+                if (next_tr is not None and type(next_tr).__name__ == "call_trailer"
+                        and method_name in getattr(ParserState, "var_self_methods", ())):
+                    import re as _re_tmp
+                    _tm = _re_tmp.match(r"(?:new|init)?(\w+)\(", result)
+                    _classes = getattr(ParserState, "_all_class_methods", None) or {}
+                    if _tm and result.endswith(")") and method_name in _classes.get(_tm.group(1), ()):
+                        _n = getattr(ParserState, "_temp_receiver_count", 0)
+                        ParserState._temp_receiver_count = _n + 1
+                        _tmp = f"adascriptTemp{_n}"
+                        result = f"(var {_tmp} = {result}; {_tmp}.{method_name}{next_tr.to_nim()})"
+                        skip_next = True
+                        continue
                 if next_tr is not None and type(next_tr).__name__ == "call_trailer":
                     method_name = _translate_method(result, method_name)
                 # `chars.append(c)` where chars is []str and c is a char --
@@ -3986,6 +4011,39 @@ def to_nim(self, prec=None):
                             result = f"{result}.{method_name}({', '.join(_ca)})"
                             skip_next = True
                             continue
+                # `s.sub(/pat/, repl)`: the substitution as an expression, a
+                # new string, `s` left as it was -- as `s = s/pat/repl/` does
+                # it, through std/re (see subst_stmt)
+                if (method_name == "sub"
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    import re as _re_sub
+                    _sub_args = _extract_call_args(next_tr)
+                    _pm = _re_sub.fullmatch(r're"(.*)"', _sub_args[0].strip(), _re_sub.S) if _sub_args else None
+                    if _pm and len(_sub_args) == 2:
+                        _ensure_nimatch_helper()
+                        _repl = _sub_args[1].strip()
+                        _fn = "replace"
+                        if _re_sub.fullmatch(r'"(?:[^"\\]|\\.)*"', _repl):
+                            _repl = _re_sub.sub(r'\$\+(\d+)', r'$\1', _repl)
+                            _repl = _re_sub.sub(r'\$\+\{(\w+)\}', r'${\1}', _repl)
+                            if _re_sub.search(r'\$(\d+|\{\w+\})', _repl):
+                                _fn = "replacef"
+                        result = f'{result}.{_fn}(srx.re(r"{_pm.group(1)}"), {_repl})'
+                        skip_next = True
+                        continue
+                # `xs.insert(i, x)` is Python's order, index first; Nim's
+                # insert takes the item first. A class's own insert is left be.
+                if (method_name == "insert"
+                        and next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    _ins_args = _extract_call_args(next_tr)
+                    _ins_type = _nim_expr_type(result) or ""
+                    _ins_type = _ins_type.replace("var ", "").strip()
+                    if len(_ins_args) == 2 and _ins_type.startswith("seq["):
+                        result = f"{result}.insert({_ins_args[1]}, {_ins_args[0]})"
+                        skip_next = True
+                        continue
                 # startswith/endswith with a tuple of prefixes/suffixes: Python
                 # accepts a tuple, but Nim's startsWith/endsWith take a single
                 # string, so expand to an or-chain (s.startsWith(a) or ...).
@@ -5700,6 +5758,16 @@ def _expr_is_option(expr_str):
     sym = ParserState.symbol_table.lookup(expr_str)
     if sym and "Option[" in (sym.get("type") or ""):
         return True
+    # `opt.map(f)`, `opt.flatMap(f)`: an Option when what they are called on is
+    _mm = _re.search(r"\.(?:map|flatMap)\(", expr_str)
+    while _mm:
+        _depth, _k = 1, _mm.end()
+        while _k < len(expr_str) and _depth:
+            _depth += {"(": 1, ")": -1}.get(expr_str[_k], 0)
+            _k += 1
+        if _depth == 0 and _k == len(expr_str):
+            return _expr_is_option(expr_str[:_mm.start()])
+        _mm = _re.compile(r"\.(?:map|flatMap)\(").search(expr_str, _mm.end())
     # A call to a proc declared `-> ?T` already yields an Option, so passing
     # it straight to a `?T` parameter must not wrap it a second time --
     # some(f(x)) on an optional f is Option[Option[T]], which Nim rejects.
