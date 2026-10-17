@@ -1,8 +1,8 @@
 #!/usr/bin/env ady2nim
 """Test: json_value, records written as JSON and read back by name.
 
-Nim only, native and under `ady2nim js` alike (the Makefile builds both): the server
-writes the records, the browser reads them. A string goes out through json_string, which
+On every backend: native and under `ady2nim js` (the Makefile builds both), where the
+server writes the records and the browser reads them, and under ady2py. A string goes out through json_string, which
 escapes what JSON needs and a `<`, so the text can stand in a <script> element.
 """
 from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag, json_string

@@ -228,6 +228,56 @@ def _binds(text, name):
         rf'|(?:^|[(,])[ \t]*{re.escape(name)}[ \t]*(?::|=(?!=))', text, re.MULTILINE)
 
 
+def _signatures(source, name):
+    """The parameter types of each top-level `def NAME` of SOURCE, one tuple per def."""
+    out = set()
+    for m in re.finditer(rf'^(?:async[ \t]+)?def[ \t]+{re.escape(name)}[ \t]*\(([^)]*)\)',
+                         _blank(source), re.MULTILINE):
+        params, depth, part = [], 0, ""
+        for ch in m.group(1) + ",":
+            if ch == "," and depth == 0:
+                params.append(part); part = ""
+                continue
+            depth += (ch in "([{") - (ch in ")]}")
+            part += ch
+        out.add(tuple(re.sub(r"\s+", "", p.split(":", 1)[1].split("=", 1)[0]) if ":" in p else ""
+                      for p in params if p.strip() and p.strip() not in ("self", "*")))
+    return out
+
+
+def refuse_shared_names(code, modules):
+    """Refuse a bare use of a name that two of the imported modules both hand out.
+    MODULES is {module: (listed, its source)}, LISTED as import_map gives it. A
+    function of the same name with other parameter types is an overload, and fine;
+    an enum member is told apart by its type."""
+    text = _blank(code)
+    # the import lines name what they import: that is not a use
+    for m in list(_FROM_RE.finditer(text)) + list(_BARE_RE.finditer(text)):
+        text = text[:m.start()] + re.sub(r"[^\n]", " ", m.group(0)) + text[m.end():]
+    owners = {}
+    for mod, (listed, source) in modules.items():
+        names = exported(source)
+        allowed = None if listed is STAR else set(listed)
+        for name, owner in names.items():
+            if owner == name and (allowed is None or name in allowed):
+                owners.setdefault(name, []).append(mod)
+    for name, mods in sorted(owners.items()):
+        if len(mods) < 2:
+            continue
+        a, b = mods[0], mods[1]
+        sigs_a, sigs_b = _signatures(modules[a][1], name), _signatures(modules[b][1], name)
+        if sigs_a and sigs_b and not (sigs_a & sigs_b):
+            continue                   # overloads, told apart by their parameters
+        use = re.search(rf'(?<![\w.$]){re.escape(name)}\b', text)
+        if not use or _binds(text, name):
+            continue
+        line = text.count("\n", 0, use.start()) + 1
+        qa, qb = a.rsplit("/", 1)[-1], b.rsplit("/", 1)[-1]
+        raise SyntaxError(
+            f"line {line}: '{name}' is defined in both {a} and {b}: import it from one of them, "
+            f"or `import {a}` and write {qa}.{name} (or {qb}.{name})")
+
+
 # {M: {name: the name it is merged under}}, M a module's last path part: a module's names that the
 # importing file also declares, reached as `M.name` (see resolve_imports)
 RENAMED = {}

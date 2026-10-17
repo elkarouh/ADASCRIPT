@@ -433,7 +433,12 @@ def _note_loop_var_type(target, iterable):
         return
     sym = ParserState.symbol_table.lookup(iterable.strip())
     t = ((sym.get("type") or "") if isinstance(sym, dict) else "").strip()
-    m = _re_lv.fullmatch(r"(?:list|tuple|Sequence|set|frozenset)\[(\w+)(?:, \.\.\.)?\]", t)
+    call = _re_lv.match(r"([A-Za-z_]\w*)\(", iterable.strip())
+    if not t and call and iterable.strip().endswith(")"):
+        # a call: what the routine is declared to return, `-> []Json_T`
+        t = (getattr(ParserState, "ady_return_types", {}).get(call.group(1)) or "").strip()
+    m = (_re_lv.fullmatch(r"(?:list|tuple|Sequence|set|frozenset)\[(\w+)(?:, \.\.\.)?\]", t)
+         or _re_lv.fullmatch(r"\[\*?\](\w+)", t))
     # a loop rebinds its name: one of no known type forgets an earlier one
     ParserState.symbol_table.add(target.strip(), m.group(1) if m else "", "let")
 

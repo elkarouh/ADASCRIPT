@@ -1,10 +1,10 @@
 #!/usr/bin/env ady2nim
 """json_value -- records written as JSON and read back by name.
 
-Plain text, no page: it compiles to C for a server that writes the records into the page,
-and to JavaScript for a script that reads them back there (ady2nim js), so both ends are
-the same code. A record goes out as a JSON object, its fields by name; a list of them as a
-JSON list:
+Plain Adascript, no library underneath: the same code compiles to C for a server that
+writes the records into the page, to JavaScript for a script that reads them back there
+(ady2nim js), and to Python (ady2py). A record goes out as a JSON object, its fields by
+name; a list of them as a JSON list:
 
     from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag, json_string
 
@@ -18,44 +18,233 @@ JSON list:
 
 `json_string(s)` is S as a JSON string, quotes and escapes included: what to write for a
 text field. A number is written as it prints (`f"{x}"`), and a bool as `true` or `false`.
-"""
-from json nimport JsonNode, JsonNodeKind, JObject, JArray, parseJson, escapeJson, hasKey, getOrDefault, getStr, getFloat, getBool, getElems, kind
 
-# A value read from JSON: an object, a list, a string, a number, a bool.
-type Json_T is JsonNode
+What it reads is JSON, with one limit: a `\\u` escape is read for a character below 0080
+(the ones json_string writes); text with any other is not read (None), so it is never
+read differently by the backends. Characters written as themselves are read as they are.
+"""
+
+# What a JSON value is.
+type JsonKind_T is enum J_NULL, J_BOOL, J_NUMBER, J_STRING, J_LIST, J_OBJECT
+
+# A value read from JSON: an object, a list, a string, a number, a bool, or null.
+type Json_T is record:
+    kind:   JsonKind_T
+    flag:   bool               # a bool's
+    number: float              # a number's
+    text:   str                # a string's
+    items:  []Json_T           # a list's values; an object's values, in order
+    keys:   []str              # an object's names, one for each of its values
+
+const HEX: str = "0123456789abcdef"
+
+# Reads one JSON value from TEXT, from AT on; OK turns False at the first thing that is not JSON.
+class JsonReader:
+    var text: str
+    var at: int
+    var ok: bool
+
+    def __init__(self, text: str):
+        self.text = text
+        self.at = 0
+        self.ok = True
+
+    # The character at AT, or "" at the end.
+    def peek(self) -> str:
+        if self.at >= len(self.text):
+            return ""
+        return self.text[self.at:self.at + 1]
+
+    def skip_space(self):
+        while self.peek() in [" ", "\t", "\n", "\r"] and self.peek() != "":
+            self.at += 1
+
+    # Take WORD if the text has it here; OK turns False if not.
+    def expect(self, word: str):
+        if self.text[self.at:self.at + len(word)] == word:
+            self.at += len(word)
+        else:
+            self.ok = False
+
+    def value(self) -> Json_T:
+        self.skip_space()
+        let c: str = self.peek()
+        if c == "{":
+            return self.object()
+        if c == "[":
+            return self.list()
+        if c == "\"":
+            return Json_T(J_STRING, False, 0.0, self.string(), [], [])
+        if c == "t":
+            self.expect("true")
+            return Json_T(J_BOOL, True, 0.0, "", [], [])
+        if c == "f":
+            self.expect("false")
+            return Json_T(J_BOOL, False, 0.0, "", [], [])
+        if c == "n":
+            self.expect("null")
+            return Json_T(J_NULL, False, 0.0, "", [], [])
+        return Json_T(J_NUMBER, False, self.number(), "", [], [])
+
+    def object(self) -> Json_T:
+        var keys: []str = []
+        var items: []Json_T = []
+        self.expect("{")
+        self.skip_space()
+        if self.peek() == "}":
+            self.at += 1
+            return Json_T(J_OBJECT, False, 0.0, "", items, keys)
+        while self.ok:
+            self.skip_space()
+            if self.peek() != "\"":
+                self.ok = False
+                break
+            keys.append(self.string())
+            self.skip_space()
+            self.expect(":")
+            items.append(self.value())
+            self.skip_space()
+            if self.peek() == ",":
+                self.at += 1
+            else:
+                self.expect("}")
+                break
+        return Json_T(J_OBJECT, False, 0.0, "", items, keys)
+
+    def list(self) -> Json_T:
+        var items: []Json_T = []
+        self.expect("[")
+        self.skip_space()
+        if self.peek() == "]":
+            self.at += 1
+            return Json_T(J_LIST, False, 0.0, "", items, [])
+        while self.ok:
+            items.append(self.value())
+            self.skip_space()
+            if self.peek() == ",":
+                self.at += 1
+            else:
+                self.expect("]")
+                break
+        return Json_T(J_LIST, False, 0.0, "", items, [])
+
+    def string(self) -> str:
+        var out: str = ""
+        self.expect("\"")
+        while self.ok:
+            let c: str = self.peek()
+            if c == "" or c == "\n":
+                self.ok = False
+            elif c == "\"":
+                self.at += 1
+                break
+            elif c == "\\":
+                self.at += 1
+                out += self.escape()
+            else:
+                out += c
+                self.at += 1
+        return out
+
+    # The character an escape stands for, its backslash already taken.
+    def escape(self) -> str:
+        let c: str = self.peek()
+        self.at += 1
+        if c in ["\"", "\\", "/"]:
+            return c
+        if c == "n":
+            return "\n"
+        if c == "t":
+            return "\t"
+        if c == "r":
+            return "\r"
+        if c == "b":
+            return "\b"
+        if c == "f":
+            return "\f"
+        if c == "u":
+            let code: str = self.text[self.at:self.at + 4].lower()
+            self.at += 4
+            if len(code) == 4 and code[0:2] == "00" and code[2:3] in ["0", "1", "2", "3", "4", "5", "6", "7"] \
+                    and HEX.find(code[3:4]) >= 0:
+                return str(chr(HEX.find(code[2:3]) * 16 + HEX.find(code[3:4])))
+        self.ok = False
+        return ""
+
+    def number(self) -> float:
+        let start: int = self.at
+        while self.peek() != "" and self.peek() in ["-", "+", ".", "e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+            self.at += 1
+        let n: float | !ParseFailure_T = parse_float(self.text[start:self.at])
+        if n is ParseFailure_T:
+            self.ok = False
+            return 0.0
+        return n
 
 # TEXT read as JSON; None when it is not JSON.
 def read_json(text: str) -> ?Json_T:
-    try:
-        return parseJson(text)
-    except:
+    var reader: JsonReader = JsonReader(text)
+    let v: Json_T = reader.value()
+    reader.skip_space()
+    if not reader.ok or reader.at != len(text):
         return None
+    return v
+
+# The field NAME of the object J; None when J is not an object or has no such field.
+def json_field(j: Json_T, name: str) -> ?Json_T:
+    if j.kind != J_OBJECT:
+        return None
+    for i in range(len(j.keys)):
+        if j.keys[i] == name:
+            return j.items[i]
+    return None
 
 # The list field NAME of the object J, as values; [] when it has none.
 def json_list(j: Json_T, name: str) -> []Json_T:
-    if j.kind != JObject or not j.hasKey(name) or j.getOrDefault(name).kind != JArray:
-        return []
-    return j.getOrDefault(name).getElems()
+    let f: ?Json_T = json_field(j, name)
+    if f is not None and f.kind == J_LIST:
+        return f.items
+    return []
 
 # The string field NAME of the object J; "" when it has none.
 def json_text(j: Json_T, name: str) -> str:
-    if j.kind != JObject or not j.hasKey(name):
-        return ""
-    return j.getOrDefault(name).getStr()
+    let f: ?Json_T = json_field(j, name)
+    if f is not None and f.kind == J_STRING:
+        return f.text
+    return ""
 
 # The number field NAME of the object J; 0.0 when it has none.
 def json_number(j: Json_T, name: str) -> float:
-    if j.kind != JObject or not j.hasKey(name):
-        return 0.0
-    return j.getOrDefault(name).getFloat()
+    let f: ?Json_T = json_field(j, name)
+    if f is not None and f.kind == J_NUMBER:
+        return f.number
+    return 0.0
 
 # The true-or-false field NAME of the object J; False when it has none.
 def json_flag(j: Json_T, name: str) -> bool:
-    if j.kind != JObject or not j.hasKey(name):
-        return False
-    return j.getOrDefault(name).getBool()
+    let f: ?Json_T = json_field(j, name)
+    if f is not None and f.kind == J_BOOL:
+        return f.flag
+    return False
 
-# TEXT as a JSON string, its quotes and escapes included. A `<` is written \u003c, so the
+# TEXT as a JSON string, its quotes and escapes included. A `<` is written <, so the
 # text can stand inside a <script> element of a page whatever it holds.
 def json_string(text: str) -> str:
-    return escapeJson(text).replace("<", "\\u003c")
+    var out: str = "\""
+    for i in range(len(text)):
+        let c: str = text[i:i + 1]
+        if c == "\"":
+            out += "\\\""
+        elif c == "\\":
+            out += "\\\\"
+        elif c == "\n":
+            out += "\\n"
+        elif c == "\r":
+            out += "\\r"
+        elif c == "\t":
+            out += "\\t"
+        elif c == "<" or ord(c[0]) < 32:
+            out += "\\u00" + HEX[ord(c[0]) // 16:ord(c[0]) // 16 + 1] + HEX[ord(c[0]) % 16:ord(c[0]) % 16 + 1]
+        else:
+            out += c
+    return out + "\""

@@ -568,6 +568,9 @@ def include_ady_modules(code, search_dir, _seen=None):
     refuse_bare_nim_names(code, lambda name: find_checked(name) is not None)
     from ady_modules import refuse_python_math_names
     refuse_python_math_names(code, lambda name: find_checked(name) is not None)
+    from ady_modules import refuse_shared_names
+    refuse_shared_names(code, {mod: (listed, open(find_checked(mod), encoding="utf-8").read())
+                               for mod, listed in import_map(code).items() if find_checked(mod)})
     for mod, listed in import_map(code).items():
         path = find_checked(mod)
         if path:

@@ -705,6 +705,9 @@ def _resolved_imports(code, search_dir):
         # which of the `nimport`s are .ady modules, for the translation that reads them
         import hek_nim_stmt as _hns
         _hns.ADY_MODULES.update(m for m in import_map(code) if find(m))
+        from ady_modules import refuse_shared_names
+        refuse_shared_names(code, {mod: (listed, open(find(mod), encoding="utf-8").read())
+                                   for mod, listed in import_map(code).items() if find(mod)})
         for mod, listed in import_map(code).items():
             path = find(mod)
             if path:

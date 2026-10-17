@@ -1584,7 +1584,8 @@ def to_py(self, prec=None):
                     and _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*", result):
                 _first = getattr(ParserState, "py_first_param", {}).get(tr_str[1:])
                 _rsym = ParserState.symbol_table.lookup(result) if _first else None
-                _rtype = ((_rsym.get("type") or "") if isinstance(_rsym, dict) else "").replace("?", "").strip()
+                _rtype = ((_rsym.get("type") or "") if isinstance(_rsym, dict) else "").replace("?", "")
+                _rtype = _re_mod_pfx.sub(r"^Optional\[(.*)\]$|\s*\|\s*None$|^None\s*\|\s*", r"\1", _rtype.strip()).strip()
                 if _first and _rtype == _first and tr_str[1:] not in \
                         getattr(ParserState, "py_type_members", {}).get(_rtype, ()):
                     _call = trailers[i + 1].to_py() if i + 1 < len(trailers) else ""
