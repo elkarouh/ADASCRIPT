@@ -1122,11 +1122,13 @@ def as_written(text):
     return text
 
 
-def unit_fix(target, value):
-    """How to give VALUE to a TARGET it is no unit of: through the plain number
-    when it is a unit of its own, which no declaration relates to TARGET."""
-    from hek_parsec import ParserState
+def unit_fix(target, value, source=None):
+    """How to give VALUE, of unit SOURCE, to a TARGET it is no unit of: by the
+    conversion a scaled declaration gives (`Distance_T(k)` for a Km_T k), else
+    through the plain number, for a unit of its own no declaration relates."""
     v = as_written(value.strip())
+    if source and source in (scaled_sources(target) or ()):
+        return f"write {target}({v}), which converts"
     return f"write {target}(float({v}))" if distinct_kind(target) == "float" else \
            f"write {target}(int({v}))" if distinct_kind(target) == "int" else f"write {target}({v})"
 

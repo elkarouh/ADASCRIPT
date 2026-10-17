@@ -488,7 +488,7 @@ def _reject_distinct_mix(name, annotation, value):
         return
     from ady_declarations import as_written, unit_fix
     if is_distinct(target) and is_distinct(source):
-        fix = unit_fix(target, v)       # an unrelated unit goes through the number
+        fix = unit_fix(target, v, source)       # an unrelated unit goes through the number
     elif is_distinct(target):
         fix = f"write {target}({as_written(v)})"
     else:

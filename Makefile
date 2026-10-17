@@ -1079,7 +1079,7 @@ test: compile
 	    > $(TMPDIR)/ady_scaled_hdr.ady
 	@for c in "1:a unit no declaration relates:does not convert:let e: Km_T = Km_T(t)" \
 	          "2:a km plus a metre:type mismatch:let e: Km_T = k + d" \
-	          "3:a km given as metres:type mismatch:let e: Distance_T = k" \
+	          "3:a km given as metres:write Distance_T(k), which converts:let e: Distance_T = k" \
 	          "4:a factor that is a variable:is not a const:type Bad_T is r * Distance_T" \
 	          "5:a factor that is a unit:the factor of a scaled unit is a plain number:type Bad_T is R * Distance_T" \
 	          "6:a fractional factor of cents:so the factor is a whole number:type Bad_T is 0.5 * C_T" \
@@ -1087,7 +1087,7 @@ test: compile
 	          "8:cents plus dollars:type mismatch:let e: C_T = c + u" \
 	          "9:cents from a float:type mismatch:let e: C_T = C_T(r)" \
 	          "10:cents from a time:does not convert:let e: C_T = C_T(t)" \
-	          "11:dollars given as cents:type mismatch:let e: C_T = u" \
+	          "11:dollars given as cents:write C_T(u), which converts:let e: C_T = u" \
 	          "12:unrelated units, no scaling:does not convert:let e: Duration_T = Duration_T(d)" \
 	          "13:unrelated, through arithmetic:does not convert:let e: Duration_T = Duration_T(d * 2.0)" \
 	          "14:a count from a distance:does not convert:let e: Usd_T = Usd_T(d)"; do \

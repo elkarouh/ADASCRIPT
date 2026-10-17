@@ -2921,7 +2921,7 @@ def _reject_unit_mix(name, annotation, value):
         from ady_declarations import as_written, unit_fix
         raise SyntaxError(
             f"cannot give {as_written(value.strip())}, a {source}, to {name}, a {target}: a distinct type "
-            f"does not mix with any other -- {unit_fix(target, value)}")
+            f"does not mix with any other -- {unit_fix(target, value, source)}")
 
 
 def _wrap_distinct_literal(value, nim_type):
