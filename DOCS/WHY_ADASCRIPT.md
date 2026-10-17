@@ -1317,19 +1317,25 @@ Adascript narrows on the test, and the test reads as the sentence:
 class Selection:
     var what: NodeView | EdgeView | None
 
+    def change_cost(self):
+        let picked: NodeView | EdgeView | None = self.what
+        if picked is EdgeView:
+            picked.change_cost()
+
     def remove(self):
         let picked: NodeView | EdgeView | None = self.what
         case picked:
-            when NodeView:
-                picked.delete()
-            when EdgeView:
+            when NodeView | EdgeView:
                 picked.delete()
             when None:
                 pass
 ```
 
-In the first branch `picked` is a `NodeView`, not "maybe a `NodeView`"; in the
-second an `EdgeView`; in the third there is nothing to delete.
+Only an edge has a cost to change, so `change_cost` asks `picked is EdgeView`, and
+on the next line `picked` is an `EdgeView`, not "maybe an `EdgeView`". Either
+kind can be deleted, so `remove` names both in one `when`; the body is checked
+once for each of them, and it would not compile if one of them had no
+`delete`. The third arm says there is nothing to delete.
 
 That is how the Dijkstra page deletes what the reader selected. There is no `Selected_T`
 declared for it, no tag field to keep in step with the value, no cast, and no

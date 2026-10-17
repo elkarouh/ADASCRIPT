@@ -116,6 +116,7 @@ def _nim_reset():
     ParserState.where_types = {}        # `type N is str where ..`: name -> str
     ParserState.ctor_overloads = {}     # class -> its __init__s, when one can fail
     ParserState.overloaded_procs = set()  # procs defined more than once, with other types
+    ParserState.proc_overload_types = {}  # every signature of each name, for a literal argument
     ParserState._scaled_bases_done = set()   # bases whose to_B is emitted
     ParserState.generic_funcs = {}      # generic function -> its type parameters
     ParserState.class_field_types = {}
@@ -395,6 +396,8 @@ _TOP_ROUTINE = _re_order.compile(r'^(proc|func|method|iterator|template|macro|co
 _DECLARABLE = _re_order.compile(r'^(?:proc|func|method)\s+(\w+)\*?\s*[\[(]')
 _CALLED = _re_order.compile(r'(?:\b(\w+)\s*)?(\.\s*)?\b([A-Za-z_]\w*)\s*\(')
 _IDENT = _re_order.compile(r'\b[A-Za-z_]\w*\b')
+# a routine named as a value -- `setTimeout(pick, 50)`, `apply(double, 4)` -- not called
+_PASSED = _re_order.compile(r'(?<![\w.`"\'])([A-Za-z_]\w*)(?=\s*[,)])')
 _HEADER_END = _re_order.compile(r'^(.*\S)\s+=(\s+#.*)?$')
 
 
@@ -620,6 +623,19 @@ def _declare_before_use(lines):
                     if receiver_type and _first_param_type(sig) != receiver_type:
                         continue
                     earliest[at] = head
+        # a routine passed as a value needs declaring ahead just as a call does,
+        # unless the caller has a name of its own that says otherwise
+        for ln in lines[head + 1:stop]:
+            code = _code_only(ln)
+            for m in _PASSED.finditer(code):
+                name = m.group(1)
+                if name not in defs or name in known:
+                    continue
+                if _re_order.search(r'\b(?:let|var|const|for)\s+(?:\w+\s*,\s*)*' + name + r'\b', '\n'.join(lines[head:stop])):
+                    continue
+                for at, sig in defs[name]:
+                    if at > head and not head >= earliest.get(at, at):
+                        earliest[at] = head
     tops = {}            # top-level let/var/const name -> line
     for i, ln in enumerate(lines):
         m = _re_order.match(r'^(?:let|var|const)\s+(\w+)', ln)
@@ -964,6 +980,14 @@ def translate(code, export_symbols=False):
     # import math is left as it was (an integer `mod` needs nothing).
     if ({"math"} & (ParserState.nim_qualified | set(ParserState.nim_from) | ParserState.nim_imports)) and _re_order.search(r"(?<![\w`.])\w[^\n#\"]* mod ", "\n".join(output)):
         ParserState.nim_from.setdefault("math", set()).add("`mod`")
+
+    # A list prints as Python prints it (`[A, B]`, `['a']`), not as Nim's `@[A, B]`:
+    # a program that prints or formats anything, and has a list, gets the `$` that says so.
+    _text = "\n".join(output)
+    if (_re_order.search(r'\becho\(|\bfmt"|\$\(', _text)
+            and _re_order.search(r'@\[|\bseq\[|\bnewSeq|\btoSeq|\bcollect\(|split', _text)):
+        from hek_nim_unicode import _SEQ_REPR_HELPER
+        ParserState.nim_top_decls.append(_SEQ_REPR_HELPER)
 
     # Insert collected Nim imports at the top (after any leading comments),
     # followed by the pragmas, helper declarations and init statements the

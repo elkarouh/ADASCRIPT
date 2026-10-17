@@ -299,9 +299,7 @@ class Selection:
     def remove(self):
         let picked: NodeView | EdgeView | None = self.what
         case picked:
-            when NodeView:
-                picked.delete()
-            when EdgeView:
+            when NodeView | EdgeView:
                 picked.delete()
             when None:
                 pass
@@ -309,9 +307,10 @@ class Selection:
 
 What the reader last clicked is a node's view, an edge's view, or nothing, and
 the field says so in its type: there is no tag to keep in step with the value.
-`case` over a union tests the *type* of each member and narrows: in the first
-branch `picked` is a `NodeView`, in the second an `EdgeView`, with no cast. Every
-member has to be named, `None` included. A `case` over an enum, an int or a
+`case` over a union tests the *type* of each member and narrows, with no cast.
+`when NodeView | EdgeView` shares one body between two members: it is checked
+once for each, so `picked.delete()` has to exist on both. Every member has to
+be named, `None` included. A `case` over an enum, an int or a
 string compares *values* instead, and a choice that compares different things
 still needs an `if` chain: `picked` in `dijkstra_gui.ady` is one.
 

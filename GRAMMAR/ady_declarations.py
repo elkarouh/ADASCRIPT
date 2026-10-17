@@ -1185,9 +1185,11 @@ def unit_result(lu, op, ru):
             if rel:
                 return rel
             return UNIT_PLAIN if op != "*" and lu == ru else None
+        # a unit scaled by a number is that unit; by something of no unit
+        # this can see, it is anything -- `e.n * t` with e.n unknown is not a t
         if ld:
-            return lu
-        return ru if op == "*" else None
+            return lu if ru in (UNIT_LIT, UNIT_PLAIN) else None
+        return ru if op == "*" and lu in (UNIT_LIT, UNIT_PLAIN) else None
     return None
 
 

@@ -1221,7 +1221,10 @@ def _emit_enum_py(name, member_names, indent=0):
     # Nim's `$` on an enum is the bare member name, and so is 'Image here.
     # Python's default is "Stage_T.STAGE2", so the same f-string printed two
     # different things depending on the backend.
+    # and a container of them shows the same names, as `repr` would otherwise
+    # give "<Stage_T.STAGE2: 1>" for each element.
     lines.append(f"{_ind(indent + 1)}def __str__(self): return self.name")
+    lines.append(f"{_ind(indent + 1)}__repr__ = __str__")
     # Unpack enum members as bare names (Nim uses bare names)
     for orig, py_m in py_members:
         if not orig.isdigit():

@@ -829,6 +829,7 @@ class Color(Enum):
     Green = 1
     Blue = 2
     def __str__(self): return self.name
+    __repr__ = __str__
 Red = Color.Red
 Green = Color.Green
 Blue = Color.Blue
@@ -861,6 +862,7 @@ class Status(Enum):
     Ok = 0
     Err = 1
     def __str__(self): return self.name
+    __repr__ = __str__
 Ok = Status.Ok
 Err = Status.Err
 

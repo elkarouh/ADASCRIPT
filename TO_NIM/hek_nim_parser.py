@@ -115,6 +115,11 @@ def _note_param_types(key, types):
     if old is not None and old != types:
         ParserState.overloaded_procs.add(key)
     ParserState.proc_param_types[key] = types
+    if not hasattr(ParserState, "proc_overload_types"):
+        ParserState.proc_overload_types = {}
+    _seen = ParserState.proc_overload_types.setdefault(key, [])
+    if types not in _seen:
+        _seen.append(types)
 
 def _nim_ident(name):
     """Escape a user identifier that happens to be a Nim keyword."""
@@ -339,6 +344,46 @@ def _leaves_the_block(last_line):
                            or call.group(1) in getattr(ParserState, "noreturn_procs", set()))
 
 
+def _note_shadow(chunk, shadowed):
+    """A `let`/`var` of a name the enclosing code narrowed declares a new one:
+    the narrowing is set aside until the block that declared it ends."""
+    m = re.match(r'\s*(?:let|var)\s+(`?[A-Za-z_]\w*`?)\s*[:=]', chunk)
+    if m:
+        saved = hek_nim_expr._narrow_shadow(m.group(1))
+        if saved is not None:
+            shadowed.append((m.group(1), saved))
+
+
+def _shadow_params(names):
+    """A parameter is a new name in its function: a module-level name it
+    shares with, narrowed there, is not narrowed in it."""
+    out = []
+    for n in names:
+        saved = hek_nim_expr._narrow_shadow(n)
+        if saved is not None:
+            out.append((n, saved))
+    return out
+
+
+def _unshadow(shadowed):
+    for name, saved in reversed(shadowed):
+        hek_nim_expr._narrow_unshadow(name, saved)
+
+
+# names narrowed by an `assert`, which holds only until the name is assigned again
+collected_by_assert = set()
+
+
+def _note_reassign(chunk, collected):
+    """`r = other` after `assert r is ...` writes a new value: what the assert
+    proved is over, and the next `assert` proves it afresh."""
+    m = re.match(r'\s*(`?[A-Za-z_]\w*`?)(?:\.value|\.error)?\s*(?:=|\+=|-=|\*=|&=)(?!=)', chunk)
+    if m and m.group(1) in collected_by_assert and m.group(1) in collected:
+        hek_nim_expr._narrow_drop(m.group(1))
+        collected.remove(m.group(1))
+        collected_by_assert.discard(m.group(1))
+
+
 def note_option_guard(chunk, collected=None):
     """Record the optionals a leaving guard proves present.
 
@@ -369,6 +414,17 @@ def note_option_guard(chunk, collected=None):
                  r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
     if not m:
+        # `assert r is not F` is a guard that leaves by failing: what it
+        # asserts holds in everything after it, as in the body of an `if`
+        ma = re.match(r'^\s*assert\s+(' + hek_nim_expr.NARROW_NAME + r')\.('
+                      + hek_nim_expr.NARROW_TESTS + r')\s*(?:,.*)?$',
+                      chunk_lines[0])
+        if ma:
+            _sfx = hek_nim_expr.narrow_suffix(ma.group(1), ma.group(2), True)
+            if _sfx and hek_nim_expr._narrow_add(ma.group(1), _sfx):
+                collected_by_assert.add(ma.group(1))
+                if collected is not None:
+                    collected.append(ma.group(1))
         return
     head_indent, name, inline_exit = m.group(1), m.group(2), m.group(4)
     # What the rest of the block reads NAME as: an Option's value, or the
@@ -422,8 +478,12 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
     def _note_option_guard(chunk):
         note_option_guard(chunk, _guard_unwrapped)
 
+    _shadowed = []
+
     def _emit(chunk):
         lines.append(chunk)
+        _note_shadow(chunk, _shadowed)
+        _note_reassign(chunk, _guard_unwrapped)
         _note_option_guard(chunk)
 
     for node in self.nodes:
@@ -707,6 +767,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             result_lines.append(_ind(indent) + "discard")
         ParserState._current_class_name = None
         ParserState._class_siblings, ParserState._pure_methods = _saved_purity
+        _unshadow(_shadowed)
         for _gname in _guard_unwrapped:
             hek_nim_expr._narrow_drop(_gname)
         return "\n".join(result_lines)
@@ -714,6 +775,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
     # For non-class blocks, if empty emit discard
     if not lines:
         return _ind(indent) + "discard"
+    _unshadow(_shadowed)
     for _gname in _guard_unwrapped:
         hek_nim_expr._narrow_drop(_gname)
     return "\n".join(_add_call_discards(lines))
@@ -2314,65 +2376,68 @@ def _either_case_to_nim(case_node, subject, rtype, indent, optional=False):
     out, covered, keyword = [], set(), "if"
     for pat_node, block_node, guard_node in _extract_branches(case_node):
         shown = (pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)).strip()
-        pat = _PY_TO_NIM.get(shown, shown)
-        shown = "None" if shown == "nil" else shown
         if guard_node is not None:
             raise SyntaxError(
                 f"case over a union: `when {shown}` cannot carry a guard -- "
                 f"test inside the branch")
-        if pat in ("others", "_"):
-            head, narrow = f"{_ind(indent)}else:", None
-            covered.update(members)
-        else:
-            if pat == "nil" and values == ["void"]:
-                pat = "void"
-            if optional and pat == "nil":
-                pat = "None"
-            if pat not in members:
-                raise SyntaxError(
-                    f"case {subject}: `when {shown}` is no member of {shown_all}")
-            if optional and pat == "None":
-                test = "isNone"
-            elif pat == failure:
-                test = "is_err"
-            elif info["kind"] == "plain":
-                test = f"is_m{values.index(pat)}"
-            elif info["multi"]:
-                test = f"is_v{values.index(pat)}"
+        # `when A | B:` is a branch for each of A and B, the same body for both:
+        # the body is written once, and must be right for every member it names
+        for shown in [s.strip() for s in re.split(r"[,|]", shown)]:
+            pat = _PY_TO_NIM.get(shown, shown)
+            shown = "None" if shown == "nil" else shown
+            if pat in ("others", "_"):
+                head, narrow = f"{_ind(indent)}else:", None
+                covered.update(members)
             else:
-                test = "is_ok"
-            if optional and pat == "None":
-                narrow, cond = None, f"{subject}.isNone"
-            elif optional:
-                # a member of what the optional holds: present, and that member
-                narrow = f"{subject}.get()"
-                cond = f"{subject}.isSome and {subject}.get().{test}"
-            else:
-                narrow = hek_nim_expr.narrow_suffix(subject, test, True)
-                cond = f"{subject}.{test}"
-            if pat == "void":
-                narrow = None
-            covered.add(pat)
-            head = f"{_ind(indent)}{keyword} {cond}:"
-            keyword = "elif"
-        _added = False
-        if optional and narrow is not None:
-            # unwrapped first, then narrowed to the member
-            ParserState.nim_imports.add("options")
-            hek_nim_expr._narrow_add(subject, ".get()")
-            hek_nim_expr._narrow_add(narrow, hek_nim_expr.narrow_suffix(narrow, test, True))
-            _added = True
-        elif narrow is not None:
-            _added = hek_nim_expr._narrow_add(subject, narrow)
-        try:
-            body = block_node.to_nim(indent + 1) if block_node else _ind(indent + 1) + "discard"
-        finally:
-            if _added:
-                hek_nim_expr._narrow_drop(subject)
-                if optional:
+                if pat == "nil" and values == ["void"]:
+                    pat = "void"
+                if optional and pat == "nil":
+                    pat = "None"
+                if pat not in members:
+                    raise SyntaxError(
+                        f"case {subject}: `when {shown}` is no member of {shown_all}")
+                if optional and pat == "None":
+                    test = "isNone"
+                elif pat == failure:
+                    test = "is_err"
+                elif info["kind"] == "plain":
+                    test = f"is_m{values.index(pat)}"
+                elif info["multi"]:
+                    test = f"is_v{values.index(pat)}"
+                else:
+                    test = "is_ok"
+                if optional and pat == "None":
+                    narrow, cond = None, f"{subject}.isNone"
+                elif optional:
+                    # a member of what the optional holds: present, and that member
+                    narrow = f"{subject}.get()"
+                    cond = f"{subject}.isSome and {subject}.get().{test}"
+                else:
+                    narrow = hek_nim_expr.narrow_suffix(subject, test, True)
+                    cond = f"{subject}.{test}"
+                if pat == "void":
+                    narrow = None
+                covered.add(pat)
+                head = f"{_ind(indent)}{keyword} {cond}:"
+                keyword = "elif"
+            _added = False
+            if optional and narrow is not None:
+                # unwrapped first, then narrowed to the member
+                ParserState.nim_imports.add("options")
+                hek_nim_expr._narrow_add(subject, ".get()")
+                hek_nim_expr._narrow_add(narrow, hek_nim_expr.narrow_suffix(narrow, test, True))
+                _added = True
+            elif narrow is not None:
+                _added = hek_nim_expr._narrow_add(subject, narrow)
+            try:
+                body = block_node.to_nim(indent + 1) if block_node else _ind(indent + 1) + "discard"
+            finally:
+                if _added:
                     hek_nim_expr._narrow_drop(subject)
-        hc = _block_inline_header_comment(block_node) if block_node else ""
-        out.append(f"{head}{hc}\n{body}")
+                    if optional:
+                        hek_nim_expr._narrow_drop(subject)
+            hc = _block_inline_header_comment(block_node) if block_node else ""
+            out.append(f"{head}{hc}\n{body}")
     missing = [m for m in members if m not in covered]
     if missing:
         raise SyntaxError(
@@ -3044,7 +3109,14 @@ def _func_def_to_nim_inner(self, indent=0):
             _m = _re_fpt.match(r'\s*\w+\s*:\s*(.+?)(?:\s*=.*)?$', _cur.strip())
             _ptypes.append(_m.group(1).strip() if _m else "")
         _note_param_types(name, _ptypes)
+        if declared_type_params:
+            # in order, for an explicit `clip[Speed_T](x, -2.0, 2.0)` to type its literals
+            if not hasattr(ParserState, "proc_type_param_names"):
+                ParserState.proc_type_param_names = {}
+            ParserState.proc_type_param_names[name] = [
+                n.split(":")[0].strip() for n in declared_type_params.strip("[] ").split(",") if n.strip()]
     ParserState.symbol_table.push_scope(name or "<func>")
+    _param_shadow = _shadow_params(re.findall(r"(?:^|,)\s*(?:var\s+)?`?(\w+)`?\s*:", params or ""))
     hc = _block_inline_header_comment(block_node) if block_node else ""
     # A @contextmanager is a Nim template, where fmt cannot see the
     # parameters or the locals: hek_nim_expr._fmt_in_template
@@ -3060,6 +3132,7 @@ def _func_def_to_nim_inner(self, indent=0):
     finally:
         type_scope_pop()
         ParserState._nim_in_template = _was_tpl
+        _unshadow(_param_shadow)
     ParserState.symbol_table.pop_scope()
     body = _bind_user_result(body, ret_ann)
     # A proc that always leaves -- a `die` ending in quit(1) -- so that a
@@ -5624,6 +5697,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         ParserState.proc_return_types[name] = _ret_type
     # Push scope and register params for body translation
     ParserState.symbol_table.push_scope(name or "<method>")
+    _param_shadow = _shadow_params([p.split(":")[0].strip() for p in params if ":" in p])
     for p in params:
         parts = p.split(":")
         if len(parts) >= 2:
@@ -5851,6 +5925,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     # Translate dunder names to Nim operator procs
     nim_name, nim_kw = _nim_proc_name(name)
     if nim_name is None:
+        _unshadow(_param_shadow)
         ParserState.symbol_table.pop_scope()
         ParserState._current_return_type = ""
         return []  # skip (e.g. __init__)
@@ -5901,6 +5976,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             _mptypes.append(_pt_m.group(1).strip() if _pt_m else "")
         ParserState.proc_param_types[nim_name] = _mptypes
 
+    _unshadow(_param_shadow)
     ParserState.symbol_table.pop_scope()
     ParserState._current_return_type = ""
     return lines
@@ -5937,6 +6013,7 @@ def _extract_block_body(block_node, indent, is_init_body=False):
     # A guard that leaves the method -- `if r is Failure_T: return r` -- proves
     # what it proves for the rest of the body, as it does in `block`
     _guard_unwrapped = []
+    _shadowed = []
 
     def _emit(line):
         # In init bodies, strip var from self.x assignments
@@ -5948,6 +6025,8 @@ def _extract_block_body(block_node, indent, is_init_body=False):
             if s.startswith("self.") and ("= initTable()" in s or "= collect(initTable" in s or s.endswith("= @[]")):
                 return
         result_lines.append(line)
+        _note_shadow(line, _shadowed)
+        _note_reassign(line, _guard_unwrapped)
         note_option_guard(line, _guard_unwrapped)
 
     for node in block_node.nodes:
@@ -5976,6 +6055,7 @@ def _extract_block_body(block_node, indent, is_init_body=False):
     # If init body is empty after skipping, add discard
     if is_init_body and all(not l.strip() for l in result_lines):
         result_lines = [_ind(indent) + "discard"]
+    _unshadow(_shadowed)
     for _gname in _guard_unwrapped:
         hek_nim_expr._narrow_drop(_gname)
     return result_lines

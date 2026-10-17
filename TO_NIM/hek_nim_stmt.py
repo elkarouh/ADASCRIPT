@@ -212,6 +212,17 @@ def to_nim(self):
     """
     reject_dollar_assignment(self.nodes[0])
     parts = [self.nodes[0].to_nim()]
+    # an assignment to a name an `assert` narrowed writes the whole value, not
+    # the member the assert proved: the narrowing ends here, and the next
+    # `assert` proves it afresh
+    from hek_nim_parser import collected_by_assert
+    for _n in list(collected_by_assert):
+        if (parts[0] == _n + hek_nim_expr._narrow_suffix(_n)
+                and _n in getattr(ParserState, "_option_unwrap_vars", ())):
+            hek_nim_expr._narrow_drop(_n)
+            collected_by_assert.discard(_n)
+            parts = [self.nodes[0].to_nim()]
+            break
     rhs_node = None
     for node in self.nodes[1:]:
         if not hasattr(node, "nodes") or not node.nodes:
@@ -1084,7 +1095,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
-                value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(value, annotation), annotation), annotation)
+                value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -1339,7 +1350,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
-                value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(value, annotation), annotation), annotation)
+                value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -2541,7 +2552,12 @@ _DISTINCT_SCALE_FLOAT = [
     "proc `*`{e}(a: {t}, b: int): {t} = {t}(float(a) * float(b))",
     "proc `*`{e}(a: int, b: {t}): {t} = {t}(float(a) * float(b))",
     "proc `/`{e}(a: {t}, b: int): {t} = {t}(float(a) / float(b))",
-    "proc `*=`{e}(a: var {t}, b: int) = a = {t}(float(a) * float(b))"]
+    "proc `*=`{e}(a: var {t}, b: int) = a = {t}(float(a) * float(b))",
+    # a bound written as a number: `max(gap, 1e-9)` is a gap of at least 1e-9
+    "proc min{e}(a: {t}, b: float): {t} = min(a, {t}(b))",
+    "proc min{e}(a: float, b: {t}): {t} = min({t}(a), b)",
+    "proc max{e}(a: {t}, b: float): {t} = max(a, {t}(b))",
+    "proc max{e}(a: float, b: {t}): {t} = max({t}(a), b)"]
 _DISTINCT_SCALE_INT = [
     "proc `*`{e}(a: {t}, b: int): {t} = {t}(int(a) * b)",
     "proc `*`{e}(a: int, b: {t}): {t} = {t}(a * int(b))",
@@ -2611,6 +2627,10 @@ def _derived_type_nim(name, params, indent):
         nim_op = "div" if (o == "/" and kind == "int") else o
         lines.append(f"{ind}proc `{nim_op}`{_exp}(a: {l}, b: {r}): {res} = "
                      f"{res}({base}(a) {nim_op} {base}(b))")
+    if op == "*" and a == b and kind == "float":
+        # a square has a root, in the unit it is the square of
+        ParserState.nim_qualified.add("math")
+        lines.append(f"{ind}proc sqrt{_exp}(x: {name}): {a} = {a}(math.sqrt(float(x)))")
     return "\n".join(lines)
 
 
@@ -2851,8 +2871,13 @@ def _wrap_distinct_literal(value, nim_type):
     if is_distinct(t):
         # a checked string takes no literal: it is compared as a str, and
         # assigned only through its check
-        if not _is_nim_literal(v) or t in (getattr(ParserState, "where_types", None) or {}):
+        if t in (getattr(ParserState, "where_types", None) or {}):
             return value
+        if not _is_nim_literal(v):
+            # arithmetic on literals alone, `5.0 * 86400.0`, is a literal too
+            from ady_declarations import UNIT_LIT
+            if hek_nim_expr._unit_of(v) != UNIT_LIT or not any(c.isdigit() for c in v):
+                return value
         from ady_declarations import wraps_or_checks
         return f"to_{t}({v})" if wraps_or_checks(t) else f"{t}({v})"   # a range is checked, a mod wraps
     if t.startswith("(") and t.endswith(")") and v.startswith("(") and v.endswith(")"):

@@ -709,9 +709,8 @@ Both `is` and `=` are accepted as the assignment keyword.
 
 A member stringifies as its bare name on both backends — `str(d)`, `print
 d`, `f"{d}"` and `d'Image` all give `Door1`, which is what Nim's `$` gives.
-A *container* of enum values is the exception: Python formats elements with
-`repr`, so printing a `[]Door_T` still shows `[<Door_T.Door1: 0>, …]`
-against Nim's `@[Door1, …]`. That one is in `TODO.md`.
+So does a list of them: `print xs` over a `[]Door_T` gives `[Door1, Door2]` on
+both (a list prints Python's way on Nim, `[1, 2]` and `['a']`, not `@[1, 2]`).
 
 ### Members with values
 
@@ -1175,6 +1174,11 @@ constant. `case x:` does the one the subject calls for. Over a union every
 `x`; over an enum, an int or a string it compares values, `when RED`,
 `when 3`. A union is never matched by value, so there is nothing to confuse:
 test the type, then use the value.
+
+Members that are handled alike share a branch: `when Circle_T | Square_T:`
+runs one body for either. It is checked once for each member, so it may use
+only what both have (`x.delete()` if both define `delete`), and it is a
+compile error where one of them does not.
 
 
 ### Value or failure `T | !F`

@@ -437,6 +437,14 @@ The operands must be distinct, and of one kind: `float` for a quotient,
 is naturally `distinct int` in cents, so `price * 3` scales it, and
 `price * qty` needs a total unit to say what it is.
 
+A square has a root in the unit it is the square of: with `type SpeedSq_T is
+Speed_T * Speed_T`, `sqrt(vv)` of a `SpeedSq_T` is a `Speed_T` (on Nim, where
+`sqrt` comes from `from math nimport sqrt`). A bound may be written as a
+number, `max(gap, 1e-9)`, and is of the unit beside it; so is a number given
+for a `T` of an explicit generic call, `clip[Speed_T](v, -2.0, 2.0)`, and a
+`const` of a unit made of numbers alone, `const SPAN: Duration_T = 5.0 *
+86400.0`.
+
 ### A unit made from a unit: momentum and energy
 
 Energy is mass times velocity times velocity, and it is worth seeing why it

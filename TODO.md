@@ -91,17 +91,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       meanwhile.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
-- [ ] containers holding enum values stringify differently. `print xs` where
-      `xs: []Node_T` gives `@[A, B, C, D]` on Nim and
-      `[<Node_T.A: 0>, <Node_T.B: 1>, ...]` on Python -- Nim's seq syntax and
-      bare enum names against Python's list syntax and Enum *repr*. It is
-      what stops most examples from producing byte-identical output on the
-      two backends. A bare enum agrees now (the generated class gets a
-      `__str__` returning the member name, so `'Image`, `str()`, `print` and
-      f-strings all give `A`); it is a container's elements that do not,
-      because a container formats its elements with `repr`. Giving the class
-      a `__repr__` as well would leave only the `@` prefix -- and the set
-      ordering, which `{}T` never promised anyway.
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
       both backends. Consistent rather than divergent, and a missing form
       rather than a bug -- less pressing than it was, now that the
@@ -118,15 +107,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       `Container` and a constant `CONTAINER` are one name there and two on
       Python. Worth a transpile-time warning: the Nim error names a
       "redefinition" at a line the author did not write.
-- [ ] `.isdigit()` is ASCII-only on Nim and Unicode-aware on Python:
-      a string of Arabic-Indic digits answers false there and true here. It is what every
-      strutils predicate does -- `TO_NIM/STDLIB/strscan.ady` says so in its
-      header -- and it became *reachable* rather than new when the string
-      overload landed, since before that a string receiver did not compile at
-      all. The same gap is waiting behind `.isalpha()`, `.isalnum()`,
-      `.isspace()`, `.islower()` and `.isupper()`, none of which have a string
-      overload yet. Either the Python backend narrows to ASCII, or unicode's
-      predicates go behind the Nim ones, or it is documented per method.
 - [ ] `Path` in expression position needs a `: Path` annotation somewhere in
       the same file. `let base: str = Path(p).name` on its own does not
       compile on Nim -- "undeclared identifier: 'Path'" -- because the Path
@@ -460,25 +440,12 @@ Each open one has a workaround in that file.
 - [ ] units: `SquareMeters_T * metre_T` has no unit (a chain is two-at-a-time).
 - [ ] `from MAP_UTILS/map_base import` works from a sibling directory only because the
       parent is searched. (The map_* modules stay Nim-only, by decision.)
-- [ ] units: `sqrt` of a unit. `Speed_T(sqrt(float(mu) / float(radius)))`, `half_period`, the Moon's
-      mean motion and `sqrt(float(dt))` in the IMU all go through floats; `sqrt(SpeedSq_T)` is a
-      `Speed_T`, and `sqrt(Duration_T)` has no unit at all.
 - [ ] units: a unit with two derivations. `Force_T` is `Mass_T * Accel_T`, but the mass flow wants
       `Force_T / Speed_T` and `MassFlow_T * Duration_T`; `v^2 - mu/r` (`Mu_T / metre_T`) and the
       products `AngMom_T * AngMom_T` have no unit either. `Propulsion.thrust` and `orbital_elements`
       keep a float block.
 - [ ] units: an angle times a length. A radian is dimensionless, so `radius * angle` is a length;
       `arc` (the one place that takes `float(Radians_T(angle))`) says so.
-- [ ] `max(unit, 1e-9)` and `min`/`max` with a literal beside a unit do not compile on Nim (the literal is
-      not typed); `max(a, metre_T(1e-9))` does.
-- [ ] a literal on the LEFT of `-` takes the wrong unit: `180.0 - n * t` (n: `AngularRate_T`, t:
-      `Duration_T`) came out as `Duration_T(180.0) - ...` and did not compile. Workaround: a `const`.
-- [ ] a literal in an explicit generic call is not typed: `clip[Speed_T](x, -2.0, 2.0)` fails
-      (constants `SIDE_MAX` and friends instead), and a `const` initialised by `5.0 * 86400.0` stays a float.
-- [ ] an `int` beside a float (`0.9 * i`) is refused on Nim; the example has `fraction(i, n)`. A cast the
-      language could take over, as Python does.
-- [ ] a unit-typed constructor argument is spelled out where a class has two constructors
-      (`Velocity(Speed_T(0.0), Speed_T(0.0))`): a literal to an overloaded name is refused on Nim.
 
 ### Met on the way and since fixed
 
@@ -543,18 +510,6 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
       kept failing until `~/.cache/adascript/cache-<hash>` was removed. A
       failed dependency should leave nothing cached, or the cache key should
       cover the dependencies' contents.
-- [ ] `assert r is not F` does not narrow `r` for the lines after it (an `if
-      r is F: die(...)` does not either, without `else:`), so a test takes a
-      value that must not fail through a helper with `case r:`.
-- [ ] a `let` that shadows an outer one of the same name narrows as the
-      outer: in ledger.ady's main, `let read: Books | !BookFailure_T` inside
-      the `else:` of an outer `let read: Config | !BookFailure_T` gave
-      "undeclared field: 'detail' for type Books" on `read.detail`. The
-      inner one is named `loaded` instead.
-- [ ] a module-level function used before its `def` in another function's
-      body (`setTimeout(pick_shown, 50)` with `pick_shown` defined below) is
-      "undeclared identifier" in the Nim, though calling one before its def
-      works elsewhere: forward declarations miss a function passed as a value.
 - [x] a local `let x: str` made a field of the same name on another value
       a string too: in accounting_gui.ady's box_html, with `let x: str =
       px(...)` in scope, `px(p.x + shape.half_w - 8.0)` came out as

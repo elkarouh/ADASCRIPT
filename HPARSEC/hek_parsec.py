@@ -91,13 +91,20 @@ class SymbolTable:
     def pop_scope(self):
         """Pop and return the current scope."""
         if self.stack:
-            return self.stack.pop()
+            _scope = self.stack.pop()
+            _hook = getattr(ParserState, "on_scope_popped", None)
+            if _hook is not None:
+                _hook(_scope)
+            return _scope
         return None
 
     def add(self, name, type_info=None, kind="var"):
         """Add a symbol to the current scope."""
         if self.stack:
             self.stack[-1]["symbols"][name] = {"type": type_info, "kind": kind}
+            _hook = getattr(ParserState, "on_symbol_declared", None)
+            if _hook is not None:
+                _hook(name, self.stack[-1], len(self.stack))
 
     def lookup(self, name):
         """Look up a symbol from innermost scope outward. Returns dict or None."""

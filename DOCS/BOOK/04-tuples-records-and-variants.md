@@ -304,13 +304,14 @@ The Dijkstra page keeps what the reader selected in one field, `what: NodeView
 def remove(self):
     let picked: NodeView | EdgeView | None = self.what
     case picked:
-        when NodeView:
-            picked.delete()          # picked is a NodeView here
-        when EdgeView:
-            picked.delete()          # ...and an EdgeView here
+        when NodeView | EdgeView:
+            picked.delete()          # a NodeView or an EdgeView: both have delete()
         when None:
             pass                     # nothing is selected
 ```
+
+Members handled alike share a branch, `when NodeView | EdgeView:`. The body is
+checked once for each member, so it may use only what both have.
 
 ## 4.5 Type aliases
 

@@ -75,14 +75,10 @@ def set_selected(el: Element_T, lit: bool):
 
 # Write a change to the hidden form #gesture and press BUTTON. The fields the request does not use
 # are sent empty, as the form holds them by default; the server ignores them.
-def send_gesture(button: str, name: str, a: str, b: str, cost: str, x: str, y: str):
+def send_gesture(button: str, fields: {str}str):
     let change: Change = Change("#gesture")
-    change.set("name", name)
-    change.set("a", a)
-    change.set("b", b)
-    change.set("cost", cost)
-    change.set("x", x)
-    change.set("y", y)
+    for name in ["name", "a", "b", "cost", "x", "y"]:
+        change.set(name, fields.get(name, ""))
     change.send(button)
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
@@ -120,7 +116,7 @@ class NodeView:
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.node.name} and its edges?"):
-            send_gesture("#drop_node", self.node.name, "", "", "", "", "")
+            send_gesture("#drop_node", {"name": self.node.name})
 
 class EdgeView:
     var edge: Edge_T
@@ -133,14 +129,14 @@ class EdgeView:
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
-            send_gesture("#drop_edge", "", self.edge.a, self.edge.b, "", "", "")
+            send_gesture("#drop_edge", {"a": self.edge.a, "b": self.edge.b})
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
         if cost == "":
             return
-        send_gesture("#set_cost", "", self.edge.a, self.edge.b, cost, "", "")
+        send_gesture("#set_cost", {"a": self.edge.a, "b": self.edge.b, "cost": cost})
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -275,9 +271,7 @@ class Selection:
     def remove(self):
         let picked: NodeView | EdgeView | None = self.what
         case picked:
-            when NodeView:
-                picked.delete()
-            when EdgeView:
+            when NodeView | EdgeView:
                 picked.delete()
             when None:
                 pass
@@ -321,7 +315,7 @@ def ask_name() -> str:
 
 # Send a new node NAME: placed at X, Y (drawing units, as text) when given, else where the server puts it.
 def send_node(name: str, x: str, y: str):
-    send_gesture("#make_node", name, "", "", "", x, y)
+    send_gesture("#make_node", {"name": name, "x": x, "y": y})
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
@@ -488,7 +482,7 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
         if cost == "":
             return
-        send_gesture("#make_edge", "", self.from_node.name, to.name, cost, "", "")
+        send_gesture("#make_edge", {"a": self.from_node.name, "b": to.name, "cost": cost})
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):

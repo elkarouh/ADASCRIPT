@@ -1,0 +1,103 @@
+#!/usr/bin/env ady2nim
+"""Six gaps between the backends: `when A | B` over a union, assert narrowing, a shadowing let, a routine passed before its def, a list of enum members printed, and the str predicates on non-ASCII text."""
+type Node_T is enum A, B, C
+
+type Fail_T is record:
+    why: str
+
+type Books is record:
+    n: int
+
+def load(k: int) -> Books | !Fail_T:
+    if k == 0:
+        return Fail_T(why="none")
+    return Books(n=k)
+
+def apply(f: (int) -> int, x: int) -> int:
+    return f(x)
+
+def run() -> int:
+    return apply(double, 4)
+
+def double(n: int) -> int:
+    return n * 2
+
+type Circle_T is record:
+    r: int
+
+type Square_T is record:
+    side: int
+
+type Dot_T is record:
+    id: int
+
+def describe(x: Circle_T | Square_T | Dot_T | None) -> str:
+    case x:
+        when Circle_T | Square_T:
+            return "shape"
+        when Dot_T:
+            return f"dot{x.id}"
+        when None:
+            return "nothing"
+
+def yes(b: bool) -> str:
+    if b:
+        return "y"
+    return "n"
+
+def main():
+    # `assert r is not F` narrows r for the lines after it
+    let r: Books | !Fail_T = load(2)
+    assert r is not Fail_T
+    assert r.n == 2
+
+    # a let that shadows an outer one is narrowed as itself
+    let read: Books | !Fail_T = load(1)
+    var seen: str = ""
+    if read is Fail_T:
+        seen += "outer-failed "
+    else:
+        let read: Books | !Fail_T = load(0)
+        if read is Fail_T:
+            seen += read.why + " "
+        else:
+            seen += "inner-ok "
+        seen += yes(read is Fail_T) + " "
+    assert seen == "none y "
+
+    # a routine named as a value before its def
+    assert run() == 8
+
+    # a list of enum members prints as Python prints it
+    let xs: []Node_T = [A, B, C]
+    let ws: []str = ["a", "it's"]
+    assert f"{xs}" == "[A, B, C]"
+    assert f"{ws}" == """['a', "it's"]"""
+    print xs
+    print ws
+
+    # str predicates know Unicode, on both backends
+    let arabic: str = "٣٤"
+    let greek: str = "αβγ"
+    assert yes(arabic.isdigit()) == "y"
+    assert yes(arabic.isalpha()) == "n"
+    assert yes(arabic.isalnum()) == "y"
+    assert yes(greek.isalpha()) == "y"
+    assert yes(greek.islower()) == "y"
+    assert yes("ΑΒΓ".isupper()) == "y"
+    assert yes("Αβγ".islower()) == "n"
+    assert yes(" ".isspace()) == "y"
+    assert yes("".isdigit()) == "n"
+    assert yes("123".isdigit()) == "y"
+    assert yes("a1".isalnum()) == "y"
+    assert yes("a-1".isalnum()) == "n"
+    assert yes("1".islower()) == "n"
+
+    # members handled alike share a branch of a case over a union
+    assert describe(Circle_T(r=1)) == "shape"
+    assert describe(Square_T(side=2)) == "shape"
+    assert describe(Dot_T(id=3)) == "dot3"
+    assert describe(None) == "nothing"
+    print "ok"
+
+main()

@@ -301,11 +301,9 @@ Both `is` and `=` are valid assignment keywords.
 **Members with values** -- `type Key_T is enum DOWN = 258, UP = 259, END = 360`, or one `NAME = value` per line in the block form (`enum:`). Every member has a value or none does (a mix is refused); the values must strictly ascend and give the order: `ord`, `<`, `case` and sets follow them. Consecutive values (`1, 2, 3`) leave the enum as good as any other; values that skip a number can still order, compare and `case`, but cannot index an array (`[E]T`), be iterated (`for x in E`) or be stepped (`'Next`, `'Prev`), on both backends. `parse_enum(E, n)` turns an integer into the member with that value (`E | !ParseFailure_T`), and `E(n)` raises where no member has it.
 
 A member stringifies as its bare name on both backends — `str(d)`,
-`print d`, `f"{d}"` and `d'Image` all give `Door1`, matching Nim's `$`.
-(The generated Python class carries a `__str__` for this.) A *container* of
-enum values still differs: Python formats elements with `repr`, so
-`print xs` over a `[]Door_T` gives `[<Door_T.Door1: 0>, ...]` against Nim's
-`@[Door1, ...]`. Known, and in `TODO.md`.
+`print d`, `f"{d}"` and `d'Image` all give `Door1`, and a list of them prints
+`[Door1, Door2]`: the generated Python class sets `__repr__` to the name, and
+a list prints Python's way on Nim (`[1, 2]`, `['a']`, not `@[1, 2]`).
 
 Reading an enum member from text is `parse_enum(E, s)` -> `E | !ParseFailure_T` (exact name; an integer `s` is read as the member's value, `.text` its digits); `State(s)` is the older form and raises:
 ```adascript
@@ -625,10 +623,8 @@ Rules: `TypeName(field=Value)` with uppercase → equality check; lowercase → 
 ```adascript
 let picked: NodeView | EdgeView | None = self.what    # `A | B | None` is ?(A | B)
 case picked:                       # the subject is a NAME: bind an expression with `let` first
-    when NodeView:
-        picked.delete()            # picked is a NodeView here: no cast, no second variable
-    when EdgeView:
-        picked.delete()
+    when NodeView | EdgeView:      # one body for several members; it is checked once for each
+        picked.delete()            # picked is a NodeView here, and an EdgeView there: no cast
     when None:
         pass
 ```

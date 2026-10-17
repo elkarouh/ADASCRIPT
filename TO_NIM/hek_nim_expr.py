@@ -28,6 +28,7 @@ import re as _re_mod_pfx
 # Set to True by ady2nim before translating a file compiled with `nim js`.
 # Guards JS-only code-generation paths so the native backend is unaffected.
 JS_BACKEND = False
+from hek_nim_unicode import _UNICODE_HELPER
 from hek_nim_declarations import _is_nim_ordinal  # noqa: F403 — need all parser rule names
 from ady_expr import (
     PREC_WALRUS, PREC_CONDITIONAL, PREC_OR, PREC_AND, PREC_NOT,
@@ -446,34 +447,14 @@ def _ensure_splitlines_helper():
         ParserState.nim_top_decls = decls
 
 
-_ISDIGIT_HELPER = """\
-proc adascriptIsDigit*(c: char): bool =
-  ## isdigit() on a char -- strutils' predicate, unchanged.
-  c.isDigit
-
-proc adascriptIsDigit*(s: string): bool =
-  ## isdigit() on a string, which strutils has no predicate for: isDigit is
-  ## the char one, so `s.isDigit` was a type mismatch where Python answered a
-  ## bool. Python also calls the empty string not-all-digits, which
-  ## allCharsInSet on its own calls true.
-  ##
-  ## Two overloads rather than one emitter guessing which it has: the
-  ## receiver may be a literal, a subscript or the result of a call, and Nim
-  ## knows its type in every one of those cases where the emitter does not.
-  ##
-  ## ASCII only, as every strutils predicate is, where Python's is
-  ## Unicode-aware: a string of Arabic-Indic digits is false here and true
-  ## there. See TODO.md.
-  s.len > 0 and s.allCharsInSet(Digits)\
-"""
-
-
 def _ensure_isdigit_helper():
-    """Add the isdigit overloads the first time isdigit is used."""
-    ParserState.nim_imports.add("strutils")          # isDigit, allCharsInSet, Digits
+    """Add the Unicode-aware str predicates the first time one is used."""
+    ParserState.nim_imports.add("strutils")          # isDigit, isAlphaAscii ... for a char
+    ParserState.nim_from.setdefault("std/unicode", set()).update(
+        {"runes", "isAlpha", "isWhiteSpace", "isLower", "isUpper", "isTitle"})
     decls = getattr(ParserState, 'nim_top_decls', [])
-    if not any("adascriptIsDigit" in d for d in decls):
-        decls.append(_ISDIGIT_HELPER)
+    if not any("adascriptInRanges" in d for d in decls):
+        decls.append(_UNICODE_HELPER)
         ParserState.nim_top_decls = decls
 
 
@@ -1144,6 +1125,9 @@ def _narrow_add(name, suffix):
             return True
         return False
     _vars.add(name)
+    if getattr(ParserState, "_narrow_scope", None) is None:
+        ParserState._narrow_scope = {}
+    ParserState._narrow_scope[name] = len(ParserState.symbol_table.stack)
     if suffix != ".get()":
         _sfx = getattr(ParserState, "_unwrap_suffix", None)
         if _sfx is None:
@@ -1152,6 +1136,60 @@ def _narrow_add(name, suffix):
     else:
         ParserState.nim_imports.add("options")
     return True
+
+
+def _narrow_shadow(name):
+    """A new `let`/`var` of NAME hides the outer one, and what the outer one
+    was narrowed to says nothing about it. Returns what to hand back to
+    _narrow_unshadow when the block that declared it ends; None when NAME
+    was not narrowed."""
+    _vars = getattr(ParserState, "_option_unwrap_vars", None)
+    if not _vars or name not in _vars:
+        return None
+    _sfx = getattr(ParserState, "_unwrap_suffix", {})
+    saved = (_sfx.get(name), list(getattr(ParserState, "_narrow_prev", {}).get(name, ())))
+    _vars.discard(name)
+    _sfx.pop(name, None)
+    getattr(ParserState, "_narrow_prev", {}).pop(name, None)
+    return saved
+
+
+def _narrow_unshadow(name, saved):
+    """The outer NAME is the one in scope again: read it as it was narrowed."""
+    _vars = getattr(ParserState, "_option_unwrap_vars", None)
+    if _vars is None:
+        _vars = ParserState._option_unwrap_vars = set()
+    suffix, prev = saved
+    _vars.add(name)
+    if suffix is not None:
+        if getattr(ParserState, "_unwrap_suffix", None) is None:
+            ParserState._unwrap_suffix = {}
+        ParserState._unwrap_suffix[name] = suffix
+    if prev:
+        if getattr(ParserState, "_narrow_prev", None) is None:
+            ParserState._narrow_prev = {}
+        ParserState._narrow_prev[name] = prev
+
+
+def _on_symbol_declared(name, scope, depth):
+    """A name declared in a scope inside the one that narrowed it -- a
+    parameter, a `where` variable -- is a different name from the narrowed
+    one: set the narrowing aside until that scope ends."""
+    at = getattr(ParserState, "_narrow_scope", {}).get(name)
+    if at is None or at >= depth:
+        return
+    saved = _narrow_shadow(name)
+    if saved is not None:
+        scope.setdefault("narrow_shadowed", []).append((name, saved))
+
+
+def _on_scope_popped(scope):
+    for name, saved in reversed(scope.get("narrow_shadowed", ())):
+        _narrow_unshadow(name, saved)
+
+
+ParserState.on_symbol_declared = staticmethod(_on_symbol_declared)
+ParserState.on_scope_popped = staticmethod(_on_scope_popped)
 
 
 def _narrow_base(name):
@@ -1216,6 +1254,11 @@ def _field_type(expr):
         if _called:
             _btype = _re_ft.sub(r"^var\s+", "",
                                 getattr(ParserState, "proc_return_types", {}).get(_called, "") or "")
+            # a constructor: `newEph(2.0).n` is a field of an Eph
+            if not _btype and _called.startswith(("new", "init")):
+                _cls = _called[3:] if _called.startswith("new") else _called[4:]
+                if _cls in ParserState.class_field_types:
+                    _btype = _cls
     _ftype = ParserState.class_field_types.get(_btype, {}).get(field) if _btype else None
     if not _ftype and not _btype:
         # the object's type is not known: guess from the field's name. Not when
@@ -1863,6 +1906,13 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 if nim_op == "+" and distinct_kind(_lu or _ru) == "str":
                     result = f"{result} & {right}"
                     continue
+            # an int beside a float is a float, as in Python: `0.9 * i`, `x + n`.
+            # Nim converts no int variable to a float on its own.
+            if nim_op in ("+", "-", "*", "/"):
+                if _expr_is_float(result) and _expr_is_int(right) and not _re_mod_pfx.fullmatch(r"-?\d+", right.strip()):
+                    right = f"float({right})"
+                elif _expr_is_float(right) and _expr_is_int(result) and not _re_mod_pfx.fullmatch(r"-?\d+", result.strip()):
+                    result = f"float({result})"
             # seq/string concatenation: + -> & when operand is seq or string
             if nim_op == "+":
                 # `collect(...)` / `toSeq(...)` is what a comprehension
@@ -2924,6 +2974,8 @@ def to_nim(self, prec=None):
     return self.nodes[0].to_nim()
 
 
+_UNICODE_PREDICATES = {"adascriptIsAlpha", "adascriptIsAlnum", "adascriptIsDigit",
+                       "adascriptIsSpace", "adascriptIsLower", "adascriptIsUpper"}
 _STRUTILS_METHODS = {"toLowerAscii", "toUpperAscii", "strip", "startsWith", "endsWith", "splitLines", "parseInt", "split", "rsplit", "join", "replace", "find", "alignLeft", "align",
                      "isAlphaAscii", "isAlphaNumeric", "isDigit", "isSpaceAscii", "isLowerAscii", "isUpperAscii"}
 
@@ -2946,12 +2998,12 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "zfill": "adascriptZfill",
     "removeprefix": "adascriptRemovePrefix",
     "removesuffix": "adascriptRemoveSuffix",
-    "isalpha": "isAlphaAscii",
-    "isalnum": "isAlphaNumeric",
+    "isalpha": "adascriptIsAlpha",
+    "isalnum": "adascriptIsAlnum",
     "isdigit": "adascriptIsDigit",
-    "isspace": "isSpaceAscii",
-    "islower": "isLowerAscii",
-    "isupper": "isUpperAscii",
+    "isspace": "adascriptIsSpace",
+    "islower": "adascriptIsLower",
+    "isupper": "adascriptIsUpper",
 }
 
 def _translate_method(obj_name, method_name):
@@ -3064,7 +3116,7 @@ def _translate_method(obj_name, method_name):
         _ensure_splitlines_helper()
     if nim_method in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):
         _ensure_affix_helper()
-    if nim_method == "adascriptIsDigit":
+    if nim_method in _UNICODE_PREDICATES:
         _ensure_isdigit_helper()
     return nim_method
 
@@ -4282,6 +4334,43 @@ def _char_literal_arg(arg):
     return None
 
 
+def _same_in_every_overload(proc_name, nargs, position, ptype):
+    """Whether every overload of PROC_NAME that takes NARGS arguments has
+    PTYPE at POSITION: then a literal there has one type, whichever is called."""
+    sigs = getattr(ParserState, "proc_overload_types", {}).get(proc_name, [])
+    fits = [s for s in sigs if position < len(s) and len(s) >= nargs]
+    return bool(fits) and all(s[position].strip() == ptype.strip() for s in fits)
+
+
+def _type_generic_literals(expr):
+    """`clip[Speed_T](x, -2.0, 2.0)`: the type arguments say what T is, so a
+    number given for a parameter of type T is a Speed_T, as it would be if
+    the call had no type arguments and Nim could see one."""
+    m = _re_mod_pfx.match(r"^([A-Za-z_]\w*)\[([^\[\]]+)\]\((.+)\)$", expr, _re_mod_pfx.DOTALL)
+    if not m:
+        return expr
+    names = getattr(ParserState, "proc_type_param_names", {}).get(m.group(1))
+    ptypes = ParserState.proc_param_types.get(m.group(1))
+    if not names or not ptypes:
+        return expr
+    targs = [t.strip() for t in _split_args(m.group(2))]
+    if len(targs) != len(names):
+        return expr
+    bound = dict(zip(names, targs))
+    from ady_declarations import is_distinct
+    args = _split_args(m.group(3))
+    if not _balanced(m.group(3)) or len(args) > len(ptypes):
+        return expr
+    out = []
+    for a, pt in zip(args, ptypes):
+        t = bound.get(pt.strip())
+        if t and is_distinct(t) and _re_mod_pfx.fullmatch(r"\s*-?\d+(\.\d*)?([eE][-+]?\d+)?\s*", a):
+            a = f"{t}({a.strip()})"
+        out.append(a.strip())
+    out += [a.strip() for a in args[len(ptypes):]]
+    return f"{m.group(1)}[{m.group(2)}](" + ", ".join(out) + ")"
+
+
 def _wrap_option_args(expr):
     """Wrap call arguments in some() where the proc parameter expects Option[T].
 
@@ -4291,6 +4380,7 @@ def _wrap_option_args(expr):
     """
     import re as _re
     import re as _re_kw
+    expr = _type_generic_literals(expr)
     # Try bare function call: func(args)
     m = _re.match(r"^([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
     skip_self = False
@@ -4381,6 +4471,13 @@ def _wrap_option_args(expr):
             cur.append(ch)
     if cur:
         args.append("".join(cur).strip())
+    if proc_name in ParserState.overloaded_procs:
+        # the one overload that takes this many arguments, when there is one
+        _sk = 1 if skip_self else 0
+        _fit = [s[_sk:] for s in getattr(ParserState, "proc_overload_types", {}).get(proc_name, [])
+                if len(s) - _sk == len(args)]
+        if len(_fit) == 1:
+            param_types = _fit[0]
     if len(args) > len(param_types):
         return expr
     new_args = []
@@ -4403,7 +4500,11 @@ def _wrap_option_args(expr):
 
     for arg, ptype in zip(args, param_types):
         kw_prefix, arg = _split_kwarg(arg)
-        if ptype.strip().startswith("seq[Option[") and arg.strip().startswith("@["):
+        if ptype.strip().startswith(("Table[", "OrderedTable[")) and arg.strip().startswith("js{"):
+            _tbl = _js_table_literal(arg, ptype)
+            new_args.append(kw_prefix + _tbl)
+            changed = changed or _tbl != arg
+        elif ptype.strip().startswith("seq[Option[") and arg.strip().startswith("@["):
             _lifted = _lift_option_seq(arg, ptype)
             new_args.append(kw_prefix + _lifted)
             changed = changed or _lifted != arg
@@ -4447,7 +4548,8 @@ def _wrap_option_args(expr):
             new_args.append(kw_prefix + _result_wrap(arg, ptype))
             changed = True
         elif _is_distinct_param(ptype) and _is_literal_arg(arg):
-            if proc_name in ParserState.overloaded_procs:
+            if (proc_name in ParserState.overloaded_procs
+                    and not _same_in_every_overload(proc_name, len(args), len(new_args) + (1 if skip_self else 0), ptype)):
                 raise SyntaxError(
                     f"{proc_name}(...): the literal {arg.strip()} is passed to an overloaded "
                     f"name, so there is no one type to give it -- write it with the type it "
@@ -4492,6 +4594,24 @@ _CHAR_OR_STRING_METHODS = frozenset({"replace", "split", "rsplit", "join",
 
 
 _LAMBDA_HEAD = None
+
+
+def _js_table_literal(val, declared):
+    """A `{k: v}` written where a `{K}V` is expected is a Table, on JS too.
+
+    On the JS backend a dict literal is a JavaScript object (`js{...}`), which
+    is what a library call wants; a `{str}str` parameter or declaration wants
+    a Table, so the literal is written as one there -- its string values lose
+    the `cstring()` the object form gave them.
+    """
+    d = (declared or "").lstrip(": ").strip()
+    v = val.strip()
+    if not (JS_BACKEND and d.startswith(("Table[", "OrderedTable[")) and v.startswith("js{") and v.endswith("}")):
+        return val
+    inner = v[3:-1]
+    inner = _re_mod_pfx.sub(r'cstring\(("(?:[^"\\]|\\.)*")\)', r'\1', inner)
+    ParserState.nim_imports.add("tables")
+    return "{" + inner + "}.toTable"
 
 
 def _type_lambdas(val, declared):
@@ -4568,6 +4688,24 @@ def _expr_is_int(arg):
     if _re_int.fullmatch(r"[A-Za-z_]\w*", a):
         sym = ParserState.symbol_table.lookup(a)
         return bool(sym) and (sym.get("type") or "") == "int"
+    return False
+
+
+def _expr_is_float(arg):
+    """True for a float literal or a name the symbol table types float."""
+    a = (arg or "").strip()
+    if _re_mod_pfx.fullmatch(r"-?\d+\.\d*(?:[eE][-+]?\d+)?|-?\d+[eE][-+]?\d+", a):
+        return True
+    if _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*", a):
+        sym = ParserState.symbol_table.lookup(a)
+        return bool(sym) and (sym.get("type") or "") in ("float", "float64")
+    if a.startswith("float(") and a.endswith(")") and _balanced(a[6:-1]):
+        return True
+    from ady_declarations import split_arith
+    parts = split_arith(a)
+    if parts is not None:
+        left, op, right = parts
+        return op in ("+", "-", "*", "/") and (_expr_is_float(left) or _expr_is_float(right))
     return False
 
 
@@ -5727,6 +5865,14 @@ def to_nim(self, prec=None):
                 if _rtest is not None:
                     chain = _rtest
                     continue
+            # an optional already proved present (by an `assert`, a guard) is read as its
+            # value: asking again whether it has one is yes, and not a comparison with nil
+            if (right == "nil" and nim_op in ("isnot", "is", "==", "!=")
+                    and chain.endswith(".get()")
+                    and _narrow_base(chain) in getattr(ParserState, "_option_unwrap_vars", ())
+                    and _narrow_suffix(_narrow_base(chain)) == ".get()"):
+                chain = "true" if nim_op in ("isnot", "!=") else "false"
+                continue
             # Option-aware: x is/== None -> x.isNone, x is not/!= None -> x.isSome
             if right == "nil" and nim_op in ("isnot", "is", "==", "!="):
                 is_option = _expr_is_option(chain)
