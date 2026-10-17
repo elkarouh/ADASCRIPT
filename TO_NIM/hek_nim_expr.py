@@ -680,12 +680,30 @@ def _result_type_of(expr_str):
 
 
 def _balanced(text):
+    """True when TEXT closes every bracket it opens. A bracket inside a string
+    or char literal is text, not a bracket: `"missing )"` is balanced."""
     depth = 0
-    for ch in text:
-        depth += ch in "([{"
-        depth -= ch in ")]}"
-        if depth < 0:
-            return False
+    quote = None
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 1
+            elif ch == quote:
+                quote = None
+        elif ch == '"':
+            quote = ch
+        elif ch == "'" and i + 2 < n and (text[i + 2] == "'" or text[i + 1] == "\\"):
+            i = text.find("'", i + 2) if text[i + 1] == "\\" else i + 2   # a char literal
+            if i < 0:
+                return False
+        else:
+            depth += ch in "([{"
+            depth -= ch in ")]}"
+            if depth < 0:
+                return False
+        i += 1
     return depth == 0
 
 

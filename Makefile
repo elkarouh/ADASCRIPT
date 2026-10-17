@@ -136,6 +136,7 @@ STANDALONE := \
     test_generic_methods.ady \
     test_round_splitlines.ady \
     test_portable_gaps.ady \
+    test_union_slips.ady \
     test_format_zero_decimals.ady \
     test_region_operators.ady \
     test_vi_save.ady \
@@ -336,7 +337,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips
 
 # -----------------------------------------------------------------------
 # Skipped when this machine cannot build them -- a Nim package that is not
@@ -701,6 +702,20 @@ test: compile
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_dup_type.out; exit 1; }; \
 	done
 	@rm -f $(TMPDIR)/ady_dup_type.ady $(TMPDIR)/ady_dup_type.out
+
+	@# A failure dropped after a receiver that is itself a call is refused too.
+	@echo "=== dropped failure after a call receiver, both backends ==="
+	@printf 'def main():\n    let base: Path = Path("/a")\n    Path("/a/b").relative_to(base)\nmain()\n' \
+	    > $(TMPDIR)/ady_drop_recv.ady
+	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
+	    printf '  %-42s' "dropped failure ($$tr)"; \
+	    if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_drop_recv.ady > $(TMPDIR)/ady_drop_recv.out 2>&1; then \
+	        echo "FAIL (accepted)"; exit 1; \
+	    fi; \
+	    grep -q "drops a failure" $(TMPDIR)/ady_drop_recv.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_drop_recv.out; exit 1; }; \
+	done
+	@rm -f $(TMPDIR)/ady_drop_recv.ady $(TMPDIR)/ady_drop_recv.out
 
 	@# A bare print is an empty line on both backends: compared from outside.
 	@echo "=== bare print, both backends ==="

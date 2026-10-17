@@ -431,27 +431,8 @@ let rc: int = shell(join = ";"):
     sd 'a' 'b' {out_file}
 ```
 
-## Union returns: four Nim-side slips found rewriting lispy.ady
+## Union returns: what is left from rewriting lispy.ady
 
-`T | !F` works in free functions and most methods, but on Nim:
-
-- A string holding a `)` inside a call's argument list --
-  `return reject("missing )")` -- makes the analysis of what is returned lose
-  its place: the failure is wrapped as `.ok(...)` instead of `.err(...)` and
-  Nim refuses it. Naming the string first (`let MISSING: str = "missing )"`)
-  avoids it. The same for `return Failure_T(message="missing )")`.
-- `if r is F: return r` narrows `r` for the rest of a *free function*, but
-  not at the top level of a *class method* (deeper blocks are fine): a later
-  `use(r)` still sees the Result. `case r: when F: ... when T: ...` narrows
-  in both.
-- The return type of a method is looked up by its bare name, so a method
-  `run` returning `str | !F` is taken for the free function `run` returning
-  `str` when the two share a file.
-- A method named `get` is taken for a dict's `get`, and `bind` is a Nim
-  keyword: a Nim-reserved or stdlib-shadowing method name fails late, inside
-  Nim, rather than with a message from Adascript.
-  `out` is the same as a parameter name (`def f(out: Path)` gives "typedesc[var]"
-  in the generated `quoteShell(out)`).
 - An f-string inside a shell interpolation, `{!f"HEAD {short}"}`, breaks the
   emitted Nim ("closing \" expected"); bind it to a `let` first.
 
@@ -479,28 +460,6 @@ one. It went unseen because the shared tests print enums and strings.
   `str` is emitted as-is and fails -- in a comprehension too,
   `[int(w) for w in f(path)]`; a typed `let words: []str = f(path)` first
   avoids it, and the routine's declared return type is all the emitter needs.
-
-## A dropped `T | !F` is only refused after a name
-
-`p.relative_to(base)` as a statement is refused ("drops a failure"), but
-`Path("/a/b").relative_to(base)` -- the receiver a call -- is not, on either
-backend: the check reads `name.name(...)` and gives up on anything before the
-last dot that is not a bare name. The same is true of any routine returning a
-`T | !F`, `f(x).g(y)` included. On Nim the unused Result then fails to
-compile; on Python the failure is dropped silently.
-
-## `case r:` over a built-in failure and `str`
-
-`case r: when ShellFailure_T: ... when str: ...` (r a `str | !ShellFailure_T`)
-emits `case ShellFailure_T:` on Python, a capture pattern that makes the next
-one unreachable: a SyntaxError. A user's own record type works. Use
-`if r is ShellFailure_T: ... else: ...` for now.
-
-## `x.strip().replace(...)` on a `T | !F` that a test narrowed
-
-After `if r is ShellFailure_T: return ...`, `r.strip()` is unwrapped on Nim but
-`r.strip().replace(...)` is not (`strip(r)` mismatch), nor is `let text: str = r`.
-Split the chain into a `let` of the first call.
 
 ## A record literal with fewer positional arguments than fields, on Nim
 

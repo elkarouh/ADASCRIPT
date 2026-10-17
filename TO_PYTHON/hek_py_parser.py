@@ -3513,6 +3513,11 @@ def to_py(self, indent=0):
         if not checked:
             lines.append(f"{ind}_cmd = {cmd_str}")
         lines.append(f"{ind}_r = {runner}(_cmd, {kwargs_str})")
+        # the target is a `T | !ShellFailure_T` to what reads it, `case r:` included
+        ParserState.symbol_table.add(
+            target_name,
+            f"{ {'str': 'str', 'None': 'None', 'lines': 'list[str]'}[_either] } | ShellFailure_T",
+            "var")
         _value = {"str": "_r.stdout", "None": "None",
                   "lines": "_r.stdout.splitlines()"}[_either]
         lines.append(

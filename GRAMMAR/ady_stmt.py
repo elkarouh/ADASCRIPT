@@ -695,25 +695,53 @@ def either_procs(return_types, failure_types):
     return out
 
 
+def _trailing_call(text):
+    """`name(args)` when TEXT ends in a method call on some expression --
+    `Path("/a").relative_to(base)`, `f(x).g(y)` -- else None."""
+    import re as _re_tc
+    if not text.endswith(")"):
+        return None
+    depth = 0
+    for i in range(len(text) - 1, -1, -1):
+        depth += text[i] in ")]}"
+        depth -= text[i] in "([{"
+        if depth == 0:
+            m = _re_tc.search(r"\.([A-Za-z_]\w*)$", text[:i])
+            return text[m.start() + 1:] if m else None
+    return None
+
+
 def refuse_dropped_failure(stmt_text, is_either_call):
     """Refuse STMT_TEXT, an emitted expression statement, when it is nothing
     but a call of a routine returning `T | !F`: its failure would go unseen.
     IS_EITHER_CALL(text) says whether a call returns one -- each backend
     knows its own calls. Taking the result is what a do: step, a test or a
     `return` are for; dropping it silently is the bug the type exists to
-    stop, so it is not a spelling the language has."""
+    stop, so it is not a spelling the language has.
+
+    The call may be on a name (`p.f(x)`) or on any expression whose last
+    step is a call (`Path("/a").f(x)`, `g(y).f(x)`): it is the last call that
+    returns the failure."""
     import re as _re_df
     text = stmt_text.strip()
     m = _re_df.match(r"^(?:[A-Za-z_]\w*\.)*([A-Za-z_]\w*)\(", text)
-    if not m or not text.endswith(")"):
-        return
-    depth = 0
-    for i, ch in enumerate(text[m.end() - 1:]):
-        depth += ch in "([{"
-        depth -= ch in ")]}"
-        if depth == 0 and i != len(text) - m.end():
-            return          # the call is only part of the statement
-    if is_either_call(text):
+    whole = False
+    if m and text.endswith(")"):
+        whole = True
+        depth = 0
+        for i, ch in enumerate(text[m.end() - 1:]):
+            depth += ch in "([{"
+            depth -= ch in ")]}"
+            if depth == 0 and i != len(text) - m.end():
+                whole = False       # the call is only part of the statement
+                break
+    if whole:
+        call = text
+    else:
+        call = _trailing_call(text)
+        if call is None:
+            return
+    if is_either_call(call):
         # the Nim backend's names for parse_float and parse_enum, as written
         shown = text.replace("adascriptParseFloat", "parse_float") \
                     .replace("adascriptParseInt", "parse_int") \

@@ -121,6 +121,16 @@ def _nim_ident(name):
     from hek_nim_expr import _nim_user_ident
     return _nim_user_ident(name)
 
+class _NimShellWrap(str):
+    """A shell-quoting wrapper whose expression is rendered as Nim: a bare name
+    Nim reserves (`out`) goes in its backticks, as it does everywhere else."""
+    def format(self, **kw):
+        e = kw.get("expr", "")
+        if re.fullmatch(r"[A-Za-z_]\w*", e):
+            kw["expr"] = _nim_ident(e)
+        return str.format(self, **kw)
+
+
 def _nim_proc_name(py_name):
     """Translate a Python dunder/magic method name to its Nim proc name.
 
@@ -142,7 +152,9 @@ def _nim_proc_name(py_name):
     # Nim disallows leading single underscore — strip it (mirrors IDENTIFIER.to_nim())
     if py_name != "_" and py_name.startswith("_") and not py_name.startswith("__"):
         py_name = py_name[1:]
-    return py_name, "proc"   # non-dunder — unchanged
+    # a method named like a Nim keyword (`bind`, `type`) is declared in
+    # backticks, as its calls already are
+    return _nim_ident(py_name), "proc"
 
 def _strip_generic(name):
     """Strip generic params: 'Optimizer[S, D]' -> 'Optimizer'"""
@@ -4617,7 +4629,7 @@ def to_nim(self, indent=0):
     cmd = _apply_pipefail(cmd, opts)
 
     cmd, _quoted = _apply_shell_quoting(
-        cmd, "quoteShell({expr})", 'mapIt({expr}, quoteShell(it)).join(" ")')
+        cmd, _NimShellWrap("quoteShell({expr})"), 'mapIt({expr}, quoteShell(it)).join(" ")')
     if _quoted:
         needs_fstring = True
         ParserState.nim_imports.update({"osproc", "sequtils", "strutils"})
@@ -4729,7 +4741,7 @@ def to_nim(self, indent=0):
 
     from hek_py_parser import _apply_shell_quoting
     cmd, _quoted = _apply_shell_quoting(
-        cmd, "quoteShell({expr})",
+        cmd, _NimShellWrap("quoteShell({expr})"),
         'mapIt({expr}, quoteShell(it)).join(\" \")')
     if _quoted:
         needs_fstring = True
@@ -4786,7 +4798,7 @@ def to_nim(self, indent=0):
             # which a block does not have: `{!repo}` in a block line reached
             # fmt as it was written, and Nim read `!` as an identifier.
             cmd, _quoted = _apply_shell_quoting(
-                cmd, "quoteShell({expr})",
+                cmd, _NimShellWrap("quoteShell({expr})"),
                 'mapIt({expr}, quoteShell(it)).join(\" \")')
             if _quoted:
                 needs_fstring = True

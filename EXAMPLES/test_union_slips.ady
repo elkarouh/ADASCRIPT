@@ -1,0 +1,61 @@
+#!/usr/bin/env ady2nim
+"""Union slips both backends now agree on: `case` over a shell result, a call dropped after a receiver, a ")" inside a returned failure's text, and methods named like Nim keywords."""
+
+type Failure_T is record:
+    message: str
+
+def reject(msg: str) -> Failure_T:
+    return Failure_T(message=msg)
+
+def parse(s: str) -> int | !Failure_T:
+    if s == "":
+        return reject("missing )")
+    return len(s)
+
+def parse2(s: str) -> int | !Failure_T:
+    if s == "":
+        return Failure_T(message="missing )")
+    return len(s)
+
+class Box:
+    var n: int = 1
+    def get(self) -> int:
+        return self.n
+    def bind(self, out: int) -> int:
+        return out + self.n
+    def type(self) -> int:
+        return 7
+
+def quoted(out: str) -> str:
+    let s: str | !ShellFailure_T = shell: printf '%s' {!out}
+    if s is ShellFailure_T:
+        return ""
+    return s
+
+def main():
+    assert quoted("a b") == "a b"
+    let r: str | !ShellFailure_T = shell: echo hi
+    case r:
+        when ShellFailure_T:
+            print "failed"
+        when str:
+            print "got " + r.strip()
+    let q: str | !ShellFailure_T = shell: echo oops >&2; exit 3
+    case q:
+        when ShellFailure_T:
+            print "failed"
+        when str:
+            print "got " + q
+
+    let a: int | !Failure_T = parse("")
+    if a is Failure_T:
+        print a.message
+    let b: int | !Failure_T = parse2("")
+    if b is Failure_T:
+        print b.message
+
+    let bx: Box = Box()
+    print bx.get()
+    print bx.bind(2)
+    print bx.type()
+main()
