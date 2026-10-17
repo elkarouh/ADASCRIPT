@@ -380,6 +380,25 @@ proc adascriptZfill(s: string, width: int): string =
 """
 
 
+_SPLITLINES_HELPER = """\
+proc adascriptSplitLines(s: string): seq[string] =
+  ## Python's str.splitlines: no empty string after a trailing newline, so
+  ## "" is [] and "a\\nb\\n" is ["a", "b"]. strutils' splitLines keeps it.
+  result = s.splitLines()
+  if result.len > 0 and result[^1].len == 0:
+    result.setLen(result.len - 1)
+"""
+
+
+def _ensure_splitlines_helper():
+    """Add the splitlines helper the first time splitlines is used."""
+    ParserState.nim_imports.add("strutils")
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptSplitLines" in d for d in decls):
+        decls.append(_SPLITLINES_HELPER)
+        ParserState.nim_top_decls = decls
+
+
 _ISDIGIT_HELPER = """\
 proc adascriptIsDigit*(c: char): bool =
   ## isdigit() on a char -- strutils' predicate, unchanged.
@@ -417,6 +436,46 @@ def _ensure_zfill_helper():
     decls = getattr(ParserState, 'nim_top_decls', [])
     if not any("adascriptZfill" in d for d in decls):
         decls.append(_ZFILL_HELPER)
+        ParserState.nim_top_decls = decls
+
+
+_ROUND_HELPER = """\
+proc adascriptRound(x: int): int = x
+
+proc adascriptRound(x: float): int =
+  ## Python's round(x): an int, and halves go to the even neighbour
+  ## (round(2.5) == 2, round(3.5) == 4). Nim's math.round returns a float and
+  ## sends halves away from zero.
+  let f = floor(x)
+  let d = x - f
+  let fi = int(f)
+  if d < 0.5: fi
+  elif d > 0.5: fi + 1
+  elif fi mod 2 == 0: fi
+  else: fi + 1
+
+proc adascriptRound(x: float, digits: int): float =
+  ## Python's round(x, n): a float, correctly rounded from the exact binary
+  ## value (round(2.675, 2) == 2.67), which formatFloat reproduces.
+  if digits >= 0:
+    return parseFloat(formatFloat(x, ffDecimal, digits))
+  let scale = pow(10.0, float(-digits))
+  float(adascriptRound(x / scale)) * scale
+
+proc adascriptRound(x: int, digits: int): int =
+  if digits >= 0: return x
+  let scale = int(pow(10.0, float(-digits)))
+  adascriptRound(x / scale) * scale
+"""
+
+
+def _ensure_round_helper():
+    """Add the round overloads the first time round() is used."""
+    ParserState.nim_imports.add("math")              # floor, pow
+    ParserState.nim_imports.add("strutils")          # formatFloat, parseFloat
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptRound" in d for d in decls):
+        decls.append(_ROUND_HELPER)
         ParserState.nim_top_decls = decls
 
 
@@ -2799,7 +2858,7 @@ _PY_UNIVERSAL_METHOD_TO_NIM = {
     "endswith": "endsWith",
     # Nim spells it with the capital L, and without this a plain
     # `s.splitlines()` reached the compiler as an undeclared routine.
-    "splitlines": "splitLines",
+    "splitlines": "adascriptSplitLines",
     "get": "getOrDefault",
     "index": "find",
     "ljust": "alignLeft",
@@ -2917,6 +2976,8 @@ def _translate_method(obj_name, method_name):
         ParserState.nim_imports.add("strmisc")
     if nim_method == "adascriptZfill":
         _ensure_zfill_helper()
+    if nim_method == "adascriptSplitLines":
+        _ensure_splitlines_helper()
     if nim_method in ("adascriptRemovePrefix", "adascriptRemoveSuffix"):
         _ensure_affix_helper()
     if nim_method == "adascriptIsDigit":
@@ -3209,6 +3270,10 @@ def to_nim(self, prec=None):
             from hek_nim_declarations import _ensure_parse_helpers
             _ensure_parse_helpers()
             result = {"parse_float": "adascriptParseFloat", "parse_int": "adascriptParseInt", "parse_enum": "adascriptParseEnum"}[raw_name]
+        if raw_name == "round" and raw_name not in getattr(ParserState, "user_top_level_procs", ()) \
+                and not ParserState.symbol_table.lookup("round"):
+            _ensure_round_helper()
+            result = "adascriptRound"
         if raw_name == "input" and raw_name not in getattr(ParserState, "user_top_level_procs", ()):
             from hek_nim_declarations import _ensure_input_helper
             _ensure_input_helper()

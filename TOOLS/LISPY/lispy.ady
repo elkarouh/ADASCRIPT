@@ -427,7 +427,7 @@ class Interpreter:
                     if args[i].num < m:
                         m = args[i].num
                 VNum(m)
-            when "round": VNum(round(args[0].num))
+            when "round": VNum(float(round(args[0].num)))
             when "floor": VNum(floor(args[0].num))
             when "ceil": VNum(ceil(args[0].num))
             when "sqrt": VNum(sqrt(args[0].num))

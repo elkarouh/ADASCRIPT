@@ -1,0 +1,24 @@
+#!/usr/bin/env ady2nim
+"""round() and str.splitlines() mean the same on both backends: round gives an int and sends halves to the even neighbour; splitlines has no empty last line."""
+
+def main():
+    assert round(2.5) == 2
+    assert round(3.5) == 4
+    assert round(-0.5) == 0
+    assert round(-1.5) == -2
+    assert round(2.4) == 2
+    assert round(2.6) == 3
+    assert round(7) == 7
+    let n: int = round(9.5)
+    assert n == 10
+    assert round(2.675, 2) == 2.67
+    assert round(3.14159, 3) == 3.142
+    assert round(1234, -2) == 1200
+    assert "".splitlines() == []
+    assert "a\nb\n".splitlines() == ["a", "b"]
+    assert "a\n\n".splitlines() == ["a", ""]
+    assert "a\r\nb".splitlines() == ["a", "b"]
+    assert "one".splitlines() == ["one"]
+    print "ok"
+
+main()

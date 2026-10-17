@@ -281,11 +281,6 @@ history of this file if the reasoning behind one of them is ever wanted.
         refuses scaled units. Building them there, where the argument's
         unit is known, would lift that for money, km and miles alike. The
         conversion to cents rounds with its own helper, not `round`.
-- [ ] `round(x)` differs between the backends. Python's returns an int and
-      rounds half to even (`round(2.5)` is 2); Nim's `round` is in `math`,
-      which Adascript does not import for it ("undeclared identifier"),
-      returns a float, and rounds half away from zero. Give it one
-      meaning -- an int, and say which way halves go -- and emit the import.
 - [ ] a `def` returning a `lambda` does not build on Nim. `def twice(f: (int)
       -> int) -> (int) -> int: return lambda x: f(f(x))` is emitted as a
       nested `proc(x: auto): auto`, which Nim rejects ("a nested proc can
@@ -451,14 +446,6 @@ whatever spelling keeps the sed flavour -- would make the copy unnecessary
 and leave the statement form for the in-place case. Needs a `sub` on `str`
 in both emitters.
 
-## The one cross-backend difference the catalogue named
-
-`"".splitlines()` is `[]` on Python and `@[""]` on Nim -- one blank line
-rather than none. It is a standard-library difference rather than a
-transpiler bug, and it cannot be fixed in one without picking a side, so
-filter the empty lines after splitting input that might be empty.
-Everything else the outside session catalogued now compiles and runs the
-same on both backends; the probes are in the session log.
 ## `{!var}` quoting not supported in shell block form
 
 In single-line `shell:`, `{!var}` quotes the value as a single shell argument
