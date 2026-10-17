@@ -242,7 +242,7 @@ def angular_gap(a: Bearing_T, b: Bearing_T) -> HalfAngle_T:   # the smaller angl
 ```
 A float subrange is checked at RUN time, on Nim (an assert after an assignment, naming the type and the value); a range type is an alias, so a `Bearing_T` and a `HalfAngle_T` still mix. A `distinct` type is the one the compiler keeps apart. Take the quantity out for `math` with `float(d)`, put the result back with the named type.
 
-Other enforcement: enums are their own types; subranges are bounds-checked, on Nim only; records are nominal; `?T` is not `T`; `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
+Other enforcement: enums are their own types; subranges are bounds-checked on both backends (Python checks each declaration, assignment and `+=` of a variable or field: `_in_range`; a parameter and a return are checked on Nim only); records are nominal; `?T` is not `T`; `Path` is a distinct string, so `let p: Path = s` is an error; write `Path(s)`.
 
 Style: every place on disk is a `Path`, joined with `/` (`Path(root) / sub / ".git"`), never a `str` joined with `"/"`; parameters that are directories or files are typed `Path`. Keep `str` for what is not a place on this disk (a URL, a path as another tool reports it, a git config value); convert with `str(p)` where an API takes strings, e.g. `run(["rmdir", str(work)])`. Go up with `.parent`, not `/ ".."`.
 
@@ -1906,7 +1906,7 @@ for s in Stage_T'First .. Stage_T'Last:
 ## Known Limitations
 
 - **Comments on a `case` header** — blank lines and inline comments survive into the output, inside `def`, `class`, `for`, `while`, `if`, fields and method bodies alike. Two placements do not, on both backends: a comment on the `case` line itself is dropped, and one on a `type ... is enum` line is relocated to the last generated member.
-- **A plain named type is an alias**: `type Velocity_T is float` and `type Distance_T is float` mix freely. Write `type Velocity_T is distinct float` where mixing would be a bug. Subranges are bounds-checked on Nim only; on Python a range is a plain `int`.
+- **A plain named type is an alias**: `type Velocity_T is float` and `type Distance_T is float` mix freely. Write `type Velocity_T is distinct float` where mixing would be a bug. Subranges are bounds-checked on both backends: on Python a range is a plain `int`, checked wherever a variable or field of it is given a value.
 - **`%` on a negative operand differs between the backends**: Python's result has the divisor's sign (`-7 % 3` is 2, `-30.0 % 360` is 330.0); on Nim `%` is `mod`, which keeps the dividend's (-1, -30.0), and a float `%` is `mod`, which needs `nimport math` (the transpiler then imports just that operator). For a bearing or any wrap-around write it out: `x - period * floor(x / period)` (floats), and see `modulo` in `EXAMPLES/MAP_UTILS/map_utils.ady`.
 - **Ticks do not chain** — `Stage_T'First'Image` is a parse error; bind the intermediate value first. Ticks on field accesses and subscripts are fine.
 - **Case subject must be structural** — `case state:` where `state` is a tuple variable emits Nim's native `case`, which rejects non-ordinal selectors. Destructure with `let (a, b) = state` first, then `case (a, b):`.

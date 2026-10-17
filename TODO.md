@@ -54,37 +54,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       object too. Nim refuses any other decorator, while Python passes it
       through; `@property`, `@staticmethod`, `@classmethod`, `@functools.*`
       have no Nim counterpart and keep their refusal.
-- [ ] whether a class is a `ref object` on Nim is decided twice, and the two
-      can disagree. An exact check over the field declarations runs first
-      and the constructor follows it (`new(result)` or not); a search of the
-      *emitted* field text runs after the body is generated and the type
-      follows that. Where the second says ref and the first did not, the
-      type is `ref object` and `newX` never allocates, so the first field
-      write in `initX` dereferences nil -- a SIGSEGV at run time, not a
-      compile error. The known way in was a substring match (`Build` found
-      inside `BuildType`), now a whole-word match; nothing else in the repo
-      disagrees today. The robust fix is one source of truth: decide once,
-      before the body, or have the late check regenerate the constructor.
-      `hek_nim_parser.py`, the `needs_ref` line and the `_has_self_ref`
-      pre-check above it.
-- [ ] a type argument written inline as a list type is not parsed:
-      `first_of[[]int](rows)` is a syntax error on both backends, where a
-      name (`first_of[Row_T]`, with `type Row_T is []int`) or a tuple
-      (`first_of[(int, str)]`) works. Now that a generic call must name its
-      types, naming a list type first is the only spelling; accept
-      `[]T`, `{K}V` and the like in the brackets, or keep it a deliberate
-      rule and say so in the error.
-- [ ] a subrange is bounds-checked on Nim only, so the same source behaves
-      differently. With `type Quantity_T is 0 .. Max_Allowed_Quantity`, on
-      Nim `let q: Quantity_T = 101` does not compile and a computed value
-      outside the range (`q -= 2` from 1, `q += 20` from 90) stops at its
-      line; on Python the same program runs on with -1 or 110, because a
-      range is a plain `int` there. The examples now lean on ranges for
-      counts, so the gap matters more than it did. Check on assignment: a
-      literal at transpile time, a computed value with a small `_check(x,
-      lo, hi)` at each assignment and augmented assignment of a variable of
-      the type, as Ada's constraint model does. The tutorial says "Nim only"
-      meanwhile.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
@@ -130,29 +99,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       returning one. Those now keep `.lines` as an attribute and raise
       AttributeError, which is at least loud. A receiver-type pass would
       settle it properly.
-- [ ] a single-line `when COND: stmt` body glues a following comment onto
-      the Nim `of` clause instead of leaving it where it is, when that
-      comment is the very next line after the case statement (at the same
-      or a shallower indent -- exiting the case, not another `when`).
-      Minimal repro:
-
-          case TOOL:
-              when GREP: stages = stages + "a"
-              when RG:   stages = stages + "b"
-          # a comment right after
-
-      compiles to `of RG    # a comment right after:`, which Nim rejects
-      ("expected: ':', but got: 'stages'") since the comment lands between
-      `of RG` and its colon. Writing the last `when`'s body on its own
-      indented line instead of inline avoids it -- confirmed the bug is
-      specific to the single-line `stmt_line` form, not the `case`
-      statement generally -- which is the workaround `TOOLS/PGREP/Pgrep.ady`
-      uses (the `-ppat` stage's `case GREP_TOOL:` in `search_one`). Found
-      while adding a `GREP_TOOL` enum there; `_block_inline_header_comment`
-      in `HPARSEC/hek_helpers.py`, called from `when_clause.to_nim` in
-      `TO_NIM/hek_nim_parser.py`, is where the trailing-comment lookup for
-      a compound header lives and is the likely place the wrong comment is
-      being picked up.
 - [ ] a `char` reached through a *field* is not recognised as one by the
       comparison narrowing, so `r.fill == "."` over a `fill: char` fails on
       Nim ("type mismatch", string against char) and passes on Python. A
@@ -196,12 +142,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       writes both the same way, so a computed function could become a
       precomputed table without touching a call site. Every declaration
       would still name one concrete type; only the call syntax is shared.
-- [ ] `[E]{}T` cannot infer the element type of an empty set literal in its
-      initialiser: `var seen: [Phase_T]{}str = [CLIMB: {}, ...]` gives Nim
-      "cannot instantiate: 'A'" from initHashSet. `{}` is ambiguous on its
-      own -- empty set or empty table -- and the enum-array literal is not
-      passing the annotation down to its elements. `[E][]T` is fine, so it
-      is the set literal specifically.
 - [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 - [ ] **For discussion, not to implement yet:** a statement modifier on more
       than the guards. Today only `return`, `break`, `continue`, `die(...)`

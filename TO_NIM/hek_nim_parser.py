@@ -3814,7 +3814,15 @@ def to_nim(self, indent=0):
     # ref object -- while the constructor, generated earlier from the exact
     # AST check above, did not allocate, so the first field write in initX
     # dereferenced nil at run time.
-    needs_ref = is_virtual or bool(name and _re.search(rf"\b{_re.escape(name)}\b", fields_text))
+    # One source of truth: the AST check above, which the constructor was
+    # generated from. Where the emitted fields still name the class and it
+    # said no, the two would disagree -- a ref type that newX never allocates
+    # -- so that is refused here rather than crashing at run time.
+    needs_ref = is_virtual
+    if name and not needs_ref and _re.search(rf"\b{_re.escape(name)}\b", fields_text):
+        raise SyntaxError(f"class {name}: a field refers to {name} in a way the "
+                          f"transpiler did not see before the body; mark the class "
+                          f"@virtual to make it a reference")
     ref_keyword = "ref " if needs_ref else ""
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and indent == 0 else ""
     ParserState.symbol_table.pop_scope()

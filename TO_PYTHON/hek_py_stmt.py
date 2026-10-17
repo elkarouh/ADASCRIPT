@@ -87,6 +87,8 @@ def to_py(self):
         # `m = {...}` on a [K]V map keeps it one
         if isinstance(_t, dict) and _t.get("type"):
             parts[-1] = _wrap_for_ordered_array(parts[-1], _t["type"])
+        if len(parts) == 2:
+            parts[-1] = _range_checked(parts[-1], _target_range_type(parts[0]))
     return " = ".join(parts)
 
 
@@ -104,6 +106,9 @@ def to_py(self):
         else op_node.nodes[0].to_py()
     )
     value = self.nodes[2].to_py()
+    _rt = _target_range_type(target)
+    if _rt and op[:-1] in ("+", "-", "*", "//", "%", "**", "<<", ">>", "&", "|", "^"):
+        return f"{target} = {_range_checked(f'{target} {op[:-1]} {value}', _rt)}"
     return f"{target} {op} {value}"
 
 
@@ -130,6 +135,7 @@ def to_py(self):
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
+                value = _range_checked(value, annotation)
                 result += f" = {value}"
                 has_value = True
     # Deliberately not zero-initialised here, unlike the `var x: T` form:
@@ -372,6 +378,57 @@ def _py_atom_unit(e):
     if is_distinct(t):
         return t
     return UNIT_PLAIN if t in _PY_PLAIN_TYPES else None
+
+
+_RANGE_CHECK_HELPER = """\
+def _in_range(v, r):
+    \"\"\"A value of an integer subrange stays in it, as on Nim.\"\"\"
+    if v not in r:
+        raise ValueError(f"value out of range: {v} notin {r.start} .. {r.stop - 1}")
+    return v\
+"""
+
+
+def _subrange_type(annotation):
+    """ANNOTATION when it names an integer subrange, `type Q is 0 .. 100`;
+    None otherwise."""
+    t = (annotation or "").strip()
+    info = getattr(ParserState, "tick_types", {}).get(t)
+    if not info or "members" in info or info.get("is_float_range"):
+        return None
+    return t
+
+
+def _range_checked(value, annotation):
+    """VALUE checked against the subrange ANNOTATION names, as Nim checks
+    every value given to one: a literal here, now, anything else when the
+    program runs. VALUE itself for any other type."""
+    t = _subrange_type(annotation)
+    if t is None or not (value or "").strip():
+        return value
+    info = ParserState.tick_types[t]
+    v, lo, hi = value.strip(), str(info["First"]).strip(), str(info["Last"]).strip()
+    if all(_re_mod_p2s.fullmatch(r"-?\d[\d_]*", s) for s in (v, lo, hi)):
+        if not int(lo) <= int(v) <= int(hi):
+            raise SyntaxError(f"{v} is out of the range of {t}, {lo} .. {hi}")
+        return value
+    decls = getattr(ParserState, "py_top_decls", [])
+    if not any("def _in_range" in d for d in decls):
+        decls.append(_RANGE_CHECK_HELPER)
+        ParserState.py_top_decls = decls
+    return f"_in_range({v}, {t})"
+
+
+def _target_range_type(target):
+    """The subrange a target of an assignment is declared of: a variable's,
+    or a field's, `self.q`, by the field's name."""
+    sym = ParserState.symbol_table.lookup(target)
+    if isinstance(sym, dict) and sym.get("type"):
+        return _subrange_type(sym["type"])
+    m = _re_mod_p2s.match(r"^[\w.\[\]()]+\.(\w+)$", target)
+    if m:
+        return getattr(ParserState, "py_range_fields", {}).get(m.group(1))
+    return None
 
 
 def _wrap_narrowed_literal(value, annotation):
@@ -634,6 +691,10 @@ def to_py(self):
     annotation = self.nodes[3].to_py()
     keyword = self.nodes[0].nodes[0] if hasattr(self.nodes[0], "nodes") else ""
     ParserState.symbol_table.add(name, annotation, keyword or "var")
+    if CLASS_BODY_DEPTH and _subrange_type(annotation):
+        # a field of a subrange: `self.q = ...` is checked, by its name
+        ParserState.py_range_fields = getattr(ParserState, "py_range_fields", {})
+        ParserState.py_range_fields[name] = annotation
     result = f"{name}: {annotation}"
     has_value = False
     for node in self.nodes[4:]:
@@ -648,6 +709,7 @@ def to_py(self):
                 value = _wrap_seq_for_enum_array(value, annotation)
                 value = _wrap_for_ordered_array(value, annotation)
                 value = _wrap_list_for_queue(value, annotation)
+                value = _range_checked(value, annotation)
                 result += f" = {value}"
                 has_value = True
     if not has_value and _either_zero(annotation) is not None:

@@ -727,6 +727,8 @@ def translate(code, export_symbols=False):
     from hek_parsec import ParserState
     from ady_decorators import expand_decorators
     code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators
+    from ady_stmt import expand_type_args
+    code = expand_type_args(code)              # `f[[]int](x)`: see ady_stmt
     from ady_declarations import refuse_dict_display_types
     refuse_dict_display_types(code)            # `{int: int}` is written {int}int
     from ady_stmt import expand_variant_literals

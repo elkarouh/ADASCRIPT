@@ -710,6 +710,21 @@ test: compile
 	done
 	@rm -f $(TMPDIR)/ady_dup_type.ady $(TMPDIR)/ady_dup_type.out
 
+	@# A subrange holds on both backends: a value leaving it stops the program.
+	@echo "=== a subrange left, both backends ==="
+	@printf 'type Q_T is 0 .. 100\n\ndef main():\n    var q: Q_T = 1\n    q -= 2\n    print q\n\nmain()\n' \
+	    > $(TMPDIR)/ady_range_left.ady
+	@printf '  %-42s' "q -= 2 from 1 (nim)"; \
+	    if $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py $(TMPDIR)/ady_range_left.ady > $(TMPDIR)/ady_range_left.out 2>&1; then \
+	        echo "FAIL (ran on)"; exit 1; else echo OK; fi
+	@printf '  %-42s' "q -= 2 from 1 (python)"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_range_left.ady > $(TMPDIR)/ady_range_left.py; \
+	    if $(PYTHON) $(TMPDIR)/ady_range_left.py > $(TMPDIR)/ady_range_left.out 2>&1; then \
+	        echo "FAIL (ran on)"; exit 1; fi; \
+	    grep -q "value out of range: -1 notin 0 .. 100" $(TMPDIR)/ady_range_left.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_range_left.out; exit 1; }
+	@rm -f $(TMPDIR)/ady_range_left.ady $(TMPDIR)/ady_range_left.py $(TMPDIR)/ady_range_left.out
+
 	@# `{int: int}` is a dict display, not a type: refused, naming {int}int.
 	@echo "=== {K: V} written as a type, both backends ==="
 	@printf 'var a: {}int = {}\n\ndef f(t: {str: float}) -> int:\n    return 0\n' \

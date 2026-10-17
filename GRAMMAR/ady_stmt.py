@@ -1474,3 +1474,85 @@ def _expand_kinds(s, kinds):
             out.append(c)
             i += 1
     return "".join(out)
+
+
+# --- a type argument written as a type, `first_of[[]int](rows)` ------------
+# A generic call names its types, and a type with a name or a tuple -- `[Row_T]`,
+# `[(int, str)]` -- reads as an expression in the brackets. `[]int`, `{}str`,
+# `{str}int`, `?int` do not, so each is given a name of its own,
+# `type AdascriptTypeArgN_T is []int`, written on a blank top-level line above
+# its first use (no line number moves), or above the first def when there is
+# none.
+_TYPE_ARG = _re_dup.compile(r"^(?:\[\]|\[\*\]|\[\d+\]|\{\}|\?|\{[^{}]+\})+\s*[\w\[\]{}(), ?*]+$")
+
+
+def _close_bracket(text, k):
+    """The index just past the bracket that closes the one opening at K."""
+    depth = 0
+    while k < len(text):
+        depth += {"[": 1, "(": 1, "{": 1, "]": -1, ")": -1, "}": -1}.get(text[k], 0)
+        k += 1
+        if depth == 0:
+            return k
+    return -1
+
+
+def expand_type_args(code):
+    """CODE with each type written in a generic call's brackets named."""
+    if "[" not in code:
+        return code
+    lines = code.split("\n")
+    aliases, first_use = {}, None
+    for n, line in enumerate(lines):
+        masked = _re_dup.sub(r"\"[^\"\n]*\"|'[^'\n]*'|#.*", lambda m: " " * len(m.group(0)), line)
+        out, last = [], 0
+        for m in _re_dup.finditer(r"\b[A-Za-z_]\w*\[", masked):
+            if m.start() < last:
+                continue
+            end = _close_bracket(masked, m.end() - 1)
+            if end < 0 or masked[end:end + 1] != "(":
+                continue
+            items = _split_top_commas(line[m.end():end - 1])
+            if not any(_TYPE_ARG.match(it) for it in items):
+                continue
+            named = []
+            for it in items:
+                if _TYPE_ARG.match(it):
+                    if it not in aliases:
+                        aliases[it] = f"AdascriptTypeArg{len(aliases) + 1}_T"
+                    named.append(aliases[it])
+                else:
+                    named.append(it)
+            out.append(line[last:m.end()] + ", ".join(named) + "]")
+            last = end
+            first_use = n if first_use is None else first_use
+        if out:
+            lines[n] = "".join(out) + line[last:]
+    if not aliases:
+        return code
+    decls = [f"type {name} is {typ}" for typ, name in aliases.items()]
+    # blank lines between top-level statements, above the first use
+    slots = [n for n in range(1, first_use) if not lines[n].strip()
+             and lines[n - 1].strip() and not lines[n - 1].startswith((" ", "\t", "#", '"', "'"))
+             and not lines[n - 1].rstrip().endswith(("\\", ",", "(", "[", "{", ":"))
+             and n + 1 < len(lines) and lines[n + 1][:1] not in (" ", "\t")]
+    for slot, decl in zip(slots, decls):
+        lines[slot] = decl
+    rest = decls[len(slots):]
+    if rest:
+        at = next((n for n, l in enumerate(lines) if l.startswith(("def ", "class ", "type "))), 0)
+        lines[at:at] = rest
+    return "\n".join(lines)
+
+
+def _split_top_commas(text):
+    parts, depth, cur = [], 0, ""
+    for c in text:
+        depth += {"[": 1, "(": 1, "{": 1, "]": -1, ")": -1, "}": -1}.get(c, 0)
+        if c == "," and depth == 0:
+            parts.append(cur.strip())
+            cur = ""
+        else:
+            cur += c
+    parts.append(cur.strip())
+    return parts

@@ -132,6 +132,7 @@ def _py_reset():
     ParserState.narrowed_types = {}
     ParserState.mod_types = {}
     ParserState.record_types = set()
+    ParserState.py_range_fields = {}      # field name -> its subrange type
     ParserState.py_type_aliases = {}
     ParserState.py_top_decls = []
     # Marks are held by id(), which the allocator reuses once a parse tree is
@@ -320,6 +321,8 @@ def translate(code):
 
     from ady_decorators import expand_decorators
     code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators
+    from ady_stmt import expand_type_args
+    code = expand_type_args(code)              # `f[[]int](x)`: see ady_stmt
     from ady_declarations import refuse_dict_display_types
     refuse_dict_display_types(code)            # `{int: int}` is written {int}int
     from ady_stmt import expand_variant_literals

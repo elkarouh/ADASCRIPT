@@ -5,6 +5,14 @@ type takes that type; `name = ` inside a string is no write to `name`."""
 
 type Cents_T is distinct int
 
+const Max_Quantity: int = 100
+type Quantity_T is 0 .. Max_Quantity
+type Phase_T is enum CLIMB, CRUISE, DESCENT
+type Tool_T is enum GREP, RG
+
+def first_of[T](xs: []T) -> T:
+    return xs[0]
+
 def profit_and_loss() -> (Cents_T, Cents_T, Cents_T):
     return (Cents_T(250_000), Cents_T(120_000), Cents_T(130_000))
 
@@ -40,6 +48,25 @@ def main():
     var ledger: Ledger = Ledger()
     let who: str = "cash"
     print ledger.lookup(who)
+    # a subrange is checked on both backends; these stay inside it
+    var q: Quantity_T = 1
+    q += 98
+    q -= 4
+    print q
+    # the {} elements of an [E]{}T take its element type
+    var seen: [Phase_T]{}str = [CLIMB: {}, CRUISE: {"a"}, DESCENT: {}]
+    seen[CLIMB].add("x")
+    print len(seen[CLIMB]), len(seen[CRUISE]), len(seen[DESCENT])
+    # a list type as a type argument
+    let rows: [][]int = [[1, 2], [3]]
+    print first_of[[]int](rows)
+    # a one-line when, then a comment just after the case
+    var stages: str = ""
+    case RG:
+        when GREP: stages = stages + "a"
+        when RG:   stages = stages + "b"
+    # a comment right after
+    print stages
 
 if __name__ == "__main__":
     main()

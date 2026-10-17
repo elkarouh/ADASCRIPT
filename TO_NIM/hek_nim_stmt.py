@@ -1095,6 +1095,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
+                value = _typed_empty_inits(value, annotation)
                 value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
@@ -1350,6 +1351,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
+                value = _typed_empty_inits(value, annotation)
                 value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
@@ -2876,6 +2878,27 @@ def _is_nim_literal(value):
     return bool(_re_lit.match(
         r'^(-?\d[\d_]*(\.\d+)?([eE][-+]?\d+)?|"([^"\\]|\\.)*"'
         r"|'([^'\\]|\\.)'|true|false)$", v))
+
+
+def _typed_empty_inits(value, nim_type):
+    """VALUE with each bare `initHashSet()` / `initTable()` in it given the
+    element type NIM_TYPE declares: an empty `{}` among the elements of an
+    `[E]{}T` has nothing else to infer it from, and Nim refused it."""
+    import re as _re_ei
+    for init, typ in (("initHashSet", "HashSet"), ("initTable", "Table"),
+                      ("initOrderedTable", "OrderedTable")):
+        if f"{init}()" not in value:
+            continue
+        found = set()
+        for m in _re_ei.finditer(rf"\b{typ}\[", nim_type):
+            depth, k = 1, m.end()
+            while k < len(nim_type) and depth:
+                depth += {"[": 1, "]": -1}.get(nim_type[k], 0)
+                k += 1
+            found.add(nim_type[m.end():k - 1])
+        if len(found) == 1:
+            value = value.replace(f"{init}()", f"{init}[{found.pop()}]()")
+    return value
 
 
 def _wrap_distinct_literal(value, nim_type):
