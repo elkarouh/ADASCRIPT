@@ -235,12 +235,10 @@ def dropped_cb(node: Element_T, at: Spot_T):
 
 # ---- The selection: the node or edge the reader last clicked ----
 
-# What the reader selected: a node's view or an edge's view; None when nothing is.
-type Selected_T is NodeView | EdgeView
-
 # The reader's selection: what it holds, and what the gestures do with it.
 class Selection:
-    var what: ?Selected_T
+    # the node's view or the edge's view the reader clicked last; None when nothing is selected
+    var what: NodeView | EdgeView | None
 
     def __init__(self):
         self.what = None
@@ -269,18 +267,20 @@ class Selection:
 
     # Ask the cost of the selected edge, if an edge is selected.
     def change_cost(self):
-        if self.what is EdgeView:
-            let edge: EdgeView = self.what
-            edge.change_cost()
+        let picked: NodeView | EdgeView | None = self.what
+        if picked is EdgeView:
+            picked.change_cost()
 
     # Delete what is selected, after asking.
     def remove(self):
-        if self.what is NodeView:
-            let node: NodeView = self.what
-            node.delete()
-        elif self.what is EdgeView:
-            let edge: EdgeView = self.what
-            edge.delete()
+        let picked: NodeView | EdgeView | None = self.what
+        case picked:
+            when NodeView:
+                picked.delete()
+            when EdgeView:
+                picked.delete()
+            when None:
+                pass
 
     # Forget the selection without unmarking it: the page it was on has been drawn again.
     def forget(self):

@@ -1162,8 +1162,20 @@ case x:
         print f"float {x * 2.0}"
 ```
 
-`x is int` asks the same in an `if`. `?T` is the union `T | None`, and a
-union with a member marked `!` -- a failure -- is a value-or-failure:
+`x is int` asks the same in an `if`. `?T` is the union `T | None`, and
+`None` may join several members: `A | B | None` is the optional of `A | B`,
+and a `case` over it names `when A`, `when B` and `when None`. A union with a
+member marked `!` -- a failure -- is a value-or-failure:
+
+**Which test says what.** `x is A` asks about the *type*: `A` is a type, and
+inside the branch `x` is an `A`, with no cast and no second variable.
+`x == A` asks about the *value*: `A` is a value, an enum member or a
+constant. `case x:` does the one the subject calls for. Over a union every
+`when` names a member type (or `None`), so it is a type test and narrows
+`x`; over an enum, an int or a string it compares values, `when RED`,
+`when 3`. A union is never matched by value, so there is nothing to confuse:
+test the type, then use the value.
+
 
 ### Value or failure `T | !F`
 

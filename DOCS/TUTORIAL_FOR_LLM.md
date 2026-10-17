@@ -621,6 +621,21 @@ case x.items:
 
 Rules: `TypeName(field=Value)` with uppercase → equality check; lowercase → `let` binding. `*rest` captures tail. `[]` matches empty. `_` or `others` → catch-all.
 
+**Union patterns (type tests, with narrowing):**
+```adascript
+let picked: NodeView | EdgeView | None = self.what    # `A | B | None` is ?(A | B)
+case picked:                       # the subject is a NAME: bind an expression with `let` first
+    when NodeView:
+        picked.delete()            # picked is a NodeView here: no cast, no second variable
+    when EdgeView:
+        picked.delete()
+    when None:
+        pass
+```
+- `x is A` tests the TYPE (and narrows `x` to `A` in the branch); `x == A` tests a VALUE (an enum member, a constant) and narrows nothing.
+- `case x:` over a union is a type test per member, narrowing as `is` does; every member (or `when others`) must be named; a value pattern (`when 3`) is refused. Over an enum, int or string, `case` compares values. Test the type, then use the value.
+- Python output: an `if/elif` chain of `_is_a(x, T)` and `x is None`; Nim: `isSome` / `is_m<i>` tests over `Option[OneOfN[...]]`. Single capital letters (`A`, `B`) are read as type parameters in a signature; use real type names.
+
 ### Style: `case` over `if` chains, enums over strings, expressions over loops
 Write the shorter form the language has. The examples are written this way, and
 the transpiler is tested on it.

@@ -294,21 +294,26 @@ button does: it fills a hidden form, then presses the button.
 
 ```adascript
 class Selection:
-    var what: Selection_T
+    var what: NodeView | EdgeView | None
     ...
     def remove(self):
-        case self.what.kind:
-            when NODE:
-                self.what.node.delete()
-            when EDGE:
-                self.what.edge.delete()
-            when NOTHING:
-                pass                        # nothing is selected
+        let picked: NodeView | EdgeView | None = self.what
+        case picked:
+            when NodeView:
+                picked.delete()
+            when EdgeView:
+                picked.delete()
+            when None:
+                pass
 ```
 
-The enum case needs every value covered, `NOTHING` included. A `case`
-switches on one value, so a choice that compares different things still
-needs an `if` chain: `picked` in `dijkstra_gui.ady` is one.
+What the reader last clicked is a node's view, an edge's view, or nothing, and
+the field says so in its type: there is no tag to keep in step with the value.
+`case` over a union tests the *type* of each member and narrows: in the first
+branch `picked` is a `NodeView`, in the second an `EdgeView`, with no cast. Every
+member has to be named, `None` included. A `case` over an enum, an int or a
+string compares *values* instead, and a choice that compares different things
+still needs an `if` chain: `picked` in `dijkstra_gui.ady` is one.
 
 ---
 

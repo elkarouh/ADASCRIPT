@@ -275,6 +275,43 @@ It is written out so that a function's signature reads as it is spoken; the
 transpiler declares the union type for it. A `None` that comes twice is an
 error.
 
+### Testing the type, testing the value
+
+Three spellings look alike and ask different things:
+
+| You write | It asks | `A` is |
+|---|---|---|
+| `if x is A:` | does `x` hold an `A`? | a **type** |
+| `if x == A:` | is `x` equal to `A`? | a **value**: an enum member, a constant |
+| `case x:` / `when A:` | the first over a union, the second elsewhere | see below |
+
+`is` is the test of the *type*, and it narrows: inside the branch `x` is an
+`A`, so `x.n` and `x.delete()` need no cast and no second variable. `==` is
+the test of the *value*, and narrows nothing, because equal to a constant
+says nothing new about the type.
+
+`case x:` follows its subject. Over a **union** each `when` names a member
+type (or `None`), so it is a type test and narrows exactly as `is` does: the
+union has no values to compare, only members to tell apart, and a value
+pattern such as `when 3` is refused. Over an **enum, an int or a string** each
+`when` is a value. So the rule never needs remembering twice: *test the type,
+then use the value*.
+
+The Dijkstra page keeps what the reader selected in one field, `what: NodeView
+| EdgeView | None`, and acts on it with no type test written twice:
+
+```python
+def remove(self):
+    let picked: NodeView | EdgeView | None = self.what
+    case picked:
+        when NodeView:
+            picked.delete()          # picked is a NodeView here
+        when EdgeView:
+            picked.delete()          # ...and an EdgeView here
+        when None:
+            pass                     # nothing is selected
+```
+
 ## 4.5 Type aliases
 
 The humblest `type` declaration is an alias, and the examples use them

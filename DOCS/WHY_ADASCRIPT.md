@@ -1302,6 +1302,58 @@ factor applied twice that the Orbiter lost a spacecraft to.
 
 ---
 
+## Test the type, then use the value
+
+Most languages make you say a thing twice: once to ask what a value is, and
+again to get it back as that. Python's `isinstance` leaves the name as wide as
+it was, so the next line still carries a cast, an `assert`, or a comment
+promising it is fine. TypeScript narrows, but only by its own rules. Nim's
+variant objects need the field spelled out in every branch.
+
+Adascript narrows on the test, and the test reads as the sentence:
+
+<!-- from: EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady -->
+```python
+class Selection:
+    var what: NodeView | EdgeView | None
+
+    def remove(self):
+        let picked: NodeView | EdgeView | None = self.what
+        case picked:
+            when NodeView:
+                picked.delete()
+            when EdgeView:
+                picked.delete()
+            when None:
+                pass
+```
+
+In the first branch `picked` is a `NodeView`, not "maybe a `NodeView`"; in the
+second an `EdgeView`; in the third there is nothing to delete.
+
+That is how the Dijkstra page deletes what the reader selected. There is no `Selected_T`
+declared for it, no tag field to keep in step with the value, no cast, and no
+branch that can be forgotten: a `case` over a union names every member, or says
+`when others`, as one over an enum does. The same code runs on both backends,
+a chain of class tests on Python and a `OneOf` variant on Nim.
+
+The rule behind it is short, and it is why the code reads the way it does:
+
+- `x is A` tests the **type**. `A` is a type, and inside the branch `x` is an `A`.
+- `x == A` tests the **value**. `A` is a value, an enum member or a constant,
+  and nothing is narrowed.
+- `case x:` over a **union** tests the type, member by member, and narrows as
+  `is` does; over an enum, an int or a string it compares values. A union has
+  members and no values to compare, so there is nothing for the two readings to
+  collide on.
+
+So you test the type once, and use the value as the thing it now is. `A | B |
+None` says "one of these, or nothing" in the signature, where a reader looks
+for it, and the `case` that takes it apart is checked against that line. It
+costs nothing to write, which is what makes people write it.
+
+---
+
 ## A failure belongs in the signature
 
 A signature that says `-> Path` is telling half the truth when the function
