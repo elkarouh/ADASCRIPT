@@ -1504,6 +1504,32 @@ def _scaled_conversion(name, arg):
         f"and {name} converts by it -- bind it to a name declared with its type")
 
 
+def _refuse_unrelated_unit(name, arg):
+    """`Duration_T(d)` for a Distance_T d: refused, as the Nim backend refuses
+    it, when ARG's unit can be told and no declaration relates it to NAME.
+    Without it the number was kept and the units silently relabelled."""
+    from ady_declarations import (is_distinct, expr_unit, scaled_sources, narrow_ancestors,
+                                  wraps_or_checks)
+    from hek_py_stmt import _py_atom_unit
+    if not is_distinct(name) or wraps_or_checks(name):
+        return
+    try:
+        unit = expr_unit(arg, _py_atom_unit)
+    except Exception:
+        return
+    if not unit or not is_distinct(unit) or unit == name or name in narrow_ancestors(unit):
+        return
+    sources = scaled_sources(name) or set()
+    if unit in sources or any(a in sources for a in narrow_ancestors(unit)):
+        return
+    raise SyntaxError(
+        f"{name}({arg.strip()}): a {unit} does not convert to a {name} -- "
+        + ("a " + name + " converts from " + ", ".join(sorted(sources | {"a plain number"}))
+           if sources else
+           "go through the plain number, float(...) or int(...), to say "
+           "that the units are meant"))
+
+
 @method(primary)
 def to_py(self, prec=None):
     """primary: atom trailer*"""
@@ -1533,7 +1559,8 @@ def to_py(self, prec=None):
                 _first = getattr(ParserState, "py_first_param", {}).get(tr_str[1:])
                 _rsym = ParserState.symbol_table.lookup(result) if _first else None
                 _rtype = ((_rsym.get("type") or "") if isinstance(_rsym, dict) else "").replace("?", "").strip()
-                if _first and _rtype == _first:
+                if _first and _rtype == _first and tr_str[1:] not in \
+                        getattr(ParserState, "py_type_members", {}).get(_rtype, ()):
                     _call = trailers[i + 1].to_py() if i + 1 < len(trailers) else ""
                     if _call.startswith("(") and _call.endswith(")"):
                         _args = _call[1:-1].strip()
@@ -1560,6 +1587,8 @@ def to_py(self, prec=None):
                     result = helper
                     i += 1
                     continue
+            if i == 0 and tr_str.startswith("(") and not _is_scaled_name(result):
+                _refuse_unrelated_unit(result, tr_str[1:-1])
             if i == 0 and tr_str.startswith("(") and _is_scaled_name(result):
                 result = _scaled_conversion(result, tr_str[1:-1])
                 i += 1

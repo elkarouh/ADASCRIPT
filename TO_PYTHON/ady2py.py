@@ -400,6 +400,23 @@ def translate(code):
     _PS_udef.py_first_param = {
         m.group(1): m.group(2) for m in _re_udef.finditer(
             r'^def\s+([A-Za-z_]\w*)\s*\(\s*\w+\s*:\s*([A-Za-z_][\w.]*)\s*[,)=]', code, _re_udef.M)}
+    # ... unless the type has a field or method of that name: `ed.row` of an
+    # Editor with a field row is the field, whatever functions are named row
+    _members, _owner, _owner_indent = {}, None, 0
+    for _ln in code.split("\n"):
+        _head = _re_udef.match(r'([ \t]*)(?:class\s+(\w+)|type\s+(\w+)\s+is\s+(?:record|tuple)\b)', _ln)
+        if _head:
+            _owner, _owner_indent = _head.group(2) or _head.group(3), len(_head.group(1))
+            _members.setdefault(_owner, set())
+            continue
+        if _owner and _ln.strip():
+            if len(_ln) - len(_ln.lstrip()) <= _owner_indent:
+                _owner = None
+                continue
+            _m = _re_udef.match(r'\s+(?:var\s+|def\s+)?(\w+)\s*[:(]', _ln)
+            if _m:
+                _members[_owner].add(_m.group(1))
+    _PS_udef.py_type_members = _members
     # PROG, the program's name, is predeclared for a module that uses it and
     # does not declare its own -- as on the Nim backend.
     if (_re_udef.search(r'\bPROG\b', code)
