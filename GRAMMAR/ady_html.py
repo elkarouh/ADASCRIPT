@@ -207,6 +207,8 @@ def expand_html_blocks(code):
     karax = "karax/[karax, karaxdsl, vdom, vstyles]" if "__on(" in "\n".join(out) \
         else "karax/[karaxdsl, vdom, vstyles]"
     head = [f"# nimraw: import {karax}", "# nimraw: type Html = VNode"]
+    if "__tag_" in "\n".join(out) and re.search(r"\bstyle\s*=", "\n".join(out)):
+        head += ["# nimraw: " + ln for ln in _CSS_HELPER.split("\n")]
     if out and out[0].startswith("#!"):               # keep the shebang first
         return "\n".join([out[0]] + head + out[1:])
     return "\n".join(head + out)
@@ -233,8 +235,21 @@ def _karax(tag, args):
     # karax's style= is a VStyle; the page writes it as CSS text
     if (m := re.search(r"(^|, )style\s*=\s*", args)):
         end = _arg_end(args, m.end())
-        args = f"{args[:m.end()]}toCss({args[m.end():end]}){args[end:]}"
+        args = f"{args[:m.end()]}adascriptCss({args[m.end():end]}){args[end:]}"
     return tag, args
+
+
+# style= as karax's VStyle. karax writes each property `name: value; ` itself,
+# so a space the text has after `:` or `;` would come out doubled.
+_CSS_HELPER = """\
+proc adascriptCss(css: string): VStyle {.used.} =
+  var t = ""
+  var after = false
+  for c in css:
+    if after and c == ' ': continue
+    after = c in {':', ';'}
+    t.add c
+  toCss(t)"""
 
 
 def _arg_end(args, i):
