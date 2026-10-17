@@ -1,0 +1,45 @@
+#!/usr/bin/env ady2nim
+"""Same output on both backends: a bool prints True, a tuple and a table quote
+their strings as Python does; a literal beside a subscript of a distinct
+type takes that type; `name = ` inside a string is no write to `name`."""
+
+type Cents_T is distinct int
+
+def profit_and_loss() -> (Cents_T, Cents_T, Cents_T):
+    return (Cents_T(250_000), Cents_T(120_000), Cents_T(130_000))
+
+class Ledger:
+    var last_query: str
+
+    def __init__(self):
+        self.last_query = ""
+
+    def lookup(self, name: str) -> str:
+        self.last_query = "SELECT number FROM accounts WHERE name = ?"
+        return name.upper()
+
+def main():
+    let b: bool = 3 > 2
+    print b
+    print f"{b} and {not b}"
+    print str(b) + "!"
+    let pair: (str, int) = ("a", 1)
+    print pair
+    let quoted: (str, bool) = ("it's", True)
+    print quoted
+    var stock: {str}int = {:}
+    stock["pears"] = 3
+    print stock
+    var prices: [str]float = {:}
+    prices["tea"] = 2.5
+    prices["coffee"] = 3.0
+    print prices
+    assert profit_and_loss()[2] == 130_000
+    let pl: (Cents_T, Cents_T, Cents_T) = profit_and_loss()
+    assert pl[0] > 200_000
+    var ledger: Ledger = Ledger()
+    let who: str = "cash"
+    print ledger.lookup(who)
+
+if __name__ == "__main__":
+    main()

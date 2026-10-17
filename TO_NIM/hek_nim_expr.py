@@ -1773,6 +1773,9 @@ def _nim_atom_unit(e):
                 return _dist[0]
             if _units and all(u in (UNIT_LIT, UNIT_PLAIN) for u in _units):
                 return UNIT_PLAIN if UNIT_PLAIN in _units else UNIT_LIT
+    _el = _element_type(e)
+    if _el and is_distinct(_el):
+        return _el                        # `pl()[2]` of a tuple of them, `xs[i]`
     t = (_nim_expr_type(e) or "").strip()
     if not is_distinct(t):
         t = _field_type(e).strip() or t      # a field: `self.flown`
@@ -1784,6 +1787,31 @@ def _nim_atom_unit(e):
     if is_distinct(t):
         return t
     return UNIT_PLAIN if t in ("float", "int", "float64", "Natural", "Positive") else None
+
+
+def _element_type(e):
+    """The type of E, emitted Nim, when it is a subscript: field N of a
+    tuple for `t[2]` and `pl()[2]`, the element of a seq or an array for
+    `xs[i]`; "" when it cannot be told."""
+    import re as _re_el
+    m = _re_el.match(r"^(.+)\[([^\[\]]+)\]$", e, _re_el.S)
+    if not m or not _balanced(m.group(1)):
+        return ""
+    base, idx = m.group(1).strip(), m.group(2).strip()
+    called = _outer_call_name(base) if base.endswith(")") else None
+    bt = (getattr(ParserState, "proc_return_types", {}).get(called, "") if called
+          else (_nim_expr_type(base) or _field_type(base) or ""))
+    bt = (bt or "").strip()
+    if bt.startswith("var "):
+        bt = bt[4:].strip()
+    if bt.startswith("(") and bt.endswith(")") and idx.isdigit():
+        parts = _split_args(bt[1:-1])
+        if int(idx) < len(parts):
+            return parts[int(idx)].split(":")[-1].strip()
+    em = _re_el.match(r"^(?:seq|openArray)\[(.+)\]$|^array\[[^,]+,\s*(.+)\]$", bt)
+    if em:
+        return (em.group(1) or em.group(2)).strip()
+    return ""
 
 
 def _unit_of(expr):

@@ -87,12 +87,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       meanwhile.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
-- [ ] a bool prints `true` on Nim and `True` on Python: `print b`, `f"{x is F}"`.
-      A list of bools already prints Python's way (the list `$`); a bare one
-      does not. The next thing stopping byte-identical output.
-- [ ] a string inside a tuple or a table prints with Nim's quotes, `("a", 1)`,
-      against Python's `('a', 1)`. A list prints Python's way since the list
-      `$` landed; a tuple and a table want the same.
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
       both backends. Consistent rather than divergent, and a missing form
       rather than a bug -- less pressing than it was, now that the
@@ -485,27 +479,9 @@ The units items below were fixed in the transpiler (`EXAMPLES/test_units_fields.
 
 ## Found porting EXAMPLES/accounting.ady
 
-- [ ] A literal beside `==` (and the other comparisons) on a tuple subscript of a call, on
-      Nim: `assert books.profit_and_loss()[2] == 130_000` (the tuple's third field is a
-      `Cents_T`, a `distinct int`) emits a bare `130000` and Nim reports a type mismatch.
-      The literal takes the declared type next to a name or a field, but not next to
-      `f(...)[i]`. Workaround in the example: unpack with `let (revenue, expenses, profit) = ...`.
 
 ## Found writing TOOLS/ACCOUNTING/ledger.ady
 
-- [ ] a parameter is made `var` when its name, followed by ` = `, appears
-      inside a string literal: `self.db.value("SELECT number FROM accounts
-      WHERE name = ?", [name])` made `name` a `var string`, and every caller
-      passing a `let` or a field was refused ("expression is immutable, not
-      var"). The mutation scan should skip string contents. The ledger writes
-      `WHERE name IS ?` to stay clear of it.
-- [ ] a stale transpile is kept when a dependency failed to parse: compiling
-      test_accounting_model.ady while accounting_model.ady had a parse error
-      cached the test's Nim without the model's types (`g.total() == 0` lost
-      its `Cents_T(0)`), and fixing the model did not refresh it -- the test
-      kept failing until `~/.cache/adascript/cache-<hash>` was removed. A
-      failed dependency should leave nothing cached, or the cache key should
-      cover the dependencies' contents.
 - [x] a local `let x: str` made a field of the same name on another value
       a string too: in accounting_gui.ady's box_html, with `let x: str =
       px(...)` in scope, `px(p.x + shape.half_w - 8.0)` came out as

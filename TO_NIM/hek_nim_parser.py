@@ -5855,11 +5855,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # not while the purity probe is still guessing which methods mutate
             if name and getattr(ParserState, "_mutation_probe", None) is None:
                 ParserState.var_self_methods.add(name)
+        # `WHERE name = ?` in a string is no write to a parameter `name`
+        _body_no_strings = _re.sub(r'"(?:\\.|[^"\\\n])*"', '""', _body_no_comments)
         new_params = []
         for p in params:
             pname = p.split(":")[0].strip()
             if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", _body_no_comments
+                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", _body_no_strings
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)

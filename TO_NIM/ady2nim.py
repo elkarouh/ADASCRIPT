@@ -994,13 +994,16 @@ def translate(code, export_symbols=False):
     if ({"math"} & (ParserState.nim_qualified | set(ParserState.nim_from) | ParserState.nim_imports)) and _re_order.search(r"(?<![\w`.])\w[^\n#\"]* mod ", "\n".join(output)):
         ParserState.nim_from.setdefault("math", set()).add("`mod`")
 
-    # A list prints as Python prints it (`[A, B]`, `['a']`), not as Nim's `@[A, B]`:
-    # a program that prints or formats anything, and has a list, gets the `$` that says so.
+    # A list prints as Python prints it (`[A, B]`, `['a']`), not as Nim's `@[A, B]`,
+    # and so do a bool (`True`), a tuple (`('a', 1)`) and a table (`{'k': 1}`): a
+    # program that prints or formats anything gets the `$`s that say so.
     _text = "\n".join(output)
-    if (_re_order.search(r'\becho\(|\bfmt"|\$\(', _text)
-            and _re_order.search(r'@\[|\bseq\[|\bnewSeq|\btoSeq|\bcollect\(|split', _text)):
-        from hek_nim_unicode import _SEQ_REPR_HELPER
+    if _re_order.search(r'\becho\(|\bfmt"|\$\(|\$\w|&', _text):
+        from hek_nim_unicode import _SEQ_REPR_HELPER, _TABLE_REPR_HELPER
         ParserState.nim_top_decls.append(_SEQ_REPR_HELPER)
+        if "tables" in (ParserState.nim_imports | set(ParserState.nim_from)
+                        | ParserState.nim_qualified) or _re_order.search(r'\b(?:Ordered)?Table\[', _text):
+            ParserState.nim_top_decls.append(_TABLE_REPR_HELPER)
 
     # Insert collected Nim imports at the top (after any leading comments),
     # followed by the pragmas, helper declarations and init statements the
@@ -1669,7 +1672,9 @@ def run_tests():
     # member its type names, and a case over it narrows each branch.
     tests.append((
         'def f(n: int) -> int | float:\n    if n > 0:\n        return n\n    return 0.5\n\nlet x: int | float = f(1)\ncase x:\n    when int:\n        print x + 1\n    when float:\n        print x\n',
-        'import stdlib\nproc f(n: int): OneOf2[int, float] =\n    if n > 0:\n        return OneOf2[int, float].of0(n)\n    return OneOf2[int, float].of1(0.5)\n\nlet x: OneOf2[int, float] = f(1)\nif x.is_m0:\n    echo(x.m0 + 1)\nelse:\n    echo(x.m1)\n',
+        # a program that prints gets the `$`s that print as Python does
+        'import stdlib\n' + __import__("hek_nim_unicode")._SEQ_REPR_HELPER + '\n'
+        'proc f(n: int): OneOf2[int, float] =\n    if n > 0:\n        return OneOf2[int, float].of0(n)\n    return OneOf2[int, float].of1(0.5)\n\nlet x: OneOf2[int, float] = f(1)\nif x.is_m0:\n    echo(x.m0 + 1)\nelse:\n    echo(x.m1)\n',
     ))
 
     passed = failed = 0
@@ -2285,6 +2290,7 @@ def main(argv=None):
 
         _pp_done = []
         _pp_second = False
+        _dep_paths, _dep_failed = set(), []
         while _prepass_worklist or (_pp_done and not _pp_second):
             if not _prepass_worklist:
                 # a second round over the same modules: the first met a module
@@ -2297,6 +2303,7 @@ def main(argv=None):
             if not _pp_second:
                 _pp_done.append(_pp_item)
             _ppname, _ppady, _ppdir = _pp_item
+            _dep_paths.add(_ppady)
             with open(_ppady, encoding="utf-8") as _f:
                 _ppcode = _resolved_imports(_f.read(), _ppdir)
             try:
@@ -2320,7 +2327,10 @@ def main(argv=None):
                 _nimport_std_imports.update(
                     getattr(_PS_pre, "nim_imports", set()) & _CARRIED_STD_IMPORTS)
             except Exception:
-                pass  # errors will surface properly during the full dep transpile
+                # errors will surface properly during the full dep transpile;
+                # what this file is translated to lacks the module's types,
+                # so it is not kept as if it were current
+                _dep_failed.append(_ppady)
             _enqueue_checked(_ppcode, _ppdir)
 
         # Set JS_BACKEND before any transpilation (main file or deps).
@@ -2328,7 +2338,10 @@ def main(argv=None):
         _hne.JS_BACKEND = (subcommand == "js")
 
         # --- tier 1: transpile? ---
-        need_transpile = nim_mtime < max(ady_mtime, transpiler_mtime)
+        # A module this file nimports counts as its source too: the types and
+        # signatures it declares are part of what the file is translated to.
+        _deps_mtime = max((os.path.getmtime(_p) for _p in _dep_paths), default=0)
+        need_transpile = nim_mtime < max(ady_mtime, transpiler_mtime, _deps_mtime)
         if need_transpile:
             try:
                 nim_output = translate(code)
@@ -2353,6 +2366,10 @@ def main(argv=None):
                 f.write(_with_runtime(nim_output))
             # Refresh mtime after write so tier-2 comparison is accurate
             nim_mtime = os.path.getmtime(nim_file)
+            if _dep_failed:
+                # translated without a module that failed to parse: the next
+                # run translates again, whatever the module's mtime
+                os.utime(nim_file, (0, 0))
             print(f"# transpiled → {nim_file}", file=sys.stderr)
         else:
             print(f"# up to date: {nim_file}", file=sys.stderr)

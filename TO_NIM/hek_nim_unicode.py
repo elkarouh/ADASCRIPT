@@ -185,6 +185,22 @@ proc adascriptRepr[T](x: T): string =
   elif T is bool: (if x: "True" else: "False")
   else: $x
 
+proc `$`(x: bool): string {.used.} =
+  ## True and False, as Python prints them; system's says true and false.
+  if x: "True" else: "False"
+
+proc `$`[T: tuple](x: T): string {.used.} =
+  ## A tuple prints as Python prints it: its strings quoted as repr quotes
+  ## them, and a single one with its comma, `(1,)`.
+  result = "("
+  var n = 0
+  for v in x.fields:
+    if n > 0: result.add ", "
+    result.add adascriptRepr(v)
+    inc n
+  if n == 1: result.add ","
+  result.add ")"
+
 proc `$`*[T](xs: seq[T]): string =
   ## A list prints as Python prints it -- `[1, 2]`, not Nim's `@[1, 2]`, with
   ## its elements as repr shows them.
@@ -224,3 +240,21 @@ proc adascriptCasefold(s: string): string =
   for r in s.runes:
     result.add toUTF8(toLower(r))
 """
+
+
+# A table prints as Python prints a dict: `{'k': 1}`, keys and values as repr
+# shows them. Only for a program that has tables imported.
+_TABLE_REPR_HELPER = """\
+proc adascriptDictRepr[T](t: T): string =
+  result = "{"
+  var n = 0
+  for k, v in t.pairs:
+    if n > 0: result.add ", "
+    result.add adascriptRepr(k) & ": " & adascriptRepr(v)
+    inc n
+  result.add "}"
+
+proc `$`[K, V](t: Table[K, V]): string {.used.} = adascriptDictRepr(t)
+proc `$`[K, V](t: OrderedTable[K, V]): string {.used.} = adascriptDictRepr(t)\
+"""
+
