@@ -437,6 +437,16 @@ without a helper:
 let score: ?int = int(raw_score) if raw_score is not None else None
 ```
 
+Both are methods of every `?T`, so a chain needs no helper: `.map(f)` is
+fmap and `.and_then(f)` is bind.
+
+```python
+let label: ?str = fetch_user(id).and_then(fetch_account).map(format_summary)
+```
+
+On Nim they are `map` and `flatMap` from `std/options`; on Python, a small
+helper. A `?T` prints as its value, or `None`, on both.
+
 The monad laws hold — left identity, right identity, associativity — which
 in practice means bind chains can be regrouped or factored into helpers
 without changing behaviour.

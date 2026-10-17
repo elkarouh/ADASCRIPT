@@ -2616,6 +2616,24 @@ _SHELL_OPT_WHY = {
 import re as _re
 
 
+def _inside_fstring(tokens):
+    """For each of TOKENS, whether it lies within an f-string, its closing
+    quote included. The parts of an f-string carry no columns of their own
+    (`{!f"HEAD {short}"}` in a shell line), so they are glued as they come:
+    the gaps between their columns are not spaces the line had."""
+    import tokenize as _tkn
+    depth, out = 0, []
+    for tok in tokens:
+        if tok.type == _tkn.FSTRING_START:
+            out.append(False)
+            depth += 1
+            continue
+        out.append(depth > 0)
+        if tok.type == _tkn.FSTRING_END:
+            depth -= 1
+    return out
+
+
 def _extract_shell_body(body_st):
     """Reconstruct the shell command string from the body Several_Times node.
 
@@ -2635,6 +2653,7 @@ def _extract_shell_body(body_st):
     from hek_tokenize import DOLLAR_TOKEN as _DOLLAR_TOKEN, \
         BASH_TEST_TOKEN as _BASH_TEST_TOKEN
     parts = []
+    inside = _inside_fstring(tokens)
     for i, tok in enumerate(tokens):
         if i > 0:
             prev = tokens[i - 1]
@@ -2642,7 +2661,7 @@ def _extract_shell_body(body_st):
             # column offsets (the sentinel had a space before the name token).
             # Never insert a gap after DOLLAR_TOKEN ($USER -> $USER not $ USER)
             # or after BASH_TEST_TOKEN (-e path -> -e path not - e path).
-            if prev.type in (_DOLLAR_TOKEN, _BASH_TEST_TOKEN):
+            if prev.type in (_DOLLAR_TOKEN, _BASH_TEST_TOKEN) or inside[i]:
                 pass  # no gap — glue directly to previous token
             else:
                 gap = tok.start[1] - prev.end[1]
@@ -2787,10 +2806,11 @@ def _tokens_to_string(tokens):
     from hek_tokenize import DOLLAR_TOKEN as _DOLLAR_TOKEN, \
         BASH_TEST_TOKEN as _BASH_TEST_TOKEN
     parts = []
+    inside = _inside_fstring(tokens)
     for i, tok in enumerate(tokens):
         if i > 0:
             prev = tokens[i - 1]
-            if prev.type in (_DOLLAR_TOKEN, _BASH_TEST_TOKEN):
+            if prev.type in (_DOLLAR_TOKEN, _BASH_TEST_TOKEN) or inside[i]:
                 pass
             else:
                 # Same-line gap from columns; cross-line, just one space

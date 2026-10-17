@@ -135,6 +135,8 @@ STANDALONE := \
     test_str_case.ady \
     test_portable_gaps4.ady \
     test_portable_gaps5.ady \
+    test_portable_gaps6.ady \
+    test_json_value.ady \
     test_optional_tails.ady \
     test_generic_methods.ady \
     test_round_splitlines.ady \
@@ -345,7 +347,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_union_wide test_units_dims \
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_union_wide test_units_dims \
     distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_stdlib test_cents
 
 # -----------------------------------------------------------------------
@@ -740,6 +742,18 @@ test: compile
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_dict_type.out; exit 1; }; \
 	done
 	@rm -f $(TMPDIR)/ady_dict_type.ady $(TMPDIR)/ady_dict_type.out
+
+	@# A list of capitals in parentheses is an enum written without `enum`.
+	@printf 'type K_T is (A, B)\nprint 1\n' > $(TMPDIR)/ady_paren_enum.ady
+	@for tr in TO_NIM/ady2nim.py TO_PYTHON/ady2py.py; do \
+	    printf '  %-42s' "(A, B) as an enum ($$tr)"; \
+	    if $(PYTHON) $(CURDIR)/$$tr $(TMPDIR)/ady_paren_enum.ady > $(TMPDIR)/ady_paren_enum.out 2>&1; then \
+	        echo "FAIL (accepted)"; exit 1; \
+	    fi; \
+	    grep -q "line 1: (A, B) names no types; an enum is written type K_T is enum A, B" $(TMPDIR)/ady_paren_enum.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_paren_enum.out; exit 1; }; \
+	done
+	@rm -f $(TMPDIR)/ady_paren_enum.ady $(TMPDIR)/ady_paren_enum.out
 
 	@# Two names that are one name on Nim are refused there, naming both.
 	@echo "=== names one name on Nim ==="
@@ -1553,6 +1567,13 @@ test: compile
 	@printf '  %-42s' "STDLIB/svg_path.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/svg_path.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "test_json_value.ady (ady2nim js, node)"; \
+	if ! command -v node >/dev/null; then echo "SKIPPED, no node"; else \
+	    $(ADY2NIM) js $(EXDIR)/test_json_value.ady >/dev/null 2>&1 \
+	        && node $(EXDIR)/test_json_value.js | grep -q "all checks passed" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(EXDIR)/test_json_value.js; \
+	fi
 
 	@# html: blocks: the native build prints the page, which must hold one
 	@# line of its content; the one with event handlers only builds under js,

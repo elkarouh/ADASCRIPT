@@ -4,7 +4,7 @@
 the mouse, and an arrow drawn from one. Every other event is declared in the HTML (hx-*
 attributes, accounting_page_gui.ady) and handled on the server (accounting_events.ady).
 
-The accounts and arrows are the page's own text (the hidden pre#books, see accounting_page_gui.ady),
+The accounts and arrows are the page's own text (the JSON in script#books, see accounting_page_gui.ady),
 read into a BooksView when htmx has drawn the page. Where each account is drawn is computed from
 them (shared/layout.ady), not read off the drawing: while one is dragged, every account is laid
 out again and every arrow routed again, here, by the same code the server uses (shared/routes.ady).
@@ -45,7 +45,7 @@ def data_name(el: Element_T) -> str:
 
 # ---- The books as the page holds them ----
 
-# The accounts and arrows as the server keeps them (the hidden pre#books), and where each account
+# The accounts and arrows as the server keeps them (the JSON in script#books), and where each account
 # is drawn now: the layout of the accounts, with the reader's places (the field pos) and any
 # account dragged since, which is put into pos as the drag goes on. The views are built again each
 # time htmx draws the page (see page_drawn).
@@ -59,7 +59,7 @@ class BooksView:
     def __init__(self):
         var kept: str = ""
         var pos: str = ""
-        let el: ?Element_T = page.find("pre#books")
+        let el: ?Element_T = page.find("script#books")
         if el is not None:                  # no page yet, the first time: an empty one
             kept = el.text()
             pos = page.field("pos")

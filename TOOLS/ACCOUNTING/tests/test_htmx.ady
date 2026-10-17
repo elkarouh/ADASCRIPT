@@ -64,17 +64,18 @@ assert "data-x=\"600.0\"" not in all_text(b, ["x"], ["X"], "x", params_of("pos=1
 let kept_slots: []Slot_T = [Slot_T("100000/0", "Bank", 0, "100000", 15.0, false), Slot_T("610000/2", "Rent", 2, "610000", 23.0, true)]
 let kept_arrows: []Arrow_T = [Arrow_T("Bank", "Rent", "$100.00")]
 let kept: str = books_text(kept_slots, kept_arrows)
-assert kept == "slot\t100000/0\t0\t100000\t15.0\t0\tBank\nslot\t610000/2\t2\t610000\t23.0\t1\tRent\narrow\tBank\tRent\t$100.00\n"
+assert kept == "{\"slots\": [{\"id\": \"100000/0\", \"name\": \"Bank\", \"quarter\": 0, \"number\": \"100000\", \"tall\": 15.0, \"group\": false}, {\"id\": \"610000/2\", \"name\": \"Rent\", \"quarter\": 2, \"number\": \"610000\", \"tall\": 23.0, \"group\": true}], \"arrows\": [{\"source\": \"Bank\", \"target\": \"Rent\", \"label\": \"$100.00\"}]}"
 assert slots_of(kept)[1].name == "Rent" and slots_of(kept)[1].group and not slots_of(kept)[0].group
 assert arrows_of(kept)[0].label == "$100.00"
-# a name with a tab, a newline or a % reads back as it was: the line it is on is not broken
-let odd: []Slot_T = [Slot_T("1/0", "Ban\tk\n50%", 0, "1", 15.0, false)]
+# a name with a tab, a newline, a quote or a </script> reads back as it was, and cannot end the element
+let odd: []Slot_T = [Slot_T("1/0", "Ban\tk\n50% \"</script>", 0, "1", 15.0, false)]
 let no_arrows: []Arrow_T = []
 let odd_text: str = books_text(odd, no_arrows)
-assert len(odd_text.split("\n")) == 2 and len(slots_of(odd_text)) == 1
-assert slots_of(odd_text)[0].name == "Ban\tk\n50%" and slots_of(odd_text)[0].id == "1/0"
+assert "</script>" not in odd_text and len(slots_of(odd_text)) == 1
+assert slots_of(odd_text)[0].name == "Ban\tk\n50% \"</script>" and slots_of(odd_text)[0].id == "1/0"
+assert len(slots_of("not JSON")) == 0
 assert layout_of_slots(slots_of(kept), "100000/0@600.0,300.0").points[0].x == 600.0
-assert "<pre id=\"books\">slot\t" in all_text(b, ["x"], ["X"], "x", params_of(""))
+assert "<script id=\"books\" type=\"application/json\">{\"slots\": [{\"id\": " in all_text(b, ["x"], ["X"], "x", params_of(""))
 assert "<script src=\"/accounting_js_events.js\"" in shell_text()
 # the popup's transaction
 let vat_books: Books = Books("USD", [row("550000", ASSET, "Bank"), row("700000", REVENUE, "Sales"), row("610000", EXPENSE, "Rent"),

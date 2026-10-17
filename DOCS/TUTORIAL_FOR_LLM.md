@@ -1527,6 +1527,14 @@ let words: []str = s == /\w+/g
 
 # Substitution — s/pat/repl/flags
 s = s/\d+/[N]/g    # replace all digits with [N]
+
+# Substitution as an expression -- s is left as it was
+let base: str = s.sub(/\.gz$/i, "")
+
+# A pattern known only at run time: a Regex, on the right of == / != or in sub
+let pat: Regex = Regex("(?i)" + suffix)
+if s == pat:
+    print($+0)
 ```
 
 **Python output:** uses `re` module.

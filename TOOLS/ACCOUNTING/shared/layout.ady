@@ -7,11 +7,12 @@ lays the accounts out again in the browser while one is dragged. The two must ag
 are the same code. Nothing here knows the books (the model is native only): an account is a
 Slot_T, and an arrow an Arrow_T, both plain text and numbers. No HTML in here.
 
-The page keeps the accounts and arrows as text in a hidden element (books_text below), and the
-browser reads them back with slots_of and arrows_of; where the reader dragged an account is kept
+The page keeps the accounts and arrows as JSON in a script element (books_text below), and the
+browser reads them back by name with slots_of and arrows_of; where the reader dragged an account is kept
 in the form field pos ("id@x,y|id@x,y", see with_position).
 """
 from shared/routes import Point_T, boxes
+from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag, json_string
 
 const WIDTH: float = 980.0      # the drawing's width (the svg's viewBox); its height varies
 const GAP: float = 10.0         # between two accounts stacked in a quarter
@@ -140,48 +141,34 @@ def layout_of_slots(slots: []Slot_T, pos: str) -> Layout_T:
             height = max(height, at.y + slots[i].tall + MARGIN)
     return Layout_T(points, height, split_y)
 
-# The accounts and arrows as text, the way the page keeps them: a line an account
-# (tab-separated: "slot", id, quarter, number, half height, group 1 or 0, name), then a line an
-# arrow ("arrow", source, target, amount).
+# The accounts and arrows as the page keeps them, JSON: {"slots": [...], "arrows": [...]}, an
+# object a record, its fields by the record's own names. slots_of and arrows_of read it back.
 def books_text(slots: []Slot_T, arrows: []Arrow_T) -> str:
-    var lines: []str = []
+    var parts: []str = []
     for s in slots:
-        let group: str = ("1" if s.group else "0")
-        lines.append("\t".join(["slot", field_out(s.id), str(s.quarter), field_out(s.number), f"{s.tall:.1f}", group, field_out(s.name)]))
+        let group: str = ("true" if s.group else "false")
+        parts.append(f"{{\"id\": {json_string(s.id)}, \"name\": {json_string(s.name)}, \"quarter\": {s.quarter}, \"number\": {json_string(s.number)}, \"tall\": {s.tall:.1f}, \"group\": {group}}}")
+    var lines: []str = []
     for a in arrows:
-        lines.append("\t".join(["arrow", field_out(a.source), field_out(a.target), field_out(a.label)]))
-    return "\n".join(lines) + "\n"
+        lines.append(f"{{\"source\": {json_string(a.source)}, \"target\": {json_string(a.target)}, \"label\": {json_string(a.label)}}}")
+    return "{\"slots\": [" + ", ".join(parts) + "], \"arrows\": [" + ", ".join(lines) + "]}"
 
-# A field of a line of books_text, written so that no tab, newline or % in it can break the line:
-# each of those becomes %09, %0A or %25. field_in undoes it.
-def field_out(text: str) -> str:
-    return text.replace("%", "%25").replace("\t", "%09").replace("\n", "%0A")
-
-def field_in(text: str) -> str:
-    return text.replace("%0A", "\n").replace("%09", "\t").replace("%25", "%")
-
-# TEXT as a number: -1 when it is not one.
-def number_of(text: str) -> float:
-    let n: float | !ParseFailure_T = parse_float(text)
-    if n is ParseFailure_T:
-        return -1.0
-    else:
-        return n
-
-# The accounts of books_text TEXT, in their order.
+# The accounts of books_text TEXT, in their order; none when it is not that text.
 def slots_of(text: str) -> []Slot_T:
     var slots: []Slot_T = []
-    for line in text.split("\n"):
-        let w: []str = line.split("\t")
-        if len(w) == 7 and w[0] == "slot":
-            slots.append(Slot_T(field_in(w[1]), field_in(w[6]), int(number_of(w[2])), field_in(w[3]), number_of(w[4]), w[5] == "1"))
+    let books: ?Json_T = read_json(text)
+    if books is None:
+        return slots
+    for s in books.json_list("slots"):
+        slots.append(Slot_T(s.json_text("id"), s.json_text("name"), int(s.json_number("quarter")), s.json_text("number"), s.json_number("tall"), s.json_flag("group")))
     return slots
 
 # The arrows of books_text TEXT, in their order.
 def arrows_of(text: str) -> []Arrow_T:
     var arrows: []Arrow_T = []
-    for line in text.split("\n"):
-        let w: []str = line.split("\t")
-        if len(w) == 4 and w[0] == "arrow":
-            arrows.append(Arrow_T(field_in(w[1]), field_in(w[2]), field_in(w[3])))
+    let books: ?Json_T = read_json(text)
+    if books is None:
+        return arrows
+    for a in books.json_list("arrows"):
+        arrows.append(Arrow_T(a.json_text("source"), a.json_text("target"), a.json_text("label")))
     return arrows

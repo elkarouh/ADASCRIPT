@@ -97,6 +97,28 @@ def normalize_spaces(s: str) -> str:
 Backreferences in the replacement use `$+1` / `$+{name}`. Under the hood:
 Nim `s = s.replace(srx.re(r"pat"), "repl")`, Python `s = re.sub(...)`.
 
+To derive one string from another without rewriting it, `sub` is the same
+substitution as an expression; it leaves `s` as it was:
+
+```python
+let base: str = name.sub(/\.gz$/i, "")       # "Data.GZ" -> "Data"
+let swapped: str = pair.sub(/(\w+)=(\w+)/, "$+2=$+1")
+```
+
+A pattern that is not known until the program runs -- read from a file,
+or built from parts -- is a `Regex`, made with `Regex(s)`. It goes where a
+literal goes on the right of `==` and `!=`, and as the first argument of
+`sub`:
+
+```python
+def classify(line: str, pat: Regex) -> str:
+    if line == pat:
+        return f"yes {$+1}"
+    return "no"
+
+let gz: Regex = Regex("(?i)" + suffix)     # flags go inside the pattern
+```
+
 ## 7.5 Regexes as patterns
 
 Chapter 5 previewed the classifier from `awk_example.ady`; here is the full

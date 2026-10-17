@@ -3725,6 +3725,14 @@ functions say what a drag means to the app. Pixels and drawing units are
 distinct types in it, with a scale between them. `EXAMPLES/DIJKSTRA_HTMX` and
 `TOOLS/ACCOUNTING` are whole programs built this way.
 
+**Data the server hands the script.** `import json_value`
+(`TO_NIM/STDLIB/json_value.ady`) is the same code on the server and in the
+browser: the server writes its records as JSON with `json_string` and plain
+numbers, into a `<script type="application/json">` element, and the script
+reads them back with `read_json(text)` (a `?Json_T`, None when it is not JSON)
+and, by name, `json_list`, `json_text`, `json_number` and `json_flag`.
+`TOOLS/ACCOUNTING` hands its accounts and arrows over this way.
+
 ---
 
 ## Summary of Adascript-Only Syntax

@@ -1,0 +1,28 @@
+#!/usr/bin/env ady2nim
+"""Test: json_value, records written as JSON and read back by name.
+
+Nim only, native and under `ady2nim js` alike (the Makefile builds both): the server
+writes the records, the browser reads them. A string goes out through json_string, which
+escapes what JSON needs and a `<`, so the text can stand in a <script> element.
+"""
+from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag, json_string
+
+let name: str = "cash \"box\" </script>"
+let text: str = "{\"slots\": [{\"id\": " + json_string(name) + ", \"tall\": 12.5, \"group\": true}, {\"id\": \"x\"}]}"
+assert "</script>" not in text
+let books: ?Json_T = read_json(text)
+assert books is not None
+var ids: []str = []
+var total: float = 0.0
+var groups: int = 0
+for s in books.json_list("slots"):
+    ids.append(s.json_text("id"))
+    total = total + s.json_number("tall")
+    if s.json_flag("group"):
+        groups = groups + 1
+assert ids == [name, "x"]
+assert total == 12.5 and groups == 1
+assert len(books.json_list("arrows")) == 0          # a list it does not have
+assert books.json_text("missing") == ""
+assert read_json("{oops") is None
+print "test_json_value: all checks passed"

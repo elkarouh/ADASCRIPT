@@ -278,6 +278,8 @@ paren_group = LPAREN_NODE + (yield_expr | walrus | expressions) + RPAREN
 empty_paren = LPAREN + RPAREN
 list_display = LBRACKET_NODE + (listcomp | star_expressions) + RBRACKET
 enum_array_display = LBRACKET_NODE + dictmaker + RBRACKET
+# [k: v for k in E] -- an [E]T built member by member
+enum_array_comp = LBRACKET_NODE + dictcomp + RBRACKET
 empty_list = LBRACKET + RBRACKET
 dict_display = LBRACE_NODE + (dictcomp | dictmaker) + RBRACE
 set_display = LBRACE_NODE + (setcomp | setmaker) + RBRACE
@@ -298,6 +300,7 @@ atom = (
     | named_tuple_lit
     | paren_group
     | empty_list
+    | enum_array_comp
     | enum_array_display
     | list_display
     | empty_set

@@ -415,6 +415,14 @@ def to_py(self, prec=None):
     return "_EnumArray({" + self.nodes[1].to_py() + "})"
 
 
+@method(enum_array_comp)
+def to_py(self, prec=None):
+    """enum_array_comp: '[' dictcomp ']' -> Python: _EnumArray({k: v for k in E})"""
+    from hek_py_declarations import _ensure_enum_array_alias
+    _ensure_enum_array_alias()
+    return "_EnumArray({" + self.nodes[1].to_py() + "})"
+
+
 @method(set_display)
 def to_py(self, prec=None):
     """set_display: '{' (setcomp | setmaker) '}'"""
@@ -1429,6 +1437,15 @@ def _is_scaled_name(name):
     return name in scaled or any(b == name for _, b in scaled.values())
 
 
+def _names_regex(call_args):
+    """Whether the first of CALL_ARGS, `(pat, ...)`, is a name declared Regex."""
+    from hek_parsec import ParserState
+    from hek_py_overload import _split_top
+    args = _split_top(call_args[1:-1]) if call_args.startswith("(") else []
+    sym = ParserState.symbol_table.lookup(args[0].strip()) if args else None
+    return isinstance(sym, dict) and (sym.get("type") or "").strip() == "Regex"
+
+
 def _only_plain_numbers(arg):
     """Whether ARG is made of literals and float()/int() calls alone, so a
     plain number whatever its operators: `float(a) ** 0.5`."""
@@ -1526,6 +1543,11 @@ def to_py(self, prec=None):
                     continue
             if i == 0 and tr_str.startswith("(") and _is_scaled_name(result):
                 result = _scaled_conversion(result, tr_str[1:-1])
+                i += 1
+                continue
+            if i == 0 and result == "Regex" and "Regex" not in _own and tr_str.startswith("("):
+                _ensure_pymatch_helper()
+                result = f"_re_mod.compile{tr_str}"
                 i += 1
                 continue
             if i == 0 and result == "enumerate" and "enumerate" not in _own:
@@ -1632,7 +1654,8 @@ def to_py(self, prec=None):
             # copied as it is, as Nim's std/re replace copies it.
             if (tr_str == ".sub"
                     and i + 1 < len(trailers)
-                    and trailers[i + 1].to_py().startswith("(_re_mod.compile(")):
+                    and (trailers[i + 1].to_py().startswith("(_re_mod.compile(")
+                         or _names_regex(trailers[i + 1].to_py()))):
                 import re as _re_sb
                 from hek_py_overload import _split_top as _split_sb
                 _sb_args = _split_sb(trailers[i + 1].to_py()[1:-1])
@@ -2143,6 +2166,16 @@ def to_py(self, prec=None):
                     else:
                         _call = f"_pymatch({chain}, r'{_safe_pat}')" if _flags_val == "0" else f"_pymatch({chain}, r'{_safe_pat}', {_flags_val})"
                         chain = f"not {_call}" if op == "!=" else _call
+                    continue
+            # `line == pat` for a `pat: Regex`: the same match, by a value
+            if op in ("==", "!="):
+                _rv = seq.nodes[1].to_py(operand_prec)
+                from hek_parsec import ParserState as _PS_rx
+                _rsym = _PS_rx.symbol_table.lookup(_rv.strip())
+                if (_rv.startswith("_re_mod.compile(")
+                        or (isinstance(_rsym, dict) and (_rsym.get("type") or "").strip() == "Regex")):
+                    _ensure_pymatch_helper()
+                    chain = f"{'not ' if op == '!=' else ''}_pymatch({chain}, {_rv})"
                     continue
             right = seq.nodes[1].to_py(operand_prec)
             # `r is Failure_T`: a type on the right asks which side of a

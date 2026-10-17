@@ -254,6 +254,8 @@ def _wrap_seq_for_enum_array(value, annotation):
     v = (value or "").strip()
     # Already keyed (the `[KEY: v]` literal, or the zero value), or not a
     # sequence at all: leave it alone.
+    if v.startswith("{") and " for " in v:   # `[k: v for k in E]`, keyed
+        return f"_EnumArray({v})"
     if v.startswith("_EnumArray(") or not v.startswith("["):
         return value
     key = _enum_array_key(ann)

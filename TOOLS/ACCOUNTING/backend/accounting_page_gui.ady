@@ -461,7 +461,7 @@ def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_a
                     + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source, g.accounts[i].name in now_accounts, g.accounts[i].name in picked)
             # the accounts and arrows as the server keeps them, for the browser to lay out and route again
             # (outside the svg: a <pre> inside it would end the drawing)
-            pre id="books": books_text(at.slots, arrows)
+            script type="application/json" id="books": books_text(at.slots, arrows)
 
 # ---------------------------------------------------------------------
 # The replay: the transactions one at a time, the books as they stood after each
@@ -1243,7 +1243,6 @@ path.split { stroke: #999; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none;
 text.side { font-size: 14px; font-weight: bold; fill: #666; }
 button.redraw { display: none; }
 svg.graph { user-select: none; }
-pre#books { display: none; }
 form.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #333; border-radius: 6px; padding: 1em 1.5em; box-shadow: 0 4px 24px #0006; z-index: 10; min-width: 24em; }
 form.popup label { display: block; margin-top: 0.6em; font-weight: bold; }
 form.popup input, form.popup select { width: 100%; box-sizing: border-box; }

@@ -174,6 +174,13 @@ for c in Color:
     print c'Image, score[c]      # RED 1, GREEN 2, BLUE 3, AMBER 4
 ```
 
+When each value follows from its member, the keyed comprehension builds
+the whole array, every slot filled from its own key:
+
+```python
+var tens: [Color]int = [c: ord(c) * 10 for c in Color]   # 0 10 20 30
+```
+
 On the Python backend `[E]T` is a dict keyed by the members, so it would
 otherwise be the one member of the family to yield its keys, and in the
 literal's order rather than the enum's.

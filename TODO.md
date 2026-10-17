@@ -4,15 +4,6 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
-- [ ] JSON for the browser. The accounting page hands the browser its accounts and
-      arrows as tab-separated lines in a hidden `pre` (`TOOLS/ACCOUNTING/shared/layout.ady`,
-      `books_text`/`slots_of`), with the fields matched by position and escaped by hand.
-      JSON in a `<script type="application/json">` element would follow the record types
-      instead. The server can already use it (`from json nimport parseJson, ...`, std/json),
-      but the browser build cannot: `browser.ady` has no JSON, and a plain `parseJson` plus
-      `JsonNode` indexing did not translate. The fix is a stdlib piece: typed accessors
-      over the parsed value in `browser.ady`, tested on both backends. Then the page
-      writes the records as JSON and the browser reads them by name.
 - [ ] a direct request from the browser. The Dijkstra gestures send their changes by
       filling the hidden form `#gesture` and pressing a button (`Change` in
       `EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady`). A call such as
@@ -37,22 +28,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       make `let` of a class a reference. (Found porting kilo, with two others
       since settled: a slice past the end clips on both backends, and names
       that are one name on Nim are refused.)
-- [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
-      both backends. Consistent rather than divergent, and a missing form
-      rather than a bug -- less pressing than it was, now that the
-      generator can name the domain: `[Color]int = [ord(c)*10 for c in
-      Color]` computes each value *from* its own key, which is what the
-      keyed form was mostly wanted for. What is still missing is filling
-      the slots out of domain order, the way the `[BLUE: 3, RED: 1]`
-      literal does.
-- [ ] no spelling for a pattern that is not known until run time. Regex
-      literals are syntax, which is the point, but it leaves a program that
-      reads a pattern out of a database or builds one from parts with nowhere
-      to go: `EXAMPLES/CFMU/cfmu_get_file_type.ady` matches against a pattern
-      the query returned and has to say `pyimport re` for that one call, which
-      drags CPython into a Nim binary. `re(expr)` appears in a couple of older
-      CFMU files as if it existed; it does not. Either a `Regex(s)` value that
-      `==` accepts on the right, or interpolation inside a literal.
 - [ ] distinct types and units, what is left (the feature itself --
       `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
@@ -73,18 +48,12 @@ history of this file if the reasoning behind one of them is ever wanted.
         units are meant. ady2py still keeps the number: it records no
         parameter types and knows a value's unit only where a name or
         operator shows it.
-      - cents: `type Dollar_T is 100 * Dollar_in_cent_T` over a `distinct
-        int` is done on Nim (EXAMPLES/test_cents.ady); ady2py still
-        refuses scaled units. Building them there, where the argument's
-        unit is known, would lift that for money, km and miles alike. The
-        conversion to cents rounds with its own helper, not `round`.
 - [ ] **For discussion:** let `m(k)` look up a `{K}V` or `[K]V` as `m[k]`
       does, and let a table be passed where a `(K) -> V` is expected (a
       small adapter on each backend). A pure function is a mapping, and Ada
       writes both the same way, so a computed function could become a
       precomputed table without touching a call site. Every declaration
       would still name one concrete type; only the call syntax is shared.
-- [ ] `.map()` / `.and_then()` rewriting on `?T` (Feature 2)
 - [ ] **For discussion, not to implement yet:** a statement modifier on more
       than the guards. Today only `return`, `break`, `continue`, `die(...)`
       and `quit(...)` may carry a trailing `if` (README, "Statement
@@ -114,14 +83,8 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] an `html:` attribute named with underscores keeps them in the page:
-      `data_hx_get`, `marker_end`, `stroke_width` come out as written, where
-      htmx wants `data-hx-get` and SVG `marker-end`. ROI_HTMX turns them
-      into hyphens by hand (`hyphens` in roi_gui.ady). Writing them hyphenated
-      means `browser.ady` and `svg_drag` read `data-x` and not `data_x`, so
-      both sides change together. Also: karax's `style=` attribute is a typed
-      `VStyle`, so `style="fill:#fff"` is refused; classes and a `<style>`
-      element do.
+- [ ] karax's `style=` attribute is a typed `VStyle`, so `style="fill:#fff"`
+      in an `html:` block is refused; classes and a `<style>` element do.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake. The message names
@@ -131,33 +94,6 @@ it but do:. Not yet:
       exception is that failure" -- a `try`-expression, a decorator on the
       callee, or a typed `shell:`-like block -- and how the exception's
       message maps onto `F`'s fields.
-
-### Feature 2 — `.map()` and `.and_then()` method rewriting on `?T`
-
-The transpiler does not currently rewrite `opt.map(f)` or `opt.and_then(f)` to
-Nim's `opt.map(f)` / `opt.flatMap(f)`. Without this, chained optional
-transformations must be broken into walrus steps or `do:` blocks — they cannot
-appear in expression position (inside arguments, list comprehensions, etc.).
-
-**Desired syntax:**
-```python
-# Expression-position pipeline — impossible today
-let label: ?str = fetch_user(id)
-                  .and_then(fetch_account)
-                  .map(format_summary)
-
-# In an argument
-print(fetch_user(id).map(format_summary) or "not found")
-```
-
-**Implementation sketch:**
-- In `hek_nim_expr.py`, detect `expr.map(f)` and `expr.and_then(f)` call
-  patterns where `expr` is typed as `Option[T]`.
-- Rewrite `.map(f)` → `.map(f)` (Nim options already has this).
-- Rewrite `.and_then(f)` → `.flatMap(f)` (Nim's name for monadic bind on Option).
-- The rewriting requires knowing that `expr` is Option-typed — check the symbol
-  table or the call's receiver type.
-- Complexity: ~300–500 lines in `hek_nim_expr.py`.
 
 ---
 
@@ -186,86 +122,17 @@ Worth revisiting if a program ever wants to feed a command more than it can
 hold. A cheaper middle step, if that day comes: let `stdin` accept `[]str`
 and write it element by element without ever joining it.
 
-## Substitution as an expression
-
-`target = s/pat/repl/` rewrites a variable in place, which means a name
-cannot be derived from another in one step: `EXAMPLES/CFMU/ftps_get.ady`
-copies first and substitutes second, four times in a row.
-
-    var no_gz : str = remote_file
-    no_gz = s/\.gz$//g
-
-An expression form -- `let no_gz: str = remote_file.sub(/\.gz$/, "")`, or
-whatever spelling keeps the sed flavour -- would make the copy unnecessary
-and leave the statement form for the in-place case. Needs a `sub` on `str`
-in both emitters.
-
-## `{!var}` quoting not supported in shell block form
-
-In single-line `shell:`, `{!var}` quotes the value as a single shell argument
-(`quoteShell`). In block form (`shell(join = ";"):` with indented lines),
-`{!var}` fails with `undeclared identifier: '!'`. Only `{var}` (unquoted
-interpolation) works in block lines.
-
-```adascript
-# Works:
-let rc: int = shell: sd 'a' 'b' {!out_file}
-
-# Fails:
-let rc: int = shell(join = ";"):
-    sd 'a' 'b' {!out_file}    # Error: undeclared identifier: '!'
-
-# Workaround — use {var} (safe when the path has no special characters):
-let rc: int = shell(join = ";"):
-    sd 'a' 'b' {out_file}
-```
-
 ## Union returns: what is left from rewriting lispy.ady
 
-- An f-string inside a shell interpolation, `{!f"HEAD {short}"}`, breaks the
-  emitted Nim ("closing \" expected"); bind it to a `let` first.
-
-Also: a variant record is a value type on Nim, so a variant that holds
+A variant record is a value type on Nim, so a variant that holds
 itself through a field (a closure holding its body) needs the holder to be a
 class marked `@virtual` -- correct, but `@virtual` is documented as being for
 cross-module subclasses only.
-
-## `n'Image` on an int or a str emits `.name` in Python
-
-`def f(n: int) -> str: return n'Image` (a `str` likewise) becomes `return (n).name` on the
-Python backend, which raises at run time; Nim's `$(n)` is right. The image of
-an enum member is `.name`, and the emitter takes any name it cannot type for
-one. It went unseen because the shared tests print enums and strings.
-
-## Found writing EXAMPLES/bench_search.ady
-
-- `case $1:` (a command-line argument as the subject) is emitted as
-  `if if paramCount() >= 1: paramStr(1) else: "" == "find":`, which Nim does
-  not parse; bind it first, `let mode: str = $1`. The `$n` expansion needs
-  parentheses wherever it is an operand.
-- `f"{x:7.0f}"` prints `5.` on Nim -- its format spec keeps the dot at zero
-  precision -- and `5` on Python. `{int(x):7}` is the same on both.
-- `for w in f(path): ... int(w)` on Nim leaves `w` untyped, so `int(w)` on a
-  `str` is emitted as-is and fails -- in a comprehension too,
-  `[int(w) for w in f(path)]`; a typed `let words: []str = f(path)` first
-  avoids it, and the routine's declared return type is all the emitter needs.
-
-## A record literal with fewer positional arguments than fields, on Nim
-
-`Press_T(ESCAPE)` for `record: key: Key_T; text: str = ""` works on Python but on
-Nim is emitted as the conversion `Press_T(ESCAPE)`: "type mismatch: got 'Key_T'
-but expected 'Press_T = object'". `Press_T(CHAR, "x")` and `Press_T(key=ESCAPE)`
-are fine; a program built for both backends would meet it.
 
 ## Found writing EXAMPLES/VI/vi_curses.ady (Adascript on Nim)
 
 Each is worked around there, and none is needed for Python:
 
-- `xs.insert(i, x)` is Python's order on both backends; on Nim the call is Nim's
-  `insert(xs, x, i)`. `xs.insert("b", 1)` works on Nim and fails on Python.
-- `Editor(path).run()` on a temporary: Nim wants a `var` receiver.
-- `return n` for an `n` narrowed by `if n is Failure_T: return ...` is not
-  unwrapped on Nim (a method call on it is): `case n: when int: return n` is.
 - `T(fd = 0, events = POLLIN)` on a Nim object type (not an Adascript record) is
   emitted as a call with `=` arguments; fields have to be assigned.
 
@@ -279,15 +146,6 @@ Known, and not done:
 - One namespace: a name defined in two modules is the later definition.
 - A parse error's line number is a line of the merged text.
 - The libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) are not merged.
-- `nimport math` then an unqualified `sqrt` is Nim's `math`; on Python it is a
-  NameError (EXAMPLES/PROJECT is that program).
-
-## `return n` of a narrowed result, in a method, on Nim
-
-In a plain function `if n is Failure_T: return 1` then `return n` works (it is
-emitted `n.value`). In a method it is emitted `is_err(n)` and `return n`,
-and Nim refuses the Result. EXAMPLES/VI/vi_editor.ady keeps that code in a function
-(`count_of`) for this.
 
 ## Found porting EXAMPLES/MOON/moon_sim.ady
 

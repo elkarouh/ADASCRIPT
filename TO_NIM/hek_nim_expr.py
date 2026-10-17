@@ -96,6 +96,12 @@ proc nimatch(s: string; pattern: Regex): bool =
   return true\
 """
 
+_KEYED_HELPER = """\
+proc adascriptKeyed[K: enum, V](t: Table[K, V]): array[K, V] =
+  ## `[k: v for k in E]`: the table the comprehension built, as the [E]T.
+  for k, v in t: result[k] = v\
+"""
+
 _EXIT_HELPER = """\
 proc c_exit(code: cint) {.importc: "exit", header: "<stdlib.h>", noreturn.}
 proc adascriptExit*(code: int) {.noreturn.} =
@@ -2866,6 +2872,17 @@ def to_nim(self, prec=None):
 _ekarr_counter = 0
 
 
+@method(enum_array_comp)
+def to_nim(self, prec=None):
+    """[k: v for k in E] -> the dictcomp's table, copied by key into an
+    array[E, V]: each value lands in the slot its key names."""
+    decls = getattr(ParserState, 'nim_top_decls', [])
+    if not any("adascriptKeyed" in d for d in decls):
+        decls.append(_KEYED_HELPER)
+        ParserState.nim_top_decls = decls
+    return f"adascriptKeyed({self.nodes[1].to_nim()})"
+
+
 @method(enum_array_display)
 def to_nim(self, prec=None):
     """[KEY: val, KEY: val] -> [val1, val2, ...] in enum declaration order."""
@@ -3470,6 +3487,12 @@ def to_nim(self, prec=None):
                 and not ParserState.symbol_table.lookup("round"):
             _ensure_round_helper()
             result = "adascriptRound"
+        # `Regex(s)`: a pattern made when the program runs -- read from a
+        # file, built from parts -- for `==` and `.sub` as a literal is
+        if raw_name == "Regex" and raw_name not in getattr(ParserState, "user_top_level_procs", ()) \
+                and not ParserState.symbol_table.lookup("Regex"):
+            _ensure_nimatch_helper()
+            result = "re"
         if raw_name == "input" and raw_name not in getattr(ParserState, "user_top_level_procs", ()):
             from hek_nim_declarations import _ensure_input_helper
             _ensure_input_helper()
@@ -4020,7 +4043,8 @@ def to_nim(self, prec=None):
                     import re as _re_sub
                     _sub_args = _extract_call_args(next_tr)
                     _pm = _re_sub.fullmatch(r're"(.*)"', _sub_args[0].strip(), _re_sub.S) if _sub_args else None
-                    if _pm and len(_sub_args) == 2:
+                    _pv = _sub_args and len(_sub_args) == 2 and _is_regex_value(_sub_args[0])
+                    if (_pm or _pv) and len(_sub_args) == 2:
                         _ensure_nimatch_helper()
                         _repl = _sub_args[1].strip()
                         _fn = "replace"
@@ -4029,7 +4053,8 @@ def to_nim(self, prec=None):
                             _repl = _re_sub.sub(r'\$\+\{(\w+)\}', r'${\1}', _repl)
                             if _re_sub.search(r'\$(\d+|\{\w+\})', _repl):
                                 _fn = "replacef"
-                        result = f'{result}.{_fn}(srx.re(r"{_pm.group(1)}"), {_repl})'
+                        _srx = f'srx.re(r"{_pm.group(1)}")' if _pm else f'srx.re({_regex_source(_sub_args[0])})'
+                        result = f'{result}.{_fn}({_srx}, {_repl})'
                         skip_next = True
                         continue
                 # `xs.insert(i, x)` is Python's order, index first; Nim's
@@ -5740,6 +5765,21 @@ def _proc_value_return_type(name):
     return ""
 
 
+def _regex_source(expr_str):
+    """The pattern text of a Regex value, for std/re, whose Regex is not nre's."""
+    return f"({expr_str.strip()}).pattern"
+
+
+def _is_regex_value(expr_str):
+    """Whether EXPR_STR, emitted Nim, is a `Regex` value: a name declared one,
+    or `re(...)` itself, which `Regex(s)` is emitted as."""
+    e = (expr_str or "").strip()
+    if e.startswith("re(") and e.endswith(")"):
+        return True
+    sym = ParserState.symbol_table.lookup(e)
+    return bool(sym) and (sym.get("type") or "").strip() == "Regex"
+
+
 def _expr_is_option(expr_str):
     """Return True if expr_str refers to an Option[...]-typed variable or attribute.
 
@@ -5942,6 +5982,13 @@ def to_nim(self, prec=None):
                         if py_op == "!=":
                             chain = f"not {chain}"
                     continue
+            # `line == pat` for a `pat: Regex`: the same match, by a value
+            if py_op in ("==", "!=") and _is_regex_value(seq.nodes[1].to_nim(operand_prec)):
+                _ensure_nimatch_helper()
+                chain = f"nimatch({chain}, {seq.nodes[1].to_nim(operand_prec)})"
+                if py_op == "!=":
+                    chain = f"not {chain}"
+                continue
             right = seq.nodes[1].to_nim(operand_prec)
             # a literal compared with a distinct value is of its type:
             # `v < 4.0` is `v < Velocity_T(4.0)`
