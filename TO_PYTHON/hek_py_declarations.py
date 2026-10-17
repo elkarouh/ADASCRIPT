@@ -757,9 +757,10 @@ def to_py(self, prec=None):
     marked = [type(m).__name__ == "failure_member" for m in members]
     u = classify_union(parts, check_failure_marks(
         parts, marked, getattr(ParserState, "failure_types", set())))
-    if u["kind"] == "plain" and len(parts) > 6:
+    # ten, as on Nim (OneOf2..OneOf10): Python itself has no limit
+    if u["kind"] == "plain" and len(parts) > 10:
         raise SyntaxError(
-            f"a union of {len(parts)} members: six at most -- group some "
+            f"a union of {len(parts)} members: ten at most -- group some "
             f"of them in a record")
     return " | ".join(parts)
 

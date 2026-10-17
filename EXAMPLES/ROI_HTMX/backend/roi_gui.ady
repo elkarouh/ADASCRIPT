@@ -120,11 +120,11 @@ def to_html(investment: Investment) -> Html:
             h2: "Investment"
             div class="jj-field-vertical":
                 label:
-                    + text("How much did you invest?")
+                    "How much did you invest?"
                     input class="jj-input" type="number" name="value" value=plain(investment.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=changed("funds") data_hx_target="#all" data_hx_swap="outerHTML"
             div class="jj-field-vertical":
                 label:
-                    + text("What year it was?")
+                    "What year it was?"
                     select class="jj-input" name="value" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=changed("year") data_hx_target="#all" data_hx_swap="outerHTML":
                         for y in years:
                             if y == investment.year:
@@ -137,9 +137,9 @@ def to_html(share: InvestmentPercentage) -> Html:
     html:
         div class="jj-field-vertical":
             label:
-                + text("What % did you invest in ")
+                "What % did you invest in "
                 strong: label_of(share.kind)
-                + text("?")
+                "?"
                 span class="jj-input-container":
                     input class="jj-input" type="number" name="value" value=plain(share.percentage) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=changed(name_of(share.kind)) data_hx_target="#all" data_hx_swap="outerHTML"
                     span class="jj-input-unit": "%"
@@ -166,9 +166,9 @@ def to_html(outcome: Outcome) -> Html:
     html:
         div class="between":
             p:
-                + text("This is your portfolio now in ")
+                "This is your portfolio now in "
                 strong: str(CURRENT_YEAR)
-                + text(".")
+                "."
             fieldset:
                 legend class="lead": "Your overall performance of investment is:"
                 + line_html("Value", outcome.overall_performance.value)

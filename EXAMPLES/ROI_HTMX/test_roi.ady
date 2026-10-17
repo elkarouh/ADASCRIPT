@@ -3,6 +3,7 @@
 from backend/roi_model import GOLD, BITCOIN, SP500, Outcome, Portfolio, evaluate, new_portfolio, set_share, set_year
 from backend/roi_layout import Layout, move_block, new_layout
 from backend/roi_events import answer
+from backend/roi_gui import shell_text
 
 # ---- the model ----
 var p: Portfolio = new_portfolio()
@@ -35,7 +36,9 @@ assert move_block(l, "nothing", 1.0, 1.0) != ""
 let first: str = answer("GET", "/all", "")
 assert "<svg" in first and "Investment" in first and "S&amp;P 500" in first
 assert "data-hx-get=\"/all\"" in first
+assert "What % did you invest in <strong>" in first                          # bare text beside a tag
 assert "value=\"2018\" selected" in first or "selected=\"selected\" value=\"2018\"" in first
+assert "font-family: sans-serif" in shell_text() and "&quot;" not in shell_text()   # the CSS as written
 assert "34.74" in answer("GET", "/all", "")                                   # gold's value in the sample
 assert "value=\"40\"" in answer("GET", "/all", "changed=gold&value=40")
 assert "value=\"10\"" in answer("GET", "/all", "changed=gold&value=40")     # bitcoin gave 15

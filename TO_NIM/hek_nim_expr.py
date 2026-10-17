@@ -3111,6 +3111,10 @@ def _translate_method(obj_name, method_name):
         _root_type = ((_root_sym.get("type") or "") if _root_sym else "")
         if _root_type.startswith("_py_module:") or _root_type == "PyObject":
             return method_name
+        # likewise a chain that starts at a JavaScript object:
+        # `dia["ElementView"].extend({...})` is JointJS's extend, not add
+        if _root_type in ("JsObject", "JsAssoc") or _root_type.startswith("JsAssoc["):
+            return method_name
     if sym:
         type_str = sym.get("type", "") or ""
         # A method the receiver's own class defines keeps its name: a Ring

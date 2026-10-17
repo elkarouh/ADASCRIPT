@@ -50,7 +50,7 @@ let paper: JsObject = jsnew dia["Paper"]({
     "background": {"color": "#f6f4f4"},
     "preventDefaultViewAction": false,
     "interactive": {"stopDelegation": false},
-    "elementView": dia["ElementView"]["extend"].call(dia["ElementView"], {
+    "elementView": dia["ElementView"].extend({
         "events": {"change input,select": "onInputChange"},
         "onInputChange": onInputChange
     })

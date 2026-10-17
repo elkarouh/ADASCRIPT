@@ -31,31 +31,12 @@ history of this file if the reasoning behind one of them is ever wanted.
       as vi's terminals are handed a `Frame_T` and not the `Editor`. What
       is wanted is `var` decided from the declaration (`ed: var Editor`), the same
       in the base and every override, and refused where they differ.
-- [ ] three things found porting kilo that are language decisions, not slips
-      (the slips were fixed: `+=` on a string field, `+` with a call operand,
-      a failure narrowed in a method, `"".join` over a multi-line f-string,
-      `{}` as a record field -- `EXAMPLES/test_nim_quirks.ady`).
-      (1) A slice past the end of a string or list raises on Nim and is clipped
-      on Python; kilo's `clip`/`tail`/`splice` stand in for it. One of the two
-      has to give.
-      (2) Nim reads names without case or underscores, so enum members `PAGE_UP`
-      and `PAGEUP`, or two names differing in the case after the first letter,
-      collide on Nim and not on Python. Refuse the pair at transpile time, or
-      accept it.
-      (3) A `let` class instance is immutable on Nim (a `var`-less object), so
-      `let r = Row(..); r.x = 1` fails there where Python allows it; kilo writes
-      through `self.rows[i].x`. Refuse the write on both backends, or make `let`
-      of a class a reference.
-- [ ] decorators beyond `@decorator` wrappers. Wrappers marked `@decorator`
-      work on every backend, with arguments, stacked, generic, with state of
-      their own (`@cached`), on functions of any arity and on methods
-      (EXAMPLES/test_decorators.ady, book 8.7). Still open: one that returns
-      a function of another type, and a cache on a method keyed on its
-      object too. Nim refuses any other decorator, while Python passes it
-      through; `@property`, `@staticmethod`, `@classmethod`, `@functools.*`
-      have no Nim counterpart and keep their refusal.
-- [ ] streaming stdin — deliberately not built; the deadlock case is already
-      handled, so only the in-memory limit remains (see below)
+- [ ] a `let` class instance is immutable on Nim (a `var`-less object), so
+      `let r = Row(..); r.x = 1` fails there where Python allows it; kilo
+      writes through `self.rows[i].x`. Refuse the write on both backends, or
+      make `let` of a class a reference. (Found porting kilo, with two others
+      since settled: a slice past the end clips on both backends, and names
+      that are one name on Nim are refused.)
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
       both backends. Consistent rather than divergent, and a missing form
       rather than a bug -- less pressing than it was, now that the
@@ -133,37 +114,14 @@ and narrows, as does `case r:` with a `when` per side; `None | !F`;
 unions (`int | float`, book 4.4, `EXAMPLES/test_union.ady`) share all of
 it but do:. Not yet:
 
-- [ ] two slips found making EXAMPLES/ROI_JOINTJS run again and writing
-      EXAMPLES/ROI_HTMX (the same page, drawn by the server, no JointJS):
-      (1) `.extend(...)` on any receiver becomes `.add(...)`
-      (`_PY_UNIVERSAL_METHOD_TO_NIM` in hek_nim_expr.py), so JointJS's
-      `dia["ElementView"].extend({...})` -- a method of a `JsObject` -- crashed
-      the page ("add is not a function") and nothing was drawn. The demo now
-      goes round it with `["extend"].call(dia["ElementView"], {...})`; the
-      mapping should leave a `JsObject` receiver alone. (2) an `html:` block
-      takes `+ text("...")` for bare text but not a bare string
-      (`"What % did you invest in "` -> `add(tmp, "...")`, "type mismatch"), so
-      text mixed with tags, as in `label: "..." strong: ...`, has no plain
-      spelling. Also seen: the CSS in a `style:` block comes out
-      HTML-escaped (`"Segoe UI"` -> `&quot;Segoe UI&quot;`), which breaks the
-      declaration. Karax's `style=` attribute is a typed `VStyle`, so
-      `style="fill:#fff"` is refused; classes and a `<style>` element do.
-      An attribute value in an `html:` block ends at a space, so it cannot
-      hold one: `x=str(a + b)`, `class=("n" if g else "b")` and
-      `viewBox=f"0 0 {w} {h}"` do not parse (a call or a spaceless f-string
-      does: `x=f"{x}"`, `data_x=f"{x+w/2.0}"`). Worse, `+` joins silently:
-      `marker_end="url(#head"+color[1:]+")"` compiles and writes only
-      `marker_end="url(#head"`, the rest dropped without a word; and a format
-      spec or a slice inside an attribute f-string (`{w:.0f}`, `{c[1:]}`)
-      does not parse. The same escaping hits `>` in a `style:` block (a child
-      combinator, `a > b`, comes out `&gt;`). Each should either work or say
-      what it refuses.
-- [x] Nim: a `T | !F` passed as an *argument* whose value is a plain T or E
-      -- `f(3)` where f takes `int | !Failure_T` -- is typed from the
-      parameter (EXAMPLES/test_union_args.ady).
-- [x] a union of more than six members: stdlib.nim now has OneOf2..OneOf10
-      (generated blocks). The Python backend still stops at six
-      (`hek_py_declarations.py`).
+- [ ] an `html:` attribute named with underscores keeps them in the page:
+      `data_hx_get`, `marker_end`, `stroke_width` come out as written, where
+      htmx wants `data-hx-get` and SVG `marker-end`. ROI_HTMX turns them
+      into hyphens by hand (`hyphens` in roi_gui.ady). Writing them hyphenated
+      means `browser.ady` and `svg_drag` read `data-x` and not `data_x`, so
+      both sides change together. Also: karax's `style=` attribute is a typed
+      `VStyle`, so `style="fill:#fff"` is refused; classes and a `<style>`
+      element do.
 - [ ] which side a returned value is on is read from its type; a value the
       Nim backend cannot type goes on the value side, and Nim's own type
       check then catches a failure put there by mistake. The message names

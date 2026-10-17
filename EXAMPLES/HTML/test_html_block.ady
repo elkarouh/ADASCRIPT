@@ -1,0 +1,31 @@
+#!/usr/bin/env ady2nim
+"""Test: what an `html:` block takes, printed and checked natively.
+
+Bare text beside tags, a `style:` whose CSS keeps its `>` and quotes, an
+attribute value with spaces inside brackets, a value joined with `+`, a
+format spec and a slice in an attribute f-string, and the tags karax names
+differently (`b`, `i`).
+"""
+const CSS: str = "a > b { font-family: \"Segoe UI\"; }"
+
+def page(a: int, b: int, g: bool, w: float, c: str) -> Html:
+    html:
+        div:
+            style: CSS
+            label:
+                "What % did you invest in "
+                b: "stocks"
+                "?"
+            i: "slanted"
+            svg viewBox=f"0 0 {w} {w}":
+                rect x=str(a + b) class=("n" if g else "b") width=f"{w:.0f}"
+                path marker_end="url(#head"+c[1:]+")" fill=f"#{c[1:]}"
+
+let out: str = str(page(1, 2, true, 3.5, "#abc"))
+assert "<style>a > b { font-family: \"Segoe UI\"; }</style>" in out
+assert "<label>What % did you invest in <b>stocks</b>?</label>" in out
+assert "<i>slanted</i>" in out
+assert "viewBox=\"0 0 3.5 3.5\"" in out
+assert "x=\"3\"" in out and "class=\"n\"" in out and "width=\"4\"" in out
+assert "marker_end=\"url(#headabc)\"" in out and "fill=\"#abc\"" in out
+print "html_block ok"

@@ -3,7 +3,8 @@
 #
 #   ady2nim EXAMPLES/test_union_wide.ady -r
 #
-# stdlib.nim carries OneOf2 .. OneOf10; eight members is not special.
+# stdlib.nim carries OneOf2 .. OneOf10, and Python takes the same ten; eight
+# members is not special. The output is compared between the backends.
 
 type A_T is record:
     a: int

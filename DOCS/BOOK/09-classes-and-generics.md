@@ -393,9 +393,13 @@ Line forms inside the block:
 | `+ expr`                      | another widget's `Html` goes here                   |
 | `for` / `if` / `elif` / `else` / `while` | ordinary control flow around tags        |
 
-An attribute value is a string or an expression without spaces
-(`id=self.id`); `class` and `for` are fine as attribute names, and
-`data-id` is written `data_id`. The block needs exactly one root tag.
+An attribute value is a string or an expression (`id=self.id`); a space
+ends it unless it is inside brackets or a string, so `x=str(a + b)`,
+`class=("on" if lit else "off")` and `marker="url(#"+name+")"` each read
+whole. `class` and `for` are fine as attribute
+names, and `data-id` is written `data_id`. The text of a `style:` or
+`script:` tag is written as it is, not escaped, so CSS keeps its `>` and
+quotes. The block needs exactly one root tag.
 
 **What the block accepts.** Expressions and control flow are Adascript; the
 tag lines are the block's own. Four things follow:

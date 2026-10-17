@@ -849,6 +849,18 @@ def translate(code, export_symbols=False):
                 f"name on Nim, which ignores case and underscores after the first "
                 f"letter; rename one")
         _seen_nim.setdefault(_key, (_nm, _ln_no))
+    # and the same inside one enum: `PAGE_UP` and `PAGEUP` are one member there
+    for _em in _re_udef.finditer(r"(?m)^\s*type\s+(\w+)\s+is\s*(?:\(([^)]*)\)|enum\s+([^#\n]*))[ \t]*(?:#.*)?$", code):
+        _members = {}
+        for _mem in _re_udef.findall(r"[A-Za-z_]\w*", _re_udef.sub(r"#[^\n]*", "", _em.group(2) or _em.group(3))):
+            _key = _mem[0] + _mem[1:].replace("_", "").lower()
+            if _key in _members and _members[_key] != _mem:
+                _ln_no = code.count("\n", 0, _em.start()) + 1
+                raise SyntaxError(
+                    f"line {_ln_no}: the members '{_members[_key]}' and '{_mem}' of "
+                    f"{_em.group(1)} are one name on Nim, which ignores case and "
+                    f"underscores after the first letter; rename one")
+            _members.setdefault(_key, _mem)
 
     # `Path(p).name` with no `: Path` anywhere: the prelude is injected when a
     # type names Path, which an expression does too late to reach the output

@@ -345,7 +345,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_units_dims
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_union_wide test_units_dims
 
 # -----------------------------------------------------------------------
 # Skipped when this machine cannot build them -- a Nim package that is not
@@ -749,6 +749,13 @@ test: compile
 	    echo "FAIL (accepted)"; exit 1; \
 	fi; \
 	grep -q "line 4: 'CONTAINER' and 'Container' (line 1) are one name on Nim" $(TMPDIR)/ady_nim_clash.out \
+	    && echo OK || { echo FAIL; cat $(TMPDIR)/ady_nim_clash.out; exit 1; }
+	@printf 'type Key_T is (\n    ARROW_UP, PAGE_UP,\n    PAGEUP)\nprint ARROW_UP\n' > $(TMPDIR)/ady_nim_clash.ady
+	@printf '  %-42s' "PAGE_UP and PAGEUP (nim)"; \
+	if $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py $(TMPDIR)/ady_nim_clash.ady > $(TMPDIR)/ady_nim_clash.out 2>&1; then \
+	    echo "FAIL (accepted)"; exit 1; \
+	fi; \
+	grep -q "line 1: the members 'PAGE_UP' and 'PAGEUP' of Key_T are one name on Nim" $(TMPDIR)/ady_nim_clash.out \
 	    && echo OK || { echo FAIL; cat $(TMPDIR)/ady_nim_clash.out; exit 1; }
 	@rm -f $(TMPDIR)/ady_nim_clash.ady $(TMPDIR)/ady_nim_clash.out
 
@@ -1550,7 +1557,7 @@ test: compile
 	@# so for it the check is that `nim js` accepts it.
 	@echo "=== html: blocks (karax) ==="
 	@if [ -n "$(HTML_SKIPPED)" ]; then echo "  SKIPPED, karax not installed"; else \
-	    for t in 'html_card:>Counter</text>'; do \
+	    for t in 'html_card:>Counter</text>' 'test_html_block:html_block ok'; do \
 	        n=$${t%%:*}; want=$${t#*:}; \
 	        printf '  %-42s' "HTML/$$n.ady"; \
 	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \

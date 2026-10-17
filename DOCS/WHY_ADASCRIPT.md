@@ -1692,7 +1692,7 @@ catches them:
   before. Nim refuses it at compile time.
 - **Scaled units** (the kilometre, the mile, money in cents) are refused:
   they are built by `ady2nim` only.
-- **Unions** are at most six members.
+- **Unions** are at most ten members.
 - **A constructor that can fail** is refused by `ady2py`: Python's `__init__`
   returns nothing, so the same source needs a function returning `C | !F` there.
 - **A type with a check** (`type D is str where d: ...`) is refused by `ady2py`:

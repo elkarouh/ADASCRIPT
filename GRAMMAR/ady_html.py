@@ -28,7 +28,9 @@ Line forms inside the block:
     + expr                       another widget's HTML (an Html value) here
     for / if / elif / else / while   ordinary control flow around tags
 
-An attribute value is a string literal or a bare expression without spaces.
+An attribute value is an expression; a space or a `:` ends it unless it is
+inside brackets or a string, so `x=str(a + b)` and `class=("n" if g else "b")`
+read whole.
 An attribute named on... (`onclick=self.inc`) is an event handler: its value
 is run when the event fires, and the module then needs karax's browser side,
 so it builds under `ady2nim js` only.
@@ -40,17 +42,12 @@ import re
 _CONTROL = ("for", "if", "elif", "else", "while", "match", "case", "try",
             "except", "finally", "with")
 _OPEN = re.compile(r"^(\s*)html:\s*(#.*)?$")
-_ATTR = re.compile(r"""([A-Za-z_][\w-]*)=("[^"]*"|'[^']*'|[^\s:]+)""")
-_TAG = re.compile(
-    r"""^(?P<tag>[A-Za-z][A-Za-z0-9]*)
-        (?P<attrs>(?:\s+[A-Za-z_][\w-]*=(?:"[^"]*"|'[^']*'|[^\s:]+))*)
-        \s*(?P<colon>:)?\s*(?P<rest>.*)$""", re.X)
 
 
-def _attrs(text):
-    """TEXT's attributes as ('class_', '"card"') pairs."""
+def _attrs(pairs):
+    """PAIRS of a tag line as ('class_', '"card"') pairs."""
     out = []
-    for name, value in _ATTR.findall(text):
+    for name, value in pairs:
         name = name.replace("-", "_")
         if name in ("class", "for"):
             name += "_"
@@ -92,14 +89,60 @@ def _tag_line(raw):
         return ind, "text", None, None, line
     if line.startswith("+ "):                        # a child's own HTML
         return ind, "embed", None, None, line[2:].strip()
-    m = _TAG.match(line)
+    m = re.match(r"[A-Za-z][A-Za-z0-9]*", line)
     if not m:
         raise SyntaxError(f"html: block: cannot read the line {line!r}")
-    rest = m.group("rest").strip()
+    pairs, k = _scan_attrs(line, m.end())
+    colon = line[k:k + 1] == ":"
+    rest = line[k + 1:].strip() if colon else line[k:].strip()
     if rest.startswith("#"):
         rest = ""
-    return (ind, "tag", m.group("tag"), _attrs(m.group("attrs")),
-            rest if m.group("colon") else None)
+    if not colon and rest:
+        raise SyntaxError(f"html: block: cannot read {rest!r} in the line {line!r}")
+    return (ind, "tag", m.group(0), _attrs(pairs), rest if colon else None)
+
+
+def _value_end(line, k):
+    """Where the attribute value that starts at LINE[k] ends: at a space or a
+    `:` outside brackets and strings, so `x=str(a + b)`,
+    `class=("n" if g else "b")` and `"url(#"+c[1:]+")"` are each one value."""
+    depth, n = 0, len(line)
+    while k < n:
+        ch = line[k]
+        if ch in "\"'":
+            q = ch
+            k += 1
+            while k < n and line[k] != q:
+                k += 2 if line[k] == "\\" else 1
+            k += 1
+            continue
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and (ch.isspace() or ch == ":"):
+            break
+        k += 1
+    if depth:
+        raise SyntaxError(f"html: block: unbalanced brackets in {line[:n]!r}")
+    return k
+
+
+def _scan_attrs(line, k):
+    """The name=value pairs of a tag line from LINE[k], and where they end."""
+    pairs = []
+    while True:
+        j = k
+        while j < len(line) and line[j].isspace():
+            j += 1
+        m = re.compile(r"([A-Za-z_][\w-]*)=").match(line, j)
+        if not m:
+            return pairs, j
+        end = _value_end(line, m.end())
+        if end == m.end():
+            raise SyntaxError(f"html: block: {m.group(1)}= has no value in {line!r}")
+        pairs.append((m.group(1), line[m.end():end]))
+        k = end
 
 
 def _kw(attrs):
@@ -136,7 +179,9 @@ def _expand(lines, start, end, base):
             out.append(f"{pad}with {marker}{tag}({_kw(attrs)}):")
         else:                                         # tag around one expression
             out.append(f"{pad}with {marker}{tag}({_kw(attrs)}):")
-            out.append(f"{pad}    __text({rest})")
+            # CSS and script are not text: `a > b` and "Segoe UI" stay as written
+            raw = tag.lower() in ("style", "script")
+            out.append(f"{pad}    {'__raw' if raw else '__text'}({rest})")
     return out
 
 
@@ -171,10 +216,13 @@ _TAGW = re.compile(r"^(\s*)with __tag_(\w+)\((.*)\):\s*$")
 _VOID = re.compile(r"^(\s*)__tag_(\w+)\((.*)\)\s*$")
 _EMBED = re.compile(r"^(\s*)__embed\((.*)\)\s*$")
 _TEXT = re.compile(r"^(\s*)__text\((.*)\)\s*$")
+_RAW = re.compile(r"^(\s*)__raw\((.*)\)\s*$")
 
 
 def _karax(tag, args):
-    tag = {"div": "tdiv"}.get(tag, tag)
+    # karax's names for the tags whose own name is taken in Nim
+    tag = {"div": "tdiv", "s": "strikethrough", "i": "italic", "b": "bold",
+           "u": "underlined", "text": "stext"}.get(tag, tag)
     args = re.sub(r"\bclass_=", "class=", args)
     args = re.sub(r"\bfor_=", "`for`=", args)
     args = re.sub(r"\b([A-Za-z]+)_([A-Za-z]+)=", r"\1-\2=", args) if False else args
@@ -195,7 +243,7 @@ def _handlers(line):
 def finish_html_nim(nim):
     """NIM, the text of a module, with the markers turned into karax."""
     if "__tag_" not in nim and "__root_" not in nim and "__text(" not in nim \
-            and "__embed(" not in nim:
+            and "__embed(" not in nim and "__raw(" not in nim:
         return nim
     out = []
     for ln in nim.split("\n"):
@@ -213,6 +261,8 @@ def finish_html_nim(nim):
             out.append(f"{m.group(1)}{m.group(2)}")
         elif (m := _TEXT.match(ln)):
             out.append(f"{m.group(1)}text {m.group(2)}")
+        elif (m := _RAW.match(ln)):
+            out.append(f"{m.group(1)}verbatim {m.group(2)}")
         else:
             out.append(ln)
     return "\n".join(out)
