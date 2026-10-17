@@ -168,7 +168,10 @@ def decode(ch: int) -> Press_T:
     let code: Code_T | !ParseFailure_T = parse_enum(Code_T, ch)
     case code:
         when ParseFailure_T:
-            return Press_T(CHAR, str(chr(ch))) if 0 <= ch <= 255 else Press_T(OTHER, "")
+            if not (0 <= ch <= 255):
+                return Press_T(OTHER, "")
+            let byte: char = chr(ch)            # one byte, as the terminal sent it
+            return Press_T(CHAR, str(byte))
         when Code_T:
             case code:
                 when ENTER: Press_T(NEWLINE, "")
