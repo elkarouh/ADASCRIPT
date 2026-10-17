@@ -1,0 +1,6 @@
+# a module the refusals here import
+def ok() -> int:
+    return 1
+
+def broken() -> int
+    return 2

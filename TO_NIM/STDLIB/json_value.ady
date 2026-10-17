@@ -66,15 +66,15 @@ class JsonReader:
         else:
             self.ok = False
 
-    def value(self) -> Json_T:
+    def read_value(self) -> Json_T:
         self.skip_space()
         let c: str = self.peek()
         if c == "{":
-            return self.object()
+            return self.read_object()
         if c == "[":
-            return self.list()
+            return self.read_list()
         if c == "\"":
-            return Json_T(J_STRING, False, 0.0, self.string(), [], [])
+            return Json_T(J_STRING, False, 0.0, self.read_string(), [], [])
         if c == "t":
             self.expect("true")
             return Json_T(J_BOOL, True, 0.0, "", [], [])
@@ -84,9 +84,9 @@ class JsonReader:
         if c == "n":
             self.expect("null")
             return Json_T(J_NULL, False, 0.0, "", [], [])
-        return Json_T(J_NUMBER, False, self.number(), "", [], [])
+        return Json_T(J_NUMBER, False, self.read_number(), "", [], [])
 
-    def object(self) -> Json_T:
+    def read_object(self) -> Json_T:
         var keys: []str = []
         var items: []Json_T = []
         self.expect("{")
@@ -99,10 +99,10 @@ class JsonReader:
             if self.peek() != "\"":
                 self.ok = False
                 break
-            keys.append(self.string())
+            keys.append(self.read_string())
             self.skip_space()
             self.expect(":")
-            items.append(self.value())
+            items.append(self.read_value())
             self.skip_space()
             if self.peek() == ",":
                 self.at += 1
@@ -111,7 +111,7 @@ class JsonReader:
                 break
         return Json_T(J_OBJECT, False, 0.0, "", items, keys)
 
-    def list(self) -> Json_T:
+    def read_list(self) -> Json_T:
         var items: []Json_T = []
         self.expect("[")
         self.skip_space()
@@ -119,7 +119,7 @@ class JsonReader:
             self.at += 1
             return Json_T(J_LIST, False, 0.0, "", items, [])
         while self.ok:
-            items.append(self.value())
+            items.append(self.read_value())
             self.skip_space()
             if self.peek() == ",":
                 self.at += 1
@@ -128,7 +128,7 @@ class JsonReader:
                 break
         return Json_T(J_LIST, False, 0.0, "", items, [])
 
-    def string(self) -> str:
+    def read_string(self) -> str:
         var out: str = ""
         self.expect("\"")
         while self.ok:
@@ -140,14 +140,14 @@ class JsonReader:
                 break
             elif c == "\\":
                 self.at += 1
-                out += self.escape()
+                out += self.read_escape()
             else:
                 out += c
                 self.at += 1
         return out
 
     # The character an escape stands for, its backslash already taken.
-    def escape(self) -> str:
+    def read_escape(self) -> str:
         let c: str = self.peek()
         self.at += 1
         if c in ["\"", "\\", "/"]:
@@ -171,7 +171,7 @@ class JsonReader:
         self.ok = False
         return ""
 
-    def number(self) -> float:
+    def read_number(self) -> float:
         let start: int = self.at
         while self.peek() != "" and self.peek() in ["-", "+", ".", "e", "E", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
             self.at += 1
@@ -184,7 +184,7 @@ class JsonReader:
 # TEXT read as JSON; None when it is not JSON.
 def read_json(text: str) -> ?Json_T:
     var reader: JsonReader = JsonReader(text)
-    let v: Json_T = reader.value()
+    let v: Json_T = reader.read_value()
     reader.skip_space()
     if not reader.ok or reader.at != len(text):
         return None

@@ -4,43 +4,22 @@ Open items only.  The write-ups for everything already fixed — 26 numbered
 bugs and the shell-syntax work — were removed once done; they are in the git
 history of this file if the reasoning behind one of them is ever wanted.
 
-- [ ] a method's parameter is made `var` only for a direct write to it
-      (`p.x = 1`, `p.items.add(..)`), where a plain proc's is also for a call of
-      a method that mutates its object (`p.scroll()`). So `def draw(self, ed:
-      Editor)` calling `ed.scroll()` kept a by-value `ed` and nim refused it. The
-      fix is not just to copy the proc rule: a method that overrides must have its
-      base's exact signature, and a `var` the subclass alone infers from its body
-      makes a *different* method -- the base's is called, silently. Today the way
-      out is a reference class (`@virtual`), or a plain record handed over instead,
-      as vi's terminals are handed a `Frame_T` and not the `Editor`. What
-      is wanted is `var` decided from the declaration (`ed: var Editor`), the same
-      in the base and every override, and refused where they differ.
-- [ ] a `let` class instance is immutable on Nim (a `var`-less object), so
-      `let r = Row(..); r.x = 1` fails there where Python allows it; kilo
-      writes through `self.rows[i].x`. Refuse the write on both backends, or
-      make `let` of a class a reference. (Found porting kilo, with two others
-      since settled: a slice past the end clips on both backends, and names
-      that are one name on Nim are refused.)
 - [ ] distinct types and units, what is left (the feature itself --
       `distinct`, scaling, derived and scaled units -- is done: book 2.7,
       EXAMPLES/test_distinct.ady, test_units.ady, test_money.ady):
-      - the Python backend does not check an argument's type (it records
-        no parameter types); building for Nim catches it.
       - a literal whose context Nim cannot see (an argument to something
         that is not a known routine) needs `V(x)` written. A table literal
         with a distinct key or value type no longer does, when declared,
         returned or passed as a known routine's argument.
-      - a derived unit is float, or int for a product, and a unit cannot be
-        raised to a power: `Area_T` is `Length_T * Length_T`, and there is
-        no `Length_T ** 2`. Units relate by dimension (book 2.7), but only
-        to the units declared: Nim's `unchained` does full dimensional
-        analysis; this is deliberately smaller.
+      - a derived unit is float, or int for a product. `x ** n` (n a whole
+        number written out) is the unit of that dimension, when one is
+        declared. Units relate by dimension (book 2.7), but only to the
+        units declared: Nim's `unchained` does full dimensional analysis;
+        this is deliberately smaller.
       - a conversion between two distinct types no declaration relates,
         `Duration_T(d)` for a `Distance_T` d, is refused on Nim, naming
         both types; `Duration_T(float(d))` is the spelling that says the
-        units are meant. ady2py still keeps the number: it records no
-        parameter types and knows a value's unit only where a name or
-        operator shows it.
+        units are meant. ady2py refuses it the same way.
 - [ ] **For discussion:** let `m(k)` look up a `{K}V` or `[K]V` as `m[k]`
       does, and let a table be passed where a `(K) -> V` is expected (a
       small adapter on each backend). A pure function is a mapping, and Ada
@@ -120,13 +99,6 @@ itself through a field (a closure holding its body) needs the holder to be a
 class marked `@virtual` -- correct, but `@virtual` is documented as being for
 cross-module subclasses only.
 
-## Found writing EXAMPLES/VI/vi_curses.ady (Adascript on Nim)
-
-Each is worked around there, and none is needed for Python:
-
-- `T(fd = 0, events = POLLIN)` on a Nim object type (not an Adascript record) is
-  emitted as a call with `=` arguments; fields have to be assigned.
-
 ## Modules on the Python backend (ady2py merges what ady2nim links)
 
 `ady2py` replaces `import X` by X.ady's text (see `include_ady_modules`).
@@ -135,9 +107,8 @@ Known, and not done:
 - `geometry.distance(a, b)` beside a `distance` of the importing file's own merges the
   module's as `geometry__distance`; a third file that takes `distance` from geometry
   unqualified then gets the importing file's.
-- One namespace: a name defined in two modules is the later definition.
-- A parse error's line number is a line of the merged text.
-- The libraries bundled with ady2nim (`TO_NIM/STDLIB/*.ady`) are not merged.
+- Of the libraries bundled with ady2nim, `db.ady` (Nim's db_sqlite) builds on Nim only;
+  `browser`, `svg_drag` and `jointjs` are for `ady2nim js`, by nature.
 
 ## Found porting EXAMPLES/MOON/moon_sim.ady
 

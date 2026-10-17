@@ -1,0 +1,9 @@
+# refused by nim: line 8: p.x changes the `let` p (line 7), a Point_T value, which cannot change: declare it `var p`
+# refused by python: line 8: p.x changes the `let` p (line 7), a Point_T value, which cannot change: declare it `var p`
+type Point_T is record:
+    x: int
+    y: int
+
+let p: Point_T = Point_T(1, 2)
+p.x = 3
+print(p.x)

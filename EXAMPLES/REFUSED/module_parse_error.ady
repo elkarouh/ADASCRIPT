@@ -1,0 +1,4 @@
+# refused by nim: mod_broken.ady: Parse error at line 5
+# refused by python: mod_broken.ady: Parse error at line 5
+from mod_broken import ok
+print(ok())

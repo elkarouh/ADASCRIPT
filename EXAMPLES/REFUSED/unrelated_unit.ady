@@ -1,0 +1,7 @@
+# refused by nim: Duration_T(d): a Distance_T does not convert to a Duration_T
+# refused by python: Duration_T(d): a Distance_T does not convert to a Duration_T
+type Distance_T is distinct float
+type Duration_T is distinct float
+let d: Distance_T = 3.0
+let t: Duration_T = Duration_T(d)
+print(t)

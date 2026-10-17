@@ -423,7 +423,6 @@ var_param_type = ikw("var") + elem_type
 # the standalone identifiers 'lent' or 'own'.
 basic_type = (
     lent_type
-    | var_param_type
     | own_param_type
     | seq_type
     | openarray_type

@@ -3530,6 +3530,19 @@ def to_nim(self, prec=None):
                 ParserState.nim_imports.add("strutils")
                 return f"parseEnum[{raw_name}]({', '.join(args)}){rest}"
 
+        # A Nim module's object type, taken by name (`from posix nimport TPollfd`) and
+        # given its fields by name: TPollfd(fd = 0, events = POLLIN) builds the object,
+        # as a record's constructor does. A type's name is capitalised; a routine's is not.
+        if (raw_name[:1].isupper() and len(self.nodes) > 1 and self.nodes[1].nodes
+                and type(self.nodes[1].nodes[0]).__name__ == "call_trailer"
+                and any(raw_name in names for names in ParserState.nim_from.values())):
+            import re as _re_no
+            args = _extract_call_args(self.nodes[1].nodes[0])
+            if args and all(_re_no.match(r'^\w+ = ', a) for a in args):
+                pairs = ", ".join(_re_no.sub(r'^(\w+) = ', r'\1: ', a, count=1) for a in args)
+                rest = "".join(tr.to_nim() for tr in self.nodes[1].nodes[1:])
+                return f"{raw_name}({pairs}){rest}"
+
         # Tuple/object type constructor: TupleType(a, b) -> (field1: a, field2: b)
         #                                ObjectType(a, b) -> ObjectType(field1: a, field2: b)
         if raw_name not in _PY_IDENT_TO_NIM:

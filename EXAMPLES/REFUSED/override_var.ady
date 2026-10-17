@@ -1,0 +1,22 @@
+# refused by nim: Status.draw: its parameter ed is not var, where Pane.draw's is var
+class Editor:
+    var top: int
+    def __init__(self):
+        self.top = 0
+
+@virtual
+class Pane:
+    def __init__(self):
+        pass
+    def draw(self, ed: var Editor):
+        ed.top = 1
+
+@virtual
+class Status(Pane):
+    def __init__(self):
+        super().__init__()
+    def draw(self, ed: Editor):
+        print(ed.top)
+
+var ed: Editor = Editor()
+Status().draw(ed)

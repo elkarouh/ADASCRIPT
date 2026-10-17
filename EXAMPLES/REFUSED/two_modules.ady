@@ -1,0 +1,5 @@
+# refused by nim: line 5: 'size' is defined in both mod_a and mod_b
+# refused by python: line 5: 'size' is defined in both mod_a and mod_b
+from mod_a import size
+from mod_b import size
+print(size())

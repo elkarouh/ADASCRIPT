@@ -471,7 +471,10 @@ declaration naming that pair. A result of no dimension is a plain number, and
 one two declared units share is refused with both named. Everything else
 between the units is refused: `d * t`, `v + d`, `1.0 / t`. A unit of no
 dimension is the ratio it is, `type Radians_T is Length_T / Length_T`, and
-scales a length into a length. A derived unit can be made from another (`type Accel_T
+scales a length into a length. A unit raised to a whole number written out
+is the unit of that dimension: `side ** 2` for a `Length_T` side is an
+`Area_T`, and a power no declared unit has is refused, saying what to
+declare. A derived unit can be made from another (`type Accel_T
 is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
 `int` for a product. Nim gets a small proc per relation, so it costs nothing
 at run time.
@@ -3230,6 +3233,7 @@ def consume(data: own Buffer):        # take ownership: callee is responsible
 |---|---|---|---|
 | `param: lent T` | `param: T` | `param: T` | Read-only borrow; caller still owns the value |
 | `param: own T` | `param: sink T` | `param: T` | Ownership transferred to the callee |
+| `param: var T` | `param: var T` | `param: T` | The callee changes the caller's value |
 
 **`lent T`** — the callee promises not to store or transfer the value; it
 simply reads it.  Nim passes by value (ARC may optimise to a pointer); Python
@@ -3238,6 +3242,14 @@ passes by reference as usual.
 **`own T` / `sink T`** — the callee takes responsibility for the value.  In
 Nim this enables the "sink" optimisation: the caller's copy is moved rather
 than copied.  In Python the annotation is stripped; the GC handles cleanup.
+
+**`var T`** — the callee changes the value its caller passed: a field written,
+or a method called that changes its object. A plain function works this out
+from its body, and `var` there only says it. A method does not: an override
+must take its parameters as the method it overrides does, so ady2nim refuses
+a method that changes a by-value parameter, naming the `var` to declare, and
+an override whose `var` parameters differ from its base's. A reference class
+(`@virtual`) needs no `var`: the callee changes the object the caller holds.
 
 ```python
 def process(buf: lent Buffer) -> int:
@@ -3390,6 +3402,7 @@ done
 | `own x: T = expr` | `var x: T = expr` | `x: T = expr` |
 | `param: lent T` | `param: T` | `param: T` |
 | `param: own T` | `param: sink T` | `param: T` |
+| `param: var T` | `param: var T` | `param: T` |
 | `-> own T` (return) | `-> T` | `-> T` |
 | `move(x)` | `move(x)` | `x` (alias; GC ref) |
 | `drop(x)` | `(block: =destroy(x); =wasMoved(x))` | `del x` |
@@ -3717,8 +3730,9 @@ def data_name(n: Element_T) -> str:
 
 `node.data_name` (or `node.data_name()`) is `data_name(node)`. That gives a
 type the program did not declare, such as a page's `Element_T`, what reads like fields,
-with no wrapper class around it. **Nim only**: ady2py writes `node.data_name`
-as an attribute lookup, which fails.
+with no wrapper class around it. Both backends do this; ady2py does it where the
+value before the dot is a name whose declared type is the function's first
+parameter's, and the type has no field or method of that name.
 
 **Pages the server draws.** When the server draws the page and htmx keeps it
 current, the browser script holds only what must follow the mouse. `import

@@ -1,0 +1,5 @@
+# refused by nim: [k: v for k in E if c] leaves members without a value
+# refused by python: [k: v for k in E if c] leaves members without a value
+type Color_T is enum RED, GREEN, BLUE
+let weight: [Color_T]int = [c: 1 for c in Color_T if c != GREEN]
+print(weight)

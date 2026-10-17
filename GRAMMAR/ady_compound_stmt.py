@@ -44,7 +44,7 @@ from hek_parsec import (
     shift,
 )
 from ady_stmt import *  # noqa: F403 — need all fw() names in namespace
-from ady_declarations import type_annotation
+from ady_declarations import type_annotation, var_param_type
 
 ###############################################################################
 # Tokens not in hek_parsec
@@ -314,7 +314,7 @@ case_stmt = (
 
 # --- Function parameters ---
 # param_plain: name [':' annotation] ['=' default]
-param_plain = IDENTIFIER + (V_COLON + type_annotation)[:] + (V_EQUAL + expression)[:]
+param_plain = IDENTIFIER + (V_COLON + (var_param_type | type_annotation))[:] + (V_EQUAL + expression)[:]
 # param_star: '*' [name [':' annotation]]  — bare * or *args
 param_star = SSTAR + (IDENTIFIER + (V_COLON + expression)[:])[:]
 # param_dstar: '**' name [':' annotation]

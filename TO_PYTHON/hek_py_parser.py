@@ -437,6 +437,17 @@ def _note_loop_var_type(target, iterable):
     if not t and call and iterable.strip().endswith(")"):
         # a call: what the routine is declared to return, `-> []Json_T`
         t = (getattr(ParserState, "ady_return_types", {}).get(call.group(1)) or "").strip()
+    lit = _re_lv.match(r"\[\s*([A-Z]\w*)\(", iterable.strip())
+    if not t and lit and lit.group(1) in getattr(ParserState, "py_type_members", {}):
+        # a list written out, of values built by one type's constructor: [Box_T(1, 1), ...]
+        depth, starts = 0, [1]
+        body = iterable.strip()
+        for i, ch in enumerate(body[1:-1], 1):
+            depth += (ch in "([{") - (ch in ")]}")
+            if ch == "," and depth == 0:
+                starts.append(i + 1)
+        if all(body[k:].lstrip().startswith(lit.group(1) + "(") for k in starts):
+            t = "[]" + lit.group(1)
     m = (_re_lv.fullmatch(r"(?:list|tuple|Sequence|set|frozenset)\[(\w+)(?:, \.\.\.)?\]", t)
          or _re_lv.fullmatch(r"\[\*?\](\w+)", t))
     # a loop rebinds its name: one of no known type forgets an earlier one

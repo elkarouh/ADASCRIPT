@@ -1,0 +1,6 @@
+# refused by nim: Length_T ** 3 is Length_T^3, and no unit declared is one
+# refused by python: Length_T ** 3 is Length_T^3, and no unit declared is one
+type Length_T is distinct float
+type Area_T is Length_T * Length_T
+let side: Length_T = 3.0
+print(side ** 3)

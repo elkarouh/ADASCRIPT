@@ -1072,6 +1072,9 @@ def translate(code, export_symbols=False):
     if _re_order.search(r'\becho\(|\bfmt"|\$\(|\$\w|&', _text):
         from hek_nim_unicode import _SEQ_REPR_HELPER, _TABLE_REPR_HELPER
         ParserState.nim_top_decls.append(_SEQ_REPR_HELPER)
+        if "array[" in _text:
+            from hek_nim_unicode import _ARRAY_REPR_HELPER
+            ParserState.nim_top_decls.append(_ARRAY_REPR_HELPER)
         if "tables" in (ParserState.nim_imports | set(ParserState.nim_from)
                         | ParserState.nim_qualified) or _re_order.search(r'\b(?:Ordered)?Table\[', _text):
             ParserState.nim_top_decls.append(_TABLE_REPR_HELPER)

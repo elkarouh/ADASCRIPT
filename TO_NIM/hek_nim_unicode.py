@@ -214,17 +214,6 @@ proc `$`*[T](xs: seq[T]): string =
   for i, x in xs:
     if i > 0: result.add ", "
     result.add adascriptRepr(x)
-  result.add "]"
-
-proc `$`*[I, T](xs: array[I, T]): string =
-  ## An array prints as a list does, its values in index order -- an [E]T
-  ## too, as Python prints it.
-  result = "["
-  var first = true
-  for x in xs:
-    if not first: result.add ", "
-    first = false
-    result.add adascriptRepr(x)
   result.add "]"\
 """
 
@@ -261,6 +250,21 @@ proc adascriptCasefold(s: string): string =
 
 # A table prints as Python prints a dict: `{'k': 1}`, keys and values as repr
 # shows them. Only for a program that has tables imported.
+# An array prints as a list does: only for a program that has one.
+_ARRAY_REPR_HELPER = """\
+proc `$`[I, T](xs: array[I, T]): string {.used.} =
+  ## An array prints as a list does, its values in index order -- an [E]T
+  ## too, as Python prints it.
+  result = "["
+  var first = true
+  for x in xs:
+    if not first: result.add ", "
+    first = false
+    result.add adascriptRepr(x)
+  result.add "]"
+"""
+
+
 _TABLE_REPR_HELPER = """\
 proc adascriptDictRepr[T](t: T): string =
   result = "{"

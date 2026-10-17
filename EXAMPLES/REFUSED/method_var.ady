@@ -1,0 +1,18 @@
+# refused by nim: Pane.draw: `ed.scroll` changes the Editor its caller passed, and ed is taken by value: declare it `ed: var Editor`
+class Editor:
+    var top: int
+    def __init__(self):
+        self.top = 0
+    def scroll(self):
+        self.top += 1
+
+class Pane:
+    var name: str
+    def __init__(self, name: str):
+        self.name = name
+    def draw(self, ed: Editor):
+        ed.scroll()
+
+var ed: Editor = Editor()
+Pane("main").draw(ed)
+print(ed.top)

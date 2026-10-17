@@ -1,0 +1,60 @@
+#!/usr/bin/env ady2nim
+"""Test: spellings that ran on one backend only, or on neither.
+
+An [E]T printed; `x.f` and `x.f(a)` for a function f whose first parameter is
+x's type, on a name and on a loop variable; a method's `var` parameter; a unit
+raised to a whole number; json_value read back. Compared between the backends.
+"""
+from json_value import Json_T, read_json, json_list, json_text, json_string
+
+type Color_T is enum RED, GREEN, BLUE
+type Length_T is distinct float
+type Area_T is Length_T * Length_T
+type Volume_T is Area_T * Length_T
+
+type Box_T is record:
+    w: int
+    h: int
+
+def area(b: Box_T) -> int:
+    return b.w * b.h
+
+def scaled(b: Box_T, k: int) -> Box_T:
+    return Box_T(b.w * k, b.h * k)
+
+class Counter:
+    var hits: int
+    def __init__(self):
+        self.hits = 0
+    def bump(self):
+        self.hits += 1
+
+class Tally:
+    var name: str
+    def __init__(self, name: str):
+        self.name = name
+    def count(self, c: var Counter, n: int):
+        for i in range(n):
+            c.bump()
+
+let weight: [Color_T]int = [c: ord(c) * 10 for c in Color_T]
+print(weight)
+
+let b: Box_T = Box_T(2, 3)
+print(b.area, b.scaled(2).w)
+for x in [Box_T(1, 1), Box_T(4, 5)]:
+    print(x.area)
+
+var c: Counter = Counter()
+Tally("t").count(c, 3)
+print(c.hits)
+
+let side: Length_T = 1.5
+let a: Area_T = side ** 2
+let v: Volume_T = side ** 3
+print(a, v)
+
+let j: ?Json_T = read_json("{\"rows\": [{\"id\": " + json_string("a \"b\"") + "}, {\"id\": \"c\"}]}")
+if j is not None:
+    for row in j.json_list("rows"):
+        print(row.json_text("id"))

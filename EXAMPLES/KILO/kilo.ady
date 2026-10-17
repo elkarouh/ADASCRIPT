@@ -46,9 +46,7 @@ def raw_mode(on: bool) -> None:
 
 def key_waiting(ms: int) -> bool:
     """Is there a byte to read, within MS milliseconds?"""
-    var fds: TPollfd
-    fds.fd = cint(0)
-    fds.events = POLLIN
+    var fds: TPollfd = TPollfd(fd = cint(0), events = POLLIN)
     poll(addr(fds), 1, cint(ms)) > 0
 
 def read_byte() -> int:
