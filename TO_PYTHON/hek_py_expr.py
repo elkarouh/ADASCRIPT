@@ -76,7 +76,7 @@ def binop_to_py(self, prec=None, my_prec=None, combine=None):
             not always join with a plain infix -- `or` over a ?T, so far.
     """
     if combine is None:
-        combine = lambda left, op, right: f"{left} {op} {right}"
+        combine = lambda left, op, right: _amp_combine(left, op, right)
     # Find the last Several_Times that has (op, operand) pairs
     last_st_idx = None
     for i in range(len(self.nodes) - 1, -1, -1):
@@ -1780,6 +1780,26 @@ def to_py(self, prec=None):
 def to_py(self, prec=None):
     """shift_expr: sum_expr (('<<' | '>>') sum_expr)*"""
     return binop_to_py(self, prec, PREC_SHIFT)
+
+
+def _is_str_operand(e):
+    """True for a string literal (plain, f- or r-) or a name typed str."""
+    import re as _re_s
+    e = e.strip()
+    if _re_s.match(r"""^[fFrRbB]?(\"|')""", e):
+        return True
+    if _re_s.fullmatch(r"[A-Za-z_]\w*", e):
+        sym = ParserState.symbol_table.lookup(e)
+        return bool(sym) and (sym.get("type") or "") in ("str", "string")
+    return False
+
+
+def _amp_combine(left, op, right):
+    """`a & b` over strings is concatenation on Nim and a TypeError here, so
+    it is joined with `+`, which both backends take. Anything else keeps `&`."""
+    if op == "&" and (_is_str_operand(left) or _is_str_operand(right)):
+        return f"{left} + {right}"
+    return f"{left} {op} {right}"
 
 
 @method(bitand_expr)

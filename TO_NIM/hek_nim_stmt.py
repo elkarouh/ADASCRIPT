@@ -1080,7 +1080,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
-                value = _to_ordered_table(value, annotation)
+                value = _to_ordered_table(hek_nim_expr._type_lambdas(value, annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -1335,7 +1335,7 @@ def to_nim(self):
                 value = _coerce_char_to_string(value, annotation)
                 value = _coerce_string_to_char(value, annotation)
                 # [K]V over a non-ordinal K: the table literal is an ordered one
-                value = _to_ordered_table(value, annotation)
+                value = _to_ordered_table(hek_nim_expr._type_lambdas(value, annotation), annotation)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
                 # array types: {} is unnecessary — arrays are zero-initialized
@@ -1587,6 +1587,7 @@ def to_nim(self):
     if val == "nil" and ret_type and "seq[" in ret_type:
         return "return @[]"
     if _rt_bare:
+        val = hek_nim_expr._type_lambdas(val, _rt_bare)
         val = _to_ordered_table(val, _rt_bare)
         val = _wrap_distinct_literal(val, _rt_bare)
     if val == "initTable()" and ret_type:

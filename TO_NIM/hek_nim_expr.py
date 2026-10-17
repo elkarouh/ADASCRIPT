@@ -380,6 +380,15 @@ proc adascriptZfill(s: string, width: int): string =
 """
 
 
+def _sorted_operand(arg):
+    """What `sorted` is applied to. `.keys()` and `.values()` are iterators on
+    Nim, which `sorted` cannot take; toSeq makes them a seq first."""
+    if arg.endswith((".keys()", ".values()")):
+        ParserState.nim_imports.add("sequtils")
+        return f"toSeq({arg})"
+    return _paren_if_compound(arg)
+
+
 _SPLITLINES_HELPER = """\
 proc adascriptSplitLines(s: string): seq[string] =
   ## Python's str.splitlines: no empty string after a trailing newline, so
@@ -4400,6 +4409,86 @@ _CHAR_OR_STRING_METHODS = frozenset({"replace", "split", "rsplit", "join",
                                      "count", "find", "rfind", "strip"})
 
 
+_LAMBDA_HEAD = None
+
+
+def _type_lambdas(val, declared):
+    """Write out the types of the lambdas in VAL from the DECLARED type.
+
+    A lambda is `proc(x: auto): auto = ...`, which Nim takes where the
+    expected type reaches it (a `let`, an argument) and refuses where it
+    does not (a `return`, a table literal): "a nested proc can have generic
+    parameters only when it is used as an operand". When DECLARED is a proc
+    type, or a table whose values are, the lambdas' parameter and result
+    types are the proc type's.
+    """
+    import re as _re_l
+    global _LAMBDA_HEAD
+    if "): auto = " not in val:
+        return val
+    d = (declared or "").lstrip(": ").strip()
+    _tm = _re_l.match(r"^(?:Ordered)?Table\[.+?,\s*(proc\(.*)\]$", d, _re_l.S)
+    if _tm:
+        d = _tm.group(1)
+    if not d.startswith("proc("):
+        return val
+    depth = 0
+    for i, ch in enumerate(d):
+        depth += ch == "("
+        depth -= ch == ")"
+        if depth == 0 and i >= 5:
+            close = i
+            break
+    else:
+        return val
+    ptypes = [t.split(": ", 1)[1].strip() if ": " in t else t.strip()
+              for t in _split_args(d[5:close]) if t.strip()]
+    rest = d[close + 1:].strip()
+    rtype = rest[1:].strip() if rest.startswith(":") else ""
+    if _LAMBDA_HEAD is None:
+        _LAMBDA_HEAD = _re_l.compile(r"proc\(((?:\w+: auto(?:, )?)*)\): auto = ")
+    def fix(m):
+        names = [n.split(":")[0] for n in _split_args(m.group(1)) if n.strip()]
+        if len(names) != len(ptypes):
+            return m.group(0)
+        params = ", ".join(f"{n}: {t}" for n, t in zip(names, ptypes))
+        # {.closure.}: a table's value type is the closure kind, and a lambda
+        # without it is a plain proc that the table literal refuses.
+        return f"proc({params}): {rtype} {{.closure.}} = " if rtype else f"proc({params}) {{.closure.}} = "
+    return _LAMBDA_HEAD.sub(fix, val)
+
+
+def _has_top_level_slash(text):
+    """True when TEXT has a `/` outside any brackets or string -- a true
+    division, which is a float on Nim whatever its operands are."""
+    depth, in_str = 0, False
+    for i, ch in enumerate(text):
+        if in_str:
+            if ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "/" and depth == 0:
+            return True
+    return False
+
+
+def _expr_is_int(arg):
+    """True for an integer literal or a name the symbol table types int."""
+    import re as _re_int
+    a = (arg or "").strip()
+    if _re_int.fullmatch(r"-?\d+", a):
+        return True
+    if _re_int.fullmatch(r"[A-Za-z_]\w*", a):
+        sym = ParserState.symbol_table.lookup(a)
+        return bool(sym) and (sym.get("type") or "") == "int"
+    return False
+
+
 def _expr_is_string(arg):
     """True when ARG is known to be a string rather than a char."""
     import re as _re_st
@@ -4812,13 +4901,13 @@ def _translate_stdlib_patterns(expr):
         _order = ("SortOrder.Descending"
                   if _sorted_rev.group(2).lower() == "true"
                   else "SortOrder.Ascending")
-        return f"{_paren_if_compound(_sorted_rev.group(1))}.sorted({_order})"
+        return f"{_sorted_operand(_sorted_rev.group(1))}.sorted({_order})"
 
     # --- 7. sorted(X) -> X.sorted ---
     _sorted_plain = _re.match(r'^sorted\((.+)\)$', expr)
     if _sorted_plain:
         ParserState.nim_imports.add("algorithm")
-        return f"{_paren_if_compound(_sorted_plain.group(1))}.sorted"
+        return f"{_sorted_operand(_sorted_plain.group(1))}.sorted"
 
     # --- 8. max(X, key=f) / min(X, key=f) -> foldl ---
     _maxmin_key = _re.match(r'^(max|min)\((.+),\s*key\s*=\s*(.+)\)$', expr)
@@ -5515,6 +5604,14 @@ def to_nim(self, prec=None):
                     _rd = _distinct_type_of(right)
                     if _rd is not None:
                         chain = _wrap_distinct_literal(chain, _rd)
+            # `4 == a / 2`: Python compares an int with the float a true
+            # division gives; Nim has no int/float comparison, so the int
+            # side becomes a float.
+            if nim_op in ("<", ">", "<=", ">=", "==", "!="):
+                if _has_top_level_slash(right) and _expr_is_int(chain):
+                    chain = f"float({chain})"
+                elif _has_top_level_slash(chain) and _expr_is_int(right):
+                    right = f"float({right})"
             # char comparisons: coerce single-char string literals to char literals
             if nim_op in ("<", ">", "<=", ">=", "==", "!="):
                 if _is_nim_char_expr(chain):

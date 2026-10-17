@@ -124,21 +124,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       "type mismatch ... expected Table". Iteration and indexing agree now;
       these two do not. Nim's `pairs`/`keys` iterators over an array are the
       shape to map onto.
-- [ ] `&` as string concatenation is Nim-only: `a & b` over two strings
-      works there (Nim spells concat `&`) and raises `unsupported operand
-      type(s) for &: 'str' and 'str'` on Python, where `&` is bitwise-and.
-      `+` is the portable spelling -- the Nim emitter rewrites it to `&`
-      when it can tell an operand is a string -- so this is a matter of
-      examples not reaching for `&`, which the book now says. What made it
-      look unavoidable was a gap in that rewrite, fixed: `str(x) + str(y)`
-      renders as `$x + $y` and a leading `$` was not counted as evidence
-      of a string, so `+` failed on Nim in exactly the position where
-      `sudoku.ady` had reached for `&`. Worth a transpile-time warning on
-      `&` between strings rather than a Python run-time error.
-- [ ] `int == int / int` compiles on Python and is rejected by Nim, whose
-      `/` yields a float and whose `==` has no int/float overload. Python
-      says `4 == 8 / 2` is True. Either the emitter converts, or the
-      limitation is documented.
 - [ ] a variable named `b`, `r`, `f` or `u` cannot take a tick: `b'Length`
       lexes as the start of a bytes literal and fails to parse on both
       backends. Consistent, so not a divergence, but the error names the
@@ -185,12 +170,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       way `user_top_level_procs` already works in `ady2nim.py`, not another
       emission-time hook. Binding the path to a name is the workaround, and
       reads better anyway when both `.parent` and `.name` are wanted.
-- [ ] a bare file test as an `assert` condition is dropped on Nim. `assert -s
-      path` emits just the path -- "expression ... has to be used (or
-      discarded)" -- losing both the assert and the operator, while `assert
-      not -s path` and `assert (-s path)` are both fine. So it is the
-      unnegated, unparenthesised form that the assert emitter does not route
-      through the file-test rule.
 - [ ] no spelling for a pattern that is not known until run time. Regex
       literals are syntax, which is the point, but it leaves a program that
       reads a pattern out of a database or builds one from parts with nowhere
@@ -209,10 +188,6 @@ history of this file if the reasoning behind one of them is ever wanted.
       the examples use; the divergence is in the set form. Either Python emits
       something ordered for `'Range` in a for-loop, or `'Range` is documented
       as unordered and the examples keep away from it.
-- [ ] `sorted(d.keys())` over a `{K}V` does not compile on Nim: "undeclared
-      field: 'sorted'", because `keys` is an iterator there and wants
-      `toSeq`. Same family as the `[E]T` `.keys()` entry above. An example
-      that needs a stable report order has to carry its own list of keys.
 - [ ] `.lines` on the Python backend now applies only to a receiver it can
       see is a file -- stdin, an `open(...)` call, a string literal, or a
       `File`/`str`/`Path` binding -- because `lines` is also an ordinary field
@@ -281,16 +256,6 @@ history of this file if the reasoning behind one of them is ever wanted.
         refuses scaled units. Building them there, where the argument's
         unit is known, would lift that for money, km and miles alike. The
         conversion to cents rounds with its own helper, not `round`.
-- [ ] a `def` returning a `lambda` does not build on Nim. `def twice(f: (int)
-      -> int) -> (int) -> int: return lambda x: f(f(x))` is emitted as a
-      nested `proc(x: auto): auto`, which Nim rejects ("a nested proc can
-      have generic parameters only when it is used as an operand"). The
-      lambda's parameter and result types are known from the declared
-      return type and should be written out; Python takes it. The same
-      goes for a lambda in a `{str}(float) -> float` table literal
-      (`{"sqrt": lambda x: sqrt(x)}`): the declared type of the table
-      gives the lambda's types, and they are not written out. It stopped
-      lispy's built-ins from being a table of one-line procedures.
 - [ ] **For discussion:** let `m(k)` look up a `{K}V` or `[K]V` as `m[k]`
       does, and let a table be passed where a `(K) -> V` is expected (a
       small adapter on each backend). A pure function is a mapping, and Ada
