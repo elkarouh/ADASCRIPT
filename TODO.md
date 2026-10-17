@@ -91,6 +91,12 @@ history of this file if the reasoning behind one of them is ever wanted.
       meanwhile.
 - [ ] streaming stdin — deliberately not built; the deadlock case is already
       handled, so only the in-memory limit remains (see below)
+- [ ] a bool prints `true` on Nim and `True` on Python: `print b`, `f"{x is F}"`.
+      A list of bools already prints Python's way (the list `$`); a bare one
+      does not. The next thing stopping byte-identical output.
+- [ ] a string inside a tuple or a table prints with Nim's quotes, `("a", 1)`,
+      against Python's `('a', 1)`. A list prints Python's way since the list
+      `$` landed; a tuple and a table want the same.
 - [ ] the keyed-comprehension form `[k: v for k in E]` is a parse error on
       both backends. Consistent rather than divergent, and a missing form
       rather than a bug -- less pressing than it was, now that the
