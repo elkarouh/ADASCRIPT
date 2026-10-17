@@ -186,15 +186,28 @@ are valid Adascript, and the examples mix them freely with the Python ones:
 - `echo`-style formatting concerns disappear behind f-strings, which compile
   to `fmt"..."`.
 
-One Nim spelling does not carry over: `&` to join strings. It is Nim's
-concatenation but Python's bitwise-and, so on the Python backend it raises
-("unsupported operand type(s) for &: 'str' and 'str'"). Write `+`, which the
-Nim backend rewrites to `&`, or, for literals, put them next to each other:
+`&` to join strings is portable only where the Python backend can see a
+string. It is Nim's concatenation but Python's bitwise-and, so the Python
+backend writes `a & b` as `a + b` when an operand is a string literal or a
+name typed `str`, and leaves it as `&` otherwise (an int still gets its
+bitwise-and). An operand it cannot type -- a call's result, a field -- would
+raise ("unsupported operand type(s) for &") at run time, so write `+`, which
+the Nim backend rewrites to `&`, or, for literals, put them next to each
+other:
 
 ```python
 let ddl: str = ("CREATE TABLE a (x INTEGER);"
                 "CREATE TABLE b (y TEXT);")
 ```
+
+Where a Python builtin and the Nim routine it maps to disagree, Adascript
+takes Python's meaning on both backends and the Nim output carries a small
+helper to match. `round(x)` is an `int` and sends halves to the even
+neighbour (`round(2.5)` is 2, `round(3.5)` is 4); `round(x, n)` is a `float`
+rounded from the exact binary value (`round(2.675, 2)` is 2.67). `s.splitlines()`
+has no empty last line: `"".splitlines()` is `[]` and `"a\nb\n".splitlines()` is
+`["a", "b"]`. A true division compared with an int (`4 == n / 2`) compares as
+floats, and `sorted(d.keys())` works on a dict.
 
 Style advice drawn from the examples: prefer the Python spelling where both
 exist (it keeps the file runnable-in-your-head for Python readers), and
