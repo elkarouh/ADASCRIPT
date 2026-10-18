@@ -1486,9 +1486,16 @@ def _affine_result(lu, op, ru):
     difference of two is a change in the base unit, a change added to a point
     is a point, and nothing else has a meaning. Returns (True, unit or None)
     when one is, else (False, None)."""
+    from hek_parsec import ParserState
     al, ar = _affine_of(lu), _affine_of(ru)
     if not (al or ar):
+        # a base of a scale beside something unknown: the unknown may be a point
+        bases = {p[1] for p in (getattr(ParserState, "affine_units", None) or {}).values()}
+        if op in ("+", "-") and (lu in bases and ru is None or ru in bases and lu is None):
+            return True, None
         return False, None
+    if (lu is None or ru is None) and op in ("+", "-"):
+        return True, None
     if op == "-" and al and lu == ru:
         return True, al[1]
     if op in ("+", "-") and al and ru == al[1]:

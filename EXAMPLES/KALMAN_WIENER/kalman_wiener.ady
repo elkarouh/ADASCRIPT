@@ -25,16 +25,18 @@ in the simulation, and variances in the filter: the simulation passes them to `n
 scales, which is why it takes a float.
 """
 nimport math
-from units import second_T          # the SI base unit of time, from the shared library
+from units import second_T, kelvin_T, celsius_T, hertz_T   # the shared units: time, temperature, frequency
 pyimport numpy as np
 pyimport scipy.signal as signal
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
-# degrees Celsius: a temperature, or a difference of two of them
-type Celsius_T is distinct float
-# degrees Celsius squared: a Kalman covariance, and the noise covariances Q and R
-type Variance_T is Celsius_T * Celsius_T
+# A temperature is a point on the Celsius scale (`celsius_T`); a noise, or the difference of
+# two temperatures, is a change in it, a `kelvin_T` -- one degree Celsius is one kelvin.  Two
+# temperatures cannot be added, but a change can be added to a temperature, which is exactly
+# what a noisy measurement is.
+# kelvin squared: a Kalman covariance, and the noise covariances Q and R
+type Variance_T is kelvin_T * kelvin_T
 # the Kalman gain: 0 = trust the forecast, 1 = trust the measurement (no unit)
 type Gain_T is float range 0.0 .. 1.0
 
@@ -43,10 +45,10 @@ const SEED: int = 42
 
 let rng: PyObject = np.random.default_rng(SEED)
 
-def normal(scale: float) -> Celsius_T:
+def normal(scale: float) -> kelvin_T:
     # a draw from a normal distribution with mean 0 and standard deviation `scale`
     let x: float = rng.normal(0.0, scale)
-    return Celsius_T(x)
+    return kelvin_T(x)
 
 # --- the system and its two filters -----------------------------------------------------
 
@@ -54,19 +56,19 @@ class Temperature_System:
     var timestep: second_T
     var Q: Variance_T                        # process noise
     var R: Variance_T                        # measurement noise
-    var T_array: []Celsius_T
-    var T_meas_array: []Celsius_T
-    var kalman_mean_array: []Celsius_T
-    var kalman_mean_forecast_array: []Celsius_T
+    var T_array: []celsius_T
+    var T_meas_array: []celsius_T
+    var kalman_mean_array: []celsius_T
+    var kalman_mean_forecast_array: []celsius_T
     var kalman_cov_array: []Variance_T
     var kalman_cov_forecast_array: []Variance_T
     var kalman_gain_array: []Gain_T          # one per step: gain k is the gain of step k + 1
     var K_ss: Gain_T                         # steady-state Kalman gain
-    var wiener_array: []Celsius_T
+    var wiener_array: []celsius_T
 
-    def __init__(self, T0: Celsius_T = Celsius_T(20.0), Q: Variance_T = Variance_T(1.0), R: Variance_T = Variance_T(1.0),
-                 initial_kalman_mean: Celsius_T = Celsius_T(20.0), initial_kalman_cov: Variance_T = Variance_T(1.0),
-                 initial_wiener_val: Celsius_T = Celsius_T(20.0), timestep_s: second_T = second_T(1.0)):
+    def __init__(self, T0: celsius_T = celsius_T(20.0), Q: Variance_T = Variance_T(1.0), R: Variance_T = Variance_T(1.0),
+                 initial_kalman_mean: celsius_T = celsius_T(20.0), initial_kalman_cov: Variance_T = Variance_T(1.0),
+                 initial_wiener_val: celsius_T = celsius_T(20.0), timestep_s: second_T = second_T(1.0)):
         self.timestep = timestep_s
         self.Q = Q
         self.R = R
@@ -87,35 +89,35 @@ class Temperature_System:
         self.wiener_array = [initial_wiener_val]
 
         # Initial state measurement
-        let _first: Celsius_T = self.measure()
+        let _first: celsius_T = self.measure()
 
     def step(self, num_steps: int = 1):
         for _ in 1..num_steps:
-            let T_old: Celsius_T = self.T_array[-1]
-            let T_new: Celsius_T = T_old + normal(float(self.Q))
+            let T_old: celsius_T = self.T_array[-1]
+            let T_new: celsius_T = T_old + normal(float(self.Q))
             self.T_array.append(T_new)
 
             self.kalman_predict()
-            let T_meas: Celsius_T = self.measure()
+            let T_meas: celsius_T = self.measure()
             self.kalman_update(T_meas)
             self.wiener_filter(T_meas)
 
-    def measure(self) -> Celsius_T:
+    def measure(self) -> celsius_T:
         # Measure a new data point
-        let T_noise: Celsius_T = normal(float(self.R))
-        let T_meas: Celsius_T = self.T_array[-1] + T_noise
+        let T_noise: kelvin_T = normal(float(self.R))
+        let T_meas: celsius_T = self.T_array[-1] + T_noise
         self.T_meas_array.append(T_meas)
         return T_meas
 
     def kalman_predict(self):
         # The system is unitary (F = 1) so there's no better prediction than the current guess
-        let mean_forecast: Celsius_T = self.kalman_mean_array[-1]
+        let mean_forecast: celsius_T = self.kalman_mean_array[-1]
         # But our uncertainty grows a bit, due to the process noise
         let cov_forecast: Variance_T = self.kalman_cov_array[-1] + self.Q
         self.kalman_mean_forecast_array.append(mean_forecast)
         self.kalman_cov_forecast_array.append(cov_forecast)
 
-    def kalman_update(self, T_meas: Celsius_T):
+    def kalman_update(self, T_meas: celsius_T):
         # The measurement is the state (H = 1), so the gain K = P / (P + R) is a ratio of two
         # variances, a number.  The arithmetic is on floats; the results go back in their units.
         let x_forecast: float = float(self.kalman_mean_forecast_array[-1])
@@ -127,14 +129,14 @@ class Temperature_System:
         let cov1: float = (1.0 - K) * P * (1.0 - K) + K * R_k * K
 
         self.kalman_gain_array.append(Gain_T(K))
-        self.kalman_mean_array.append(Celsius_T(x1))
+        self.kalman_mean_array.append(celsius_T(x1))
         self.kalman_cov_array.append(Variance_T(cov1))
 
-    def wiener_filter(self, T_meas: Celsius_T) -> Celsius_T:
+    def wiener_filter(self, T_meas: celsius_T) -> celsius_T:
         # The optimal IIR Wiener filter for this system has the transfer function
         # G(z) = 1/(1 + (z - 1)/K)
         let T_filt_prev: float = float(self.wiener_array[-1])
-        let T_filt: Celsius_T = Celsius_T(T_filt_prev + float(self.K_ss) * (float(T_meas) - T_filt_prev))
+        let T_filt: celsius_T = celsius_T(T_filt_prev + float(self.K_ss) * (float(T_meas) - T_filt_prev))
         self.wiener_array.append(T_filt)
         return T_filt
 
@@ -158,9 +160,9 @@ class Temperature_System:
             if i % every == 0 or i == len(self.kalman_gain_array) or i <= 3:
                 print f"{float(i) * float(self.timestep):7.1f} {float(self.kalman_gain_array[k]):9.6f} {float(self.K_ss):9.6f}"
 
-    def bode_magnitude(self, f_hz: float) -> float:
-        # |G| of the Wiener filter at the frequency f_hz
-        let wt: float = 2.0 * PI * float(f_hz) * float(self.timestep)
+    def bode_magnitude(self, f_hz: hertz_T) -> float:
+        # |G| of the Wiener filter at the frequency f_hz; a frequency times a time is a number
+        let wt: float = 2.0 * PI * (f_hz * self.timestep)
         let K: float = float(self.K_ss)
         let re: float = 1.0 + (math.cos(wt) - 1.0) / K
         let im: float = math.sin(wt) / K
@@ -178,8 +180,8 @@ class Temperature_System:
         print "# freq_hz  magnitude"
         for i in 0 ..< points:
             if i % every == 0 or i == points - 1:
-                let f_hz: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI)
-                print f"{f_hz:11.6f} {self.bode_magnitude(f_hz):9.6f}"
+                let f_hz: hertz_T = hertz_T(math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI))
+                print f"{float(f_hz):11.6f} {self.bode_magnitude(f_hz):9.6f}"
 
     def plot_filter_comparison(self, path: str):
         let ts: []float = self.times(0, len(self.T_meas_array))
@@ -236,7 +238,7 @@ class Temperature_System:
         for i in 0 ..< points:
             let f: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI)
             w_hz.append(f)
-            mag.append(self.bode_magnitude(f))
+            mag.append(self.bode_magnitude(hertz_T(f)))
         let fig: PyObject = plt.figure(figsize=(9, 2))
         let ax: PyObject = fig.add_axes([0.1, 0.25, 0.85, 0.5])
         ax.grid()
@@ -293,7 +295,7 @@ def lpf_hpf_demo(path: str):
 matplotlib.use("Agg")
 
 print "Start!"
-var my_beaker: Temperature_System = Temperature_System(R=Variance_T(0.75), Q=Variance_T(0.1), initial_kalman_mean=Celsius_T(15.0), initial_kalman_cov=Variance_T(10.0), initial_wiener_val=Celsius_T(15.0))
+var my_beaker: Temperature_System = Temperature_System(R=Variance_T(0.75), Q=Variance_T(0.1), initial_kalman_mean=celsius_T(15.0), initial_kalman_cov=Variance_T(10.0), initial_wiener_val=celsius_T(15.0))
 my_beaker.step(250)
 my_beaker.print_filter_comparison()
 my_beaker.print_kalman_gain()
