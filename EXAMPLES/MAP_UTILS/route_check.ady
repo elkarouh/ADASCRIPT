@@ -23,7 +23,7 @@ A route through four airports is flown over a restricted area.  The program:
 and checks what it printed: the legs add up, the pattern is a circle, the plane is
 the distance to the side it was put at.
 """
-from units import metre_T
+from units import metre_T, second_T
 from map_base import Bearing_T, Degree_T, GeoFailure_T, Kilometers_T, LatLong_T, SquareMeters_T, human_latlong2dec
 from map_flat import Position, Vector
 from map_geo import GeoPoint, GeoVector, must
@@ -62,7 +62,7 @@ const HOLD_POINTS: int = 6
 type Zone_T is enum R1, R2, FUNNEL, OPEN_FUNNEL
 const ZONE_LABEL: [Zone_T]str = [R1: "R-1", R2: "R-2", FUNNEL: "approach funnel", OPEN_FUNNEL: "funnel, unrestricted"]
 
-type Hours_T is distinct float
+type Hours_T is 3600.0 * second_T                       # an hour is 3600 s
 type Speed_T is Kilometers_T / Hours_T                      # kilometres an hour
 let CRUISE: Speed_T = 780.0
 
