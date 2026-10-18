@@ -11,22 +11,23 @@ substantial portions of it.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY 
 
     ady2nim EXAMPLES/KALMAN_WIENER/kalman_wiener.ady -r        (or ady2py -c)
 
-What is translated: the Temperature_System (truth, noisy measurement, Kalman predict/update,
-Wiener filter, steady-state gain), the Bode magnitude of the Wiener filter, and the
-low-pass / high-pass demo (a 2nd-order Butterworth biquad, written out where the Python
-calls scipy's butter + sosfilt).
+What is translated: everything -- the Temperature_System (truth, noisy measurement, Kalman
+predict/update, Wiener filter, steady-state gain), its three plots, and the low-pass /
+high-pass demo.  numpy (the random source), scipy (butter, sosfilt) and matplotlib come
+in through `pyimport`; the numerical core is plain Adascript lists and floats.
 
-What is not: matplotlib.  Each plot becomes a table on stdout (every 25th sample), so the
-output can be piped to any plotting tool.
-
-The random numbers are the other change.  numpy's default_rng cannot be reproduced here, so
-the noise comes from a small seeded generator (Park-Miller + Box-Muller) that runs the same
-on both backends and in the Python reference; a run is therefore repeatable, and the
-numbers can be checked against another implementation.  Like the original, `Q` and `R`
-are used as the standard deviations of the noise (the docstring calls them covariances) in the
-simulation, and as variances in the filter.
+Differences from the Python: the generator takes a seed, so a run is repeatable and can be
+checked against the original (`SEED = 42`; use `np.random.default_rng()` for a fresh run);
+the plots are written to PNG files (backend Agg) where the original opens webAgg and calls
+plt.show(); the Bode curve is computed with real arithmetic, |G(e^jwt)|, instead of numpy
+complex numbers.  Like the original, `Q` and `R` are the standard deviations of the noise
+in the simulation, and variances in the filter.
 """
 nimport math
+pyimport numpy as np
+pyimport scipy.signal as signal
+pyimport matplotlib
+pyimport matplotlib.pyplot as plt
 
 # degrees Celsius
 type Celsius_T is float
@@ -41,30 +42,13 @@ type Hertz_T is float
 
 const PI: float = 3.141592653589793
 const NAN: float = float("nan")
-const MODULUS: int = 2147483647       # 2^31 - 1
-const MULTIPLIER: int = 48271
+const SEED: int = 42
 
-# --- a seeded normal-noise source -------------------------------------------------------
+let rng: PyObject = np.random.default_rng(SEED)
 
-class Rng:
-    var state: int = 1
-
-    def __init__(self, seed: int = 1):
-        self.state = seed % MODULUS
-        if self.state == 0:
-            self.state = 1
-
-    def uniform(self) -> float:
-        # strictly inside (0, 1)
-        self.state = self.state * MULTIPLIER % MODULUS
-        return float(self.state) / float(MODULUS)
-
-    def normal(self, loc: float = 0.0, scale: float = 1.0) -> float:
-        let u1: float = self.uniform()
-        let u2: float = self.uniform()
-        return loc + scale * math.sqrt(-2.0 * math.ln(u1)) * math.cos(2.0 * PI * u2)
-
-var rng: Rng = Rng(42)
+def normal(scale: float) -> float:
+    let x: float = rng.normal(0.0, scale)
+    return x
 
 # --- the system and its two filters -----------------------------------------------------
 
@@ -108,7 +92,7 @@ class Temperature_System:
     def step(self, num_steps: int = 1):
         for _ in 1..num_steps:
             let T_old: Celsius_T = self.T_array[-1]
-            let T_new: Celsius_T = T_old + rng.normal(0.0, self.Q)
+            let T_new: Celsius_T = T_old + normal(self.Q)
             self.T_array.append(T_new)
 
             self.kalman_predict()
@@ -118,7 +102,7 @@ class Temperature_System:
 
     def measure(self) -> Celsius_T:
         # Measure a new data point
-        let T_noise: float = rng.normal(0.0, self.R)
+        let T_noise: float = normal(self.R)
         let T_meas: Celsius_T = self.T_array[-1] + T_noise
         self.T_meas_array.append(T_meas)
         return T_meas
@@ -169,6 +153,74 @@ class Temperature_System:
             if i % every == 0 or i == len(self.kalman_gain_array) - 1 or i <= 3:
                 print f"{float(i) * self.timestep:7.1f} {self.kalman_gain_array[i]:9.6f} {self.K_ss:9.6f}"
 
+    def times(self, n: int) -> []Seconds_T:
+        return [float(i) * self.timestep for i in 0 ..< n]
+
+    def plot_filter_comparison(self, path: str):
+        let time: []Seconds_T = self.times(len(self.T_meas_array))
+        let sigma: []float = [math.sqrt(c) for c in self.kalman_cov_array]
+        let k_min: []float = [self.kalman_mean_array[i] - sigma[i] for i in 0 ..< len(sigma)]
+        let k_max: []float = [self.kalman_mean_array[i] + sigma[i] for i in 0 ..< len(sigma)]
+        let fig: PyObject = plt.figure(figsize=(9, 4))
+        let ax: PyObject = fig.add_axes([0.1, 0.125, 0.85, 0.8])
+        ax.grid()
+        ax.set_ylabel("Temperature (°C)")
+        ax.set_xlabel("Time (s)")
+        ax.set_title("The Kalman filter becomes indistinguishable from the Wiener (low-pass) filter after ~10 samples")
+        ax.set_xlim(time[0] - 2.0, time[len(time) - 1])
+        let _: PyObject = ax.plot(time, self.T_array, color="seagreen", lw=3, label="Truth", zorder=2)
+        let _: PyObject = ax.errorbar(time, self.T_meas_array, yerr=math.sqrt(self.R), ls="None", label="Data", color="darkseagreen", alpha=0.5, marker="+", zorder=1)
+        let _: PyObject = ax.plot(time, self.kalman_mean_array, ls="-", color="cornflowerblue", label="Kalman filter", lw=3, zorder=3)
+        let _: PyObject = ax.fill_between(time, k_min, k_max, color="cornflowerblue", alpha=0.25, zorder=4)
+        let _: PyObject = ax.plot(time, self.wiener_array, ls="--", color="gold", label="Wiener filter", zorder=5)
+        let _: PyObject = ax.legend(loc="lower right")
+        fig.savefig(path)
+
+    def plot_kalman_gain(self, path: str):
+        let time: []Seconds_T = self.times(len(self.kalman_gain_array))
+        let steady: []Gain_T = [self.K_ss for _ in time]
+        let fig: PyObject = plt.figure(figsize=(9, 2))
+        let ax: PyObject = fig.add_axes([0.1, 0.25, 0.85, 0.5])
+        ax.grid()
+        ax.set_ylabel("Kalman gain")
+        ax.set_xlabel("Time (s)")
+        ax.set_title("The Kalman gain rapidly converges to a constant")
+        ax.set_xlim(time[0] - 2.0, time[len(time) - 1])
+        ax.set_ylim(0, 1)
+        let _: PyObject = ax.plot(time, self.kalman_gain_array, ls="-", color="cornflowerblue", lw=2, label="Kalman gain")
+        let _: PyObject = ax.plot(time, steady, ls="--", color="black", label="Steady-state")
+        let _: PyObject = ax.legend(loc="upper right")
+        fig.savefig(path)
+
+    def bode_plot(self, path: str, points: int = 1024):
+        # Plot the Wiener filter (steady-state Kalman filter) frequency spectrum
+        let dt: float = self.timestep
+        let pole_w: float = math.exp(-(1.0 - self.K_ss) * dt)
+        let pole_f: float = pole_w / (2.0 * PI)
+        let f_nyquist: float = 0.5 * dt
+        let lo: float = math.log10(0.01 * pole_w)
+        let hi: float = math.log10(2.0 * PI * f_nyquist)
+        var w_hz: []Hertz_T = []
+        var mag: []float = []
+        for i in 0 ..< points:
+            let w: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1))
+            w_hz.append(w / (2.0 * PI))
+            mag.append(self.bode_magnitude(w / (2.0 * PI)))
+        let fig: PyObject = plt.figure(figsize=(9, 2))
+        let ax: PyObject = fig.add_axes([0.1, 0.25, 0.85, 0.5])
+        ax.grid()
+        ax.set_xlabel("Frequency (Hz)")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_title("Bode plot of the steady-state Kalman filter")
+        ax.set_ylabel("Magnitude")
+        ax.set_xlim(w_hz[0], w_hz[points - 1])
+        ax.set_ylim(0.1, 10)
+        let _: PyObject = ax.plot(w_hz, [1.0 for _ in w_hz], lw=1, color="black", ls="--")
+        let _: PyObject = ax.plot(w_hz, mag, lw=2, color="cornflowerblue", label="Steady-state Kalman filter")
+        let _: PyObject = ax.plot([pole_f, pole_f], [0.1, 10], lw=1, color="grey", ls="--")
+        fig.savefig(path)
+
     def bode_magnitude(self, w_hz: Hertz_T) -> float:
         # |G(z)| of the Wiener filter at z = exp(j w dt), w in rad/s... as the original: w = 2 pi f
         let w: float = 2.0 * PI * w_hz
@@ -195,54 +247,43 @@ class Temperature_System:
 
 # --- low-pass and high-pass demo --------------------------------------------------------
 
-type Biquad is record:
-    # one second-order section, a0 = 1: y = b0 x + b1 x1 + b2 x2 - a1 y1 - a2 y2
-    b0: float
-    b1: float
-    b2: float
-    a1: float
-    a2: float
-
-def butter2(cutoff_hz: Hertz_T, fs: Hertz_T, highpass: bool) -> Biquad:
-    # 2nd-order Butterworth by the bilinear transform: what scipy's butter(2, fc, fs=fs) gives
-    let wc: float = math.tan(PI * cutoff_hz / fs)
-    let k: float = wc * wc
-    let norm: float = 1.0 / (1.0 + math.sqrt(2.0) * wc + k)
-    let a1: float = 2.0 * (k - 1.0) * norm
-    let a2: float = (1.0 - math.sqrt(2.0) * wc + k) * norm
-    if highpass:
-        return Biquad(norm, -2.0 * norm, norm, a1, a2)
-    return Biquad(k * norm, 2.0 * k * norm, k * norm, a1, a2)
-
-def sosfilt(s: Biquad, x: []float, z0: float, z1: float) -> []float:
-    # scipy.signal.sosfilt for one section: transposed direct form II, initial state (z0, z1)
-    var y: []float = []
-    var d0: float = z0
-    var d1: float = z1
-    for v in x:
-        let out: float = s.b0 * v + d0
-        d0 = s.b1 * v - s.a1 * out + d1
-        d1 = s.b2 * v - s.a2 * out
-        y.append(out)
-    return y
-
-def lpf_hpf_demo(every: int = 50):
+def lpf_hpf_demo(path: str):
     # Demonstrates the idea of low-pass and high-pass filtering
     const samples: int = 500
     const dc_offset: float = 20.0
-    let dt: float = 10.0 / float(samples - 1)          # np.linspace(0, 10, samples)
-    var y_raw: []float = []
-    var walk: float = 0.0
-    for _ in 1..samples:
-        walk += rng.normal(0.0, 1.0)
-        y_raw.append(dc_offset + walk + rng.normal(0.0, 2.0))
-    let fs: Hertz_T = 1.0 / dt
-    let y_lpf: []float = sosfilt(butter2(1.0, fs, False), y_raw, dc_offset, -0.9 * dc_offset)
-    let y_hpf: []float = sosfilt(butter2(1.0, fs, True), y_raw, -dc_offset, dc_offset)
+    let t: PyObject = np.linspace(0, 10, samples)
+    let t0: float = t[0]
+    let t1: float = t[1]
+    let dt: float = t1 - t0
+    # Generate some nice random-looking data
+    # (numpy calls, not `+`: a PyObject has no arithmetic on Nim)
+    let walk: PyObject = np.cumsum(rng.normal(0.0, 1.0, samples))
+    let noise: PyObject = rng.normal(0.0, 2.0, samples)
+    let y_raw: PyObject = np.add(np.add(walk, noise), dc_offset)
+    let fs: float = 1.0 / dt
+    let bw_lpf: PyObject = signal.butter(2, 1, btype="lowpass", output="sos", fs=fs)
+    let bw_hpf: PyObject = signal.butter(2, 1, btype="highpass", output="sos", fs=fs)
+    let y_lpf: PyObject = signal.sosfilt(bw_lpf, y_raw, zi=[[dc_offset, -0.9 * dc_offset]])[0]
+    let y_hpf: PyObject = signal.sosfilt(bw_hpf, y_raw, zi=[[-dc_offset, dc_offset]])[0]
     print "# time_s  raw  low-pass  high-pass"
-    for i in 0 ..< samples:
-        if i % every == 0 or i == samples - 1:
-            print f"{float(i) * dt:7.3f} {y_raw[i]:9.4f} {y_lpf[i]:9.4f} {y_hpf[i]:9.4f}"
+    for i in [0, 100, 200, 300, 400, samples - 1]:
+        let ti: float = t[i]
+        let ri: float = y_raw[i]
+        let li: float = y_lpf[i]
+        let hi: float = y_hpf[i]
+        print f"{ti:7.3f} {ri:9.4f} {li:9.4f} {hi:9.4f}"
+    let fig: PyObject = plt.figure(figsize=(9, 3))
+    let ax: PyObject = fig.add_axes([0.1, 0.15, 0.85, 0.75])
+    ax.grid()
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Value")
+    let _: PyObject = ax.plot(t, y_raw, label="raw data", color="black")
+    let _: PyObject = ax.plot(t, y_lpf, label="low-pass filtered", color="goldenrod", lw=2)
+    let _: PyObject = ax.plot(t, y_hpf, label="high-pass filtered", color="mediumseagreen")
+    let _: PyObject = ax.legend()
+    fig.savefig(path)
+
+matplotlib.use("Agg")
 
 print "Start!"
 var my_beaker: Temperature_System = Temperature_System(R=0.75, Q=0.1, initial_kalman_mean=15.0, initial_kalman_cov=10.0, initial_wiener_val=15.0)
@@ -250,7 +291,10 @@ my_beaker.step(250)
 my_beaker.print_filter_comparison()
 my_beaker.print_kalman_gain()
 my_beaker.print_bode()
-lpf_hpf_demo()
+my_beaker.plot_filter_comparison("kalman_filter_comparison.png")
+my_beaker.plot_kalman_gain("kalman_gain.png")
+my_beaker.bode_plot("kalman_bode.png")
+lpf_hpf_demo("lpf_hpf_demo.png")
 # the Kalman gain has converged to the steady-state gain, so the two filters agree
 assert abs(my_beaker.kalman_gain_array[-1] - my_beaker.K_ss) < 1e-6
 assert abs(my_beaker.kalman_mean_array[-1] - my_beaker.wiener_array[-1]) < 1e-4

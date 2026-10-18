@@ -58,7 +58,6 @@ LIBS := \
 # -----------------------------------------------------------------------
 STANDALONE := \
     monty_hall.ady \
-    KALMAN_WIENER/kalman_wiener.ady \
     sudoku.ady \
     prisoners.ady \
     graph.ady \
@@ -319,12 +318,14 @@ ADA_INDENT_TESTS := \
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
 #   tsp.ady         — matplotlib not installed by default (pyimport)
+#   KALMAN_WIENER/kalman_wiener.ady — numpy, scipy, matplotlib (pyimport); writes PNGs
 #   MOON/moon_sim.ady — the same; run by moon_tests below when matplotlib is there
 #   MAP_UTILS/route_map.ady — folium not installed by default (pyimport)
 #   BENCH_SEARCH/bench_search.ady — a timing program: its output is the clock
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
     tsp.ady \
+    KALMAN_WIENER/kalman_wiener.ady \
     MOON/moon_sim.ady \
     MAP_UTILS/route_map.ady \
     test_input.ady \
@@ -398,7 +399,7 @@ JS_COMPARED := test_do_block test_do_discard test_case_ranges test_ordered_map a
 # skipped, quietly.
 nim_has = $(shell PATH="$(PATH)"; d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
-NEEDS_NIMPY := pyimport_similar.ady test_pyobject_calls.ady tsp.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
+NEEDS_NIMPY := pyimport_similar.ady test_pyobject_calls.ady tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
 NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
 SKIPPED :=
 ifeq ($(call nim_has,nimpy),)
