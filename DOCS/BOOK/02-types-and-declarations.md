@@ -548,6 +548,39 @@ type of x; where `ady2py` cannot see it, it refuses the conversion rather
 than guess, since guessing wrong would relabel metres as miles.
 `EXAMPLES/physics_calc.ady` uses both the kilometre and the mile.
 
+### A point on a scale: Celsius and Fahrenheit
+
+A temperature in Celsius is a kelvin less 273.15: the zero of the scale is
+not the zero of the unit, so it is not a multiple. It is declared as the
+offset it is, and a scale may be given with it:
+
+```
+type Kelvin_T     is distinct float
+type Celsius_T    is Kelvin_T - 273.15
+type Fahrenheit_T is 1.8 * Celsius_T + 32.0     # or 1.8 * Kelvin_T - 459.67
+```
+
+`Celsius_T(k)` of a `Kelvin_T` adds the offset, `Kelvin_T(c)` takes it off,
+and `Fahrenheit_T(c)` and `Celsius_T(f)` convert directly. A number given to
+one keeps its number. Points on a scale order, and the difference of two is a
+change, a `Kelvin_T`; a change added to a point moves it. What has no
+meaning is refused: two points have no sum (`20 C + 10 C`), and a point has no
+multiple (`20 C` is not twice `10 C`). A bare `c + 1.0` is refused too, since
+one degree is a different change on each scale -- write `c + Kelvin_T(1.0)`.
+
+### The reciprocal of a unit: Hertz
+
+```
+type Second_T is distinct float
+type Hertz_T  is 1.0 / Second_T
+```
+
+A number over a `Second_T` is a `Hertz_T`, a number over a `Hertz_T` is a
+`Second_T`, and a `Hertz_T` times a `Second_T` is a plain number: cycles. A
+`Hertz_T` is a unit like any other, so it adds, compares and scales, and takes
+part in derived units (`Metre_T * Hertz_T` is a `Speed_T` when one is
+declared). `EXAMPLES/test_units_offset.ady` runs both on both backends.
+
 ### Money
 
 The commonest quantity of all is money, and it takes nothing new. An amount

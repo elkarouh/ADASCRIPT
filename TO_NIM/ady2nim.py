@@ -108,7 +108,8 @@ _nimport_tuple_field_order: dict = {}
 # its module-level names with their types: globals and type aliases. Each is
 # (ParserState attribute, merged into the importer's at its reset).
 _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations", "unit_dims",
-                    "scaled_units", "narrowed_types", "mod_types", "overloaded_procs",
+                    "scaled_units", "affine_units", "inverse_units",
+                    "narrowed_types", "mod_types", "overloaded_procs",
                     "generic_funcs",
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "contextmanager_funcs",
@@ -158,6 +159,8 @@ def _nim_reset():
     ParserState.inferred_unit_ops = {}   # (op, l, r) -> unit, from the dimensions alone
     ParserState._units_declared = set()
     ParserState.scaled_units = {}       # `type C is K * B`: name -> (K, B)
+    ParserState.affine_units = {}       # `type C is K * B - OFFSET`: name -> (K, B, OFFSET)
+    ParserState.inverse_units = {}      # `type C is 1.0 / B`: name -> B
     ParserState.narrowed_types = {}     # `type N is P range ..`: name -> P
     ParserState.mod_types = {}          # `type N is [P] mod M`: name -> (P or None, M)
     ParserState.where_types = {}        # `type N is str where ..`: name -> str
@@ -879,6 +882,9 @@ def translate(code, export_symbols=False):
     ParserState._scaled_bases_done = {b for n, (_, b) in ParserState.scaled_units.items()
                                       if n not in _scaled}
     ParserState.scaled_units.update(_scaled)
+    from ady_declarations import affine_units, inverse_units
+    ParserState.affine_units.update(affine_units(ParserState.ady_type_decls))
+    ParserState.inverse_units.update(inverse_units(ParserState.ady_type_decls))
     from ady_declarations import narrowed_types, mod_types
     ParserState.narrowed_types.update(narrowed_types(ParserState.ady_type_decls))
     from ady_declarations import where_types

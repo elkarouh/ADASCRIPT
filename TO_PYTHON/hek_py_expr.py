@@ -1437,7 +1437,33 @@ def _is_scaled_name(name):
     the base of one."""
     from hek_parsec import ParserState
     scaled = getattr(ParserState, "py_scaled_units", None) or {}
-    return name in scaled or any(b == name for _, b in scaled.values())
+    affine = getattr(ParserState, "affine_units", None) or {}
+    return (name in scaled or any(b == name for _, b in scaled.values())
+            or name in affine or any(p[1] == name for p in affine.values()))
+
+
+def _affine_conversion(name, arg):
+    """`Celsius_T(k)` / `kelvin_T(c)` / `Fahrenheit_T(c)`: the conversion
+    between points on scales of one base, chosen by the unit of ARG as the Nim
+    backend's to_ overloads choose it; None when NAME is in no such pair with
+    ARG's unit."""
+    from hek_parsec import ParserState
+    from ady_declarations import expr_unit, narrow_root
+    from hek_py_stmt import _py_atom_unit
+    affine = getattr(ParserState, "affine_units", None) or {}
+    unit = narrow_root(expr_unit(arg, _py_atom_unit))
+    if name in affine:
+        k, base, off = affine[name]
+        if unit == base:
+            return f"{name}(float({arg}) * {k} + ({off}))"
+        if unit in affine and unit != name and affine[unit][1] == base:
+            uk, _, uoff = affine[unit]
+            return f"{name}((float({arg}) - ({uoff})) / {uk} * {k} + ({off}))"
+        return None
+    for an, (k, base, off) in affine.items():
+        if base == name and unit == an:
+            return f"{name}((float({arg}) - ({off})) / {k})"
+    return None
 
 
 def _names_regex(call_args):
@@ -1496,6 +1522,9 @@ def _scaled_conversion(name, arg):
     from hek_py_stmt import _py_atom_unit, _PY_NUMBER
     scaled = ParserState.py_scaled_units
     from ady_declarations import narrow_root
+    _aff = _affine_conversion(name, arg)
+    if _aff is not None:
+        return _aff
     unit = narrow_root(expr_unit(arg, _py_atom_unit))
     if unit is None and _only_plain_numbers(arg):
         unit = UNIT_PLAIN                 # `(2.0 * float(g) * float(r)) ** 0.5`

@@ -315,6 +315,55 @@ def to_py(self, prec=None):
     return self.nodes[0].to_py()
 
 
+@method(inverse_def)
+def to_py(self, prec=None):
+    """inverse_def: NUMBER '/' IDENTIFIER; type_stmt renders it"""
+    return ""
+
+
+@method(affine_def)
+def to_py(self, prec=None):
+    """affine_def: [NUMBER '*'] IDENTIFIER ('+'|'-') NUMBER; type_stmt renders it"""
+    return ""
+
+
+_AFFINE_OPS_HELPER = """\
+def _affine_ops(cls, base, scale):
+    \"\"\"A point on a scale, as on Nim: a change in BASE moves it, the
+    difference of two is a change, and the rest is refused when transpiled.\"\"\"
+    def add(self, o):
+        if isinstance(o, base):
+            return cls(float(self) + float(o) * scale)
+        return NotImplemented
+    def sub(self, o):
+        if isinstance(o, cls):
+            return base((float(self) - float(o)) / scale)
+        if isinstance(o, base):
+            return cls(float(self) - float(o) * scale)
+        return NotImplemented
+    cls.__add__ = cls.__radd__ = add
+    cls.__sub__ = sub
+    cls.__rsub__ = lambda self, o: NotImplemented
+    for op in ("__add__", "__radd__"):
+        def g(self, o, orig=getattr(base, op)):
+            return NotImplemented if isinstance(o, cls) else orig(self, o)
+        setattr(base, op, g)
+    return cls\
+"""
+
+
+def _affine_class(name, indent):
+    """`class Celsius_T(float)`, a point on a scale, with _affine_ops."""
+    from ady_declarations import affine_units
+    scale, base, _ = ParserState.affine_units[name]
+    decls = getattr(ParserState, "py_top_decls", [])
+    if _AFFINE_OPS_HELPER not in decls:
+        decls.append(_AFFINE_OPS_HELPER)
+        ParserState.py_top_decls = decls
+    ind = _ind(indent)
+    return f"{ind}class {name}(float): __slots__ = ()\n{ind}_affine_ops({name}, {base}, {scale})"
+
+
 _DISTINCT_BASES = {"float": "float", "int": "int", "str": "str", "bool": "bool"}
 
 
@@ -1608,6 +1657,12 @@ def to_py(self, indent=0):
         _note_alias(name, name)
         ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
         return _unit_class(name, base, indent)
+    if rhs_type in ('inverse_def', 'affine_def'):
+        _note_alias(name, name)
+        ParserState.py_type_names = getattr(ParserState, "py_type_names", set()) | {name}
+        if rhs_type == 'affine_def':
+            return _affine_class(name, indent)
+        return _unit_class(name, "float", indent)
     if rhs_type == 'derived_def':
         # `type Velocity_T is Distance_T / Duration_T`: a class of the
         # operands' base, like any distinct type. What the operators between

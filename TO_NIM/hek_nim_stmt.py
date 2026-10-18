@@ -2459,6 +2459,10 @@ def to_nim(self, indent=0):
         return _scaled_type_nim(name, params, indent)
     elif rhs_type == "derived_def":
         return _derived_type_nim(name, params, indent)
+    elif rhs_type == "inverse_def":
+        return _inverse_type_nim(name, params, indent)
+    elif rhs_type == "affine_def":
+        return _affine_type_nim(name, params, indent)
     elif rhs_type == "float_range_def":
         lo = _float_bound_text(rhs.nodes[2])
         hi = _float_bound_text(rhs.nodes[4])  # [float, range, lo, range_op, hi]
@@ -2669,6 +2673,83 @@ def _derived_type_nim(name, params, indent):
         # a square has a root, in the unit it is the square of
         ParserState.nim_qualified.add("math")
         lines.append(f"{ind}proc sqrt{_exp}(x: {name}): {a} = {a}(math.sqrt(float(x)))")
+    return "\n".join(lines)
+
+
+@method(inverse_def)
+def to_nim(self, prec=None):
+    """inverse_def: NUMBER '/' IDENTIFIER -- type_stmt renders it, from the
+    declaration scan."""
+    return ""
+
+
+@method(affine_def)
+def to_nim(self, prec=None):
+    """affine_def: [NUMBER '*'] IDENTIFIER ('+'|'-') NUMBER -- type_stmt
+    renders it, from the declaration scan."""
+    return ""
+
+
+def _inverse_type_nim(name, params, indent):
+    """`type Hertz_T is 1.0 / second_T` -> a distinct float, and what being
+    one over the other means: Hertz_T times second_T, either way round, is a
+    plain number; a number over a second_T is a Hertz_T and over a Hertz_T a
+    second_T."""
+    base = ParserState.inverse_units[name]
+    lines, _exp = _distinct_lines(name, params, "float", "float", indent)
+    ind = _ind(indent)
+    for a, b in ((name, base), (base, name)):
+        lines.append(f"{ind}proc `*`{_exp}(a: {a}, b: {b}): float = float(a) * float(b)")
+    for unit, other in ((base, name), (name, base)):
+        for num in ("float", "int"):
+            lines.append(f"{ind}proc `/`{_exp}(a: {num}, b: {unit}): {other} = "
+                         f"{other}(float(a) / float(b))")
+    lines += _inferred_op_lines(name, indent, _exp)
+    return "\n".join(lines)
+
+
+def _affine_type_nim(name, params, indent):
+    """`type Celsius_T is kelvin_T - 273.15` (or `1.8 * kelvin_T - 459.67`)
+    -> a distinct float that is a point on a scale: it orders, and a change in
+    the base unit moves it, but two points have no sum and no multiple. The
+    difference of two is a change in the base unit. `to_Celsius_T` and
+    `to_kelvin_T` convert, as `Celsius_T(k)` and `kelvin_T(c)` are emitted;
+    two scales of one base convert through it."""
+    scale, base, offset = ParserState.affine_units[name]
+    ind = _ind(indent)
+    ParserState.symbol_table.add(name, name, "type")
+    _top = ParserState.symbol_table.depth() <= 2
+    _exp = "*" if getattr(ParserState, "export_symbols", False) and _top else ""
+    ParserState.nim_imports.update(("hashes", "strformat"))
+    lines = [f"{ind}type {name}{_exp}{params} = distinct float"]
+    lines += [ind + p.format(e=_exp, t=name) for p in _DISTINCT_ORDERED]
+    lines.append(f"{ind}proc formatValue{_exp}(result: var string; value: {name}; "
+                 f"specifier: string) = formatValue(result, float(value), specifier)")
+    lines += [f"{ind}proc `+`{_exp}(a: {name}, b: {base}): {name} = "
+              f"{name}(float(a) + float(b) * {scale})",
+              f"{ind}proc `+`{_exp}(a: {base}, b: {name}): {name} = "
+              f"{name}(float(a) * {scale} + float(b))",
+              f"{ind}proc `-`{_exp}(a: {name}, b: {base}): {name} = "
+              f"{name}(float(a) - float(b) * {scale})",
+              f"{ind}proc `-`{_exp}(a: {name}, b: {name}): {base} = "
+              f"{base}((float(a) - float(b)) / {scale})",
+              f"{ind}proc `+=`{_exp}(a: var {name}, b: {base}) = a = a + b",
+              f"{ind}proc `-=`{_exp}(a: var {name}, b: {base}) = a = a - b"]
+    done = ParserState._scaled_bases_done
+    for t in ([base] if base not in done else []) + [name]:
+        lines += [f"{ind}proc to_{t}{_exp}(x: float): {t} = {t}(x)",
+                  f"{ind}proc to_{t}{_exp}(x: int): {t} = {t}(float(x))",
+                  f"{ind}proc to_{t}{_exp}(x: {t}): {t} = x"]
+    done.add(base)
+    lines.append(f"{ind}proc to_{name}{_exp}(x: {base}): {name} = "
+                 f"{name}(float(x) * {scale} + ({offset}))")
+    lines.append(f"{ind}proc to_{base}{_exp}(x: {name}): {base} = "
+                 f"{base}((float(x) - ({offset})) / {scale})")
+    for other, (_, ob, _) in ParserState.affine_units.items():
+        if other != name and ob == base and other in ParserState._units_declared:
+            lines.append(f"{ind}proc to_{name}{_exp}(x: {other}): {name} = to_{name}(to_{base}(x))")
+            lines.append(f"{ind}proc to_{other}{_exp}(x: {name}): {other} = to_{other}(to_{base}(x))")
+    lines += _inferred_op_lines(name, indent, _exp)
     return "\n".join(lines)
 
 

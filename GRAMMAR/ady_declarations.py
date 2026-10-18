@@ -642,6 +642,67 @@ def parse_derived(rhs):
     return (m.group(1), m.group(2), m.group(3)) if m else None
 
 
+_NUM_RE = r"\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][-+]?\d+)?"
+_INVERSE = _re_du.compile(r"^1(?:\.0*)?[ \t]*/[ \t]*([A-Za-z_]\w*)$")
+_AFFINE = _re_du.compile(
+    r"^(?:(" + _NUM_RE + r")[ \t]*\*[ \t]*)?([A-Za-z_]\w*)[ \t]*([-+])[ \t]*(" + _NUM_RE + r")$")
+
+
+def parse_inverse(rhs):
+    """B for a declaration `type C is 1.0 / B`, else None: a unit that is
+    the reciprocal of B (a frequency is one over a time)."""
+    m = _INVERSE.match((rhs or "").strip())
+    return m.group(1) if m else None
+
+
+def parse_affine(rhs):
+    """(scale, base, offset) for a declaration `type C is [K *] B - OFFSET`
+    (or `+`), else None: a point on a scale whose zero is not the zero of B.
+    A C is K * B + OFFSET, with the sign of OFFSET kept: `kelvin_T - 273.15`
+    is Celsius, `1.8 * kelvin_T - 459.67` Fahrenheit. SCALE is "1" when the
+    declaration has none."""
+    m = _AFFINE.match((rhs or "").strip())
+    if not m:
+        return None
+    return (m.group(1) or "1", m.group(2), m.group(3) + m.group(4))
+
+
+def inverse_units(decls):
+    """{name: base} for every `type C is 1.0 / B` in DECLS. Two reciprocals of
+    one unit would be one type twice, and are refused."""
+    out, seen = {}, {}
+    for name, rhs in decls.items():
+        b = parse_inverse(rhs) if rhs is not None else None
+        if b is None:
+            continue
+        if b in seen:
+            raise SyntaxError(
+                f"type {name} is 1.0 / {b}: {seen[b]} is already one over {b} -- "
+                f"a unit has one reciprocal; name it {seen[b]}")
+        seen[b] = name
+        out[name] = b
+    return out
+
+
+def affine_units(decls):
+    """{name: (scale, base, offset)} for every `type C is [K *] B - OFFSET`
+    in DECLS, see parse_affine."""
+    raw = {n: p for n, r in decls.items() if r is not None
+           for p in [parse_affine(r)] if p}
+    # a scale declared from another scale -- Fahrenheit from Celsius -- is
+    # the composition of the two, over the unit they both come from
+    out = {}
+    for name in raw:
+        k, base, off = raw[name]
+        seen = {name}
+        while base in raw and base not in seen:
+            seen.add(base)
+            bk, bbase, boff = raw[base]
+            k, off, base = f"({k} * {bk})", f"({k} * ({boff}) + ({off}))", bbase
+        out[name] = (k, base, off)
+    return out
+
+
 def distinct_types(decls, known=None, scaled=None, consts=None):
     """{name: kind} for every `type X is distinct T`, every derived unit
     `type C is A / B` and every scaled unit `type C is K * B` (SCALED, the
@@ -665,10 +726,22 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
     # resolve until nothing moves
     pending = dict(derived)
     pending.update({n: (None, "*", b) for n, (_, b) in scaled.items()})
+    pending.update({n: (None, "inv", b) for n, b in inverse_units(decls).items()})
+    pending.update({n: (None, "aff", p[1]) for n, p in affine_units(decls).items()})
     while pending:
         moved = False
         for name, (a, op, b) in list(pending.items()):
-            if a is None and b in out and b not in pending:
+            if a is None and op in ("inv", "aff") and b in out and b not in pending:
+                if out[b] != "float":
+                    shown = (f"1.0 / {b}" if op == "inv" else decls[name])
+                    raise SyntaxError(
+                        f"type {name} is {shown}: {b} is made of {out[b]} -- "
+                        f"{'a reciprocal' if op == 'inv' else 'a point on a scale'} "
+                        f"is made from a distinct float")
+                out[name] = "float"
+                del pending[name]
+                moved = True
+            elif a is None and b in out and b not in pending:
                 out[name] = _check_scaled(name, scaled[name][0], b, out, consts)
                 del pending[name]
                 moved = True
@@ -678,6 +751,11 @@ def distinct_types(decls, known=None, scaled=None, consts=None):
                 moved = True
         if not moved:
             name, (a, op, b) = next(iter(pending.items()))
+            if a is None and op in ("inv", "aff"):
+                shown = f"1.0 / {b}" if op == "inv" else decls[name]
+                raise SyntaxError(
+                    f"type {name} is {shown}: {b} is not a distinct float -- "
+                    f"declare `type {b} is distinct float`")
             if a is None:
                 raise SyntaxError(
                     f"type {name} is {scaled[name][0]} * {b}: {b} is not a "
@@ -753,7 +831,8 @@ def _is_unit_decl(rhs):
     others (`A / B`, `K * B`)."""
     rhs = (rhs or "").strip()
     return (rhs.startswith("distinct ") or parse_derived(rhs) is not None
-            or _SCALED_RHS.match(rhs) is not None)
+            or _SCALED_RHS.match(rhs) is not None or parse_inverse(rhs) is not None
+            or parse_affine(rhs) is not None)
 
 
 _SCALED_RHS = _re_du.compile(r"^[-\d_.eE+]+[ \t]*\*[ \t]*[A-Za-z_]\w*$")
@@ -963,6 +1042,12 @@ def scaled_sources(target):
     if target in scaled:
         out.add(scaled[target][1])
     out |= {n for n, (_, b) in scaled.items() if b == target}
+    affine = getattr(ParserState, "affine_units", None) or {}
+    if target in affine:
+        base = affine[target][1]
+        out.add(base)
+        out |= {n for n, p in affine.items() if p[1] == base and n != target}
+    out |= {n for n, p in affine.items() if p[1] == target}
     return out or None
 
 
@@ -1018,6 +1103,13 @@ def unit_relations(decls, scaled=None):
                 raise SyntaxError(
                     f"type {name} is derived from the same units as "
                     f"{rel[(op, l, r)]}: `{l} {op} {r}` cannot be both")
+    # a reciprocal: it times its base is a plain number, a number over the
+    # base is it, and a number over it is the base
+    for name, base in inverse_units(decls).items():
+        rel[("*", name, base)] = rel[("*", base, name)] = UNIT_PLAIN
+        for lit in (UNIT_LIT, UNIT_PLAIN):
+            rel[("/", lit, base)] = name
+            rel[("/", lit, name)] = base
     return rel
 
 
@@ -1054,9 +1146,16 @@ def unit_dims(decls, scaled=None, known=None):
             dims[name] = ((name, 1),)
     pending = {n: parse_derived(r) for n, r in decls.items()
                if r is not None and n not in scaled and parse_derived(r) is not None}
+    pending.update({n: (None, "inv", b) for n, b in inverse_units(decls).items()})
     while pending:
         moved = False
         for name, (a, op, b) in list(pending.items()):
+            if a is None:
+                if b in dims:
+                    dims[name] = _dims_key({u: -e for u, e in dims[b]})
+                    del pending[name]
+                    moved = True
+                continue
             if a in dims and b in dims:
                 dims[name] = _dims_combine(dict(dims[a]), op, dims[b])
                 del pending[name]
@@ -1375,6 +1474,30 @@ def _mod_result(lu, op, ru):
     return None
 
 
+def _affine_of(u):
+    """(scale, base, offset) when U is a point on a scale, `type Celsius_T is
+    kelvin_T - 273.15`, else None."""
+    from hek_parsec import ParserState
+    return (getattr(ParserState, "affine_units", None) or {}).get(u) if u else None
+
+
+def _affine_result(lu, op, ru):
+    """The unit of `l op r` when either side is a point on a scale: the
+    difference of two is a change in the base unit, a change added to a point
+    is a point, and nothing else has a meaning. Returns (True, unit or None)
+    when one is, else (False, None)."""
+    al, ar = _affine_of(lu), _affine_of(ru)
+    if not (al or ar):
+        return False, None
+    if op == "-" and al and lu == ru:
+        return True, al[1]
+    if op in ("+", "-") and al and ru == al[1]:
+        return True, lu
+    if op == "+" and ar and lu == ar[1]:
+        return True, ru
+    return True, None
+
+
 def unit_result(lu, op, ru):
     """The unit of `l op r` given the units of l and r, or None if it has
     none (or the backend cannot tell). A narrowed type is its widest parent
@@ -1389,6 +1512,9 @@ def unit_result(lu, op, ru):
         if lu in (UNIT_LIT, UNIT_PLAIN) and ru in (UNIT_LIT, UNIT_PLAIN):
             return UNIT_LIT if lu == ru == UNIT_LIT else UNIT_PLAIN
         return None
+    is_affine, unit = _affine_result(lu, op, ru)
+    if is_affine:
+        return unit
     if op in _SAME_UNIT_OPS:
         if ld and rd:
             return lu if lu == ru else None
@@ -1403,7 +1529,45 @@ def unit_result(lu, op, ru):
         # this can see, it is anything -- `e.n * t` with e.n unknown is not a t
         if ld:
             return lu if ru in (UNIT_LIT, UNIT_PLAIN) else None
+        if lu in (UNIT_LIT, UNIT_PLAIN) and unit_relation(op, lu, ru):
+            return unit_relation(op, lu, ru)        # `1.0 / t` is a frequency
         return ru if op == "*" and lu in (UNIT_LIT, UNIT_PLAIN) else None
+    return None
+
+
+def _affine_error(lu, op, ru):
+    """Why `l op r` is refused when a side is a point on a scale -- Celsius_T,
+    Fahrenheit_T -- and the other does not make a point or a change of it, or
+    None. A point has no sum with another, and no multiple: 20 degrees is not
+    twice 10. A change in the base unit moves it."""
+    al, ar = _affine_of(narrow_root(lu)), _affine_of(narrow_root(ru))
+    if not (al or ar) or op in _COMPARE_OPS:
+        return None
+    if op in _SCALE_OPS or op in ("%", "mod"):
+        t = lu if al else ru
+        return (f"applies `{op}` to {a_(t)}: a point on a scale is not a quantity, "
+                f"so it has no multiple or share -- convert it to "
+                f"{_affine_of(t)[1]} first, `{_affine_of(t)[1]}(...)`")
+    if op not in ("+", "-"):
+        return None
+    if al and lu == ru:
+        if op == "+":
+            return (f"adds {a_(lu)} to {a_(lu)}: two points on a scale have no sum -- "
+                    f"add a change, a {al[1]}, to one; subtracting two gives that change")
+        return None
+    t, other, p = (lu, ru, al) if al else (ru, lu, ar)
+    if other == p[1] and (op == "+" or al):
+        return None
+    if al is None and op == "-" and other == p[1]:
+        return (f"subtracts {a_(ru)} from {a_(lu)}: a point on a scale is not taken "
+                f"from a change -- the other way round, `{ru} - {lu}`, is a {ru}")
+    if other in (UNIT_LIT, UNIT_PLAIN):
+        return (f"mixes {a_(t)} with a plain number: a point on a scale moves by a "
+                f"change in {p[1]}, whose size depends on the scale -- write "
+                f"{p[1]}(...)")
+    if other and is_distinct(other):
+        return (f"mixes {a_(t)} with {a_(other)}: a point on a scale moves only by "
+                f"a {p[1]} -- convert one side explicitly")
     return None
 
 
@@ -1418,6 +1582,8 @@ def unit_mix_error(lu, op, ru):
     rd = bool(ru) and is_distinct(ru)
     if not (ld or rd):
         return None
+    if (_affine_of(lu) or _affine_of(ru)) and op not in _COMPARE_OPS:
+        return _affine_error(lu, op, ru)
     if op in _SAME_UNIT_OPS or op in _COMPARE_OPS:
         if ld and rd:
             if lu == ru:
@@ -1451,7 +1617,7 @@ def unit_mix_error(lu, op, ru):
                             f"it with `type X is {lu} {sign} {ru}`")
             return (f"{verb} {a_(lu)} by {a_(ru)} has no unit: name the result "
                     f"with `type X is {lu} {sign} {ru}`")
-        if rd and op != "*" and lu in (UNIT_LIT, UNIT_PLAIN):
+        if rd and op != "*" and lu in (UNIT_LIT, UNIT_PLAIN) and not unit_relation(op, lu, ru):
             return (f"a plain number divided by {a_(ru)} has no unit: name "
                     f"the result, `type X is A / {ru}`, with A a distinct type")
     return None

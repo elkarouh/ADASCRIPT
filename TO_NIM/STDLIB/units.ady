@@ -18,6 +18,11 @@ type metre_T    is distinct float   # length
 type kilogram_T is distinct float   # mass
 type second_T   is distinct float   # time
 type ampere_T   is distinct float   # electric current
-type kelvin_T   is distinct float   # temperature; no offset units, so no Celsius
+type kelvin_T   is distinct float   # temperature
 type mole_T     is distinct float   # amount of substance
 type candela_T  is distinct float   # luminous intensity
+
+# Derived from the above: a point on a scale, and a reciprocal.
+type celsius_T    is kelvin_T - 273.15
+type fahrenheit_T is 1.8 * celsius_T + 32.0
+type hertz_T      is 1.0 / second_T

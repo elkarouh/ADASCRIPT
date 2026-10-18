@@ -1161,6 +1161,16 @@ derived_def = IDENTIFIER + (V_STAR | V_SLASH) + IDENTIFIER
 # derived_def; ady_declarations.scaled_units tells the two apart.
 scaled_def = fw("scaled_def")
 scaled_def = NUMBER + V_STAR + IDENTIFIER
+# inverse_def: 1.0 / B -- the reciprocal of a distinct float, `type Hertz_T is
+# 1.0 / second_T`: a Hertz_T times a second_T is a plain number, 1.0 over a
+# second_T is a Hertz_T.
+inverse_def = fw("inverse_def")
+inverse_def = NUMBER + V_SLASH + IDENTIFIER
+# affine_def: [K *] B - OFFSET -- a point on a scale whose zero is not the
+# zero of B: `type Celsius_T is kelvin_T - 273.15`,
+# `type Fahrenheit_T is 1.8 * kelvin_T - 459.67`. See ady_declarations.parse_affine.
+affine_def = fw("affine_def")
+affine_def = (NUMBER + V_STAR)[:] + IDENTIFIER + (V_PLUS | V_MINUS) + NUMBER
 # int_range_def: int range LO .. HI  (synonym for constrained_subrange_def)
 int_range_def = fw("int_range_def")
 int_range_def = literal("int") + literal("range") + subrange_def
@@ -1175,7 +1185,7 @@ elem_type.parsers.insert(0, subrange_def)
 from ady_declarations import basic_type as _basic_type
 _basic_type.parsers.insert(2, subrange_array_type)
 # type_stmt for simple (inline) forms only; block forms (tuple/record) are in ady_compound_stmt
-type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_where_def | where_def | where_plain_def | distinct_float_range_def | distinct_def | derived_def | scaled_def | float_range_def | int_range_def | narrowed_def | mod_def | parent_mod_def | constrained_subrange_def | subrange_def | type_annotation)
+type_stmt = ikw("type") + IDENTIFIER + type_alias_params[:] + (V_EQUAL | ikw("is")) + (enum_def | distinct_where_def | where_def | where_plain_def | distinct_float_range_def | distinct_def | affine_def | derived_def | scaled_def | inverse_def | float_range_def | int_range_def | narrowed_def | mod_def | parent_mod_def | constrained_subrange_def | subrange_def | type_annotation)
 
 # --- simple_stmt: choice of all statement types ---
 # Ordering matters: try more specific forms before general expression.

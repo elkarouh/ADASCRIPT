@@ -1777,6 +1777,8 @@ def _nim_atom_unit(e):
     if called and called.startswith("to_") and called[3:] in (
             getattr(ParserState, "scaled_units", None) or {}).keys() | {
             b for _, b in (getattr(ParserState, "scaled_units", None) or {}).values()} | set(
+            getattr(ParserState, "affine_units", None) or {}) | {
+            p[1] for p in (getattr(ParserState, "affine_units", None) or {}).values()} | set(
             getattr(ParserState, "narrowed_types", None) or {}) | set(
             getattr(ParserState, "mod_types", None) or {}):
         return called[3:]                 # `Distance_T(k)`, emitted as to_Distance_T

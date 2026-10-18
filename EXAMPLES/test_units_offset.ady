@@ -1,0 +1,98 @@
+#!/usr/bin/env ady2nim
+# test_units_offset.ady — a point on a scale, and the reciprocal of a unit
+#
+#   ady2nim EXAMPLES/test_units_offset.ady -r
+#
+# `type Celsius_T is kelvin_T - 273.15` says a Celsius_T is a kelvin_T less
+# 273.15: the zero of the scale is not the zero of the unit. With a scale,
+# `type Fahrenheit_T is 1.8 * Celsius_T + 32.0` -- a scale may be declared from
+# another, or from the kelvin directly (`1.8 * Kelvin_T - 459.67`).
+# A Celsius_T(k) of a kelvin_T
+# adds the offset, a kelvin_T(c) of a Celsius_T takes it off, and a
+# Fahrenheit_T(c) of a Celsius_T goes through the kelvin. Points on a scale
+# order and subtract: the difference of two is a change, a kelvin_T. A change
+# moves a point. Two points have no sum, and no multiple.
+#
+# `type Hertz_T is 1.0 / second_T` says a Hertz_T is one over a second_T: a
+# number over a second_T is a Hertz_T, a Hertz_T times a second_T is a plain
+# number, and a number over a Hertz_T is a second_T.
+#
+# The output is compared between the backends. What is refused is checked in
+# the Makefile, one line at a time.
+
+type Kelvin_T     is distinct float
+type Second_T     is distinct float
+type Celsius_T    is Kelvin_T - 273.15
+type Fahrenheit_T is 1.8 * Celsius_T + 32.0
+type Hertz_T      is 1.0 / Second_T
+type Metre_T      is distinct float
+type Speed_T      is Metre_T / Second_T
+
+def near(a: float, b: float) -> bool:
+    return abs(a - b) <= 1e-9 * max(abs(b), 1.0)
+
+# --- from the base and back -------------------------------------------------
+let boil_k: Kelvin_T = 373.15
+let boil_c: Celsius_T = Celsius_T(boil_k)
+assert near(float(boil_c), 100.0)
+assert near(float(Kelvin_T(boil_c)), 373.15)
+let boil_f: Fahrenheit_T = Fahrenheit_T(boil_k)
+assert near(float(boil_f), 212.0)
+assert near(float(Kelvin_T(boil_f)), 373.15)
+
+# --- between two scales, through the base -----------------------------------
+let body: Celsius_T = Celsius_T(37.0)
+assert near(float(Fahrenheit_T(body)), 98.6)
+assert near(float(Celsius_T(Fahrenheit_T(212.0))), 100.0)
+
+# --- a plain number keeps its number ----------------------------------------
+assert near(float(Celsius_T(21.5)), 21.5)
+let n: int = 20
+assert near(float(Celsius_T(n)), 20.0)
+
+# --- points order, and the difference of two is a change --------------------
+assert Celsius_T(0.0) < body
+assert body > Celsius_T(-40.0)
+let rise: Kelvin_T = body - Celsius_T(20.0)
+assert near(float(rise), 17.0)
+let fever: Fahrenheit_T = Fahrenheit_T(100.4)
+let fahr_rise: Kelvin_T = fever - Fahrenheit_T(98.6)
+assert near(float(fahr_rise), 1.0)
+
+# --- a change moves a point -------------------------------------------------
+let warmer: Celsius_T = body + Kelvin_T(2.0)
+assert near(float(warmer), 39.0)
+let cooler: Celsius_T = body - Kelvin_T(2.0)
+assert near(float(cooler), 35.0)
+let hotter_f: Fahrenheit_T = Kelvin_T(10.0) + Fahrenheit_T(32.0)
+assert near(float(hotter_f), 50.0)
+var t: Celsius_T = Celsius_T(10.0)
+t += Kelvin_T(5.0)
+assert near(float(t), 15.0)
+
+# --- a reciprocal -----------------------------------------------------------
+let period: Second_T = 0.02
+let freq: Hertz_T = 1.0 / period
+assert near(float(freq), 50.0)
+let cycles: float = freq * Second_T(0.1)
+assert near(cycles, 5.0)
+let again: Second_T = 1.0 / freq
+assert near(float(again), 0.02)
+let tick: Hertz_T = 1000.0 / Second_T(2.0)
+assert near(float(tick), 500.0)
+assert near(freq * period, 1.0)
+
+# --- a reciprocal is a unit: it scales, adds, compares ----------------------
+let both: Hertz_T = freq + tick
+assert near(float(both), 550.0)
+assert freq < both
+assert near(float(both * 2.0), 1100.0)
+
+# --- and takes part in derived units ----------------------------------------
+let d: Metre_T = 10.0
+let v: Speed_T = d * freq
+assert near(float(v), 500.0)
+
+print f"{float(boil_c):.1f} C, {float(boil_f):.1f} F, {float(Fahrenheit_T(body)):.1f} F"
+print f"{float(freq):.1f} Hz, {float(again):.3f} s"
+print "test_units_offset: all checks passed"

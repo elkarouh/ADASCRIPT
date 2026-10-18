@@ -198,6 +198,7 @@ STANDALONE := \
     test_money.ady \
     accounting.ady \
     test_scaled_units.ady \
+    test_units_offset.ady \
     test_units_stdlib.ady \
     test_cents.ady \
     test_units_more.ady \
@@ -358,7 +359,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_element_field \
     MAP_UTILS/map_base MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry test_units_dims \
-    distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_stdlib test_cents
+    distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset test_units_stdlib test_cents
 
 # The compared examples that `ady2nim js` builds: their output under node is
 # compared with the native build's too. test_parse is left out on purpose: an
@@ -381,7 +382,7 @@ JS_COMPARED := test_do_block test_do_discard test_case_ranges test_ordered_map a
     test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_element_field MAP_UTILS/map_base \
     MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry \
-    test_units_dims distance_units mars_climate_orbiter physics_calc test_scaled_units \
+    test_units_dims distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset \
     test_units_stdlib test_cents
 
 # -----------------------------------------------------------------------
@@ -1171,6 +1172,31 @@ test-part-22:
 	        && $(PYTHON) $(TMPDIR)/ady_scaled_hdr.py > $(TMPDIR)/ady_scaled.out 2>&1 \
 	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_scaled.out; exit 1; }
 	@rm -rf $(TMPDIR)/ady_scaled_* $(TMPDIR)/ady_scaled.out
+	@# A point on a scale (`type C is K - 273.15`) and a reciprocal (`type Hz is
+	@# 1.0 / S`): what has no meaning is refused by both backends.
+	@echo "=== offset and reciprocal units ==="
+	@printf 'type K_T is distinct float\ntype S_T is distinct float\ntype C_T is K_T - 273.15\ntype F_T is 1.8 * C_T + 32.0\ntype Hz_T is 1.0 / S_T\nvar c: C_T = C_T(20.0)\nvar f: F_T = F_T(70.0)\nvar k: K_T = 3.0\nvar s: S_T = 2.0\nvar hz: Hz_T = 4.0 / s\n' \
+	    > $(TMPDIR)/ady_off_hdr.ady
+	@for c in "1:two points added:have no sum:let e: float = float(c + c)" \
+	          "2:a point plus a plain number:moves by a change:let e: float = float(c + 1.0)" \
+	          "3:a point scaled:not a quantity:let e: float = float(c * 2.0)" \
+	          "4:two scales added:moves only by a K_T:let e: float = float(c + f)" \
+	          "5:a point taken from a change:is not taken from a change:let e: float = float(k - c)" \
+	          "6:a frequency plus a time:does not mix:let e: float = float(hz + s)" \
+	          "7:a frequency squared:has no unit:let e: float = hz * hz" \
+	          "8:a frequency as a time:does not mix:let e: S_T = 1.0 / s"; do \
+	    n=$${c%%:*}; rest=$${c#*:}; what=$${rest%%:*}; rest=$${rest#*:}; \
+	    want=$${rest%%:*}; line=$${rest#*:}; \
+	    { cat $(TMPDIR)/ady_off_hdr.ady; echo "$$line"; } > $(TMPDIR)/ady_off_$$n.ady; \
+	    printf '  %-42s' "$$what"; \
+	    if (cd $(TMPDIR) && XDG_CACHE_HOME=$(TMPDIR)/ady_off_cache $(ADY2NIM) c ady_off_$$n.ady) \
+	            > $(TMPDIR)/ady_off.out 2>&1; then echo "FAIL (ady2nim accepted)"; exit 1; fi; \
+	    if $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(TMPDIR)/ady_off_$$n.ady \
+	            > $(TMPDIR)/ady_off.out 2>&1; then echo "FAIL (ady2py accepted)"; exit 1; fi; \
+	    grep -q "$$want" $(TMPDIR)/ady_off.out \
+	        && echo OK || { echo FAIL; cat $(TMPDIR)/ady_off.out; exit 1; }; \
+	done
+	@rm -rf $(TMPDIR)/ady_off_* $(TMPDIR)/ady_off.out $(TMPDIR)/ady_off_hdr.ady
 	@# The Mars Climate Orbiter's call: pound-force seconds where newton-seconds
 	@# are expected. The example is the program that converts; this is the one that does not.
 	@printf '  %-42s' "the Mars Climate Orbiter's call"; \

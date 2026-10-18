@@ -129,6 +129,8 @@ def _py_reset():
     ParserState.distinct_types = {}
     ParserState.unit_relations = {}
     ParserState.unit_dims = {}
+    ParserState.affine_units = {}
+    ParserState.inverse_units = {}
     ParserState.written_as = {}
     ParserState.narrowed_types = {}
     ParserState.mod_types = {}
@@ -372,6 +374,9 @@ def translate(code):
     # where it cannot be told the conversion is refused, never guessed.
     _scaled = scaled_units(_PS_rp.ady_type_decls, scan_consts(code))
     _PS_rp.py_scaled_units = _scaled
+    from ady_declarations import affine_units, inverse_units
+    _PS_rp.affine_units = affine_units(_PS_rp.ady_type_decls)
+    _PS_rp.inverse_units = inverse_units(_PS_rp.ady_type_decls)
     from ady_declarations import narrowed_types, mod_types
     _PS_rp.narrowed_types = narrowed_types(_PS_rp.ady_type_decls)
     _PS_rp.mod_types = mod_types(_PS_rp.ady_type_decls)
@@ -530,7 +535,8 @@ def translate(code):
     from hek_py_stmt import _UNIT_OPS_HELPER
     if _UNIT_OPS_HELPER in py_top_decls:
         rels = {k: v for k, v in (getattr(ParserState, "unit_relations", None) or {}).items()
-                if k[0] in ("*", "/")}
+                if k[0] in ("*", "/") and not k[1].startswith("<")
+                and not v.startswith("<")}
         py_top_decls.insert(py_top_decls.index(_UNIT_OPS_HELPER),
                             "_UNIT_RELATIONS = {" + ", ".join(
                                 f"{k!r}: {v!r}" for k, v in sorted(rels.items())) + "}")
