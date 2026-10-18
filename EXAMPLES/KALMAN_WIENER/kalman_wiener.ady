@@ -14,14 +14,15 @@ substantial portions of it.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY 
 What is translated: everything -- the Temperature_System (truth, noisy measurement, Kalman
 predict/update, Wiener filter, steady-state gain), its three plots, and the low-pass /
 high-pass demo.  numpy (the random source), scipy (butter, sosfilt) and matplotlib come
-in through `pyimport`; the numerical core is plain Adascript lists and floats.
+in through `pyimport`; the numerical core is Adascript floats, with the units on the values.
 
 Differences from the Python: the generator takes a seed, so a run is repeatable and can be
 checked against the original (`SEED = 42`; use `np.random.default_rng()` for a fresh run);
 the plots are written to PNG files (backend Agg) where the original opens webAgg and calls
 plt.show(); the Bode curve is computed with real arithmetic, |G(e^jwt)|, instead of numpy
 complex numbers.  Like the original, `Q` and `R` are the standard deviations of the noise
-in the simulation, and variances in the filter.
+in the simulation, and variances in the filter: the simulation passes them to `normal` as
+scales, which is why it takes a float.
 """
 nimport math
 pyimport numpy as np
@@ -29,61 +30,63 @@ pyimport scipy.signal as signal
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt
 
-# degrees Celsius
-type Celsius_T is float
-# a noise level: degrees-squared, or degrees in the simulation, as in the original
-type Noise_T is float
-# the Kalman gain: 0 = trust the forecast, 1 = trust the measurement
-type Gain_T is float
-# seconds
-type Seconds_T is float
-# frequency in hertz
-type Hertz_T is float
+# degrees Celsius: a temperature, or a difference of two of them
+type Celsius_T is distinct float
+# seconds between two observations
+type Seconds_T is distinct float
+# cycles per second
+type Hertz_T is distinct float
+# degrees Celsius squared: a Kalman covariance, and the noise covariances Q and R
+type Variance_T is Celsius_T * Celsius_T
+# the Kalman gain: 0 = trust the forecast, 1 = trust the measurement (no unit)
+type Gain_T is float range 0.0 .. 1.0
 
 const PI: float = 3.141592653589793
-const NAN: float = float("nan")
 const SEED: int = 42
 
 let rng: PyObject = np.random.default_rng(SEED)
 
-def normal(scale: float) -> float:
+def normal(scale: float) -> Celsius_T:
+    # a draw from a normal distribution with mean 0 and standard deviation `scale`
     let x: float = rng.normal(0.0, scale)
-    return x
+    return Celsius_T(x)
 
 # --- the system and its two filters -----------------------------------------------------
 
 class Temperature_System:
     var timestep: Seconds_T
-    var Q: Noise_T                            # process noise
-    var R: Noise_T                            # measurement noise
+    var Q: Variance_T                        # process noise
+    var R: Variance_T                        # measurement noise
     var T_array: []Celsius_T
     var T_meas_array: []Celsius_T
     var kalman_mean_array: []Celsius_T
     var kalman_mean_forecast_array: []Celsius_T
-    var kalman_cov_array: []Noise_T
-    var kalman_cov_forecast_array: []Noise_T
-    var kalman_gain_array: []Gain_T
-    var K_ss: Gain_T                          # steady-state Kalman gain
+    var kalman_cov_array: []Variance_T
+    var kalman_cov_forecast_array: []Variance_T
+    var kalman_gain_array: []Gain_T          # one per step: gain k is the gain of step k + 1
+    var K_ss: Gain_T                         # steady-state Kalman gain
     var wiener_array: []Celsius_T
 
-    def __init__(self, T0: Celsius_T = 20.0, Q: Noise_T = 1.0, R: Noise_T = 1.0,
-                 initial_kalman_mean: Celsius_T = 20.0, initial_kalman_cov: Noise_T = 1.0,
-                 initial_wiener_val: Celsius_T = 20.0, timestep_s: Seconds_T = 1.0):
+    def __init__(self, T0: Celsius_T = Celsius_T(20.0), Q: Variance_T = Variance_T(1.0), R: Variance_T = Variance_T(1.0),
+                 initial_kalman_mean: Celsius_T = Celsius_T(20.0), initial_kalman_cov: Variance_T = Variance_T(1.0),
+                 initial_wiener_val: Celsius_T = Celsius_T(20.0), timestep_s: Seconds_T = Seconds_T(1.0)):
         self.timestep = timestep_s
         self.Q = Q
         self.R = R
         self.T_array = [T0]
         self.T_meas_array = []
 
-        # Kalman filter
+        # Kalman filter: the forecasts and the gain start empty, the first step fills them
         self.kalman_mean_array = [initial_kalman_mean]
-        self.kalman_mean_forecast_array = [NAN]
+        self.kalman_mean_forecast_array = []
         self.kalman_cov_array = [initial_kalman_cov]
-        self.kalman_cov_forecast_array = [NAN]
-        self.kalman_gain_array = [NAN]
+        self.kalman_cov_forecast_array = []
+        self.kalman_gain_array = []
 
-        # Wiener filter
-        self.K_ss = 1.0 / (1.0 + (2.0 * R / (Q + math.sqrt(Q * (Q + 4.0 * R)))))
+        # Wiener filter: the steady-state Kalman gain, worked out on the bare numbers
+        let q: float = float(Q)
+        let r: float = float(R)
+        self.K_ss = Gain_T(1.0 / (1.0 + (2.0 * r / (q + math.sqrt(q * (q + 4.0 * r))))))
         self.wiener_array = [initial_wiener_val]
 
         # Initial state measurement
@@ -92,7 +95,7 @@ class Temperature_System:
     def step(self, num_steps: int = 1):
         for _ in 1..num_steps:
             let T_old: Celsius_T = self.T_array[-1]
-            let T_new: Celsius_T = T_old + normal(self.Q)
+            let T_new: Celsius_T = T_old + normal(float(self.Q))
             self.T_array.append(T_new)
 
             self.kalman_predict()
@@ -102,7 +105,7 @@ class Temperature_System:
 
     def measure(self) -> Celsius_T:
         # Measure a new data point
-        let T_noise: float = normal(self.R)
+        let T_noise: Celsius_T = normal(float(self.R))
         let T_meas: Celsius_T = self.T_array[-1] + T_noise
         self.T_meas_array.append(T_meas)
         return T_meas
@@ -111,101 +114,132 @@ class Temperature_System:
         # The system is unitary (F = 1) so there's no better prediction than the current guess
         let mean_forecast: Celsius_T = self.kalman_mean_array[-1]
         # But our uncertainty grows a bit, due to the process noise
-        let cov_forecast: Noise_T = self.kalman_cov_array[-1] + self.Q
+        let cov_forecast: Variance_T = self.kalman_cov_array[-1] + self.Q
         self.kalman_mean_forecast_array.append(mean_forecast)
         self.kalman_cov_forecast_array.append(cov_forecast)
 
     def kalman_update(self, T_meas: Celsius_T):
-        let x_k_forecast: Celsius_T = self.kalman_mean_forecast_array[-1]
-        let P_k: Noise_T = self.kalman_cov_forecast_array[-1]
-        const H_k: float = 1.0                # observation matrix
-        let R_k: Noise_T = self.R
-        let K_k: Gain_T = P_k * H_k / ((H_k * P_k * H_k) + R_k)
+        # The measurement is the state (H = 1), so the gain K = P / (P + R) is a ratio of two
+        # variances, a number.  The arithmetic is on floats; the results go back in their units.
+        let x_forecast: float = float(self.kalman_mean_forecast_array[-1])
+        let P: float = float(self.kalman_cov_forecast_array[-1])
+        let R_k: float = float(self.R)
+        let K: float = P / (P + R_k)
 
-        # Update mean and covariance
-        let x_k1: Celsius_T = x_k_forecast + K_k * (T_meas - H_k * x_k_forecast)
-        let cov_k1: Noise_T = (1.0 - K_k * H_k) * P_k * (1.0 - K_k * H_k) + K_k * R_k * K_k
+        let x1: float = x_forecast + K * (float(T_meas) - x_forecast)
+        let cov1: float = (1.0 - K) * P * (1.0 - K) + K * R_k * K
 
-        self.kalman_gain_array.append(K_k)
-        self.kalman_mean_array.append(x_k1)
-        self.kalman_cov_array.append(cov_k1)
+        self.kalman_gain_array.append(Gain_T(K))
+        self.kalman_mean_array.append(Celsius_T(x1))
+        self.kalman_cov_array.append(Variance_T(cov1))
 
     def wiener_filter(self, T_meas: Celsius_T) -> Celsius_T:
         # The optimal IIR Wiener filter for this system has the transfer function
         # G(z) = 1/(1 + (z - 1)/K)
-        let T_filt_prev: Celsius_T = self.wiener_array[-1]
-        let T_filt: Celsius_T = T_filt_prev + self.K_ss * (T_meas - T_filt_prev)
+        let T_filt_prev: float = float(self.wiener_array[-1])
+        let T_filt: Celsius_T = Celsius_T(T_filt_prev + float(self.K_ss) * (float(T_meas) - T_filt_prev))
         self.wiener_array.append(T_filt)
         return T_filt
+
+    def times(self, first: int, n: int) -> []float:
+        # the times, in seconds, of the samples first .. first + n - 1
+        return [float(i) * float(self.timestep) for i in first ..< first + n]
 
     def print_filter_comparison(self, every: int = 25):
         # Truth, data, the Kalman filter with its one-sigma band, and the Wiener filter
         print "# time_s  truth  data  kalman  kalman-sigma  wiener"
         for i in 0 ..< len(self.T_meas_array):
             if i % every == 0 or i == len(self.T_meas_array) - 1:
-                let sigma: float = math.sqrt(self.kalman_cov_array[i])
-                print f"{float(i) * self.timestep:7.1f} {self.T_array[i]:9.4f} {self.T_meas_array[i]:9.4f} {self.kalman_mean_array[i]:9.4f} {sigma:7.4f} {self.wiener_array[i]:9.4f}"
+                let sigma: float = math.sqrt(float(self.kalman_cov_array[i]))
+                print f"{float(i) * float(self.timestep):7.1f} {float(self.T_array[i]):9.4f} {float(self.T_meas_array[i]):9.4f} {float(self.kalman_mean_array[i]):9.4f} {sigma:7.4f} {float(self.wiener_array[i]):9.4f}"
 
     def print_kalman_gain(self, every: int = 25):
         # The Kalman gain rapidly converges to a constant
         print "# time_s  kalman_gain  steady_state"
-        for i in 1 ..< len(self.kalman_gain_array):
-            if i % every == 0 or i == len(self.kalman_gain_array) - 1 or i <= 3:
-                print f"{float(i) * self.timestep:7.1f} {self.kalman_gain_array[i]:9.6f} {self.K_ss:9.6f}"
+        for k in 0 ..< len(self.kalman_gain_array):
+            let i: int = k + 1
+            if i % every == 0 or i == len(self.kalman_gain_array) or i <= 3:
+                print f"{float(i) * float(self.timestep):7.1f} {float(self.kalman_gain_array[k]):9.6f} {float(self.K_ss):9.6f}"
 
-    def times(self, n: int) -> []Seconds_T:
-        return [float(i) * self.timestep for i in 0 ..< n]
+    def bode_magnitude(self, f_hz: Hertz_T) -> float:
+        # |G| of the Wiener filter at the frequency f_hz
+        let wt: float = 2.0 * PI * float(f_hz) * float(self.timestep)
+        let K: float = float(self.K_ss)
+        let re: float = 1.0 + (math.cos(wt) - 1.0) / K
+        let im: float = math.sin(wt) / K
+        return 1.0 / math.sqrt(re * re + im * im)
+
+    def print_bode(self, points: int = 1024, every: int = 128):
+        # Wiener filter (steady-state Kalman filter) frequency response
+        let dt: float = float(self.timestep)
+        let pole_w: float = math.exp(-(1.0 - float(self.K_ss)) * dt)
+        let pole_f: float = pole_w / (2.0 * PI)
+        let f_nyquist: float = 0.5 * dt
+        let lo: float = math.log10(0.01 * pole_w)
+        let hi: float = math.log10(2.0 * PI * f_nyquist)
+        print f"# pole at {pole_f:.6f} Hz"
+        print "# freq_hz  magnitude"
+        for i in 0 ..< points:
+            if i % every == 0 or i == points - 1:
+                let f_hz: Hertz_T = Hertz_T(math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI))
+                print f"{f_hz:11.6f} {self.bode_magnitude(f_hz):9.6f}"
 
     def plot_filter_comparison(self, path: str):
-        let time: []Seconds_T = self.times(len(self.T_meas_array))
-        let sigma: []float = [math.sqrt(c) for c in self.kalman_cov_array]
-        let k_min: []float = [self.kalman_mean_array[i] - sigma[i] for i in 0 ..< len(sigma)]
-        let k_max: []float = [self.kalman_mean_array[i] + sigma[i] for i in 0 ..< len(sigma)]
+        let ts: []float = self.times(0, len(self.T_meas_array))
+        let truth: []float = [float(x) for x in self.T_array]
+        let data: []float = [float(x) for x in self.T_meas_array]
+        let mean: []float = [float(x) for x in self.kalman_mean_array]
+        let wiener: []float = [float(x) for x in self.wiener_array]
+        let sigma: []float = [math.sqrt(float(c)) for c in self.kalman_cov_array]
+        let k_min: []float = [mean[i] - sigma[i] for i in 0 ..< len(sigma)]
+        let k_max: []float = [mean[i] + sigma[i] for i in 0 ..< len(sigma)]
         let fig: PyObject = plt.figure(figsize=(9, 4))
         let ax: PyObject = fig.add_axes([0.1, 0.125, 0.85, 0.8])
         ax.grid()
         ax.set_ylabel("Temperature (°C)")
         ax.set_xlabel("Time (s)")
         ax.set_title("The Kalman filter becomes indistinguishable from the Wiener (low-pass) filter after ~10 samples")
-        ax.set_xlim(time[0] - 2.0, time[len(time) - 1])
-        let _: PyObject = ax.plot(time, self.T_array, color="seagreen", lw=3, label="Truth", zorder=2)
-        let _: PyObject = ax.errorbar(time, self.T_meas_array, yerr=math.sqrt(self.R), ls="None", label="Data", color="darkseagreen", alpha=0.5, marker="+", zorder=1)
-        let _: PyObject = ax.plot(time, self.kalman_mean_array, ls="-", color="cornflowerblue", label="Kalman filter", lw=3, zorder=3)
-        let _: PyObject = ax.fill_between(time, k_min, k_max, color="cornflowerblue", alpha=0.25, zorder=4)
-        let _: PyObject = ax.plot(time, self.wiener_array, ls="--", color="gold", label="Wiener filter", zorder=5)
+        ax.set_xlim(ts[0] - 2.0, ts[len(ts) - 1])
+        let _: PyObject = ax.plot(ts, truth, color="seagreen", lw=3, label="Truth", zorder=2)
+        let _: PyObject = ax.errorbar(ts, data, yerr=math.sqrt(float(self.R)), ls="None", label="Data", color="darkseagreen", alpha=0.5, marker="+", zorder=1)
+        let _: PyObject = ax.plot(ts, mean, ls="-", color="cornflowerblue", label="Kalman filter", lw=3, zorder=3)
+        let _: PyObject = ax.fill_between(ts, k_min, k_max, color="cornflowerblue", alpha=0.25, zorder=4)
+        let _: PyObject = ax.plot(ts, wiener, ls="--", color="gold", label="Wiener filter", zorder=5)
         let _: PyObject = ax.legend(loc="lower right")
         fig.savefig(path)
 
     def plot_kalman_gain(self, path: str):
-        let time: []Seconds_T = self.times(len(self.kalman_gain_array))
-        let steady: []Gain_T = [self.K_ss for _ in time]
+        # gain k is the gain of step k + 1; the original's plot began at the step-0 time, 0 s
+        let ts: []float = self.times(1, len(self.kalman_gain_array))
+        let gains: []float = [float(g) for g in self.kalman_gain_array]
+        let steady: []float = [float(self.K_ss) for _ in ts]
         let fig: PyObject = plt.figure(figsize=(9, 2))
         let ax: PyObject = fig.add_axes([0.1, 0.25, 0.85, 0.5])
         ax.grid()
         ax.set_ylabel("Kalman gain")
         ax.set_xlabel("Time (s)")
         ax.set_title("The Kalman gain rapidly converges to a constant")
-        ax.set_xlim(time[0] - 2.0, time[len(time) - 1])
+        ax.set_xlim(-2.0, ts[len(ts) - 1])
         ax.set_ylim(0, 1)
-        let _: PyObject = ax.plot(time, self.kalman_gain_array, ls="-", color="cornflowerblue", lw=2, label="Kalman gain")
-        let _: PyObject = ax.plot(time, steady, ls="--", color="black", label="Steady-state")
+        let _: PyObject = ax.plot(ts, gains, ls="-", color="cornflowerblue", lw=2, label="Kalman gain")
+        let _: PyObject = ax.plot(ts, steady, ls="--", color="black", label="Steady-state")
         let _: PyObject = ax.legend(loc="upper right")
         fig.savefig(path)
 
     def bode_plot(self, path: str, points: int = 1024):
         # Plot the Wiener filter (steady-state Kalman filter) frequency spectrum
-        let dt: float = self.timestep
-        let pole_w: float = math.exp(-(1.0 - self.K_ss) * dt)
+        let dt: float = float(self.timestep)
+        let pole_w: float = math.exp(-(1.0 - float(self.K_ss)) * dt)
         let pole_f: float = pole_w / (2.0 * PI)
         let f_nyquist: float = 0.5 * dt
         let lo: float = math.log10(0.01 * pole_w)
         let hi: float = math.log10(2.0 * PI * f_nyquist)
-        var w_hz: []Hertz_T = []
+        var w_hz: []float = []
         var mag: []float = []
         for i in 0 ..< points:
-            let w: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1))
-            w_hz.append(w / (2.0 * PI))
-            mag.append(self.bode_magnitude(w / (2.0 * PI)))
+            let f: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI)
+            w_hz.append(f)
+            mag.append(self.bode_magnitude(Hertz_T(f)))
         let fig: PyObject = plt.figure(figsize=(9, 2))
         let ax: PyObject = fig.add_axes([0.1, 0.25, 0.85, 0.5])
         ax.grid()
@@ -220,30 +254,6 @@ class Temperature_System:
         let _: PyObject = ax.plot(w_hz, mag, lw=2, color="cornflowerblue", label="Steady-state Kalman filter")
         let _: PyObject = ax.plot([pole_f, pole_f], [0.1, 10], lw=1, color="grey", ls="--")
         fig.savefig(path)
-
-    def bode_magnitude(self, w_hz: Hertz_T) -> float:
-        # |G(z)| of the Wiener filter at z = exp(j w dt), w in rad/s... as the original: w = 2 pi f
-        let w: float = 2.0 * PI * w_hz
-        let wt: float = w * self.timestep
-        let re: float = 1.0 + (math.cos(wt) - 1.0) / self.K_ss
-        let im: float = math.sin(wt) / self.K_ss
-        return 1.0 / math.sqrt(re * re + im * im)
-
-    def print_bode(self, points: int = 1024, every: int = 128):
-        # Wiener filter (steady-state Kalman filter) frequency response
-        let dt: float = self.timestep
-        let pole_w: float = math.exp(-(1.0 - self.K_ss) * dt)
-        let pole_f: float = pole_w / (2.0 * PI)
-        let f_nyquist: float = 0.5 * dt
-        let lo: float = math.log10(0.01 * pole_w)
-        let hi: float = math.log10(2.0 * PI * f_nyquist)
-        print f"# pole at {pole_f:.6f} Hz"
-        print "# freq_hz  magnitude"
-        for i in 0 ..< points:
-            if i % every == 0 or i == points - 1:
-                let w: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1))
-                let f_hz: Hertz_T = w / (2.0 * PI)
-                print f"{f_hz:11.6f} {self.bode_magnitude(f_hz):9.6f}"
 
 # --- low-pass and high-pass demo --------------------------------------------------------
 
@@ -286,7 +296,7 @@ def lpf_hpf_demo(path: str):
 matplotlib.use("Agg")
 
 print "Start!"
-var my_beaker: Temperature_System = Temperature_System(R=0.75, Q=0.1, initial_kalman_mean=15.0, initial_kalman_cov=10.0, initial_wiener_val=15.0)
+var my_beaker: Temperature_System = Temperature_System(R=Variance_T(0.75), Q=Variance_T(0.1), initial_kalman_mean=Celsius_T(15.0), initial_kalman_cov=Variance_T(10.0), initial_wiener_val=Celsius_T(15.0))
 my_beaker.step(250)
 my_beaker.print_filter_comparison()
 my_beaker.print_kalman_gain()
@@ -296,6 +306,6 @@ my_beaker.plot_kalman_gain("kalman_gain.png")
 my_beaker.bode_plot("kalman_bode.png")
 lpf_hpf_demo("lpf_hpf_demo.png")
 # the Kalman gain has converged to the steady-state gain, so the two filters agree
-assert abs(my_beaker.kalman_gain_array[-1] - my_beaker.K_ss) < 1e-6
-assert abs(my_beaker.kalman_mean_array[-1] - my_beaker.wiener_array[-1]) < 1e-4
+assert abs(float(my_beaker.kalman_gain_array[-1]) - float(my_beaker.K_ss)) < 1e-6
+assert abs(float(my_beaker.kalman_mean_array[-1]) - float(my_beaker.wiener_array[-1])) < 1e-4
 print "Done."
