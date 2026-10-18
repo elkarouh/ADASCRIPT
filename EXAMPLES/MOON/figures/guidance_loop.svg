@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" width="820" height="420" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="820" height="420" fill="#ffffff"/>
+  <text x="410" y="26" text-anchor="middle" fill="#334155" font-weight="bold" font-size="15">The robot pilot's loop, run many times a second</text>
+
+  <!-- boxes: x, y, w=150, h=56 -->
+  <g>
+    <rect x="40" y="60" width="160" height="62" rx="10" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="120" y="88" text-anchor="middle" font-weight="bold" fill="#78350f">Physics</text>
+    <text x="120" y="107" text-anchor="middle" fill="#92400e" font-size="12">the truth: where it really is</text>
+
+    <rect x="330" y="60" width="160" height="62" rx="10" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.5"/>
+    <text x="410" y="88" text-anchor="middle" font-weight="bold" fill="#0c4a6e">IMU</text>
+    <text x="410" y="107" text-anchor="middle" fill="#075985" font-size="12">feels the push, with noise</text>
+
+    <rect x="620" y="60" width="160" height="62" rx="10" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.5"/>
+    <text x="700" y="88" text-anchor="middle" font-weight="bold" fill="#0c4a6e">Navigation</text>
+    <text x="700" y="107" text-anchor="middle" fill="#075985" font-size="12">"where am I, how fast?"</text>
+
+    <rect x="620" y="250" width="160" height="62" rx="10" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
+    <text x="700" y="278" text-anchor="middle" font-weight="bold" fill="#4c1d95">Guidance</text>
+    <text x="700" y="297" text-anchor="middle" fill="#5b21b6" font-size="12">"where should I go?"</text>
+
+    <rect x="330" y="250" width="160" height="62" rx="10" fill="#ede9fe" stroke="#6d28d9" stroke-width="1.5"/>
+    <text x="410" y="278" text-anchor="middle" font-weight="bold" fill="#4c1d95">Autopilot</text>
+    <text x="410" y="297" text-anchor="middle" fill="#5b21b6" font-size="12">turns the nose that way</text>
+
+    <rect x="40" y="250" width="160" height="62" rx="10" fill="#fee2e2" stroke="#b91c1c" stroke-width="1.5"/>
+    <text x="120" y="278" text-anchor="middle" font-weight="bold" fill="#7f1d1d">Propulsion</text>
+    <text x="120" y="297" text-anchor="middle" fill="#991b1b" font-size="12">burns fuel and pushes</text>
+  </g>
+
+  <!-- arrows round the loop -->
+  <g stroke="#475569" stroke-width="1.8" fill="none">
+    <path d="M 200 91 L 326 91" marker-end="url(#a)"/>
+    <path d="M 490 91 L 616 91" marker-end="url(#a)"/>
+    <path d="M 700 122 L 700 246" marker-end="url(#a)"/>
+    <path d="M 620 281 L 494 281" marker-end="url(#a)"/>
+    <path d="M 330 281 L 204 281" marker-end="url(#a)"/>
+    <path d="M 120 250 L 120 126" marker-end="url(#a)"/>
+  </g>
+  <g fill="#475569" font-size="12">
+    <text x="263" y="82" text-anchor="middle">acceleration</text>
+    <text x="553" y="82" text-anchor="middle">measured</text>
+    <text x="710" y="180">belief: position,</text>
+    <text x="710" y="196">speed (a little off)</text>
+    <text x="557" y="257" text-anchor="middle">thrust: its size</text>
+    <text x="557" y="272" text-anchor="middle">and direction</text>
+    <text x="267" y="272" text-anchor="middle">attitude</text>
+    <text x="130" y="185">the engine's</text>
+    <text x="130" y="201">push moves it</text>
+  </g>
+
+  <!-- the radar correction -->
+  <path d="M 140 122 C 200 190, 560 190, 650 124" fill="none" stroke="#0369a1" stroke-width="1.4" stroke-dasharray="5 5" marker-end="url(#a)"/>
+  <text x="410" y="200" text-anchor="middle" fill="#0369a1" font-size="12">landing radar, below about 10 km: corrects the drift</text>
+
+  <text x="410" y="350" text-anchor="middle" fill="#334155" font-size="13">The navigation's belief ends about 120 m and 0.12 m/s from the truth at touchdown:</text>
+  <text x="410" y="368" text-anchor="middle" fill="#334155" font-size="13">the sixth plot shows the gap over the descent.</text>
+</svg>

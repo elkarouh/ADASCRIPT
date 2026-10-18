@@ -16,56 +16,35 @@ slows down with rocket burns so that the Moon's gravity can catch it, and it set
 the Moon. A lander then separates, drops out of that circle, and flies down to the surface with its
 engine pointing against its motion.
 
-```
-                                  the Moon's orbit round the Earth (a circle, 384 000 km across)
-                                 .  .  .  .  .  .  .
-                            .                           .
-                        .                                  .
-                      .                                       .
-                     .                     coast, ~4.5 days   [Moon]  <-- the spacecraft arrives
-                    .              _____ . - - - - - - - - -> (O)         here, and is captured
-                    .         . ' '                                       .
-                    .      .'                                             .
-                     .    /                                              .
-        LEO 200 km    .  |  [Earth]                                      .
-      ( a small circle )  \                                              .
-                      .    '.                                         .
-                        .                                          .
-                            .                                  .
-                                 .  .  .  .  .  .  .
-
-     TLI = "trans-lunar injection": the big push that leaves the 200 km parking orbit
-```
-
-(The sketch is not to scale: the real Moon is 384 400 km from the Earth, the spacecraft starts only
-200 km above the ground.)
+![The mission at a glance: from a parking orbit round the Earth, a push towards the Moon, a coast of four and a half days, and capture into a circle round the Moon](figures/overview.svg)
 
 ## The mission, step by step
 
-Every line below is one thing the program prints. A **burn** is a rocket firing; its size is measured by
+Each step below is one thing the program prints. A **burn** is a rocket firing; its size is measured by
 **delta-v**, the change of speed it gives, in metres per second. Bigger delta-v needs more fuel.
 
-```
- 1. TLI    Leave the Earth.   3133 m/s of delta-v from the third stage (S-IVB), which is then dropped.
-    |
- 2. COAST  About 4.6 days with the engine off. The program steps the real motion forward in time,
-    |      under the pull of both the Earth and the Moon (which moves along its own orbit meanwhile).
-    |
- 3. SOI    "Sphere of influence": the point where the Moon's pull starts to matter more than the
-    |      Earth's. 66 000 km from the Moon, at 890 m/s relative to it.
-    |
- 4. LOI-1  "Lunar orbit insertion": slow down by 771 m/s at the closest point (100 km above the
-    |      surface), or the spacecraft would fly past. Now it is orbiting the Moon in an oval.
-    |
- 5. LOI-2  A small second burn (42 m/s) makes the oval a circle, 100 km above the surface.
-    |
- 6. UNDOCK The lander (LM) separates from the command ship (CSM), which stays in orbit.
-    |
- 7. DOI    "Descent orbit insertion": a 19.5 m/s nudge that lowers the lander's closest point to 15 km.
-    |
- 8. PDI    "Powered descent initiation": at that low point, 625 km before the landing site, the lander
-           fires its engine for about 15 minutes and lands.
-```
+1. **TLI**, "trans-lunar injection": leave the Earth. The third stage (S-IVB) gives 3133 m/s of
+   delta-v and is then dropped.
+2. **Coast**: about 4.6 days with the engine off. The program steps the real motion forward in time,
+   under the pull of both the Earth and the Moon (which moves along its own orbit meanwhile).
+3. **SOI**, "sphere of influence": the point where the Moon's pull starts to matter more than the
+   Earth's, 66 000 km from the Moon, at 890 m/s relative to it.
+4. **LOI-1**, "lunar orbit insertion": slow down by 771 m/s at the closest point (100 km above the
+   surface), or the spacecraft would fly past. Now it is orbiting the Moon in an oval.
+5. **LOI-2**: a small second burn (42 m/s) makes the oval a circle, 100 km above the surface.
+6. **Undock**: the lander (LM) separates from the command ship (CSM), which stays in orbit.
+7. **DOI**, "descent orbit insertion": a 19.5 m/s nudge lowers the lander's closest point to 15 km.
+8. **PDI**, "powered descent initiation": at that low point, 625 km before the landing site, the
+   lander fires its engine for about 15 minutes and lands.
+
+The burns, as the program sums them up at the end:
+
+| burn  | stage | delta-v (m/s) | propellant (kg) |
+|-------|-------|--------------:|----------------:|
+| TLI   | S-IVB |        3133.1 |          67 913 |
+| LOI-1 | CSM   |         770.6 |           9 786 |
+| LOI-2 | CSM   |          41.6 |             462 |
+| DOI   | LM    |          19.5 |              97 |
 
 The size of each burn comes from the **rocket equation**: the fuel used is `m0 * (1 - exp(-dv / ve))`,
 where `m0` is the mass before the burn and `ve` the speed of the exhaust. That is why the heavy first
@@ -85,25 +64,7 @@ The last ten minutes are the interesting part. The lander is slowed from **1693 
 rifle bullet) to about **1 m/s**, in 15 km of height and 625 km of distance, by a pilot that is a
 program. It repeats one loop many times a second:
 
-```
-        +---------+   what the instruments say    +------------+
-        | physics |  -------------------------->  |    IMU     |  sensors: they measure the
-        | (truth) |      (acceleration, with      +------------+  push on the craft, with a little
-        +---------+       a little noise)               |         random error
-            ^                                           v
-            |                                    +------------+
-            |                                    | Navigation |  "where am I, how fast?" an
-            |                                    +------------+  estimate: it drifts, so it is
-            |                                           |         corrected from time to time
-            |                                           v
-    +------------+     the engine's push          +------------+
-    | Propulsion |  <---------------------------  |  Guidance  |  "where should I be going?" picks
-    +------------+                                +------------+  a direction and a thrust to hit
-            ^                                           |         the landing spot
-            |              +------------+               |
-            +------------  | Autopilot  |  <------------+
-                           +------------+   "turn the nose that way"
-```
+![The robot pilot's loop: physics, IMU, navigation, guidance, autopilot, propulsion, and back to physics; the landing radar corrects the navigation](figures/guidance_loop.svg)
 
 * **Physics** is the truth: where the lander really is.
 * **IMU** (inertial measurement unit) is what the lander can feel, with random noise added.
@@ -114,18 +75,11 @@ program. It repeats one loop many times a second:
 
 The descent has three phases, as in Apollo, named after computer programs of the real lander:
 
-```
-   altitude
-   15 km  *                                         P63  BRAKING:  kill the 1700 m/s sideways speed,
-          |  *                                                     engine nearly flat out
-          |      *
-          |           *
-    2 km  |                 * - - - - - - - -  P64  APPROACH:  ~90 m/s, aim at the landing spot
-          |                              *
-   55 m   |                                 * - -  P65  TERMINAL:  ~5 m/s, come in gently
-    0     +--------------------------------------*  touchdown, ~1 m/s
-          0 km                                 625 km        distance along the ground
-```
+* **P63, braking**: kill the 1700 m/s sideways speed, the engine near full thrust.
+* **P64, approach**: from about 2 km up and 90 m/s, aim at the landing spot.
+* **P65, terminal**: from 55 m up and about 5 m/s, come in gently.
+
+![The descent: altitude over time through P63, P64 and P65, from 15 km at 1693 m/s to touchdown at 880 s](figures/descent.svg)
 
 Noise is generated from a fixed **seed**, so the same seed gives the same landing every time
 (`--seed N` changes it).
@@ -148,19 +102,14 @@ Mission time : 132.60 h (5.53 d)
 
 ## The six plots (`moon_mission.png`)
 
-```
- +----------------------------+----------------------------+----------------------------+
- | 1. The trip to the Moon,   | 2. The approach, the circle| 3. Descent: altitude over  |
- |    seen from the Earth     |    and the descent seen    |    time. Dotted lines mark |
- |    (the Moon's own orbit   |    from the Moon           |    the P64 and P65 phases  |
- |    dotted, its path grey)  |                            |                            |
- +----------------------------+----------------------------+----------------------------+
- | 4. Descent: horizontal and | 5. Throttle (% of full     | 6. Navigation error: how   |
- |    vertical speed. The     |    thrust) and propellant  |    far the lander's belief |
- |    sideways speed is cut   |    left (kg). The spikes   |    is from the truth, in   |
- |    almost to nothing       |    are the pilot adjusting |    metres and cm/s         |
- +----------------------------+----------------------------+----------------------------+
-```
+The top row, left to right, then the bottom row:
+
+1. The trip to the Moon, seen from the Earth (the Moon's own orbit dotted, its path grey).
+2. The approach, the circle and the descent, seen from the Moon.
+3. Descent: altitude over time. Dotted lines mark the P64 and P65 phases.
+4. Descent: horizontal and vertical speed. The sideways speed is cut almost to nothing.
+5. Throttle (% of full thrust) and propellant left (kg). The spikes are the pilot adjusting.
+6. Navigation error: how far the lander's belief is from the truth, in metres and cm/s.
 
 ![the six plots](moon_mission.png)
 
