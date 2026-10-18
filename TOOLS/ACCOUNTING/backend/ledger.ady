@@ -295,7 +295,7 @@ def good_name(name: str) -> bool:
     if name == "" or len(name) > 60:
         return False
     for c in name:
-        if not (c.isAlphaNumeric() or c == '_' or c == '-'):
+        if not (c.isalnum() or c == '_' or c == '-'):
             return False
     return True
 

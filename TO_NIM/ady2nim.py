@@ -26,6 +26,48 @@ from hek_tokenize import Tokenizer, RichNL, set_current_tokenizer
 import hek_nim_parser  # noqa: F401 (registers compound stmt to_nim methods)
 
 
+
+_JS_STDERR = """\
+type AdascriptJsStderr = object
+let stderr {.used.} = AdascriptJsStderr()
+proc adascriptConsoleError(s: cstring) {.importjs: "console.error(#)".}
+proc writeLine(f: AdascriptJsStderr, xs: varargs[string, `$`]) {.used.} =
+  var s = ""
+  for x in xs: s.add x
+  adascriptConsoleError(cstring(s))
+proc write(f: AdascriptJsStderr, xs: varargs[string, `$`]) {.used.} =
+  var s = ""
+  for x in xs: s.add x
+  adascriptConsoleError(cstring(s))
+proc flushFile(f: AdascriptJsStderr) {.used.} = discard"""
+
+def _refuse_for_js(output, state):
+    """What a JavaScript program cannot do, said by ady2nim js in the
+    program's words rather than by Nim at a line of its standard library."""
+    import re as _re_rj
+    text = "\n".join(list(output) + list(getattr(state, "nim_top_decls", [])))
+    imports = set(state.nim_imports)
+    if "osproc" in imports:
+        raise SyntaxError("this program runs commands (a shell: block, run(...) or a "
+                          "command in $(...)), which a JavaScript program cannot: "
+                          "build it with ady2nim c")
+    if imports & {"std/dirs", "std/files"} or _re_rj.search(
+            r"\b(readFile|writeFile|read_text|write_text|read_lines|walkFiles|walkDir)\(", text):
+        raise SyntaxError("this program reads or writes files, which a JavaScript "
+                          "program cannot: build it with ady2nim c")
+    if imports & {"nre", "re", "std/nre", "std/re"}:
+        raise SyntaxError("this program uses regular expressions, which ady2nim js "
+                          "does not translate yet: build it with ady2nim c")
+
+
+_JS_ENV = """\
+proc adascriptJsEnv(name: cstring): cstring {.importjs: "((typeof process !== 'undefined' && process.env[#]) || '')".}
+proc adascriptJsHasEnv(name: cstring): bool {.importjs: "(typeof process !== 'undefined' && process.env[#] !== undefined)".}
+proc getEnv(key: string, default = ""): string {.used.} =
+  if adascriptJsHasEnv(cstring(key)): $adascriptJsEnv(cstring(key)) else: default
+proc existsEnv(key: string): bool {.used.} = adascriptJsHasEnv(cstring(key))"""
+
+
 def Input(code):
     """Create a token stream for parsing."""
     gen = Tokenizer(code)
@@ -821,6 +863,8 @@ def translate(code, export_symbols=False):
     ParserState.value_cycle_classes = scan_value_cycles(code)
     from ady_stmt import scan_constructors
     ParserState.ctor_overloads.update(scan_constructors(code))
+    from ady_stmt import scan_method_overloads
+    ParserState.method_overloads = scan_method_overloads(code)
     from ady_stmt import scan_union_aliases, scan_type_decls
     from ady_stmt import check_record_bodies
     check_record_bodies(code)
@@ -1160,6 +1204,19 @@ def translate(code, export_symbols=False):
             for j, pl in enumerate(pragma_lines):
                 output.insert(insert_pos + extra_offset + j, pl)
             extra_offset += len(pragma_lines)
+        import hek_nim_expr as _hne_err
+        if _hne_err.JS_BACKEND:
+            _refuse_for_js(output, ParserState)
+        import re as _re_js
+        if _hne_err.JS_BACKEND and _re_js.search(
+                r"\bstderr\.", "\n".join(output + list(getattr(ParserState, 'nim_top_decls', [])))):
+            # JavaScript has no stderr file: what is written to it goes to
+            # console.error, which node writes to its stderr
+            ParserState.nim_top_decls = [_JS_STDERR] + list(getattr(ParserState, 'nim_top_decls', []))
+        if _hne_err.JS_BACKEND and _re_js.search(
+                r"\b(getEnv|existsEnv)\(", "\n".join(output + list(getattr(ParserState, 'nim_top_decls', [])))):
+            # Nim's getEnv does not run under node: process.env does
+            ParserState.nim_top_decls = [_JS_ENV] + list(getattr(ParserState, 'nim_top_decls', []))
         if getattr(ParserState, 'nim_top_decls', []):
             seen = set(output)
             for j, decl in enumerate(dict.fromkeys(ParserState.nim_top_decls)):

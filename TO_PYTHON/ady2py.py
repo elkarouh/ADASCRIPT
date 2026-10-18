@@ -352,6 +352,8 @@ def translate(code):
     _PS_rp.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
     from ady_stmt import scan_method_return_types
     _PS_rp.py_method_return_types = scan_method_return_types(code)
+    from ady_stmt import scan_method_overloads
+    _PS_rp.py_method_overloads = scan_method_overloads(code)
     from ady_stmt import scan_constructors
     _PS_rp.py_constructors = scan_constructors(code, every=True)
     from ady_stmt import scan_union_aliases, scan_type_decls
@@ -400,6 +402,10 @@ def translate(code):
     import re as _re_udef
     _PS_udef.user_top_level_procs = set(
         _re_udef.findall(r'^def\s+([A-Za-z_]\w*)\s*[\(\[]', code, _re_udef.M))
+    # Whether any routine of its own is named contains: else `s.contains(x)`
+    # is Nim's strutils/sets one, which is Python's `in`.
+    _PS_udef.py_own_contains = bool(
+        _re_udef.search(r'^\s*def\s+contains\s*[\(\[]', code, _re_udef.M))
     # ... and the type of each one's first parameter: `p.total` for a P_T p is
     # total(p), as Nim reads it, when total's first parameter is a P_T
     _PS_udef.py_first_param = {
@@ -724,6 +730,31 @@ def _module_parse_error(code, error):
     return f"{path}: {_PS.parse_error or error}"
 
 
+def _refuse_html_blocks(code, main_path):
+    """An `html:` block builds a karax page, which only ady2nim knows: said at
+    the block's own file and line, not as a parse error at its first tag."""
+    import re as _re
+    from ady_html import _OPEN
+    inside = []
+    for i, text in enumerate(code.split("\n"), 1):
+        start = _re.match(r"# ---- (.+)\.ady, imported ----$", text)
+        end = _re.match(r"# ---- end of (.+)\.ady ----$", text)
+        if start:
+            inside.append(start.group(1))
+        elif end and inside:
+            inside.pop()
+        elif _OPEN.match(text):
+            path, line = main_path or "<stdin>", i
+            if inside and inside[-1] in MODULE_PATHS:
+                path = MODULE_PATHS[inside[-1]]
+                with open(path, encoding="utf-8") as f:
+                    line = next(n for n, t in enumerate(f.read().split("\n"), 1)
+                                if _OPEN.match(t))
+            raise SyntaxError(
+                f"{path}:{line}: an html: block builds a karax page, which is "
+                "Nim only (ady2nim c or js); ady2py cannot translate it")
+
+
 def main(args=None):
     import subprocess
     if args is None:
@@ -741,6 +772,7 @@ def main(args=None):
     try:
         code = include_ady_modules(
             code, os.path.dirname(os.path.abspath(args.file)) if args.file else os.getcwd())
+        _refuse_html_blocks(code, args.file)
     except SyntaxError as exc:
         print(str(exc), file=sys.stderr)
         sys.exit(1)

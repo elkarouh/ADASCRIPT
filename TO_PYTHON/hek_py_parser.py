@@ -1687,8 +1687,10 @@ def _walk_scope(node, assigned, declared, depth=0):
     if tname in ("assign_stmt", "aug_assign_stmt"):
         assigned.update(_bound_names(node))
         return
+    # A loop variable is the loop's own, as on Nim: never the module's
+    # variable of the same name, which `global` would make it overwrite.
     if tname == "for_stmt":
-        assigned.update(_bound_names(node))
+        declared.update(_bound_names(node))
     for child in (getattr(node, "nodes", None) or []):
         _walk_scope(child, assigned, declared, depth + 1)
 

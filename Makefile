@@ -359,8 +359,11 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
 
 # The compared examples that `ady2nim js` builds: their output under node is
 # compared with the native build's too. test_parse is left out on purpose: an
-# int on JS is a double, so the 64-bit bounds it reads do not fit.
-JS_COMPARED := test_do_block test_fstring_width test_optional_spelling test_contextmanager_fstring \
+# int on JS is a double, so the 64-bit bounds it reads do not fit. The others
+# left out run commands, use files or use regular expressions, which ady2nim
+# js refuses, naming which.
+JS_COMPARED := test_do_block test_do_discard test_case_ranges test_ordered_map accounting \
+    test_portable_gaps2 test_fstring_width test_optional_spelling test_contextmanager_fstring \
     test_function_type test_distinct test_units test_units_fields test_tuple_assign_block \
     test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags \
     test_fstring_leading_newline test_call_field_literal test_local_named_like_field \

@@ -337,6 +337,28 @@ def _py_value_side(t):
     return (t or "").strip()
 
 
+def _py_overload_type(cls, method, args_text):
+    """The return type of the overload of CLS.METHOD that the arguments
+    ARGS_TEXT, emitted Python, pick by their types; None unless exactly one."""
+    from ady_stmt import overload_return, _top_split
+    overloads = (getattr(ParserState, "py_method_overloads", None) or {}).get(f"{cls}.{method}")
+    if not overloads:
+        return None
+    types = []
+    for a in (_top_split(args_text) if args_text.strip() else []):
+        if _re_mod_p2s.match(r"^\w+\s*=[^=]", a):
+            return None                 # by name: not taken in order
+        if _re_mod_p2s.match(r"^-?\d[\d_]*$", a):
+            types.append("int")
+        elif _PY_NUMBER.match(a):
+            types.append("float")
+        elif a.startswith(('"', "'", 'f"', "f'")):
+            types.append("str")
+        else:
+            types.append(_py_type_of_name(a))
+    return overload_return(overloads, types)
+
+
 _PY_NUMBER = _re_mod_p2s.compile(r"^-?\d[\d_]*(\.\d+)?([eE][-+]?\d+)?$")
 _PY_PLAIN_TYPES = ("float", "int", "Natural", "Positive")
 
@@ -399,6 +421,8 @@ def _py_atom_unit(e):
         parts = m.group(1).split(".")
         cls = _py_bare_type(_py_receiver_type(parts[0], ["." + p for p in parts[1:]]))
         t = getattr(ParserState, "py_method_return_types", {}).get(f"{cls}.{m.group(2)}")
+        if not t:
+            t = _py_overload_type(cls, m.group(2), e[m.end():-1])
         if not t:
             return None
         t = _py_resolve_alias(_py_value_side(t))
@@ -1338,6 +1362,30 @@ def to_py(self):
 
 # What Nim's math calls what Python's calls something else: a file `nimport`s math
 # and writes Nim's names (ady2py renames `math.arctan(x)`; this, a name taken bare).
+# Nim's os routines that a program takes with `from os nimport`, as Python
+# functions doing what Nim's do: removeFile and removeDir succeed on what is
+# not there, createDir makes the parents, splitFile gives (dir, name, ext).
+_NIM_OS_FOR_PYTHON = {
+    "fileExists": "def fileExists(p):\n    return _os.path.isfile(p)",
+    "dirExists": "def dirExists(p):\n    return _os.path.isdir(p)",
+    "removeFile": ("def removeFile(p):\n    if _os.path.lexists(p):\n"
+                   "        _os.remove(p)"),
+    "removeDir": "def removeDir(p):\n    _shutil.rmtree(p, ignore_errors=True)",
+    "createDir": "def createDir(p):\n    _os.makedirs(p, exist_ok=True)",
+    "walkFiles": ("def walkFiles(pattern):\n"
+                  "    return [f for f in sorted(_glob.glob(pattern)) if _os.path.isfile(f)]"),
+    "splitFile": ("class _SplitFile(NamedTuple):\n    dir: str\n    name: str\n    ext: str\n\n"
+                  "def splitFile(p):\n    d, base = _os.path.split(p)\n"
+                  "    name, ext = _os.path.splitext(base)\n"
+                  "    if base.startswith(\".\") and not ext:\n        name, ext = base, \"\"\n"
+                  "    return _SplitFile(d, name, ext)"),
+    "getCurrentDir": "def getCurrentDir():\n    return _os.getcwd()",
+    "setCurrentDir": "def setCurrentDir(p):\n    _os.chdir(p)",
+    "joinPath": "def joinPath(*parts):\n    return _os.path.join(*parts)",
+    "getLastModificationTime": ("class _Time(float):\n    def toUnix(self):\n        return int(self)\n\n"
+                                "def getLastModificationTime(p):\n    return _Time(_os.path.getmtime(p))"),
+}
+
 _MATH_NAMES = {n for n in dir(__import__("math")) if not n.startswith("_")}
 
 _MATH_FOR_PYTHON = {
@@ -1366,6 +1414,19 @@ def to_py(self):
                 taken.append(n if py == n else f"{py} as {n}")
         if taken:
             return f"from math import {', '.join(taken)}  # from math nimport {names}"
+    if source == "os":
+        # Nim's os routines, written in Python's: each name taken that has one
+        taken = [n for n in (x.strip() for x in names.strip("()").split(",")) if n in _NIM_OS_FOR_PYTHON]
+        if taken:
+            decls = getattr(ParserState, "py_top_decls", [])
+            for n in taken:
+                if _NIM_OS_FOR_PYTHON[n] not in decls:
+                    decls.append(_NIM_OS_FOR_PYTHON[n])
+            ParserState.py_top_decls = decls
+            ParserState.nim_imports.update({"import os as _os", "import glob as _glob",
+                                            "import shutil as _shutil"})
+            if "splitFile" in taken:
+                ParserState.nim_imports.add("from typing import NamedTuple")
     return f"# from {source} nimport {names}"
 
 
@@ -1422,6 +1483,9 @@ def _emit_enum_py(name, member_names, indent=0):
     # and a container of them shows the same names, as `repr` would otherwise
     # give "<Stage_T.STAGE2: 1>" for each element.
     lines.append(f"{_ind(indent + 1)}def __str__(self): return self.name")
+    # `int(k)` is the member's value on Nim; Python's Enum refuses it.
+    lines.append(f"{_ind(indent + 1)}def __int__(self): return self.value")
+    lines.append(f"{_ind(indent + 1)}__index__ = __int__")
     lines.append(f"{_ind(indent + 1)}__repr__ = __str__")
     # Unpack enum members as bare names (Nim uses bare names)
     for orig, py_m in py_members:

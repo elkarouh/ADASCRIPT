@@ -378,6 +378,10 @@ def to_nim(self):
             from hek_nim_expr import _nim_expr_type
             _otype = _nim_expr_type(lhs) or ""
         if _otype:
+            if hek_nim_expr.JS_BACKEND:
+                # a js{...} object where a {K}V or [K]V is held: the table
+                parts[1] = _coerce_string_to_char(
+                    hek_nim_expr._js_table_literal(parts[1], _otype), _otype)
             parts[1] = _to_ordered_table(parts[1], _otype)
         # `self.flown = 0.0`: the literal is of the target's distinct type
         from hek_nim_expr import _distinct_type_of
@@ -1099,6 +1103,9 @@ def to_nim(self):
                 # [K]V over a non-ordinal K: the table literal is an ordered one
                 value = _typed_empty_inits(value, annotation)
                 value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
+                if hek_nim_expr.JS_BACKEND:
+                    # the table the js{...} object became: its char keys too
+                    value = _coerce_string_to_char(value, annotation)
                 _reject_unit_mix(name, annotation, value)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)
@@ -1356,6 +1363,9 @@ def to_nim(self):
                 # [K]V over a non-ordinal K: the table literal is an ordered one
                 value = _typed_empty_inits(value, annotation)
                 value = _to_ordered_table(hek_nim_expr._lift_option_seq(hek_nim_expr._type_lambdas(hek_nim_expr._js_table_literal(value, annotation), annotation), annotation), annotation)
+                if hek_nim_expr.JS_BACKEND:
+                    # the table the js{...} object became: its char keys too
+                    value = _coerce_string_to_char(value, annotation)
                 _reject_unit_mix(name, annotation, value)
                 # a literal takes the distinct type it is given to
                 value = _wrap_distinct_literal(value, annotation)

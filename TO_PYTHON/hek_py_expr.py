@@ -1775,6 +1775,12 @@ def to_py(self, prec=None):
                 result = "_wait_all" + tr_str
                 i += 1
                 continue
+            if (tr_str == ".contains" and i + 1 < len(trailers)
+                    and trailers[i + 1].to_py().startswith("(")
+                    and not getattr(ParserState, "py_own_contains", False)):
+                result = f"{result}.__contains__"
+                i += 1
+                continue
             if tr_str == ".maxIndex":
                 result = f"{result}.index(max({result}))"
                 i += 1

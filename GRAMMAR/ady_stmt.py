@@ -431,6 +431,71 @@ def scan_method_return_types(code):
     return out
 
 
+_METHOD_SIG = _re_dup.compile(
+    r"^[ \t]+def[ \t]+(\w+)[ \t]*\(((?:[^()]|\([^()]*\))*)\)\s*->\s*"
+    r"([^\n#]*?)\s*:[ \t]*(?:#.*)?$")
+
+
+def _top_split(text):
+    """TEXT split at its commas outside brackets."""
+    parts, depth, cur = [], 0, ""
+    for ch in text:
+        depth += {"(": 1, "[": 1, "{": 1, ")": -1, "]": -1, "}": -1}.get(ch, 0)
+        if ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        parts.append(cur)
+    return [p.strip() for p in parts]
+
+
+def scan_method_overloads(code):
+    """Each method a class defines more than once with other return types, by
+    `Class.method`: its overloads, each ([(parameter type, has a default)],
+    return type), self left out -- for picking the one a call means by the
+    types of its arguments."""
+    sigs, cls = {}, None
+    for line in code.splitlines():
+        m = _re_dup.match(r"class[ \t]+(\w+)", line)
+        if m:
+            cls = m.group(1)
+            continue
+        if line[:1].strip() and not line.startswith(("#", "@")):
+            cls = None
+        m = _METHOD_SIG.match(line)
+        if not (cls and m):
+            continue
+        params = []
+        for p in _top_split(m.group(2)):
+            name, _, rest = p.partition(":")
+            if name.strip() in ("self", "") or name.strip().startswith("*"):
+                continue
+            typ, eq, _ = rest.partition("=")
+            params.append((typ.strip(), bool(eq)))
+        sigs.setdefault(f"{cls}.{m.group(1)}", []).append((params, m.group(3).strip()))
+    return {k: v for k, v in sigs.items() if len({r for _, r in v}) > 1}
+
+
+def overload_return(overloads, arg_types):
+    """The return type of the one overload in OVERLOADS that ARG_TYPES fit:
+    each argument's type, None where it cannot be told (which fits any).
+    None unless exactly one does."""
+    for loose in (False, True):         # an int where a float is taken, after
+        fit = []
+        for params, ret in overloads:
+            need = sum(1 for _, d in params if not d)
+            if not need <= len(arg_types) <= len(params):
+                continue
+            if all(a is None or a == t or (loose and a == "int" and t == "float")
+                   for a, (t, _) in zip(arg_types, params)):
+                fit.append(ret)
+        if fit:
+            return fit[0] if len(set(fit)) == 1 else None
+    return None
+
+
 def check_no_where_types(code):
     """A where type is Nim only, as a failing constructor is."""
     for m in _ALIAS_DECL.finditer(code):

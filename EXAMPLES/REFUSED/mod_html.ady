@@ -1,0 +1,6 @@
+# A module with an html: block, for html_on_python.ady.
+
+def card(title: str) -> Html:
+    html:
+        div class="card":
+            h2: title

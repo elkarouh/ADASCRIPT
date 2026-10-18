@@ -1,4 +1,5 @@
 # refused by nim: cannot give tr.took(), a Duration_T, to w, a Length_T
+# refused by python: cannot give tr.took(), a Duration_T, to w, a Length_T
 type Length_T is distinct float
 type Duration_T is distinct float
 class Track:

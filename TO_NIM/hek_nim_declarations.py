@@ -152,7 +152,11 @@ def _ensure_path_helper():
     ParserState.nim_imports.add("os")
     decls = getattr(ParserState, "nim_top_decls", [])
     if not any("adascriptPathToString" in d for d in decls):
-        decls.append(_PATH_HELPER)
+        import hek_nim_expr
+        # JavaScript has no file system to resolve a path against: a script
+        # gets the lexical half, joining and taking apart
+        decls.append(_PATH_HELPER.split("proc resolve*")[0].rstrip()
+                     if hek_nim_expr.JS_BACKEND else _PATH_HELPER)
         ParserState.nim_top_decls = decls
 
 

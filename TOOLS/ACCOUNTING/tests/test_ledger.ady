@@ -176,12 +176,13 @@ for file in walkFiles("scenarios/*.books"):
                     scenario.close()
                     # Closing the year empties the profit and loss accounts into
                     # retained earnings, and leaves what the company owns as it was.
-                    var closed: Books = read
-                    closed.accounts.append(AccountRow("140000", EQUITY, "Retained earnings"))
+                    # A new Books, not `read` changed: a record is copied on
+                    # Nim and shared on Python (TUTORIAL §6).
                     let closing: []Entry = closing_entries(read, "2011-12-31", "Retained earnings")
                     assert len(closing) <= 2, file
-                    for e in closing:
-                        closed.entries.append(e)
+                    let closed: Books = Books(read.currency,
+                        read.accounts + [AccountRow("140000", EQUITY, "Retained earnings")],
+                        read.entries + closing, read.ids, read.title, read.about)
                     let after: Graph = graph_of(closed)
                     for row in closed.accounts:
                         if row.kind == EXPENSE or row.kind == REVENUE:

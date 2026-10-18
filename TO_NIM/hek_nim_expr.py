@@ -1361,6 +1361,9 @@ def _nim_expr_type(expr):
             import re as _re_bt
             _cls_m = _re_bt.match(r'^([A-Za-z_]\w*)$', base_type or "")
             _cls_name = _cls_m.group(1) if _cls_m else None
+            if _cls_name and f"?{_cls_name}.{method}" in _prt:
+                # overloaded within the class: the one its arguments pick
+                return _overload_type(_cls_name, method, s[call_m.end(2) + 1:-1])
             if _cls_name and f"{_cls_name}.{method}" in _prt:
                 return _prt[f"{_cls_name}.{method}"]
             if method in _prt:
@@ -4555,6 +4558,35 @@ def _split_top_commas(text):
     return out + ([cur.strip()] if cur.strip() else [])
 
 
+import re as _re_mod_ov
+
+
+def _overload_type(cls, method, args_text):
+    """The return type of the overload of CLS.METHOD that the arguments
+    ARGS_TEXT, emitted Nim, pick by their types; None unless exactly one."""
+    from ady_stmt import overload_return
+    overloads = (getattr(ParserState, "method_overloads", None) or {}).get(f"{cls}.{method}")
+    if not overloads or not _balanced(args_text):
+        return None
+    names = {"string": "str", "float64": "float", "char": "char", "bool": "bool"}
+    types = []
+    for a in (_split_args(args_text) if args_text.strip() else []):
+        a = a.strip()
+        if _re_mod_ov.match(r"^\w+\s*=[^=]", a):
+            return None                 # by name: not taken in order
+        if _re_mod_ov.match(r"^-?\d[\d_]*$", a):
+            types.append("int")
+        elif _NIM_NUMBER.match(a):
+            types.append("float")
+        elif a.startswith('"'):
+            types.append("str")
+        else:
+            t = (_nim_expr_type(a) or "").strip()
+            t = t[4:].strip() if t.startswith("var ") else t
+            types.append(names.get(t, t) or None)
+    return overload_return(overloads, types)
+
+
 def _unit_is_sure(value):
     """Can VALUE's unit be trusted enough to refuse on it? A method call only
     when it is the whole value and its receiver's class is known: the method's
@@ -4568,8 +4600,11 @@ def _unit_is_sure(value):
         _cls = (_nim_expr_type(_whole.group(1)) or "").strip()
         _cls = _cls[4:].strip() if _cls.startswith("var ") else _cls
         _prt = getattr(ParserState, "proc_return_types", {})
-        if f"{_cls}.{_whole.group(2)}" not in _prt or f"?{_cls}.{_whole.group(2)}" in _prt:
-            return False               # unknown, or one of several of that name
+        if f"{_cls}.{_whole.group(2)}" not in _prt:
+            return False               # unknown
+        if (f"?{_cls}.{_whole.group(2)}" in _prt
+                and not _overload_type(_cls, _whole.group(2), _whole.group(3))):
+            return False               # one of several its arguments do not pick
     elif _re_us.search(r"\.\w+\(", value):
         return False
     return not any(_re_us.search(rf"(?<![\w.]){_re_us.escape(n)}\(", value)

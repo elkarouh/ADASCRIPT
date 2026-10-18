@@ -1,0 +1,4 @@
+# refused by python: mod_html.ady:4: an html: block builds a karax page
+import mod_html
+
+print($card("x"))

@@ -1,0 +1,17 @@
+# refused by nim: cannot give tr.took(1), a Duration_T, to w, a Length_T
+# refused by python: cannot give tr.took(1), a Duration_T, to w, a Length_T
+type Length_T is distinct float
+type Duration_T is distinct float
+class Track:
+    var t: Duration_T
+    var l: Length_T
+    def __init__(self):
+        self.t = 1.0
+        self.l = 2.0
+    def took(self, k: int) -> Duration_T:
+        return self.t
+    def took(self, k: str) -> Length_T:
+        return self.l
+let tr: Track = Track()
+let fine: Length_T = tr.took("lap")
+let w: Length_T = tr.took(1)
