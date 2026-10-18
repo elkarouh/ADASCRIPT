@@ -469,7 +469,8 @@ that dimension, so with `Force_T is Mass_T * Accel_T` and `MassFlow_T is
 Mass_T / Duration_T` declared, `force / speed` is a `MassFlow_T` with no
 declaration naming that pair. A result of no dimension is a plain number, and
 one two declared units share is refused with both named. Everything else
-between the units is refused: `d * t`, `v + d`, `1.0 / t`. A unit of no
+between the units is refused: `d * t`, `v + d`, `1.0 / t` (unless `1.0 / t` is a
+declared reciprocal, below). A unit of no
 dimension is the ratio it is, `type Radians_T is Length_T / Length_T`, and
 scales a length into a length. A unit raised to a whole number written out
 is the unit of that dimension: `side ** 2` for a `Length_T` side is an
@@ -486,6 +487,62 @@ itself, both ways: `Kilometers_T(d)` of a `metre_T` d divides by 1000, and
 number of metres, never `float(k) * 1000.0`. Of a plain number the
 conversion keeps the number; of an unrelated unit it is refused (book 2.7,
 "A multiple of a unit").
+
+**A point on a scale is not an amount.** Celsius and Fahrenheit are not
+multiples of the kelvin: their zero is somewhere else, so they are declared
+as the offset they are, and a scale can be declared from another:
+
+```
+type Kelvin_T     is distinct float
+type Celsius_T    is Kelvin_T - 273.15
+type Fahrenheit_T is 1.8 * Celsius_T + 32.0
+
+let boil: Celsius_T = Celsius_T(100.0)
+let f: Fahrenheit_T = Fahrenheit_T(boil)         # 212.0
+let k: Kelvin_T = Kelvin_T(boil)                 # 373.15
+let rise: Kelvin_T = boil - Celsius_T(20.0)      # a difference is a change
+let warmer: Celsius_T = boil + Kelvin_T(2.0)     # a change moves a point
+```
+
+The conversions work between any two of the scales, and of a plain number
+they keep the number. What the language refuses is arithmetic that looks
+harmless and is wrong, and the reason is worth knowing:
+
+- **`c + c`** (20 C + 10 C). The zero of Celsius is arbitrary, so the sum
+  depends on where you put it: 20 C and 10 C are 293.15 K and 283.15 K, which
+  add to 576.3 K -- not the 30 C you meant. Two *points* have no sum. Their
+  *difference* is meaningful, a change of 10 kelvin, so `c1 - c2` is allowed
+  and is a `Kelvin_T`.
+- **`c * 2.0`** (twice as hot). 20 C is not "twice" 10 C: double the kelvin
+  and 20 C becomes 313 C, double the Fahrenheit and it becomes something
+  else. The answer depends on the scale the number was written in, so a
+  point has no multiple. An *amount* does: `Kelvin_T(10.0) * 2.0` is fine.
+- **`c + 1.0`**. One degree is one kelvin on the Celsius scale and 1.8 on the
+  Fahrenheit one. A bare number does not say which change it is, so write
+  the change: `c + Kelvin_T(1.0)`.
+- **`c + f`** mixes two scales: convert one, `c + Celsius_T(f)`. And **`k - c`**
+  takes a point from a change, which has no meaning (`c - k` is fine).
+
+Points on a scale compare, `c1 < c2`, since that is just order.
+
+**The reciprocal of a unit** is declared as one over it:
+
+```
+type Second_T is distinct float
+type Hertz_T  is 1.0 / Second_T
+
+let period: Second_T = 0.02
+let freq: Hertz_T = 1.0 / period                 # 50 Hz
+let cycles: float = freq * Second_T(0.1)         # 5.0: a plain number
+let back: Second_T = 1.0 / freq                  # 0.02
+```
+
+A number over a `Second_T` is a `Hertz_T`, a number over a `Hertz_T` is a
+`Second_T`, and the two multiplied are the plain number of cycles. A
+`Hertz_T` is a unit like any other, and joins the dimension rules above:
+`Metre_T * Hertz_T` is the speed if one is declared. The standard `units`
+module has `celsius_T`, `fahrenheit_T` and `hertz_T` ready made. Book 2.7
+has the details.
 
 ### A unit narrowed to a range
 
