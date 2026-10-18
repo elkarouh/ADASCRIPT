@@ -1,0 +1,257 @@
+#!/usr/bin/env ady2nim
+"""Is the Kalman filter just a low-pass filter?  A temperature system watched by a Kalman
+filter and by its steady-state limit, the Wiener (low-pass) filter.
+
+Translated from the Python of Jacob Bayless, P. Eng, "These Are Systems" (July 2022),
+accompanying https://jbconsulting.substack.com/p/is-the-kalman-filter-just-a-low-pass
+Copyright (c) 2022 Jacob Bayless Consulting Inc. Released under the MIT licence: permission
+is granted, free of charge, to use, copy, modify, merge, publish, distribute, sublicense
+and/or sell copies of the Software, provided this notice is kept in all copies or
+substantial portions of it.  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+    ady2nim EXAMPLES/KALMAN_WIENER/kalman_wiener.ady -r        (or ady2py -c)
+
+What is translated: the Temperature_System (truth, noisy measurement, Kalman predict/update,
+Wiener filter, steady-state gain), the Bode magnitude of the Wiener filter, and the
+low-pass / high-pass demo (a 2nd-order Butterworth biquad, written out where the Python
+calls scipy's butter + sosfilt).
+
+What is not: matplotlib.  Each plot becomes a table on stdout (every 25th sample), so the
+output can be piped to any plotting tool.
+
+The random numbers are the other change.  numpy's default_rng cannot be reproduced here, so
+the noise comes from a small seeded generator (Park-Miller + Box-Muller) that runs the same
+on both backends and in the Python reference; a run is therefore repeatable, and the
+numbers can be checked against another implementation.  Like the original, `Q` and `R`
+are used as the standard deviations of the noise (the docstring calls them covariances) in the
+simulation, and as variances in the filter.
+"""
+nimport math
+
+# degrees Celsius
+type Celsius_T is float
+# a noise level: degrees-squared, or degrees in the simulation, as in the original
+type Noise_T is float
+# the Kalman gain: 0 = trust the forecast, 1 = trust the measurement
+type Gain_T is float
+# seconds
+type Seconds_T is float
+# frequency in hertz
+type Hertz_T is float
+
+const PI: float = 3.141592653589793
+const NAN: float = float("nan")
+const MODULUS: int = 2147483647       # 2^31 - 1
+const MULTIPLIER: int = 48271
+
+# --- a seeded normal-noise source -------------------------------------------------------
+
+class Rng:
+    var state: int = 1
+
+    def __init__(self, seed: int = 1):
+        self.state = seed % MODULUS
+        if self.state == 0:
+            self.state = 1
+
+    def uniform(self) -> float:
+        # strictly inside (0, 1)
+        self.state = self.state * MULTIPLIER % MODULUS
+        return float(self.state) / float(MODULUS)
+
+    def normal(self, loc: float = 0.0, scale: float = 1.0) -> float:
+        let u1: float = self.uniform()
+        let u2: float = self.uniform()
+        return loc + scale * math.sqrt(-2.0 * math.ln(u1)) * math.cos(2.0 * PI * u2)
+
+var rng: Rng = Rng(42)
+
+# --- the system and its two filters -----------------------------------------------------
+
+class Temperature_System:
+    var timestep: Seconds_T
+    var Q: Noise_T                            # process noise
+    var R: Noise_T                            # measurement noise
+    var T_array: []Celsius_T
+    var T_meas_array: []Celsius_T
+    var kalman_mean_array: []Celsius_T
+    var kalman_mean_forecast_array: []Celsius_T
+    var kalman_cov_array: []Noise_T
+    var kalman_cov_forecast_array: []Noise_T
+    var kalman_gain_array: []Gain_T
+    var K_ss: Gain_T                          # steady-state Kalman gain
+    var wiener_array: []Celsius_T
+
+    def __init__(self, T0: Celsius_T = 20.0, Q: Noise_T = 1.0, R: Noise_T = 1.0,
+                 initial_kalman_mean: Celsius_T = 20.0, initial_kalman_cov: Noise_T = 1.0,
+                 initial_wiener_val: Celsius_T = 20.0, timestep_s: Seconds_T = 1.0):
+        self.timestep = timestep_s
+        self.Q = Q
+        self.R = R
+        self.T_array = [T0]
+        self.T_meas_array = []
+
+        # Kalman filter
+        self.kalman_mean_array = [initial_kalman_mean]
+        self.kalman_mean_forecast_array = [NAN]
+        self.kalman_cov_array = [initial_kalman_cov]
+        self.kalman_cov_forecast_array = [NAN]
+        self.kalman_gain_array = [NAN]
+
+        # Wiener filter
+        self.K_ss = 1.0 / (1.0 + (2.0 * R / (Q + math.sqrt(Q * (Q + 4.0 * R)))))
+        self.wiener_array = [initial_wiener_val]
+
+        # Initial state measurement
+        let _first: Celsius_T = self.measure()
+
+    def step(self, num_steps: int = 1):
+        for _ in 1..num_steps:
+            let T_old: Celsius_T = self.T_array[-1]
+            let T_new: Celsius_T = T_old + rng.normal(0.0, self.Q)
+            self.T_array.append(T_new)
+
+            self.kalman_predict()
+            let T_meas: Celsius_T = self.measure()
+            self.kalman_update(T_meas)
+            self.wiener_filter(T_meas)
+
+    def measure(self) -> Celsius_T:
+        # Measure a new data point
+        let T_noise: float = rng.normal(0.0, self.R)
+        let T_meas: Celsius_T = self.T_array[-1] + T_noise
+        self.T_meas_array.append(T_meas)
+        return T_meas
+
+    def kalman_predict(self):
+        # The system is unitary (F = 1) so there's no better prediction than the current guess
+        let mean_forecast: Celsius_T = self.kalman_mean_array[-1]
+        # But our uncertainty grows a bit, due to the process noise
+        let cov_forecast: Noise_T = self.kalman_cov_array[-1] + self.Q
+        self.kalman_mean_forecast_array.append(mean_forecast)
+        self.kalman_cov_forecast_array.append(cov_forecast)
+
+    def kalman_update(self, T_meas: Celsius_T):
+        let x_k_forecast: Celsius_T = self.kalman_mean_forecast_array[-1]
+        let P_k: Noise_T = self.kalman_cov_forecast_array[-1]
+        const H_k: float = 1.0                # observation matrix
+        let R_k: Noise_T = self.R
+        let K_k: Gain_T = P_k * H_k / ((H_k * P_k * H_k) + R_k)
+
+        # Update mean and covariance
+        let x_k1: Celsius_T = x_k_forecast + K_k * (T_meas - H_k * x_k_forecast)
+        let cov_k1: Noise_T = (1.0 - K_k * H_k) * P_k * (1.0 - K_k * H_k) + K_k * R_k * K_k
+
+        self.kalman_gain_array.append(K_k)
+        self.kalman_mean_array.append(x_k1)
+        self.kalman_cov_array.append(cov_k1)
+
+    def wiener_filter(self, T_meas: Celsius_T) -> Celsius_T:
+        # The optimal IIR Wiener filter for this system has the transfer function
+        # G(z) = 1/(1 + (z - 1)/K)
+        let T_filt_prev: Celsius_T = self.wiener_array[-1]
+        let T_filt: Celsius_T = T_filt_prev + self.K_ss * (T_meas - T_filt_prev)
+        self.wiener_array.append(T_filt)
+        return T_filt
+
+    def print_filter_comparison(self, every: int = 25):
+        # Truth, data, the Kalman filter with its one-sigma band, and the Wiener filter
+        print "# time_s  truth  data  kalman  kalman-sigma  wiener"
+        for i in 0 ..< len(self.T_meas_array):
+            if i % every == 0 or i == len(self.T_meas_array) - 1:
+                let sigma: float = math.sqrt(self.kalman_cov_array[i])
+                print f"{float(i) * self.timestep:7.1f} {self.T_array[i]:9.4f} {self.T_meas_array[i]:9.4f} {self.kalman_mean_array[i]:9.4f} {sigma:7.4f} {self.wiener_array[i]:9.4f}"
+
+    def print_kalman_gain(self, every: int = 25):
+        # The Kalman gain rapidly converges to a constant
+        print "# time_s  kalman_gain  steady_state"
+        for i in 1 ..< len(self.kalman_gain_array):
+            if i % every == 0 or i == len(self.kalman_gain_array) - 1 or i <= 3:
+                print f"{float(i) * self.timestep:7.1f} {self.kalman_gain_array[i]:9.6f} {self.K_ss:9.6f}"
+
+    def bode_magnitude(self, w_hz: Hertz_T) -> float:
+        # |G(z)| of the Wiener filter at z = exp(j w dt), w in rad/s... as the original: w = 2 pi f
+        let w: float = 2.0 * PI * w_hz
+        let wt: float = w * self.timestep
+        let re: float = 1.0 + (math.cos(wt) - 1.0) / self.K_ss
+        let im: float = math.sin(wt) / self.K_ss
+        return 1.0 / math.sqrt(re * re + im * im)
+
+    def print_bode(self, points: int = 1024, every: int = 128):
+        # Wiener filter (steady-state Kalman filter) frequency response
+        let dt: float = self.timestep
+        let pole_w: float = math.exp(-(1.0 - self.K_ss) * dt)
+        let pole_f: float = pole_w / (2.0 * PI)
+        let f_nyquist: float = 0.5 * dt
+        let lo: float = math.log10(0.01 * pole_w)
+        let hi: float = math.log10(2.0 * PI * f_nyquist)
+        print f"# pole at {pole_f:.6f} Hz"
+        print "# freq_hz  magnitude"
+        for i in 0 ..< points:
+            if i % every == 0 or i == points - 1:
+                let w: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1))
+                let f_hz: Hertz_T = w / (2.0 * PI)
+                print f"{f_hz:11.6f} {self.bode_magnitude(f_hz):9.6f}"
+
+# --- low-pass and high-pass demo --------------------------------------------------------
+
+type Biquad is record:
+    # one second-order section, a0 = 1: y = b0 x + b1 x1 + b2 x2 - a1 y1 - a2 y2
+    b0: float
+    b1: float
+    b2: float
+    a1: float
+    a2: float
+
+def butter2(cutoff_hz: Hertz_T, fs: Hertz_T, highpass: bool) -> Biquad:
+    # 2nd-order Butterworth by the bilinear transform: what scipy's butter(2, fc, fs=fs) gives
+    let wc: float = math.tan(PI * cutoff_hz / fs)
+    let k: float = wc * wc
+    let norm: float = 1.0 / (1.0 + math.sqrt(2.0) * wc + k)
+    let a1: float = 2.0 * (k - 1.0) * norm
+    let a2: float = (1.0 - math.sqrt(2.0) * wc + k) * norm
+    if highpass:
+        return Biquad(norm, -2.0 * norm, norm, a1, a2)
+    return Biquad(k * norm, 2.0 * k * norm, k * norm, a1, a2)
+
+def sosfilt(s: Biquad, x: []float, z0: float, z1: float) -> []float:
+    # scipy.signal.sosfilt for one section: transposed direct form II, initial state (z0, z1)
+    var y: []float = []
+    var d0: float = z0
+    var d1: float = z1
+    for v in x:
+        let out: float = s.b0 * v + d0
+        d0 = s.b1 * v - s.a1 * out + d1
+        d1 = s.b2 * v - s.a2 * out
+        y.append(out)
+    return y
+
+def lpf_hpf_demo(every: int = 50):
+    # Demonstrates the idea of low-pass and high-pass filtering
+    const samples: int = 500
+    const dc_offset: float = 20.0
+    let dt: float = 10.0 / float(samples - 1)          # np.linspace(0, 10, samples)
+    var y_raw: []float = []
+    var walk: float = 0.0
+    for _ in 1..samples:
+        walk += rng.normal(0.0, 1.0)
+        y_raw.append(dc_offset + walk + rng.normal(0.0, 2.0))
+    let fs: Hertz_T = 1.0 / dt
+    let y_lpf: []float = sosfilt(butter2(1.0, fs, False), y_raw, dc_offset, -0.9 * dc_offset)
+    let y_hpf: []float = sosfilt(butter2(1.0, fs, True), y_raw, -dc_offset, dc_offset)
+    print "# time_s  raw  low-pass  high-pass"
+    for i in 0 ..< samples:
+        if i % every == 0 or i == samples - 1:
+            print f"{float(i) * dt:7.3f} {y_raw[i]:9.4f} {y_lpf[i]:9.4f} {y_hpf[i]:9.4f}"
+
+print "Start!"
+var my_beaker: Temperature_System = Temperature_System(R=0.75, Q=0.1, initial_kalman_mean=15.0, initial_kalman_cov=10.0, initial_wiener_val=15.0)
+my_beaker.step(250)
+my_beaker.print_filter_comparison()
+my_beaker.print_kalman_gain()
+my_beaker.print_bode()
+lpf_hpf_demo()
+# the Kalman gain has converged to the steady-state gain, so the two filters agree
+assert abs(my_beaker.kalman_gain_array[-1] - my_beaker.K_ss) < 1e-6
+assert abs(my_beaker.kalman_mean_array[-1] - my_beaker.wiener_array[-1]) < 1e-4
+print "Done."

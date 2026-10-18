@@ -58,6 +58,7 @@ LIBS := \
 # -----------------------------------------------------------------------
 STANDALONE := \
     monty_hall.ady \
+    KALMAN_WIENER/kalman_wiener.ady \
     sudoku.ady \
     prisoners.ady \
     graph.ady \
