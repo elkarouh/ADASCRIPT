@@ -164,7 +164,7 @@ def vis_viva(mu: Mu_T, radius: metre_T, a: metre_T) -> Speed_T:
     return Speed_T(sqrt(float(mu) * (2.0 / float(radius) - 1.0 / float(a))))
 
 def half_period(mu: Mu_T, a: metre_T) -> second_T:
-    return second_T(PI * sqrt(float(a) * float(a) * float(a) / float(mu)))
+    return second_T(PI * sqrt(float(a) ** 3 / float(mu)))
 
 def period(mu: Mu_T, a: metre_T) -> second_T:
     return half_period(mu, a) * 2.0
@@ -535,7 +535,7 @@ def integrate(dyn: Dynamics, y0: State_T, t_end: second_T, rtol: float, atol_r: 
     let watch: []Event_T = dyn.watching()
     var g_old: []float = [dyn.event_value(k, t, y) for k in watch]
     while t < t_end:
-        var hh: second_T = min(min(h, max_step), t_end - t)
+        var hh: second_T = min(h, max_step, t_end - t)
         var s: Step_T = dp_step(dyn, t, y, f, hh)
         var ratio: float = error_ratio(s, y, rtol, atol_r, atol_v)
         while ratio >= 1.0:                      # rejected: shrink and try again
@@ -687,9 +687,7 @@ class Navigation:
         self.v = v + self.rng.speeds(vel_sigma)
 
     def propagate(self, measured_specific_force: Acceleration, dt: second_T):
-        let (r, v) = rk4_step(self.r, self.v, measured_specific_force, dt)
-        self.r = r
-        self.v = v
+        (self.r, self.v) = rk4_step(self.r, self.v, measured_specific_force, dt)
 
     def radar_update(self, true_r: Position, true_v: Velocity):
         """Landing radar: altitude + Doppler velocity (valid below ~10 km)."""

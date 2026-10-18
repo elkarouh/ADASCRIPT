@@ -302,7 +302,7 @@ def good_name(name: str) -> bool:
 # A scenario's name with its leading number padded, so names sort by number.
 def sort_key(name: str) -> str:
     var digits: int = 0
-    while digits < len(name) and name[digits].isDigit():
+    while digits < len(name) and name[digits].isdigit():
         digits += 1
     return "0" * (6 - digits) + name if digits < 6 else name
 

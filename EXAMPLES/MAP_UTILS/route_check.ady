@@ -151,7 +151,7 @@ def fix_on_leg(start: GeoPoint, leg: GeoVector, plane: GeoPoint) -> Fix_T:
     let length: metre_T = track.length()
     let across: metre_T = cross / length                    # a square over a length: a length
     let along: metre_T = dot / length
-    return Fix_T(Kilometers_T(float(along) / 1000.0), Kilometers_T(abs(float(across)) / 1000.0), side_of_track(across))
+    return Fix_T(Kilometers_T(along), Kilometers_T(abs(across)), side_of_track(across))
 
 type Airspace_T is record:
     r1:          Region        # restricted area R-1: a polygon

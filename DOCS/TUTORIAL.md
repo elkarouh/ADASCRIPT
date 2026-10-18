@@ -479,6 +479,14 @@ is Velocity_T / Duration_T`) and has the kind of its operands: `float`, or
 `int` for a product. Nim gets a small proc per relation, so it costs nothing
 at run time.
 
+A multiple of a unit is declared once, as what one of it is: `type
+Kilometers_T is 1000.0 * metre_T`. The conversion then does the scaling
+itself, both ways: `Kilometers_T(d)` of a `metre_T` d divides by 1000, and
+`metre_T(k)` of a `Kilometers_T` k multiplies, so `float(metre_T(k))` is the
+number of metres, never `float(k) * 1000.0`. Of a plain number the
+conversion keeps the number; of an unrelated unit it is refused (book 2.7,
+"A multiple of a unit").
+
 ### A unit narrowed to a range
 
 A distinct type can be narrowed to part of its values, in the manner of an Ada subtype, with `type N is P range lo .. hi` -- `P` any distinct float or int, the bounds negative if need be. The result is a type of its own, with a relation to its parent: it goes up, comes down only by an explicit conversion that checks the range, and does not stand for a sibling:

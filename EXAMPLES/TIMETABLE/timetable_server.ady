@@ -141,7 +141,7 @@ async def handler(req: Request):
         let qs: string = req.url.query
         var name: str = ""
         for part in qs.split("&"):
-            if part.startsWith("name="):
+            if part.startswith("name="):
                 name = decodeUrl(part[5:])
         if name == "":
             let (body, hdrs) = json_resp(err_json("name parameter required"))

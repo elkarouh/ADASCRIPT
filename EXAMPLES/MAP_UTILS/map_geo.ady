@@ -226,7 +226,7 @@ class GeoVector:
     def __init__(self, distance: Kilometers_T, bearing: Degree_T) -> None:
         """A displacement of DISTANCE along BEARING (clockwise from true north)."""
         let radians: float = float(Radians_T(bearing))
-        let metres: float = float(distance) * 1000.0
+        let metres: float = float(metre_T(distance))
         self.north = metre_T(metres * cos(radians))
         self.east  = metre_T(metres * sin(radians))
 
@@ -287,9 +287,9 @@ def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVe
     They are named, and in this order, so that east and north cannot be taken
     for each other.
     """
-    let n: float = float(north) * 1000.0
-    let e: float = float(east) * 1000.0
-    let distance: float = hypot(n, e) / 1000.0
+    let n: float = float(metre_T(north))
+    let e: float = float(metre_T(east))
+    let distance: metre_T = metre_T(hypot(n, e))
     let bearing: float = modulo(float(Degree_T(arctan2(e, n))), 360.0)
     GeoVector(Kilometers_T(distance), Degree_T(bearing))
 

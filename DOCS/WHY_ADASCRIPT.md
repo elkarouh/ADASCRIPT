@@ -839,6 +839,23 @@ each, and the round trip is checked in the example rather than trusted:
     assert near(float(back_mi), float(marathon_mi), 1e-9)
 ```
 
+The conversion converts by itself, so a program never carries the factor
+around. A route check measures in metres and reports in kilometres, and the
+line that crosses between them says only which unit it wants:
+
+<!-- from: EXAMPLES/MAP_UTILS/route_check.ady -->
+```python
+    let across: metre_T = cross / length                    # a square over a length: a length
+    let along: metre_T = dot / length
+    return Fix_T(Kilometers_T(along), Kilometers_T(abs(across)), side_of_track(across))
+```
+
+Written out by hand it would be `Kilometers_T(float(along) / 1000.0)`: correct, and exactly
+the arithmetic that goes wrong when someone writes `* 1000.0` instead, or
+divides a value that was already in kilometres. With the factor in one
+declaration, `float(metre_T(k))` is the number of metres in `k`, on the Nim
+backend and the Python one alike.
+
 ### The Mars Climate Orbiter
 
 The best-known unit failure in spaceflight is this one. On 23 September 1999 the

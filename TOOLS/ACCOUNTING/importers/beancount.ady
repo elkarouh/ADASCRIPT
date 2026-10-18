@@ -22,10 +22,9 @@ Clearing account, and one that does not add up in the operating currency
 is left out; both are counted in the books' description.
 """
 from os nimport fileExists
-from math nimport round
 from backend/accounting_model import BookFailure_T
 from backend/books_text import Books, bad
-from importers/plain_books import Collector, Leg, digits_only, is_account
+from importers/plain_books import Collector, Leg, whole_cents, digits_only, is_account
 
 # The words of S, apart at spaces and tabs, a quoted string being one.
 def words_of(s: str) -> []str:
@@ -87,7 +86,7 @@ def line_of(w: []str, opcur: str) -> Leg:
     let units: float = num(w[1])
     let currency: str = w[2]
     if currency == opcur:
-        return Leg(account, int(round(units * 100.0)), True, True)
+        return Leg(account, whole_cents(units), True, True)
     # the rest, between the braces for a cost, after @ for a price
     var cost: float = 0.0
     var price: float = 0.0
@@ -116,12 +115,12 @@ def line_of(w: []str, opcur: str) -> Leg:
                 cost = num(word)                # {53.60 USD}: what the units cost
                 found_cost = True
     if found_cost:                              # a lot is counted at its cost; the gain is another posting
-        return Leg(account, int(round(units * cost * 100.0)), True, True)
+        return Leg(account, whole_cents(units * cost), True, True)
     if found_total:
         let sign: float = (1.0 if units >= 0.0 else -1.0)
-        return Leg(account, int(round(sign * total * 100.0)), True, True)
+        return Leg(account, whole_cents(sign * total), True, True)
     if found_price:
-        return Leg(account, int(round(units * price * 100.0)), True, True)
+        return Leg(account, whole_cents(units * price), True, True)
     return Leg(account, 0, True, False)
 
 # The books of the Beancount file at PATH.

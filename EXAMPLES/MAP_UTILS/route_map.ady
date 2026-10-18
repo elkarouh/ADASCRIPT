@@ -29,6 +29,7 @@ It needs the folium package for the Python that nimpy embeds (`pip install foliu
 pyimport folium
 
 from map_base import Bearing_T, Degree_T, Kilometers_T
+from units import metre_T
 from map_geo import GeoPoint, GeoVector, must
 from regions import Region, HalfAngle_T
 from route_check import Airport_T, ROUTE, R2_CENTRE, R2_RADIUS, FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE
@@ -118,7 +119,7 @@ def draw_airspace(on: PyObject, apex: GeoPoint) -> int:
     put(r1, g1)
     let g2: PyObject = group(on, "R-2, restricted")
     let centre: GeoPoint = must(GeoPoint(R2_CENTRE))
-    let r2: PyObject = folium.Circle(location=latlon(centre), radius=float(R2_RADIUS) * 1000.0, color="#e31a1c", weight=2, fill=True, fill_color="#e31a1c", fill_opacity=0.18, tooltip="R-2: restricted circle")
+    let r2: PyObject = folium.Circle(location=latlon(centre), radius=float(metre_T(R2_RADIUS)), color="#e31a1c", weight=2, fill=True, fill_color="#e31a1c", fill_opacity=0.18, tooltip="R-2: restricted circle")
     put(r2, g2)
     let g3: PyObject = group(on, "Approach funnel")
     let wedge: PyObject = folium.Polygon(locations=latlons(funnel_outline(apex)), color="#33a02c", weight=2, fill=True, fill_color="#33a02c", fill_opacity=0.10, tooltip="Approach funnel")
@@ -211,7 +212,7 @@ def main():
 
     # the holding pattern round the last airport
     let hold: PyObject = group(m, "Holding pattern")
-    let ring: PyObject = folium.Circle(location=latlon(apex), radius=float(HOLD_RADIUS) * 1000.0, color="#6a3d9a", weight=2, dash_array="6", fill=False, tooltip="holding pattern")
+    let ring: PyObject = folium.Circle(location=latlon(apex), radius=float(metre_T(HOLD_RADIUS)), color="#6a3d9a", weight=2, dash_array="6", fill=False, tooltip="holding pattern")
     put(ring, hold)
     let pattern: []GeoPoint = holding_pattern(apex, HOLD_RADIUS, HOLD_POINTS)
     for k in 0 ..< len(pattern):

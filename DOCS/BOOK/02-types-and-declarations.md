@@ -543,9 +543,9 @@ rate below.
 A multiple of an `int` unit is the same declaration, and it is how money
 is counted -- see Money below. Its factor is a whole number.
 
-A scaled unit is built by `ady2nim` only. Which conversion `C(x)` is depends
-on the type of x, which the Python backend cannot always see, and guessing
-wrong would relabel metres as miles; `ady2py` refuses the declaration.
+Both backends build a scaled unit. Which conversion `C(x)` is depends on the
+type of x; where `ady2py` cannot see it, it refuses the conversion rather
+than guess, since guessing wrong would relabel metres as miles.
 `EXAMPLES/physics_calc.ady` uses both the kilometre and the mile.
 
 ### Money

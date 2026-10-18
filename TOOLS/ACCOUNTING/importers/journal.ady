@@ -24,10 +24,9 @@ Clearing account, and one that does not add up is left out; both are
 counted in the books' description.
 """
 from os nimport fileExists
-from math nimport round
 from backend/accounting_model import BookFailure_T
 from backend/books_text import Books, bad
-from importers/plain_books import Collector, Leg, digits_only
+from importers/plain_books import Collector, Leg, whole_cents, digits_only
 
 # 2013/1/6 or 2013-01-06 or 2013.01.06 (a secondary =date after it ignored) as
 # 2013-01-06, or "" when WORD starts no transaction; 1/6 is read in YEAR, if there is one.
@@ -146,16 +145,16 @@ def leg_of(text: str, opcur: str) -> Leg:
     if not units.found:
         return Leg(account, 0, True, False)
     if units.commodity == opcur or units.commodity == "":
-        return Leg(account, int(round(units.number * 100.0)), True, True)
+        return Leg(account, whole_cents(units.number), True, True)
     let cost: Amount = amount_of(cost_text)
     if cost.found and (cost.commodity == opcur or cost.commodity == ""):
-        return Leg(account, int(round(units.number * cost.number * 100.0)), True, True)
+        return Leg(account, whole_cents(units.number * cost.number), True, True)
     let price: Amount = amount_of(price_text)
     if price.found and (price.commodity == opcur or price.commodity == ""):
         if total_price:
             let sign: float = (1.0 if units.number >= 0.0 else -1.0)
-            return Leg(account, int(round(sign * price.number * 100.0)), True, True)
-        return Leg(account, int(round(units.number * price.number * 100.0)), True, True)
+            return Leg(account, whole_cents(sign * price.number), True, True)
+        return Leg(account, whole_cents(units.number * price.number), True, True)
     return Leg(account, 0, True, False)
 
 # The commodity of the first amount in the file's postings, "" when it has none.
