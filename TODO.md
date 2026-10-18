@@ -39,15 +39,6 @@ it, all but test_htmx, whose `html:` block is refused as Nim only.
       does; the regex helpers would need a JS version. test_vi_*,
       test_small_fixes and the vi editor wait on it (they use files too).
 
-### Found simplifying TOOLS/ACCOUNTING
-
-- [ ] a parameter `amount: float` of a routine in an imported module
-      (importers/plain_books.ady) made `posting.amount == 10500` in
-      tests/test_ledger.ady, a `Cents_T` field, lose its literal conversion
-      on Nim ("type mismatch: Cents_T, int literal"). The field's type is
-      taken from the bare name where the parameter's is found first. The
-      helper's parameter is named `x` meanwhile.
-
 ## For discussion
 
 - [ ] let `m(k)` look up a `{K}V` or `[K]V` as `m[k]` does, and let a table

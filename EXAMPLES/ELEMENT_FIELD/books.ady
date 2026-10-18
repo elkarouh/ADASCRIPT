@@ -1,0 +1,16 @@
+"""The middle module of test_element_field: records whose field `amount` is a
+unit, built with the leaf's routine."""
+from cents import whole_cents
+
+type Cents_T is distinct int
+
+type Posting is record:
+    account: str
+    amount:  Cents_T
+
+type Entry is record:
+    postings: []Posting
+
+def entries() -> []Entry:
+    return [Entry([Posting("Bank", Cents_T(whole_cents(105.0))),
+                   Posting("Sales", Cents_T(-whole_cents(105.0)))])]

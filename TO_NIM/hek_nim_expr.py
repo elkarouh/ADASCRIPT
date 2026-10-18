@@ -1272,6 +1272,10 @@ def _field_type(expr):
     if not _btype and "." in base:
         # a chain: `self.inner.xs` -- the type of `self.inner` is the object's
         _btype = _re_ft.sub(r"^var\s+", "", _field_type(base.strip()))
+    if not _btype and base.rstrip().endswith("]"):
+        # an element: `entries[1].postings[2].amount` -- the object is what the
+        # seq or array holds, not whatever else is named `amount`
+        _btype = _re_ft.sub(r"^var\s+", "", _element_type(base.strip()))
     if not _btype and base.rstrip().endswith(")"):
         # a call: `account(g, "x").balance` -- the object is what the routine
         # is declared to return

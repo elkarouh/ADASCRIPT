@@ -1,0 +1,10 @@
+"""Test: a field reached through elements, `es[0].postings[1].amount`, has the
+type its record declares. A parameter named `amount: float` in a module two
+imports down was taken for it, and the literal beside `==` was left a plain
+int where Nim wanted a Cents_T (found in TOOLS/ACCOUNTING's test_ledger)."""
+from ELEMENT_FIELD/books import Cents_T, Entry, Posting, entries
+
+let es: []Entry = entries()
+assert es[0].postings[0].amount == 10500
+assert es[0].postings[1].amount == -10500
+print("test_element_field: all checks passed")

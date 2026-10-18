@@ -29,8 +29,8 @@ type Leg is record:
     kept:    bool                     # False: in a currency that cannot be counted
 
 # X, an amount in the currency's units, as whole cents.
-def whole_cents(x: float) -> int:
-    return int(round(x * 100.0))
+def whole_cents(amount: float) -> int:
+    return int(round(amount * 100.0))
 
 const CLEARING: str = "Liabilities:Clearing"
 

@@ -1,0 +1,5 @@
+"""A leaf module of test_element_field: a routine whose parameter is named
+like the field the program compares, `amount`."""
+
+def whole_cents(amount: float) -> int:
+    return int(amount * 100.0 + 0.5)
