@@ -25,6 +25,7 @@ in the simulation, and variances in the filter: the simulation passes them to `n
 scales, which is why it takes a float.
 """
 nimport math
+from units import second_T          # the SI base unit of time, from the shared library
 pyimport numpy as np
 pyimport scipy.signal as signal
 pyimport matplotlib
@@ -32,10 +33,6 @@ pyimport matplotlib.pyplot as plt
 
 # degrees Celsius: a temperature, or a difference of two of them
 type Celsius_T is distinct float
-# seconds between two observations
-type Seconds_T is distinct float
-# cycles per second
-type Hertz_T is distinct float
 # degrees Celsius squared: a Kalman covariance, and the noise covariances Q and R
 type Variance_T is Celsius_T * Celsius_T
 # the Kalman gain: 0 = trust the forecast, 1 = trust the measurement (no unit)
@@ -54,7 +51,7 @@ def normal(scale: float) -> Celsius_T:
 # --- the system and its two filters -----------------------------------------------------
 
 class Temperature_System:
-    var timestep: Seconds_T
+    var timestep: second_T
     var Q: Variance_T                        # process noise
     var R: Variance_T                        # measurement noise
     var T_array: []Celsius_T
@@ -69,7 +66,7 @@ class Temperature_System:
 
     def __init__(self, T0: Celsius_T = Celsius_T(20.0), Q: Variance_T = Variance_T(1.0), R: Variance_T = Variance_T(1.0),
                  initial_kalman_mean: Celsius_T = Celsius_T(20.0), initial_kalman_cov: Variance_T = Variance_T(1.0),
-                 initial_wiener_val: Celsius_T = Celsius_T(20.0), timestep_s: Seconds_T = Seconds_T(1.0)):
+                 initial_wiener_val: Celsius_T = Celsius_T(20.0), timestep_s: second_T = second_T(1.0)):
         self.timestep = timestep_s
         self.Q = Q
         self.R = R
@@ -161,7 +158,7 @@ class Temperature_System:
             if i % every == 0 or i == len(self.kalman_gain_array) or i <= 3:
                 print f"{float(i) * float(self.timestep):7.1f} {float(self.kalman_gain_array[k]):9.6f} {float(self.K_ss):9.6f}"
 
-    def bode_magnitude(self, f_hz: Hertz_T) -> float:
+    def bode_magnitude(self, f_hz: float) -> float:
         # |G| of the Wiener filter at the frequency f_hz
         let wt: float = 2.0 * PI * float(f_hz) * float(self.timestep)
         let K: float = float(self.K_ss)
@@ -181,7 +178,7 @@ class Temperature_System:
         print "# freq_hz  magnitude"
         for i in 0 ..< points:
             if i % every == 0 or i == points - 1:
-                let f_hz: Hertz_T = Hertz_T(math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI))
+                let f_hz: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI)
                 print f"{f_hz:11.6f} {self.bode_magnitude(f_hz):9.6f}"
 
     def plot_filter_comparison(self, path: str):
@@ -239,7 +236,7 @@ class Temperature_System:
         for i in 0 ..< points:
             let f: float = math.pow(10.0, lo + (hi - lo) * float(i) / float(points - 1)) / (2.0 * PI)
             w_hz.append(f)
-            mag.append(self.bode_magnitude(Hertz_T(f)))
+            mag.append(self.bode_magnitude(f))
         let fig: PyObject = plt.figure(figsize=(9, 2))
         let ax: PyObject = fig.add_axes([0.1, 0.25, 0.85, 0.5])
         ax.grid()
