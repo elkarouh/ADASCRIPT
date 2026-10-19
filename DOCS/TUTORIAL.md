@@ -1273,6 +1273,9 @@ constant. `case x:` does the one the subject calls for. Over a union every
 `when 3`. A union is never matched by value, so there is nothing to confuse:
 test the type, then use the value.
 
+For why a union of records is preferred to a variant record or a class hierarchy,
+see [UNION_TYPES.md](UNION_TYPES.md).
+
 Members that are handled alike share a branch: `when Circle_T | Square_T:`
 runs one body for either. It is checked once for each member, so it may use
 only what both have (`x.delete()` if both define `delete`), and it is a

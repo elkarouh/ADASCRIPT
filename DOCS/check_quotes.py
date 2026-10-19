@@ -42,6 +42,7 @@ DOCS = {
     "DOCS/ADASCRIPT_FOR_SHELL.md":  4,
     "DOCS/WHY_ADASCRIPT.md":        2,
     "DOCS/ADASCRIPT_FOR_JAVASCRIPT.md": 0,
+    "DOCS/UNION_TYPES.md": 2,
 }
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
