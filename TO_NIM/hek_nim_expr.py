@@ -1065,6 +1065,48 @@ def _re_isid(t):
     return bool(_re.fullmatch(r"[A-Za-z_]\w*", t))
 
 
+def _split_ternary(value):
+    """(cond, then, else) of an emitted `(if c: a else: b)`, or None."""
+    v = value.strip()
+    while v.startswith("((") and v.endswith("))"):
+        _d = 0
+        for _k, _c in enumerate(v):
+            _d += (_c == "(") - (_c == ")")
+            if _d == 0 and _k != len(v) - 1:
+                break
+        else:
+            v = v[1:-1].strip()
+            continue
+        break
+    if not (v.startswith("(if ") and v.endswith(")")):
+        return None
+    body = v[1:-1]
+    depth, quote, esc, colon, other = 0, "", False, None, None
+    for i, ch in enumerate(body):
+        if quote:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0:
+            if colon is None and ch == ":":
+                colon = i
+            elif body.startswith(" else: ", i):
+                other = i
+    if colon is None or other is None or other < colon:
+        return None
+    return (body[3:colon].strip(), body[colon + 1:other].strip(),
+            body[other + 7:].strip())
+
+
 def _result_wrap(val, rtype):
     """VAL as a value of the union type RTYPE -- a Result or a OneOfN, its
     Nim spelling. The member is chosen by VAL's type: a failure is the
@@ -1077,6 +1119,11 @@ def _result_wrap(val, rtype):
     info = _union_info(rtype)
     if info is None:
         return val
+    _tern = _split_ternary(val)
+    if _tern is not None:
+        # each branch is a member of its own: `Sym_T(t) if bad else Num_T(n)`
+        return (f"(if {_tern[0]}: {_result_wrap(_tern[1], rtype)} "
+                f"else: {_result_wrap(_tern[2], rtype)})")
     _ut = _union_type_of(val)
     if _ut and _ut.replace(" ", "") == rtype.replace(" ", ""):
         return val

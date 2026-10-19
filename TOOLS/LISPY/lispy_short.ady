@@ -81,9 +81,7 @@ def tokenize(s: str) -> []str:
 
 def atom(token: str) -> Val_T:
     let num: float | !ParseFailure_T = parse_float(token)
-    if num is ParseFailure_T:
-        return Sym_T(token)
-    Num_T(num)
+    return Sym_T(token) if num is ParseFailure_T else Num_T(num)
 
 class Reader:
     var tokens: []str
@@ -187,10 +185,8 @@ def apply(callee: Val_T, args: []Val_T) -> Val_T:
 # ---- eval
 
 def evaluate(x: Val_T, env: Env) -> Val_T:
-    if x is Sym_T:
-        return lookup(env, x.sym)
-    if x is not List_T:
-        return x
+    return lookup(env, x.sym) if x is Sym_T
+    return x if x is not List_T
     case x.items:
         when [Sym_T("quote"), exp]: exp
         when [Sym_T("if"), test, conseq, alt]: evaluate(conseq if evaluate(test, env).is_true() else alt, env)
