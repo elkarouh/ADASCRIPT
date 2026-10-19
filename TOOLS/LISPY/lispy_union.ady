@@ -109,24 +109,15 @@ def is_true(self: Val_T) -> bool:
         when Nil_T: False
         when others: True
 
-def __eq__(a: Val_T, b: Val_T) -> bool:
-    case a:
-        when Num_T: b is Num_T and a.num == b.num
-        when Sym_T: b is Sym_T and a.sym == b.sym
-        when Str_T: b is Str_T and a.text == b.text
-        when Bool_T: b is Bool_T and a.flag == b.flag
-        when Nil_T: b is Nil_T
-        when List_T:
-            if b is not List_T:
-                return False
-            let other: []Val_T = b.items
-            if len(a.items) != len(other):
-                return False
-            for i in 0..<len(a.items):
-                if not (a.items[i] == other[i]):
-                    return False
-            True
-        when others: False
+def __eq__(a: List_T, b: List_T) -> bool:
+    """Lists are equal by their elements: List_T is a reference, whose own
+    `==` would ask whether it is the same list."""
+    if len(a.items) != len(b.items):
+        return False
+    for i in 0..<len(a.items):
+        if not (a.items[i] == b.items[i]):
+            return False
+    True
 
 def __str__(self: Val_T) -> str:
     case self:
