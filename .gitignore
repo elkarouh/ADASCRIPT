@@ -49,6 +49,7 @@ TOOLS/LOLCATE/*_gen.py
 TOOLS/C500/c500
 TOOLS/C500/*_gen.py
 TOOLS/LISPY/lispy
+TOOLS/LISPY/lispy_union
 TOOLS/LV/lv
 TOOLS/LV/*_gen.py
 
