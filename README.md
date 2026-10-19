@@ -1,4 +1,4 @@
-# Adascript
+# Adascript (WORK IN PROGRESS, use at your own risk)
 
 Adascript is a statically-typed language built on Python 3 that steals the best
 features from many languages: **Ada** (enums, variant records, tick attributes,
