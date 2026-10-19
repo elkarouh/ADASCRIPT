@@ -3611,6 +3611,9 @@ def to_py(self, indent=0):
         if "stdin" in opts:
             call_args.append("text=True")
         call_kwargs = ", ".join(call_args)
+        # the child writes straight to the shared stdout; Python's buffered
+        # prints would otherwise come out after it when stdout is a pipe
+        lines.append(f'{ind}print(end="", flush=True)')
         lines.append(f"{ind}{target_name} = {runner}({cmd_ref}, {call_kwargs}).returncode"
                      if "timeout" in opts or "stdin" in opts else
                      f"{ind}{target_name} = _subprocess.call({cmd_ref}, {call_kwargs})")
@@ -3673,6 +3676,7 @@ def to_py(self, indent=0):
                     f"{ind}return _types.SimpleNamespace("
                     f"output=_r.stdout, stderr=_r.stderr, code=_r.returncode)")
         else:
+            lines.append(f'{ind}print(end="", flush=True)')
             lines.append(f"{ind}{runner}({cmd_str}, {kwargs_str})")
 
     return "\n".join(lines)
