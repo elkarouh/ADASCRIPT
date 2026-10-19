@@ -1831,6 +1831,8 @@ def _collect_class_args(pattern_class_node):
         elif tname in ("Sequence_Parser", "Several_Times", "pattern_class_arg") and hasattr(node, "nodes"):
             for child in node.nodes:
                 _walk(child)
+        elif tname not in ("Filter", "Fmap") and hasattr(node, "to_nim"):
+            args.append((None, node))               # given by position
 
     for node in pattern_class_node.nodes[1:]:
         _walk(node)
@@ -1922,10 +1924,28 @@ def _structural_conds_and_bindings(pat_node, subj, indent):
         args = _collect_class_args(pat_node)
         conds = []
         lets = []
+        # `Sym_T("if")` over a union: the member test, then its fields by position
+        import hek_nim_expr as _hne
+        _um = _hne._union_of_member(type_name) if args or type_name else None
+        if _um is not None:
+            _ut, _ui = _um
+            conds.append(f"{subj}.is_m{_ui}")
+            _order = [f for f in getattr(ParserState, "object_field_order", {}).get(type_name, [])]
+            _pos = 0
+            _resolved = []
+            for field_name, sub_pat in args:
+                if field_name is None:
+                    if _pos >= len(_order):
+                        raise SyntaxError(f"{type_name}(...) takes {len(_order)} field(s), got more")
+                    field_name = _order[_pos]
+                    _pos += 1
+                _resolved.append((field_name, sub_pat))
+            args = _resolved
+            subj = f"{subj}.m{_ui}"
         if args:
             for field_name, sub_pat in args:
                 if field_name is None:
-                    # positional — skip for now (no field name to access)
+                    # positional over a type that is no union member: no field to read
                     continue
                 sub_nim = sub_pat.to_nim() if hasattr(sub_pat, "to_nim") else str(sub_pat)
                 field_expr = f"{subj}.{field_name}"
@@ -3049,31 +3069,69 @@ def _wrap_option_tail_lines(lines, lo, hi, inner):
 def _wrap_union_tail(body, ret_ann):
     """BODY, a routine's Nim body returning the union RET_ANN, with its
     trailing value made the member it is, as `return v` does. Only a
-    one-line expression at the body's own level whose type is known: a
-    trailing statement (a void call) returns nothing and is left alone."""
-    import re as _re_un
+    one-line expression whose type is known: a trailing statement (a void
+    call) returns nothing and is left alone. A trailing `if` or `case` gives
+    its value by every branch, so each branch's last line is wrapped."""
     _nim_ret_u = ret_ann.lstrip(": ").strip()
     if not _nim_ret_u.startswith(("Result[", "OneOf")):
         return body
     _bl_u = body.rstrip().splitlines()
-    _ix_u = len(_bl_u) - 1
-    while _ix_u >= 0 and (_bl_u[_ix_u].lstrip().startswith("#") or _bl_u[_ix_u].strip() == ""):
-        _ix_u -= 1
-    if _ix_u < 0:
-        return body
-    _base_u = min(len(l) - len(l.lstrip()) for l in _bl_u if l.strip())
-    _ln_u = _bl_u[_ix_u]
-    _ex_u = _ln_u.lstrip()
-    _balanced = all(_ex_u.count(a) == _ex_u.count(b) for a, b in ("()", "[]", "{}"))
-    if (len(_ln_u) - len(_ex_u) != _base_u or not _balanced or _ex_u.endswith(":")
-            or _re_un.match(r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when|echo|quit)\b', _ex_u)
-            or _re_un.search(r'(?<![=!<>])=(?!=)', _ex_u)):
-        return body
-    _t_u = hek_nim_expr._value_nim_type(_ex_u)
-    if not _t_u or _t_u == "void":
-        return body
-    _bl_u[_ix_u] = _ln_u[:len(_ln_u) - len(_ex_u)] + hek_nim_expr._result_wrap(_ex_u, _nim_ret_u)
+    _wrap_union_block(_bl_u, 0, len(_bl_u), _nim_ret_u)
     return chr(10).join(_bl_u) + chr(10)
+
+
+def _wrap_union_block(lines, lo, hi, rtype):
+    """LINES[lo:hi] is a block that gives a value by its last statement: wrap
+    that statement in place, or each branch's when it is an if / case."""
+    import re as _re_un
+    ix = hi - 1
+    while ix >= lo and (lines[ix].lstrip().startswith("#") or lines[ix].strip() == ""):
+        ix -= 1
+    if ix < lo:
+        return
+    base = min(len(l) - len(l.lstrip()) for l in lines[lo:ix + 1] if l.strip())
+    # the last statement starts at the last line indented to the block's own level
+    st = ix
+    while st > lo and (len(lines[st]) - len(lines[st].lstrip()) != base or not lines[st].strip()):
+        st -= 1
+    head = lines[st].lstrip()
+
+    def _ind_of(i):
+        return len(lines[i]) - len(lines[i].lstrip())
+
+    if _re_un.match(r"^case\b", head) and head.rstrip().endswith(":"):
+        # `case x:` with its `of` branches one level in: every branch gives a value
+        child = _ind_of(st + 1) if st + 1 <= ix else base + 4
+        heads = [i for i in range(st + 1, ix + 1)
+                 if _ind_of(i) == child and _re_un.match(r"^(of|else)\b", lines[i].lstrip())]
+        for n, h in enumerate(heads):
+            end = heads[n + 1] if n + 1 < len(heads) else ix + 1
+            if lines[h].rstrip().endswith(":"):
+                _wrap_union_block(lines, h + 1, end, rtype)
+        return
+    if _re_un.match(r"^(if|elif|else)\b", head):
+        # an if / elif / else chain: walk back to its `if`, then every branch
+        top = st
+        while top > lo and not (_ind_of(top) == base and _re_un.match(r"^if\b", lines[top].lstrip())):
+            top -= 1
+        heads = [i for i in range(top, ix + 1)
+                 if _ind_of(i) == base and _re_un.match(r"^(if|elif|else)\b", lines[i].lstrip())]
+        for n, h in enumerate(heads):
+            end = heads[n + 1] if n + 1 < len(heads) else ix + 1
+            if lines[h].rstrip().endswith(":"):
+                _wrap_union_block(lines, h + 1, end, rtype)
+        return
+    ln = lines[ix]
+    ex = ln.lstrip()
+    _balanced = all(ex.count(a) == ex.count(b) for a, b in ("()", "[]", "{}"))
+    if (len(ln) - len(ex) != base or not _balanced or ex.endswith(":")
+            or _re_un.match(r'^(var|let|const|result|return|if|elif|else|for|while|case|of|discard|raise|try|except|finally|block|when|echo|quit)\b', ex)
+            or _re_un.search(r'(?<![=!<>])=(?!=)', ex)):
+        return
+    t = hek_nim_expr._value_nim_type(ex)
+    if not t or t == "void":
+        return
+    lines[ix] = ln[:len(ln) - len(ex)] + hek_nim_expr._result_wrap(ex, rtype)
 
 
 @method(func_def)

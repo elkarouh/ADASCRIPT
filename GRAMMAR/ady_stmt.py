@@ -286,6 +286,11 @@ def scan_value_cycles(code):
         body = _re_vc.split(r"\n\s+(?:async\s+)?def\s", code[start:end])[0]   # fields, not methods
         body_of[name] = {n for t in field.findall(body) for n in _re_vc.findall(r"\b[A-Z]\w*", t)}
         kind[name] = "virtual" if m.group(1) else ("record" if m.group(2) else "class")
+    # a named union holds its members: `type Val_T is Num_T | Lambda`
+    for m in _re_vc.finditer(r"^type\s+([A-Z]\w*)\s+is\s+([^\n#]*\|[^\n#]*)$", code, _re_vc.M):
+        if m.group(1) not in kind:
+            body_of[m.group(1)] = set(_re_vc.findall(r"\b[A-Z]\w*", m.group(2)))
+            kind[m.group(1)] = "union"
     out = set()
     for cls, k in kind.items():
         if k != "class":
@@ -296,7 +301,7 @@ def scan_value_cycles(code):
             if t == cls:
                 out.add(cls)
                 break
-            if t in seen or kind.get(t) not in ("record", "class"):
+            if t in seen or kind.get(t) not in ("record", "class", "union"):
                 continue
             seen.add(t)
             todo.extend(body_of.get(t, ()))

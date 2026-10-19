@@ -393,6 +393,11 @@ def to_nim(self):
     if len(parts) == 2 and prefix == "":
         _rsym = ParserState.symbol_table.lookup(lhs)
         _rtype = (_rsym.get("type") or "") if _rsym else ""
+        if not _rtype and ("[" in lhs or "." in lhs):
+            # `self.bindings[k] = Num_T(1.0)`: the element or field is a union
+            _et = hek_nim_expr._nim_expr_type(lhs) or ""
+            if _et.startswith("OneOf"):
+                _rtype = _et
         if _rtype.startswith(("Result[", "OneOf")):
             parts[1] = hek_nim_expr._result_wrap(parts[1], _rtype)
     # Option[T] assignment: if LHS is known Option[T] and RHS is not some()/none()/nil,

@@ -410,6 +410,13 @@ def _lift_option_seq(val, declared):
     import re as _re_lo
     m = _re_lo.match(r"^\s*(?:var\s+)?seq\[Option\[(.+)\]\]\s*$", declared or "")
     v = (val or "").strip()
+    _mu = _re_lo.match(r"^\s*(?:var\s+)?seq\[(OneOf\d+\[.+\])\]\s*$", declared or "")
+    if _mu and v.startswith("@[") and v.endswith("]") and _balanced(v[2:-1]):
+        # `[]A | B`: each element is a member of the union, or the union
+        _u = _mu.group(1)
+        return "@[" + ", ".join(
+            e.strip() if e.strip().startswith(_u + ".of") else _result_wrap(e.strip(), _u)
+            for e in _split_args(v[2:-1]) if e.strip()) + "]"
     if not m or not (v.startswith("@[") and v.endswith("]")) or not _balanced(v[2:-1]):
         return val
     inner = m.group(1)
@@ -424,6 +431,37 @@ def _lift_option_seq(val, declared):
             out.append(f"some({e})")
     ParserState.nim_imports.add("options")
     return "@[" + ", ".join(out) + "]"
+
+
+def _union_of_member(type_name):
+    """(the Nim union, the index of TYPE_NAME in it) for a type that exactly
+    one named union -- `type Val_T is Num_T | Sym_T` -- has as a member, or
+    None. A pattern `Sym_T(name)` names the member only; this finds the
+    union whose is_m<i> and m<i> test and read it."""
+    from hek_nim_declarations import _union_alias_nim
+    found = []
+    for alias in getattr(ParserState, "union_aliases", {}):
+        nim_t = _union_alias_nim(alias)
+        info = _union_info(nim_t) if nim_t else None
+        if info and info["kind"] == "plain" and type_name in info["values"]:
+            found.append((nim_t, info["values"].index(type_name)))
+    return found[0] if len(found) == 1 else None
+
+
+def _lift_union_field(val, ftype):
+    """VAL given for a field of the union type FTYPE (or a list of it): a
+    member is the union's own, as it is for a parameter, and the elements of
+    a list literal likewise."""
+    f = (ftype or "").strip()
+    if f.startswith("seq[OneOf"):
+        return _lift_option_seq(val, f)
+    if (f.startswith("OneOf") and _union_info(f) is not None
+            and not _union_type_of(val) and not _expr_is_result(val)
+            and not val.strip().startswith(f + ".of")
+            and _value_nim_type(val) is not None
+            and not _value_nim_type(val).startswith("seq[")):
+        return _result_wrap(val, f)
+    return val
 
 
 def _sorted_operand(arg):
@@ -951,6 +989,11 @@ def _union_type_of(expr_str):
         _rt = _proc_ret_nim(_called)
         if _rt.startswith(("Result[", "OneOf")):
             return _rt
+    if "[" in expr_str or "." in expr_str:
+        # an element or a field: `args[0]` of a []Val_T, `self.items[i]`
+        _et = _nim_expr_type(expr_str) or ""
+        if _et.startswith(("Result[", "OneOf")):
+            return _et
     return ""
 
 
@@ -1006,6 +1049,11 @@ def _arith_nim_type(v):
     return None
 
 
+def _re_isid(t):
+    import re as _re
+    return bool(_re.fullmatch(r"[A-Za-z_]\w*", t))
+
+
 def _result_wrap(val, rtype):
     """VAL as a value of the union type RTYPE -- a Result or a OneOfN, its
     Nim spelling. The member is chosen by VAL's type: a failure is the
@@ -1031,6 +1079,16 @@ def _result_wrap(val, rtype):
         raise SyntaxError(
             f"None is not a member of {' | '.join(values + ([failure] if failure else []))}")
     _t = _value_nim_type(val)
+    if _t and _t.replace(" ", "") == rtype.replace(" ", ""):
+        return val                      # a field or an element that is the union
+    _vn = val.strip()
+    if _re_isid(_vn) and _union_type_of(_vn).startswith("Result["):
+        # a value-or-failure given where its value is wanted: after a guard
+        # (`if r is F: return r`) the name reads as the value, and Nim says
+        # if it does not
+        _sides = _split_result(_union_type_of(_vn))
+        if _sides and _sides[0].replace(" ", "") == rtype.replace(" ", ""):
+            return val
     if failure and (_t == failure or (_void and _t != "void")):
         return f"{rtype}.err({val})"
     if info["kind"] == "either" and not info["multi"]:
@@ -1046,6 +1104,10 @@ def _result_wrap(val, rtype):
             return f"{rtype}.of{i}({val})"
         _inner = f"OneOf{len(values)}[{', '.join(values)}]"
         return f"{rtype}.ok({_inner}.of{i}({val}))"
+    if not _t:
+        # a value whose type is not known here (a name bound by a pattern, an
+        # element of one): it is taken as the union, and Nim checks that it is
+        return val
     raise SyntaxError(
         f"cannot tell which member of {' | '.join(values)} '{val}' is"
         + (f" (it is {a_(_t)})" if _t else "")
@@ -1122,7 +1184,7 @@ def _narrow_suffix_of(name, test, in_body):
         return f".{m.group(1)}{m.group(2)}" if m else None
     info = _union_info(_union_type_of(name))
     if test == "is_err" and info and info["multi"]:
-        return None                 # several values: no one member is left
+        return ".value"             # several values: the union they are, whole
     if test in _NARROW_IN_ELSE:
         return _NARROW_IN_ELSE[test]
     m = _re.match(r"is_m(\d)$", test)
@@ -3594,6 +3656,7 @@ def to_nim(self, prec=None):
                             else:
                                 from hek_nim_stmt import _wrap_distinct_literal
                                 fv = _wrap_distinct_literal(fv, ftype)
+                            fv = _lift_union_field(fv, ftype)
                             # A char field given a literal: 'z' is a
                             # one-character string until something narrows it.
                             if ftype.strip() == "char":
@@ -3652,6 +3715,7 @@ def to_nim(self, prec=None):
                                 ParserState.nim_imports.add("options")
                         if av == "initHashSet()" and ftype.startswith("HashSet["):
                             av = f"initHashSet[{ftype[8:-1]}]()"
+                        av = _lift_union_field(av, ftype)
                         # If field type is a ref object class, cast to that type for proper subtype coercion
                         if ftype.strip() == "char":
                             _cl = _char_literal_arg(av)
@@ -4673,6 +4737,12 @@ def _wrap_option_args(expr):
         # xs.append(5.0) to a []Speed_T: the literal is a Speed_T
         _st = _nim_expr_type(receiver_prefix[:-1]) or ""
         _sm = _re.fullmatch(r"seq\[(\w+)\]", _st.strip())
+        _su = _re.fullmatch(r"seq\[(OneOf\d+\[.+\])\]", _st.strip())
+        if _su:
+            # xs.append(Sym_T("a")) to a []Val_T: the member is the union's own
+            _lifted_arg = _lift_union_field(args_str, _su.group(1))
+            if _lifted_arg != args_str:
+                return f"{receiver_prefix}add({_lifted_arg})"
         from ady_declarations import is_distinct
         if _sm and is_distinct(_sm.group(1)):
             from hek_nim_stmt import _wrap_distinct_literal
@@ -4790,7 +4860,7 @@ def _wrap_option_args(expr):
             _tbl = _js_table_literal(arg, ptype)
             new_args.append(kw_prefix + _tbl)
             changed = changed or _tbl != arg
-        elif ptype.strip().startswith("seq[Option[") and arg.strip().startswith("@["):
+        elif (ptype.strip().startswith(("seq[Option[", "seq[OneOf")) and arg.strip().startswith("@[")):
             _lifted = _lift_option_seq(arg, ptype)
             new_args.append(kw_prefix + _lifted)
             changed = changed or _lifted != arg
