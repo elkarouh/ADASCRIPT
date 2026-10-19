@@ -156,7 +156,7 @@ self.edges.append(Edge_T(a, b, cost))
 
 Fields are read with a dot, as in JavaScript. A record with one fixed set of
 fields is a plain record. For a value whose fields depend on which state it
-is in, Adascript has the variant record (§6).
+is in, Adascript has a union of records, one per state (§6).
 
 Callbacks are typed the same way. The browser's drag module declares what
 each callback takes and returns, then bundles them into a record. A caller
@@ -174,77 +174,64 @@ type Hooks_T is record:
 
 ## 5. Enums instead of strings
 
-A JavaScript program that tracks "which phase is the mouse in" stores a
+A JavaScript program that tracks "which kind of thing this is" stores a
 string, `"idle"`, `"pressed"`, and compares strings in several places. A
-typo in one comparison is silent. In Adascript the phases are an enum:
+typo in one comparison is silent. In Adascript the names are an enum:
 
-<!-- from: TO_NIM/STDLIB/svg_drag.ady -->
+<!-- from: EXAMPLES/phonecode.ady -->
 ```python
-type Phase_T is enum IDLE, PRESSED, DRAGGING, DROPPED
+type Digit_T is enum D0, D1, D2, D3, D4, D5, D6, D7, D8, D9
 ```
 
-and a `case` says what to do in each phase. A phase is a name the compiler
-knows, so a misspelt one is not a silent mismatch the way a string is:
-
-<!-- from: TO_NIM/STDLIB/svg_drag.ady -->
-```python
-case grip.phase:
-    when PRESSED | DRAGGING:
-        ...
-    when others:
-        pass
-```
-
-`when others` is the catch-all for the phases not listed above it.
+A name is one the compiler knows, so a misspelt one is an error, not a silent
+mismatch the way a string is. Where each state needs different data, the
+states are types instead of names (§6).
 
 ---
 
-## 6. Variant records: data that depends on the state
+## 6. Unions: data that depends on the state
 
 Suppose the mouse is held down on a node only between the press and the
 release. Before the press there is no node, and after the release there is
 none either. JavaScript holds this with a nullable variable, and the code
-checks it in every function. Adascript states the rule once, in the type:
+checks it in every function. Adascript states the rule once, in the types:
 
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
-type Grip_T (phase: Phase_T) is record:
-    case phase is
-        when PRESSED | DRAGGING:
-            node:   Element_T
-            down:   Screen_T
-            centre: Spot_T
-            now:    Spot_T
-        when others:
-            pass
+type Idle_T is record: pass
+type Pressed_T is record:
+    node:   Element_T
+    down:   Screen_T
+    centre: Spot_T
+    now:    Spot_T
+type Grip_T is Idle_T | Pressed_T | Dragging_T | Ended_T
 ```
 
-The `(phase: Phase_T)` in the heading is the discriminant. A `Grip_T` in phase
-`PRESSED` has a `node`, and a `Grip_T` in phase `IDLE` has no fields at all.
-Reading `grip.node` while the phase is `IDLE` is an error at run time, not a
-stale value, so the bug is found the first time it happens.
+Each state is a record of its own, and `Grip_T` is a union of them. A
+`Pressed_T` has a `node`, and an `Idle_T` has no fields at all. The field is
+read only where an `is` test has narrowed the value to a state that has it, so
+reading `grip.node` where the grip might be idle is not allowed.
 
-A value is made by naming its phase like a function. The file's own comment
-explains the one subtlety, which is worth knowing before you meet it: bare
-`IDLE` is the enum member, and `IDLE()` is a grip in that phase.
+A value is made by naming its state like a function. Bare `Idle_T` is the
+type, and `Idle_T()` is a grip in that state:
 
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
-var grip: Grip_T = IDLE()
+var grip: Grip_T = Idle_T()
 ```
 
-The module-level `var grip` is the one drag there is. Its phase is read by the
-listeners, and each listener changes it by assigning a new value:
+The module-level `var grip` is the one drag there is. Its state is tested by
+the listeners with `is`, and each listener changes it by assigning a new value:
 
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
-grip = PRESSED(node, screen_of(m), centre, centre)
+grip = Pressed_T(node=node, down=screen_of(m), centre=centre, now=centre)
 ```
 
-The assignment replaces the whole value at once, so the phase and its fields
-are always set together.
-
----
+The assignment replaces the whole value at once, so the state and its fields
+are always set together. The module puts each assignment in a small helper
+proc, not in the `if` that tested `grip`, which is how the file's `end_press`
+and `end_drop` are written.
 
 ## 7. Functions, and what they return
 
@@ -326,15 +313,15 @@ typed parameter, and the `on` call finds the shape a click landed on:
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
 def on_click(e: Event):
-    if grip.phase == DROPPED:
-        grip = IDLE()
+    if grip is Ended_T:
+        end_drop()
         e.stopPropagation()
         return
     setup.hooks.clicked_cb(click_of(e))
 ```
 
 The rule, that a click after a drag is swallowed before htmx sees it, is
-written out in the function itself, next to the phase it depends on.
+written out in the function itself, next to the state it depends on.
 
 ---
 
