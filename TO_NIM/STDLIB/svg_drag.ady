@@ -108,24 +108,24 @@ var setup: Setup_T                      # what draggable was given; set before a
 
 # Attribute NAME of NODE ("data_x", "data_y") as drawing units; 0 if it is not a number.
 def unit_of(node: Element_T, name: str) -> Unit_T:
-    return Unit_T(node.number(name))
+    Unit_T(node.number(name))
 
 # Where a shape's centre is, as the server last drew it.
 def spot_of(node: Element_T) -> Spot_T:
-    return Spot_T(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
+    Spot_T(x=unit_of(node, "data_x"), y=unit_of(node, "data_y"))
 
 # Where the mouse was when event M happened, on the screen.
 def screen_of(m: MouseEvent) -> Screen_T:
-    return Screen_T(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
+    Screen_T(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
 
 # The drawing's size and place on the screen, in pixels. It is asked each time: the window may
 # have been resized, and the drawing is scaled to fit the page.
 def svg_box() -> BoundingRect:
-    return page.element(setup.svg).getBoundingClientRect()
+    page.element(setup.svg).getBoundingClientRect()
 
 # How many drawing units a pixel is.
 def scale() -> Scale_T:
-    return setup.width / Pixel_T(svg_box().width)   # units / pixels: a Scale_T
+    setup.width / Pixel_T(svg_box().width)   # units / pixels: a Scale_T
 
 # Where the mouse was when event E happened, in the drawing's units: the drawing's own place
 # on the screen is taken off first, so the top left of the drawing is 0, 0.
@@ -133,7 +133,7 @@ def spot_at(e: Event) -> Spot_T:
     let m: MouseEvent = MouseEvent(e)
     let box: BoundingRect = svg_box()
     let k: Scale_T = setup.width / Pixel_T(box.width)
-    return Spot_T(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
+    Spot_T(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
 
 # ---- Changing the page ----
 
@@ -157,7 +157,7 @@ def place_at(label: Element_T, at: Spot_T):
 
 # V kept between LO and HI.
 def clamp(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
-    return max(lo, min(hi, v))
+    max(lo, min(hi, v))
 
 # For an app with nothing to do on a click.
 def no_click_cb(c: Click_T):
@@ -168,11 +168,9 @@ def no_click_cb(c: Click_T):
 # A button went down. If it is the left one (button 0) and on a shape, hold that shape.
 def on_down(e: Event):
     let m: MouseEvent = MouseEvent(e)
-    if m.button != 0:
-        return
+    return if m.button != 0
     let node: ?Element_T = on(click_of(e), setup.shapes)   # the press may be on a part of the shape
-    if node is None:
-        return                          # not on a shape: leave the event to htmx
+    return if node is None
     let centre: Spot_T = spot_of(node)
     grip = Pressed_T(node=node, down=screen_of(m), centre=centre, now=centre)
     e.preventDefault()                  # stop the browser's own drag, which selects text
@@ -190,8 +188,7 @@ def move_held(node: Element_T, down: Screen_T, centre: Spot_T, e: Event, pressed
     let at: Screen_T = screen_of(MouseEvent(e))
     let dx: Pixel_T = at.x - down.x   # how far from where it went down
     let dy: Pixel_T = at.y - down.y
-    if pressed and abs(dx) < MOVED and abs(dy) < MOVED:
-        return
+    return if pressed and abs(dx) < MOVED and abs(dy) < MOVED
     let k: Scale_T = scale()    # pixels * scale = drawing units
     let wanted: Spot_T = Spot_T(x=centre.x + dx * k, y=centre.y + dy * k)
     let now: Spot_T = setup.hooks.moved_cb(node, centre, wanted)

@@ -113,8 +113,7 @@ way is an early return, and the compiler follows it:
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
 let node: ?Element_T = on(click_of(e), setup.shapes)
-if node is None:
-    return
+return if node is None
 ```
 
 After the `return`, `node` is an `Element_T`, not a `?Element_T`, and the rest
@@ -296,7 +295,7 @@ like this:
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
 def svg_box() -> BoundingRect:
-    return page.element(setup.svg).getBoundingClientRect()
+    page.element(setup.svg).getBoundingClientRect()
 ```
 
 Where a match may be missing, `find` returns a `?Element_T`, and you narrow it
