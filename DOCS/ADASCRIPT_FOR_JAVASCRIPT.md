@@ -198,16 +198,17 @@ checks it in every function. Adascript states the rule once, in the types:
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
 type Idle_T is record: pass
-type Pressed_T is record:
+type Held_T is record:
     node:   Element_T
     down:   Screen_T
     centre: Spot_T
     now:    Spot_T
-type Grip_T is Idle_T | Pressed_T | Dragging_T | Ended_T
+    moved:  bool
+type Grip_T is Idle_T | Held_T | Ended_T
 ```
 
 Each state is a record of its own, and `Grip_T` is a union of them. A
-`Pressed_T` has a `node`, and an `Idle_T` has no fields at all. The field is
+`Held_T` has a `node`, and an `Idle_T` has no fields at all. The field is
 read only where an `is` test has narrowed the value to a state that has it, so
 reading `grip.node` where the grip might be idle is not allowed.
 
@@ -224,7 +225,7 @@ the listeners with `is`, and each listener changes it by assigning a new value:
 
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
-grip = Pressed_T(node=node, down=screen_of(m), centre=centre, now=centre)
+grip = Held_T(node=node, down=screen_of(m), centre=centre, now=centre, moved=false)
 ```
 
 The assignment replaces the whole value at once, so the state and its fields
