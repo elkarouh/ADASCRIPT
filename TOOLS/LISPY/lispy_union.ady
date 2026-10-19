@@ -112,12 +112,7 @@ def is_true(self: Val_T) -> bool:
 def __eq__(a: List_T, b: List_T) -> bool:
     """Lists are equal by their elements: List_T is a reference, whose own
     `==` would ask whether it is the same list."""
-    if len(a.items) != len(b.items):
-        return False
-    for i in 0..<len(a.items):
-        if not (a.items[i] == b.items[i]):
-            return False
-    True
+    return len(a.items) == len(b.items) and all(a.items[i] == b.items[i] for i in 0..<len(a.items))
 
 def __str__(self: Val_T) -> str:
     case self:
