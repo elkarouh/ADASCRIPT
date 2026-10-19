@@ -1,0 +1,23 @@
+#!/usr/bin/env ady2nim
+# test_record_eq_cycle.ady — a record that holds itself is still compared by its fields
+#
+#   ady2nim EXAMPLES/test_record_eq_cycle.ady -r
+#
+# A record is a value: two are equal when their fields are. Holding itself
+# makes Nim keep it by reference, whose own `==` asks for the same object --
+# so the generated code gives it a field-by-field `==`, and two separately
+# built trees are equal on Nim as they are on Python.
+
+type Tree_T is record:
+    label: str
+    kids: []Tree_T
+
+let a: Tree_T = Tree_T("x", [Tree_T("y", []), Tree_T("z", [])])
+let b: Tree_T = Tree_T("x", [Tree_T("y", []), Tree_T("z", [])])
+let c: Tree_T = Tree_T("x", [Tree_T("y", [])])
+let d: Tree_T = Tree_T("x", [Tree_T("y", []), Tree_T("w", [])])
+
+assert a == b
+assert a != c
+assert a != d
+print "test_record_eq_cycle OK"

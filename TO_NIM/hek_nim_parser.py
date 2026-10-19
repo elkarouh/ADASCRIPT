@@ -4280,6 +4280,15 @@ def to_nim(self, indent=0):
             ParserState.ref_records = set()
         ParserState.ref_records.add(name)
     result = f"{_ind(indent)}type {name}{_exp}{params} = {ref_keyword}{nim_kind}\n" + "\n".join(fields)
+    if (is_self_ref and not params and field_names
+            and name not in getattr(ParserState, "user_eq_types", ())):
+        # A record is a value: two are equal when their fields are. Made a
+        # reference to hold itself, its own `==` would ask for the same object,
+        # which no Python dataclass and no other record does.
+        _cmp = " and ".join(f"a.{f} == b.{f}" for f in field_names)
+        result += (f"\n{_ind(indent)}proc `==`{_exp}(a, b: {name}): bool {{.noSideEffect.}} =\n"
+                   f"{_ind(indent + 1)}if a.isNil or b.isNil: return a.isNil and b.isNil\n"
+                   f"{_ind(indent + 1)}{_cmp}")
     # Emit an init proc for record (object) types that have field defaults,
     # since Nim object fields don't support inline default values.
     # the defaults, for a literal that leaves fields out: `Press_T(ESCAPE)`

@@ -864,6 +864,8 @@ def translate(code, export_symbols=False):
     ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
     from ady_stmt import scan_value_cycles
     ParserState.value_cycle_classes = scan_value_cycles(code)
+    import re as _re_eq
+    ParserState.user_eq_types = set(_re_eq.findall(r"def\s+__eq__\s*\(\s*\w+\s*:\s*(\w+)", code))
     from ady_stmt import scan_constructors
     ParserState.ctor_overloads.update(scan_constructors(code))
     from ady_stmt import scan_method_overloads

@@ -91,6 +91,7 @@ STANDALONE := \
     test_env_optional.ady \
     test_optional_truthy.ady \
     test_self_ref.ady \
+    test_record_eq_cycle.ady \
     test_char_slice.ady \
     pyimport_similar.ady \
     test_pyobject_calls.ady \
