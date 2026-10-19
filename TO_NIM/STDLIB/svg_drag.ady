@@ -178,21 +178,23 @@ def on_down(e: Event):
 # The mouse moved. The browser sends this many times a second, whether a button is down or not.
 def on_move(e: Event):
     if grip is Pressed_T:
-        move_held(grip.node, grip.down, grip.centre, e, true)
+        let at: Screen_T = screen_of(MouseEvent(e))
+        let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
+        let dy: Pixel_T = at.y - grip.down.y
+        # not yet a drag: a hand shakes, and it may still be a click
+        return if abs(dx) < MOVED and abs(dy) < MOVED
+        let k: Scale_T = scale()    # pixels * scale = drawing units
+        let wanted: Spot_T = Spot_T(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
+        let now: Spot_T = setup.hooks.moved_cb(grip.node, grip.centre, wanted)
+        grip = Dragging_T(node=grip.node, down=grip.down, centre=grip.centre, now=now)
     elif grip is Dragging_T:
-        move_held(grip.node, grip.down, grip.centre, e, false)
-
-# A held shape follows the mouse. While PRESSED (`pressed`) a small move is not yet a drag: a
-# hand shakes, and it may still be a click.
-def move_held(node: Element_T, down: Screen_T, centre: Spot_T, e: Event, pressed: bool):
-    let at: Screen_T = screen_of(MouseEvent(e))
-    let dx: Pixel_T = at.x - down.x   # how far from where it went down
-    let dy: Pixel_T = at.y - down.y
-    return if pressed and abs(dx) < MOVED and abs(dy) < MOVED
-    let k: Scale_T = scale()    # pixels * scale = drawing units
-    let wanted: Spot_T = Spot_T(x=centre.x + dx * k, y=centre.y + dy * k)
-    let now: Spot_T = setup.hooks.moved_cb(node, centre, wanted)
-    grip = Dragging_T(node=node, down=down, centre=centre, now=now)
+        let at: Screen_T = screen_of(MouseEvent(e))
+        let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
+        let dy: Pixel_T = at.y - grip.down.y
+        let k: Scale_T = scale()    # pixels * scale = drawing units
+        let wanted: Spot_T = Spot_T(x=grip.centre.x + dx * k, y=grip.centre.y + dy * k)
+        let now: Spot_T = setup.hooks.moved_cb(grip.node, grip.centre, wanted)
+        grip = Dragging_T(node=grip.node, down=grip.down, centre=grip.centre, now=now)
 
 # The button came up.
 def on_up(e: Event):
