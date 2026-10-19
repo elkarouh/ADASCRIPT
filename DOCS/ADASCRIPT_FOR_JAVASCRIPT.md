@@ -164,9 +164,9 @@ passes the record in the way it would pass an options object:
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
 type Hooks_T is record:
-    moved_cb:   Moved_T
-    dropped_cb: Dropped_T
-    clicked_cb: Clicked_T
+    moved_cb:   Moved_CB_T
+    dropped_cb: Dropped_CB_T
+    clicked_cb: Clicked_CB_T
 ```
 
 ---

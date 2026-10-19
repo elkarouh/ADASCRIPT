@@ -52,15 +52,15 @@ type Spot_T is tuple:                     # a place in the drawing
 const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
 
 # What the app says a drag means (see the docstring).
-type Moved_T is (Element_T, Spot_T, Spot_T) -> Spot_T   # the shape, its centre when pressed, where the mouse has taken it -> where it is
-type Dropped_T is (Element_T, Spot_T) -> None       # the shape, where it was let go
-type Clicked_T is (Click_T) -> None                 # any click that is not the end of a drag
+type Moved_CB_T is (Element_T, Spot_T, Spot_T) -> Spot_T   # the shape, its centre when pressed, where the mouse has taken it -> where it is
+type Dropped_CB_T is (Element_T, Spot_T) -> None       # the shape, where it was let go
+type Clicked_CB_T is (Click_T) -> None                 # any click that is not the end of a drag
 
 # What the app says a drag means, as one value for draggable.
 type Hooks_T is record:
-    moved_cb:   Moved_T
-    dropped_cb: Dropped_T
-    clicked_cb: Clicked_T
+    moved_cb:   Moved_CB_T
+    dropped_cb: Dropped_CB_T
+    clicked_cb: Clicked_CB_T
 
 # What draggable was given: the shapes, the drawing, and the hooks.
 type Setup_T is record:
