@@ -11,7 +11,7 @@ Usage:
 """
 
 from ady_words import a_
-import sys, os
+import sys, os, copy
 _dir = os.path.dirname(__file__)
 sys.path.insert(0, os.path.join(_dir, ".."))
 sys.path.insert(0, os.path.join(_dir, "..", "HPARSEC"))
@@ -206,6 +206,30 @@ def _unslice_target(lhs):
 
 
 # --- assignment ---
+def _whole_target(node, text):
+    """The target TEXT of an assignment NODE, with an `if` narrowing of a bare
+    name switched off. Under `if grip is Pressed_T:` the name reads as the
+    member it proved (`grip.m1`), and so did its target, which made
+    `grip = Idle_T()` a write into that member. Assigning a whole value to the
+    name writes the whole value, so its target is rendered without the
+    narrowing. The narrowing is put back before the right-hand side is read,
+    since the right-hand side may still read the member.
+    """
+    narrowed = [n for n in getattr(ParserState, "_option_unwrap_vars", ())
+                if "." not in n and "[" not in n
+                and text == n + hek_nim_expr._narrow_suffix(n)]
+    if not narrowed:
+        return text
+    saved = (set(ParserState._option_unwrap_vars),
+             dict(getattr(ParserState, "_unwrap_suffix", None) or {}),
+             copy.deepcopy(getattr(ParserState, "_narrow_prev", None) or {}))
+    for n in narrowed:
+        ParserState._option_unwrap_vars.discard(n)
+        getattr(ParserState, "_unwrap_suffix", {}).pop(n, None)
+        getattr(ParserState, "_narrow_prev", {}).pop(n, None)
+    whole = node.to_nim()
+    ParserState._option_unwrap_vars, ParserState._unwrap_suffix, ParserState._narrow_prev = saved
+    return whole
 @method(assign_stmt)
 def to_nim(self):
     """assign_stmt: star_expressions ('=' star_expressions)+
@@ -224,6 +248,7 @@ def to_nim(self):
             collected_by_assert.discard(_n)
             parts = [self.nodes[0].to_nim()]
             break
+    parts[0] = _whole_target(self.nodes[0], parts[0])
     rhs_node = None
     for node in self.nodes[1:]:
         if not hasattr(node, "nodes") or not node.nodes:
