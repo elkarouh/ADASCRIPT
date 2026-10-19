@@ -192,22 +192,18 @@ def evaluate(x: Val_T, env: Env) -> Val_T:
     if x is not List_T:
         return x
     case x.items:
-        when [Sym_T("quote"), exp]:
-            return exp
-        when [Sym_T("if"), test, conseq, alt]:
-            return evaluate(conseq if evaluate(test, env).is_true() else alt, env)
+        when [Sym_T("quote"), exp]: exp
+        when [Sym_T("if"), test, conseq, alt]: evaluate(conseq if evaluate(test, env).is_true() else alt, env)
         when [Sym_T("define"), Sym_T(name), exp]:
             env.bindings[name] = evaluate(exp, env)
-            return Nil_T()
+            Nil_T()
         when [Sym_T("set!"), Sym_T(name), exp]:
             lookup(env, name)
             env.find(name).bindings[name] = evaluate(exp, env)
-            return Nil_T()
-        when [Sym_T("lambda"), List_T(parms), body]:
-            return Lambda([p.sym for p in parms], body, env)
-        when [head, *tail]:
-            return apply(evaluate(head, env), [evaluate(a, env) for a in tail])
-    Nil_T()
+            Nil_T()
+        when [Sym_T("lambda"), List_T(parms), body]: Lambda([p.sym for p in parms], body, env)
+        when [head, *tail]: apply(evaluate(head, env), [evaluate(a, env) for a in tail])
+        when others: Nil_T()
 
 # ---- REPL and tests
 
