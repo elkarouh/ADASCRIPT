@@ -39,7 +39,7 @@ questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only 
 gesture means in this app.
 """
 from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
-from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, between, shift, draw_line, place_at, no_click_cb, draggable
+from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, Place_T
 from backend/dijkstra_layout import WIDTH, inside, place_of
 

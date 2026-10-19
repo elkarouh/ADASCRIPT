@@ -156,7 +156,7 @@ def place_at(label: Element_T, at: Spot_T):
     label.set_attr("y", f"{at.y:.1f}")
 
 # V kept between LO and HI.
-def between(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
+def clamp(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
     return max(lo, min(hi, v))
 
 # For an app with nothing to do on a click.

@@ -22,7 +22,7 @@ The drag itself is the standard library's svg_drag, and the page its browser mod
 """
 from browser import Element_T, page, find, all, data, number, request
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
-from svg_drag import Hooks_T, Unit_T, Spot_T, spot_of, between, shift, trace, no_click_cb, draggable
+from svg_drag import Hooks_T, Unit_T, Spot_T, spot_of, clamp, shift, trace, no_click_cb, draggable
 
 const WIDTH: Unit_T = 3000.0    # the drawing's size (the svg's viewBox, and its size on the page)
 const HEIGHT: Unit_T = 2000.0
@@ -69,7 +69,7 @@ def redraw_arrows_of(node: Element_T, at: Spot_T):
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let half_w: Unit_T = Unit_T(node.number("width") / 2.0)
     let half_h: Unit_T = Unit_T(node.number("height") / 2.0)
-    let now: Spot_T = Spot_T(x=between(wanted.x, half_w, WIDTH - half_w), y=between(wanted.y, half_h, HEIGHT - half_h))
+    let now: Spot_T = Spot_T(x=clamp(wanted.x, half_w, WIDTH - half_w), y=clamp(wanted.y, half_h, HEIGHT - half_h))
     for part in page.all(f"[data_block=\"{node.data_name}\"]"):
         shift(part, centre, now)
     redraw_arrows_of(node, now)
