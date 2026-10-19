@@ -61,7 +61,7 @@ def __str__(self: Val_T) -> str:
             s
         when Sym_T: self.sym
         when Bool_T: "#t" if self.flag else "#f"
-        when Nil_T: "()"
+        when Nil_T: ""
         when Builtin_T: "#<builtin:" + self.name + ">"
         when Lambda: "#<lambda>"
         when List_T: "(" + " ".join([item'Image for item in self.items]) + ")"
@@ -194,8 +194,7 @@ def evaluate(x: Val_T, env: Env) -> Val_T:
 var env: Env = global_env()
 
 def run(program: str) -> str:
-    let v: Val_T = evaluate(parse(program), env)
-    "" if v is Nil_T else v'Image
+    evaluate(parse(program), env)'Image
 
 if $# == 1:
     let src: str | !PathFailure_T = Path($1).read_text()
