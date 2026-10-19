@@ -1538,6 +1538,23 @@ def _split_args(text):
     return [p for p in parts if p.strip()]
 
 
+_re_one_line_record = _re_dup.compile(
+    r"^([ \t]*type[ \t]+\w+[^\n:#]*?[ \t]+is[ \t]+(?:record|tuple)):[ \t]+"
+    r"(pass|\w+[ \t]*:[^#\n]*?)[ \t]*(#[^\n]*)?$", _re_dup.M)
+
+
+def expand_one_line_records(code):
+    """CODE with `type P is record: x: int` written as the two lines it
+    stands for -- a record or tuple of one field (or `pass`) fits on the
+    line, as `if c: stmt` does. A line the pattern does not fit is left."""
+    def spread(m):
+        head = m.group(1)
+        pad = head[:len(head) - len(head.lstrip())]
+        note = f"  {m.group(3)}" if m.group(3) else ""
+        return f"{head}:{note}\n{pad}    {m.group(2)}"
+    return _re_one_line_record.sub(spread, code)
+
+
 def expand_variant_literals(code):
     """CODE with every bare variant literal written out in full; CODE itself
     when it declares no variant record or uses no such literal."""

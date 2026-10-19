@@ -322,6 +322,8 @@ def translate(code):
 
     from ady_decorators import expand_decorators
     code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators
+    from ady_stmt import expand_one_line_records
+    code = expand_one_line_records(code)   # `type P is record: x: int`: see ady_stmt
     from ady_stmt import expand_type_args
     code = expand_type_args(code)              # `f[[]int](x)`: see ady_stmt
     from ady_declarations import refuse_dict_display_types

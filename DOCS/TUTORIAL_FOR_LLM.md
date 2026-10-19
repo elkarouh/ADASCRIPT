@@ -350,6 +350,10 @@ type Person is record:
 **Python output:** `@dataclass class Person: ...`
 **Nim output:** `type Person = object`
 
+A record or tuple of ONE field goes on the `type` line (`pass` = no fields):
+`type Num_T is record: num: float`, `type Nil_T is record: pass`. Two or more
+fields need the indented block.
+
 **Discriminated (variant) record** — fields depend on a tag:
 ```adascript
 type Shape_Kind is enum Circle, Rectangle

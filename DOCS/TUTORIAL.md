@@ -877,6 +877,17 @@ type Person is record:
 **Python output:** `@dataclass class Person: …`  
 **Nim output:** `type Person = object`
 
+A record (or tuple) of a single field fits on the line of its `type`, the way
+`if c: stmt` does; `pass` stands for no fields at all:
+
+```python
+type Num_T is record: num: float
+type Nil_T is record: pass
+```
+
+It means exactly the two-line form. A record with two or more fields takes
+the indented block.
+
 ### Copied on Nim, shared on Python
 
 A record is a **value** on the Nim backend and a **reference** on the Python

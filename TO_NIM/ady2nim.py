@@ -826,6 +826,8 @@ def translate(code, export_symbols=False):
     if not code.strip():
         return code
 
+    from ady_stmt import expand_one_line_records
+    code = expand_one_line_records(code)       # `type P is record: x: int`: see ady_stmt
     from hek_parsec import ParserState
     from ady_decorators import expand_decorators
     code = expand_decorators(code)             # `@aligned(64)`: see ady_decorators

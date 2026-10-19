@@ -9,18 +9,12 @@ lispy_union.ady is the fuller one (strings, cond, let, do, tail calls, ...).
 
 from math nimport *
 
-type Num_T is record:
-    num: float
-type Sym_T is record:
-    sym: str
-type Bool_T is record:
-    flag: bool
-type Nil_T is record:
-    pass
-type List_T is record:
-    items: []Val_T
-type Builtin_T is record:
-    name: str
+type Num_T is record: num: float
+type Sym_T is record: sym: str
+type Bool_T is record: flag: bool
+type Nil_T is record: pass
+type List_T is record: items: []Val_T
+type Builtin_T is record: name: str
 
 # A Scheme value. A user-defined procedure (Lambda) is a member as it is.
 type Val_T is Num_T | Sym_T | Bool_T | Nil_T | List_T | Lambda | Builtin_T
@@ -36,10 +30,8 @@ class Env:
 
     def find(self, name: str) -> ?Env:
         """The innermost frame that binds `name`; None if none."""
-        if name in self.bindings:
-            return self
-        if self.outer is None:
-            return None
+        return self if name in self.bindings
+        return None if self.outer is None
         self.outer.find(name)
 
 class Lambda:
@@ -91,8 +83,7 @@ class Reader:
         self.tokens = tokens
 
     def read_form(self) -> Val_T:
-        if self.pos >= len(self.tokens):
-            return fail("unexpected EOF while reading")
+        return fail("unexpected EOF while reading") if self.pos >= len(self.tokens)
         let token: str = self.tokens[self.pos]
         self.pos += 1
         if token == "(":
@@ -101,8 +92,7 @@ class Reader:
                 items.append(self.read_form())
             self.pos += 1                      # the ')'
             return List_T(items)
-        if token == ")":
-            return fail("unexpected )")
+        return fail("unexpected )") if token == ")"
         atom(token)
 
 def parse(program: str) -> Val_T:
@@ -113,9 +103,7 @@ def parse(program: str) -> Val_T:
 
 def lookup(env: Env, name: str) -> Val_T:
     let frame: ?Env = env.find(name)
-    if frame is None:
-        return fail(f"unbound variable: {name}")
-    frame.bindings[name]
+    return fail(f"unbound variable: {name}") if frame is None else frame.bindings[name]
 
 def global_env() -> Env:
     var env: Env = Env(None)

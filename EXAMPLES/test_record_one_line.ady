@@ -1,0 +1,11 @@
+# A record or tuple of one field fits on the line of its `type`.
+type Num_T is record: num: float
+type Nil_T is record: pass        # no fields
+type Pair_T is tuple: first: int  # a tuple too
+
+let n: Num_T = Num_T(2.5)
+let p: Pair_T = Pair_T(7)
+assert n.num == 2.5
+assert p.first == 7
+assert Nil_T() == Nil_T()
+print "test_record_one_line OK"
