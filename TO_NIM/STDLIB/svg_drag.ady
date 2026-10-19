@@ -197,32 +197,22 @@ def move_held(node: Element_T, down: Screen_T, centre: Spot_T, e: Event, pressed
 # The button came up.
 def on_up(e: Event):
     if grip is Pressed_T:
-        end_press()
+        grip = Idle_T()                 # it never moved: a click, which the browser sends next and htmx handles
     elif grip is Dragging_T:
-        end_drag(grip)
-
-# It never moved: a click, which the browser sends next and htmx handles.
-def end_press():
-    grip = Idle_T()
-
-# Still DRAGGING while the app answers, so a click it makes (on a form's button) goes through
-# on_click.
-def end_drag(dragged: Dragging_T):
-    setup.hooks.dropped_cb(dragged.node, dragged.now)
-    grip = Ended_T()
+        # still DRAGGING while the app answers, so a click it makes (on a form's button)
+        # goes through on_click
+        setup.hooks.dropped_cb(grip.node, grip.now)
+        grip = Ended_T()
 
 # A click. The browser sends one after every mouseup, a drag's too; htmx would take that one
-# as a click on the shape. So after a drag (DROPPED) the click is stopped here, before htmx
+# as a click on the shape. So after a drag (ENDED) the click is stopped here, before htmx
 # sees it. Any other click is the app's first.
 def on_click(e: Event):
     if grip is Ended_T:
-        end_drop()
+        grip = Idle_T()
         e.stopPropagation()             # the event goes no further up the tree, so htmx never sees it
         return
     setup.hooks.clicked_cb(click_of(e))
-
-def end_drop():
-    grip = Idle_T()
 
 # Make the shapes SHAPES (a CSS selector) of the drawing DRAWING (the <svg>, WIDTH units wide)
 # draggable: HOOKS say what a drag means (see the docstring).

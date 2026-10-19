@@ -228,9 +228,8 @@ grip = Pressed_T(node=node, down=screen_of(m), centre=centre, now=centre)
 ```
 
 The assignment replaces the whole value at once, so the state and its fields
-are always set together. The module puts each assignment in a small helper
-proc, not in the `if` that tested `grip`, which is how the file's `end_press`
-and `end_drop` are written.
+are always set together, even when it is made inside the `if` that tested
+`grip`.
 
 ## 7. Functions, and what they return
 
@@ -313,7 +312,7 @@ typed parameter, and the `on` call finds the shape a click landed on:
 ```python
 def on_click(e: Event):
     if grip is Ended_T:
-        end_drop()
+        grip = Idle_T()
         e.stopPropagation()
         return
     setup.hooks.clicked_cb(click_of(e))
