@@ -1891,6 +1891,20 @@ def _is_literal_nim(nim_text):
     return False
 
 
+def _register_pattern_lets(lets):
+    """The names a pattern binds are typed by what they are bound to, as a
+    `let` of the same expression would be: `Sym_T(name)` binds the str that
+    is the member's field, `List_T(sig)` the list."""
+    import re as _re_pl
+    from hek_nim_expr import _nim_expr_type
+    for ln in lets:
+        m = _re_pl.match(r"^\s*let (\w+) = (.+)$", ln)
+        if m:
+            t = _nim_expr_type(m.group(2))
+            if t:
+                ParserState.symbol_table.add(m.group(1), t, "let")
+
+
 def _structural_conds_and_bindings(pat_node, subj, indent):
     """Recursively compute (conditions, let_lines) for a structural pattern.
 
@@ -2273,6 +2287,7 @@ def _guarded_chain_nim(branches, subject, indent):
                 result += f"\n{_ind(indent)}else:{hc}\n{body}"
         else:
             conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
+            _register_pattern_lets(lets)
             if not conds and _is_literal_nim(pat_nim):
                 conds = [_literal_cond_nim(subject, pat_nim)]
             if guard_node:
@@ -2598,6 +2613,12 @@ def to_nim(self, indent=0):
         keyword = "if"
         for pat_node, block_node, guard_node in _extract_branches(self):
             hc = _block_inline_header_comment(block_node) if block_node else ""
+            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
+            # the names a pattern binds are known to its body
+            conds, lets = ([], [])
+            if pat_nim not in ("others", "_"):
+                conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
+                _register_pattern_lets(lets)
             body = ""
             if block_node:
                 try:
@@ -2605,13 +2626,11 @@ def to_nim(self, indent=0):
                 except TypeError:
                     body = _ind(indent + 1) + block_node.to_nim()
 
-            pat_nim = pat_node.to_nim() if hasattr(pat_node, "to_nim") else str(pat_node)
             # others / wildcard → else branch
             if pat_nim in ("others", "_"):
                 result += f"\n{_ind(indent)}else:{hc}\n{body}"
                 continue
 
-            conds, lets = _structural_conds_and_bindings(pat_node, subject, indent + 1)
             if guard_node is not None:
                 conds.append(_guard_cond_nim(guard_node, lets))
             cond_str = " and ".join(conds) if conds else "true"

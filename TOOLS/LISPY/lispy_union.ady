@@ -98,35 +98,6 @@ def fail(message: str) -> Val_T:
 # Val_T methods (free procs; dot-call works via Nim UFCS)
 # --------------------------------------------------------
 
-# What a procedure reads out of an argument it expects to be of one type.
-# A union has no field of its own to read: it is the member that has it, so
-# each of these asks which member it holds, and stops the program, as a Scheme
-# error, when it is the wrong one.
-
-def num_of(self: Val_T) -> float:
-    if self is Num_T:
-        return self.num
-    print(f"Error: expected a number, got {self}")
-    quit(1)
-
-def sym_of(self: Val_T) -> str:
-    if self is Sym_T:
-        return self.sym
-    print(f"Error: expected a symbol, got {self}")
-    quit(1)
-
-def text_of(self: Val_T) -> str:
-    if self is Str_T:
-        return self.text
-    print(f"Error: expected a string, got {self}")
-    quit(1)
-
-def items_of(self: Val_T) -> []Val_T:
-    if self is List_T:
-        return self.items
-    print(f"Error: expected a list, got {self}")
-    quit(1)
-
 def is_pair(self: Val_T) -> bool:
     case self:
         when List_T: len(self.items) > 0
@@ -140,15 +111,15 @@ def is_true(self: Val_T) -> bool:
 
 def __eq__(a: Val_T, b: Val_T) -> bool:
     case a:
-        when Num_T: b is Num_T and a.num == num_of(b)
-        when Sym_T: b is Sym_T and a.sym == sym_of(b)
-        when Str_T: b is Str_T and a.text == text_of(b)
+        when Num_T: b is Num_T and a.num == b.num
+        when Sym_T: b is Sym_T and a.sym == b.sym
+        when Str_T: b is Str_T and a.text == b.text
         when Bool_T: b is Bool_T and a.flag == b.flag
         when Nil_T: b is Nil_T
         when List_T:
             if b is not List_T:
                 return False
-            let other: []Val_T = items_of(b)
+            let other: []Val_T = b.items
             if len(a.items) != len(other):
                 return False
             for i in 0..<len(a.items):
@@ -387,11 +358,11 @@ def parse_lambda_params(param_list: []Val_T) -> ([]str, str):
     var rest_parm: str = ""
     var i: int = 0
     while i < len(param_list):
-        if sym_of(param_list[i]) == ".":
+        if param_list[i].sym == ".":
             if i + 1 < len(param_list):
-                rest_parm = sym_of(param_list[i+1])
+                rest_parm = param_list[i+1].sym
             break
-        parms.append(sym_of(param_list[i]))
+        parms.append(param_list[i].sym)
         i += 1
     (parms, rest_parm)
 
@@ -424,84 +395,84 @@ class Interpreter:
     def builtin(self, name: str, args: []Val_T) -> Val_T:
         case name:
             when "+":
-                Num_T(sum(num_of(a) for a in args))
+                Num_T(sum(a.num for a in args))
             when "-":
                 if len(args) == 1:
-                    return Num_T(-num_of(args[0]))
-                var acc: float = num_of(args[0])
+                    return Num_T(-args[0].num)
+                var acc: float = args[0].num
                 for i in 1..len(args)-1:
-                    acc -= num_of(args[i])
+                    acc -= args[i].num
                 Num_T(acc)
             when "*":
                 var acc: float = 1.0
                 for a in args:
-                    acc *= num_of(a)
+                    acc *= a.num
                 Num_T(acc)
             when "/":
                 if len(args) == 1:
-                    return Num_T(1.0 / num_of(args[0]))
-                var acc: float = num_of(args[0])
+                    return Num_T(1.0 / args[0].num)
+                var acc: float = args[0].num
                 for i in 1..len(args)-1:
-                    acc /= num_of(args[i])
+                    acc /= args[i].num
                 Num_T(acc)
             when "<" | ">" | "<=" | ">=" | "=":
                 for i in 0..len(args)-2:
-                    if not compare_nums(name, num_of(args[i]), num_of(args[i+1])):
+                    if not compare_nums(name, args[i].num, args[i+1].num):
                         return Bool_T(False)
                 Bool_T(True)
-            when "abs": Num_T(abs(num_of(args[0])))
+            when "abs": Num_T(abs(args[0].num))
             when "max":
-                var m: float = num_of(args[0])
+                var m: float = args[0].num
                 for i in 1..len(args)-1:
-                    if num_of(args[i]) > m:
-                        m = num_of(args[i])
+                    if args[i].num > m:
+                        m = args[i].num
                 Num_T(m)
             when "min":
-                var m: float = num_of(args[0])
+                var m: float = args[0].num
                 for i in 1..len(args)-1:
-                    if num_of(args[i]) < m:
-                        m = num_of(args[i])
+                    if args[i].num < m:
+                        m = args[i].num
                 Num_T(m)
-            when "round": Num_T(float(round(num_of(args[0]))))
-            when "floor": Num_T(floor(num_of(args[0])))
-            when "ceil": Num_T(ceil(num_of(args[0])))
-            when "sqrt": Num_T(sqrt(num_of(args[0])))
-            when "expt": Num_T(pow(num_of(args[0]), num_of(args[1])))
-            when "sin": Num_T(sin(num_of(args[0])))
-            when "cos": Num_T(cos(num_of(args[0])))
-            when "tan": Num_T(tan(num_of(args[0])))
+            when "round": Num_T(float(round(args[0].num)))
+            when "floor": Num_T(floor(args[0].num))
+            when "ceil": Num_T(ceil(args[0].num))
+            when "sqrt": Num_T(sqrt(args[0].num))
+            when "expt": Num_T(pow(args[0].num, args[1].num))
+            when "sin": Num_T(sin(args[0].num))
+            when "cos": Num_T(cos(args[0].num))
+            when "tan": Num_T(tan(args[0].num))
             when "atan":
                 if len(args) == 2:
-                    return Num_T(arctan2(num_of(args[0]), num_of(args[1])))
-                Num_T(arctan(num_of(args[0])))
+                    return Num_T(arctan2(args[0].num, args[1].num))
+                Num_T(arctan(args[0].num))
             when "log":
                 if len(args) == 2:
-                    return Num_T(ln(num_of(args[0])) / ln(num_of(args[1])))
-                Num_T(ln(num_of(args[0])))
-            when "truncate": Num_T(float(int(num_of(args[0]))))
+                    return Num_T(ln(args[0].num) / ln(args[1].num))
+                Num_T(ln(args[0].num))
+            when "truncate": Num_T(float(int(args[0].num)))
             when "modulo":
-                var a: int = int(num_of(args[0]))
-                var b: int = int(num_of(args[1]))
+                var a: int = int(args[0].num)
+                var b: int = int(args[1].num)
                 var r: int = a % b
                 if r != 0 and (r < 0) != (b < 0):
                     r += b
                 Num_T(float(r))
             when "remainder":
-                var a: int = int(num_of(args[0]))
-                var b: int = int(num_of(args[1]))
+                var a: int = int(args[0].num)
+                var b: int = int(args[1].num)
                 Num_T(float(a % b))
-            when "quotient": Num_T(float(int(num_of(args[0])) // int(num_of(args[1]))))
+            when "quotient": Num_T(float(int(args[0].num) // int(args[1].num)))
             when "gcd":
-                var a: int = int(abs(num_of(args[0])))
-                var b: int = int(abs(num_of(args[1])))
+                var a: int = int(abs(args[0].num))
+                var b: int = int(abs(args[1].num))
                 while b != 0:
                     var t: int = b
                     b = a % b
                     a = t
                 Num_T(float(a))
             when "lcm":
-                var a: int = int(abs(num_of(args[0])))
-                var b: int = int(abs(num_of(args[1])))
+                var a: int = int(abs(args[0].num))
+                var b: int = int(abs(args[1].num))
                 var g: int = a
                 var r: int = b
                 while r != 0:
@@ -509,7 +480,7 @@ class Interpreter:
                     r = g % r
                     g = t
                 Num_T(float(a // g * b))
-            when "exact->inexact" | "inexact->exact": Num_T(num_of(args[0]))
+            when "exact->inexact" | "inexact->exact": Num_T(args[0].num)
             when "not": Bool_T(not args[0].is_true())
             when "eq?" | "equal?": Bool_T(args[0] == args[1])
             when "null?": Bool_T(args[0] is Nil_T or (args[0] is List_T and len(args[0].items) == 0))
@@ -523,11 +494,11 @@ class Interpreter:
             when "car":
                 if not args[0].is_pair():
                     return fail("car of non-pair")
-                items_of(args[0])[0]
+                args[0].items[0]
             when "cdr":
                 if not args[0].is_pair():
                     return fail("cdr of non-pair")
-                List_T(items_of(args[0])[1..len(items_of(args[0]))-1])
+                List_T(args[0].items[1..len(args[0].items)-1])
             when "cons":
                 if args[1] is List_T:
                     var new_items: []Val_T = [args[0]]
@@ -549,8 +520,8 @@ class Interpreter:
                 List_T(built)
             when "reverse":
                 var rev: []Val_T
-                for i in 0..len(items_of(args[0]))-1:
-                    rev.append(items_of(args[0])[len(items_of(args[0]))-1-i])
+                for i in 0..len(args[0].items)-1:
+                    rev.append(args[0].items[len(args[0].items)-1-i])
                 List_T(rev)
             when "display":
                 print args[0]'Image
@@ -558,61 +529,61 @@ class Interpreter:
             when "newline":
                 print("")
                 Nil_T()
-            when "even?": Bool_T(int(num_of(args[0])) % 2 == 0)
-            when "odd?": Bool_T(int(num_of(args[0])) % 2 != 0)
-            when "zero?": Bool_T(num_of(args[0]) == 0.0)
-            when "positive?": Bool_T(num_of(args[0]) > 0.0)
-            when "negative?": Bool_T(num_of(args[0]) < 0.0)
+            when "even?": Bool_T(int(args[0].num) % 2 == 0)
+            when "odd?": Bool_T(int(args[0].num) % 2 != 0)
+            when "zero?": Bool_T(args[0].num == 0.0)
+            when "positive?": Bool_T(args[0].num > 0.0)
+            when "negative?": Bool_T(args[0].num < 0.0)
             when "number->string": Str_T(args[0]'Image)
             when "string->number":
-                var parsed: Val_T = parse_atom(text_of(args[0]))
+                var parsed: Val_T = parse_atom(args[0].text)
                 if parsed is Num_T:
                     return parsed
                 Bool_T(False)
-            when "string-length": Num_T(float(len(text_of(args[0]))))
+            when "string-length": Num_T(float(len(args[0].text)))
             when "string-append":
                 var s: str = ""
                 for a in args:
-                    s += text_of(a)
+                    s += a.text
                 Str_T(s)
-            when "string=?" | "string<?" | "string>?" | "string<=?" | "string>=?": Bool_T(compare_strs(name, text_of(args[0]), text_of(args[1])))
+            when "string=?" | "string<?" | "string>?" | "string<=?" | "string>=?": Bool_T(compare_strs(name, args[0].text, args[1].text))
             when "substring":
-                var s: str = text_of(args[0])
-                var start: int = int(num_of(args[1]))
-                var stop: int = int(num_of(args[2])) if len(args) > 2 else len(s)
+                var s: str = args[0].text
+                var start: int = int(args[1].num)
+                var stop: int = int(args[2].num) if len(args) > 2 else len(s)
                 Str_T(s[start..stop-1])
-            when "string-copy": Str_T(text_of(args[0]))
-            when "string-upcase": Str_T(text_of(args[0]).toUpper())
-            when "string-downcase": Str_T(text_of(args[0]).toLower())
+            when "string-copy": Str_T(args[0].text)
+            when "string-upcase": Str_T(args[0].text.toUpper())
+            when "string-downcase": Str_T(args[0].text.toLower())
             when "string->list":
                 var items: []Val_T
-                for c in text_of(args[0]):
+                for c in args[0].text:
                     items.append(Str_T(c'Image))
                 List_T(items)
             when "list->string":
                 var s: str = ""
-                for item in items_of(args[0]):
-                    s += text_of(item)
+                for item in args[0].items:
+                    s += item.text
                 Str_T(s)
             when "list-tail":
-                var lst: []Val_T = items_of(args[0])
-                var k: int = int(num_of(args[1]))
+                var lst: []Val_T = args[0].items
+                var k: int = int(args[1].num)
                 List_T(lst[k..len(lst)-1])
-            when "list-ref": items_of(args[0])[int(num_of(args[1]))]
+            when "list-ref": args[0].items[int(args[1].num)]
             when "assoc" | "assv" | "assq":
                 let key: Val_T = args[0]
-                for pair in items_of(args[1]):
+                for pair in args[1].items:
                     if pair is List_T and len(pair.items) > 0 and pair.items[0] == key:
                         return pair
                 Bool_T(False)
             when "member" | "memv" | "memq":
-                for i in 0..len(items_of(args[1]))-1:
-                    if items_of(args[1])[i] == args[0]:
-                        return List_T(items_of(args[1])[i..len(items_of(args[1]))-1])
+                for i in 0..len(args[1].items)-1:
+                    if args[1].items[i] == args[0]:
+                        return List_T(args[1].items[i..len(args[1].items)-1])
                 Bool_T(False)
             when "filter":
                 var built: []Val_T
-                for item in items_of(args[1]):
+                for item in args[1].items:
                     if self.apply(args[0], [item]).is_true():
                         built.append(item)
                 List_T(built)
@@ -631,7 +602,7 @@ class Interpreter:
     def expand_qq(self, x: Val_T, e: Env) -> Val_T:
         if x is not List_T:
             return x
-        let parts: []Val_T = items_of(x)
+        let parts: []Val_T = x.items
         case parts:
             when [Sym_T("unquote"), form]: return self.evaluate(form, e)
         var expanded: []Val_T
@@ -639,10 +610,10 @@ class Interpreter:
             if item is not List_T:
                 expanded.append(item)
                 continue
-            case items_of(item):
+            case item.items:
                 when [Sym_T("unquote"), form]: expanded.append(self.evaluate(form, e))
                 when [Sym_T("unquote-splicing"), form]:
-                    for sv in items_of(self.evaluate(form, e)):
+                    for sv in self.evaluate(form, e).items:
                         expanded.append(sv)
                 when others: expanded.append(self.expand_qq(item, e))
         List_T(expanded)
@@ -665,7 +636,7 @@ class Interpreter:
                 when Sym_T: return e.lookup(x.sym)
                 when List_T: pass
                 when others: return x
-            let form_items: []Val_T = items_of(x)
+            let form_items: []Val_T = x.items
             if len(form_items) == 0:
                 return Nil_T()
 
@@ -687,7 +658,7 @@ class Interpreter:
                     return Nil_T()
                 when [Sym_T("define"), List_T(sig), *body]:
                     let (parms, rest_parm) = parse_lambda_params(sig[1..len(sig)-1])
-                    e.define(sym_of(sig[0]), Lambda(parms, rest_parm, wrap_body(body), e))
+                    e.define(sig[0].sym, Lambda(parms, rest_parm, wrap_body(body), e))
                     return Nil_T()
                 when [Sym_T("set!"), Sym_T(var_name), expr]:
                     e.assign(var_name, self.evaluate(expr, e))
@@ -717,11 +688,11 @@ class Interpreter:
                 when [Sym_T("cond"), *clauses]:
                     var found: bool = False
                     for clause in clauses:
-                        let test_val: Val_T = self.evaluate(items_of(clause)[0], e)
+                        let test_val: Val_T = self.evaluate(clause.items[0], e)
                         if test_val.is_true():
-                            if len(items_of(clause)) == 1:
+                            if len(clause.items) == 1:
                                 return test_val
-                            x = self.eval_prefix(items_of(clause)[1..len(items_of(clause))-1], e)
+                            x = self.eval_prefix(clause.items[1..len(clause.items)-1], e)
                             found = True
                             break
                     if not found:
@@ -731,8 +702,8 @@ class Interpreter:
                     var parms: []str
                     var inits: []Val_T
                     for bnd in bind_list:
-                        parms.append(sym_of(items_of(bnd)[0]))
-                        inits.append(self.evaluate(items_of(bnd)[1], e))
+                        parms.append(bnd.items[0].sym)
+                        inits.append(self.evaluate(bnd.items[1], e))
                     let lam_body: Val_T = wrap_body(body)
                     var loop_env: Env = Env(e)
                     loop_env.define(loop_name, Lambda(parms, "", lam_body, loop_env))
@@ -743,23 +714,23 @@ class Interpreter:
                 when [Sym_T("let"), List_T(bind_list), *body]:
                     var let_env: Env = Env(e)
                     for bnd in bind_list:
-                        let_env.define(sym_of(items_of(bnd)[0]), self.evaluate(items_of(bnd)[1], e))
+                        let_env.define(bnd.items[0].sym, self.evaluate(bnd.items[1], e))
                     x = self.eval_prefix(body, let_env)
                     e = let_env
                 when [Sym_T("let*"), List_T(bind_list), *body]:
                     var cur_env: Env = e
                     for bnd in bind_list:
                         var next_env: Env = Env(cur_env)
-                        next_env.define(sym_of(items_of(bnd)[0]), self.evaluate(items_of(bnd)[1], cur_env))
+                        next_env.define(bnd.items[0].sym, self.evaluate(bnd.items[1], cur_env))
                         cur_env = next_env
                     x = self.eval_prefix(body, cur_env)
                     e = cur_env
                 when [Sym_T("letrec"), List_T(bind_list), *body]:
                     var rec_env: Env = Env(e)
                     for bnd in bind_list:
-                        rec_env.define(sym_of(items_of(bnd)[0]), Nil_T())
+                        rec_env.define(bnd.items[0].sym, Nil_T())
                     for bnd in bind_list:
-                        rec_env.define(sym_of(items_of(bnd)[0]), self.evaluate(items_of(bnd)[1], rec_env))
+                        rec_env.define(bnd.items[0].sym, self.evaluate(bnd.items[1], rec_env))
                     x = self.eval_prefix(body, rec_env)
                     e = rec_env
                 when [Sym_T("when"), test, *stmts]:
@@ -778,13 +749,13 @@ class Interpreter:
                     var do_vars: []str
                     var do_steps: []Val_T
                     for spec in var_specs:
-                        let vname: str = sym_of(items_of(spec)[0])
-                        do_env.define(vname, self.evaluate(items_of(spec)[1], e))
+                        let vname: str = spec.items[0].sym
+                        do_env.define(vname, self.evaluate(spec.items[1], e))
                         do_vars.append(vname)
-                        if len(items_of(spec)) > 2:
-                            do_steps.append(items_of(spec)[2])
+                        if len(spec.items) > 2:
+                            do_steps.append(spec.items[2])
                         else:
-                            do_steps.append(items_of(spec)[0])
+                            do_steps.append(spec.items[0])
                     while not self.evaluate(term_clause[0], do_env).is_true():
                         for stmt in do_body:
                             var ignored: Val_T = self.evaluate(stmt, do_env)
@@ -801,19 +772,19 @@ class Interpreter:
                     let pv: Val_T = self.evaluate(proc_expr, e)
                     let arg_list: Val_T = self.evaluate(args_expr, e)
                     if pv is Lambda:
-                        e = pv.call_env(items_of(arg_list))
+                        e = pv.call_env(arg_list.items)
                         x = pv.body
                     else:
-                        return self.apply(pv, items_of(arg_list))
+                        return self.apply(pv, arg_list.items)
                 when [Sym_T("map"), proc_expr, list_expr]:
                     let pv: Val_T = self.evaluate(proc_expr, e)
                     var mapped: []Val_T
-                    for item in items_of(self.evaluate(list_expr, e)):
+                    for item in self.evaluate(list_expr, e).items:
                         mapped.append(self.apply(pv, [item]))
                     return List_T(mapped)
                 when [Sym_T("for-each"), proc_expr, list_expr]:
                     let pv: Val_T = self.evaluate(proc_expr, e)
-                    for item in items_of(self.evaluate(list_expr, e)):
+                    for item in self.evaluate(list_expr, e).items:
                         var ignored: Val_T = self.apply(pv, [item])
                     return Nil_T()
                 when [head, *tail]:

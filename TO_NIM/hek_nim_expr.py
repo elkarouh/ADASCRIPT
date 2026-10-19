@@ -433,6 +433,17 @@ def _lift_option_seq(val, declared):
     return "@[" + ", ".join(out) + "]"
 
 
+def _union_member_with_field(expr, field):
+    """The index of the member of the plain union EXPR is whose record or
+    class has a field FIELD -- when exactly one has -- else None."""
+    info = _union_info(_union_type_of(expr))
+    if info is None or info["kind"] != "plain":
+        return None
+    hits = [i for i, m in enumerate(info["values"])
+            if field in ParserState.class_field_types.get(m, {})]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _union_of_member(type_name):
     """(the Nim union, the index of TYPE_NAME in it) for a type that exactly
     one named union -- `type Val_T is Num_T | Sym_T` -- has as a member, or
@@ -1454,6 +1465,12 @@ def _nim_expr_type(expr):
                 # Table never had `.keys` appended and did not compile --
                 # while the same loop over a bare name did.
                 _bt = _re.sub(r'^var\s+', '', bt)
+                _mm = _re.match(r"m(\d)$", field)
+                if _mm and _bt.startswith("OneOf"):
+                    # member N of a union
+                    _vals = (_union_info(_bt) or {}).get("values") or []
+                    if int(_mm.group(1)) < len(_vals):
+                        return _vals[int(_mm.group(1))]
                 _ft = getattr(ParserState, "class_field_types", {}).get(_bt, {}).get(field)
                 if _ft:
                     return _ft
@@ -1464,6 +1481,20 @@ def _nim_expr_type(expr):
                 _ft = getattr(ParserState, "class_field_types", {}).get(_cls, {}).get(field)
                 if _ft:
                     return _ft
+            return None
+
+        # a field or member of something that is not a plain name:
+        # `args[0].m5.items`, `x.items[0].m1`
+        gen_m = _re.match(r"^(.+)\.([A-Za-z_]\w*)$", s)
+        if gen_m and not _re.match(r"^[A-Za-z_]\w*$", gen_m.group(1)):
+            _bt = _resolve(gen_m.group(1))
+            if _bt:
+                _bt = _re.sub(r"^var\s+", "", _bt)
+                _mm = _re.match(r"m(\d)$", gen_m.group(2))
+                if _mm and _bt.startswith("OneOf"):
+                    _vals = (_union_info(_bt) or {}).get("values") or []
+                    return _vals[int(_mm.group(1))] if int(_mm.group(1)) < len(_vals) else None
+                return getattr(ParserState, "class_field_types", {}).get(_bt, {}).get(gen_m.group(2))
             return None
 
         # subscript: base[index]
@@ -4078,6 +4109,13 @@ def to_nim(self, prec=None):
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
+                # `x.num` on a union x: the field of the one member that has it,
+                # read through m<i>, which stops the program when x holds another
+                if next_tr is None or type(next_tr).__name__ != "call_trailer":
+                    _um = _union_member_with_field(result, method_name)
+                    if _um is not None:
+                        result = f"{result}.m{_um}.{method_name}"
+                        continue
                 # Only a call is a method: a record field that shares a
                 # Python method's name -- `r.index[k]`, `r.get`, `r.lower`
                 # -- is read as it is, not renamed to find / getOrDefault /
