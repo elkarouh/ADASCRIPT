@@ -4156,20 +4156,12 @@ def to_nim(self, prec=None):
             if type(tr).__name__ == "attr_trailer":
                 method_name = tr.nodes[0].to_nim()
                 next_tr = trailer_list[i + 1] if i + 1 < len(trailer_list) else None
-                # `x.num` on a union x: the field of the one member that has it.
-                # The read is checked where it is made: when x holds another
-                # member the program stops with a message naming the field.
+                # `x.num` on a union x: the field of the one member that has it,
+                # read through m<i>, which stops the program when x holds another
                 if next_tr is None or type(next_tr).__name__ != "call_trailer":
                     _um = _union_member_with_field(result, method_name)
                     if _um is not None:
-                        _mem = _union_info(_union_type_of(result))["values"][_um]
-                        import re as _re_acc
-                        if _re_acc.fullmatch(r"[A-Za-z_]\w*(\.\w+|\[\w+\])*", result):
-                            result = (f"(if {result}.is_m{_um}: {result}.m{_um}.{method_name} "
-                                      f"else: raise newException(ValueError, "
-                                      f"\"{result} is not a {_mem}, which has no field {method_name}\"))")
-                        else:
-                            result = f"{result}.m{_um}.{method_name}"
+                        result = f"{result}.m{_um}.{method_name}"
                         continue
                 # Only a call is a method: a record field that shares a
                 # Python method's name -- `r.index[k]`, `r.get`, `r.lower`

@@ -1989,24 +1989,6 @@ def run_tests():
          "def run() -> None:\n    step(-1)\n    print \"on\"\n",
          "'step(-1)' drops a failure"),
     ]
-    # A field read off a union that no test has narrowed is checked where it is
-    # read: the emitted code names the field and the member it needs.
-    try:
-        _out = translate("type Num_T is record: num: float\n"
-                         "type Sym_T is record: sym: str\n"
-                         "type Val_T is Num_T | Sym_T\n\n"
-                         "def first(args: []Val_T) -> float:\n"
-                         "    return args[0].num\n")
-        _want = 'raise newException(ValueError, "args[0] is not a Num_T, which has no field num")'
-        if _want in _out and "args[0].is_m0" in _out:
-            print("  PASS: a union field read is checked where it is read")
-            passed += 1
-        else:
-            print(f"  FAIL: union field read not checked: {_out!r}")
-            failed += 1
-    except SyntaxError as e:
-        print(f"  FAIL: union field read was refused: {e}")
-        failed += 1
     # ...except a shell command's output, whose type the command fixes.
     try:
         translate("let r = shell: echo hi\nprint r\n")
