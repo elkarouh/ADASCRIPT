@@ -1,0 +1,262 @@
+#!/usr/bin/env ady2nim
+"""Norvig's lis.py -- the same features and no more -- with a union for a value.
+
+lispy.py is 144 lines and has no types. This is the same interpreter with the
+Scheme value declared as a union, for a like-for-like count: numbers, symbols,
+lists, quote / if / define / set! / lambda / calls, and lis.py's procedures.
+lispy_union.ady is the fuller one (strings, cond, let, do, tail calls, ...).
+"""
+
+from math nimport *
+
+type Num_T is record:
+    num: float
+type Sym_T is record:
+    sym: str
+type Bool_T is record:
+    flag: bool
+type Nil_T is record:
+    pass
+type List_T is record:
+    items: []Val_T
+type Builtin_T is record:
+    name: str
+
+# A Scheme value. A user-defined procedure (Lambda) is a member as it is.
+type Val_T is Num_T | Sym_T | Bool_T | Nil_T | List_T | Lambda | Builtin_T
+
+class Env:
+    """A frame of bindings and the frame it is nested in."""
+    var bindings: {str}Val_T
+    var outer:    ?Env
+
+    def __init__(self, outer: ?Env):
+        self.bindings = {:}
+        self.outer = outer
+
+    def find(self, name: str) -> ?Env:
+        """The innermost frame that binds `name`; None if none."""
+        if name in self.bindings:
+            return self
+        if self.outer is None:
+            return None
+        self.outer.find(name)
+
+class Lambda:
+    """A user-defined procedure: parameters, body, and the frame it closes over."""
+    var parms: []str
+    var body:  Val_T
+    var env:   Env
+
+    def __init__(self, parms: []str, body: Val_T, env: Env):
+        self.parms = parms
+        self.body = body
+        self.env = env
+
+def fail(message: str) -> Val_T:
+    print(f"Error: {message}")
+    quit(1)
+
+def is_true(self: Val_T) -> bool:
+    not (self is Bool_T and not self.flag)
+
+def __str__(self: Val_T) -> str:
+    case self:
+        when Num_T:
+            var s: str = self.num'Image
+            if s.endswith(".0"):
+                s = s[0..len(s)-3]
+            s
+        when Sym_T: self.sym
+        when Bool_T: "#t" if self.flag else "#f"
+        when Nil_T: "()"
+        when Builtin_T: "#<builtin:" + self.name + ">"
+        when Lambda: "#<lambda>"
+        when List_T: "(" + " ".join([item'Image for item in self.items]) + ")"
+
+# ---- parsing
+
+def tokenize(s: str) -> []str:
+    s.replace("(", " ( ").replace(")", " ) ").split()
+
+def atom(token: str) -> Val_T:
+    let num: float | !ParseFailure_T = parse_float(token)
+    if num is ParseFailure_T:
+        return Sym_T(token)
+    Num_T(num)
+
+class Reader:
+    var tokens: []str
+    var pos:    int = 0
+
+    def __init__(self, tokens: []str):
+        self.tokens = tokens
+
+    def read_form(self) -> Val_T:
+        if self.pos >= len(self.tokens):
+            return fail("unexpected EOF while reading")
+        let token: str = self.tokens[self.pos]
+        self.pos += 1
+        if token == "(":
+            var items: []Val_T
+            while self.pos < len(self.tokens) and self.tokens[self.pos] != ")":
+                items.append(self.read_form())
+            self.pos += 1                      # the ')'
+            return List_T(items)
+        if token == ")":
+            return fail("unexpected )")
+        atom(token)
+
+def parse(program: str) -> Val_T:
+    var reader: Reader = Reader(tokenize(program))
+    reader.read_form()
+
+# ---- environments
+
+def lookup(env: Env, name: str) -> Val_T:
+    let frame: ?Env = env.find(name)
+    if frame is None:
+        return fail(f"unbound variable: {name}")
+    frame.bindings[name]
+
+def global_env() -> Env:
+    var env: Env = Env(None)
+    for name in ["+", "-", "*", "/", ">", "<", ">=", "<=", "=", "abs", "append",
+                 "apply", "begin", "car", "cdr", "cons", "eq?", "equal?", "length",
+                 "list", "list?", "map", "max", "min", "not", "null?", "number?",
+                 "procedure?", "round", "symbol?", "sqrt", "sin", "cos"]:
+        env.bindings[name] = Builtin_T(name)
+    env.bindings["pi"] = Num_T(PI)
+    env
+
+# ---- procedures
+
+def builtin(name: str, args: []Val_T) -> Val_T:
+    case name:
+        when "+": Num_T(args[0].num + args[1].num)
+        when "-": Num_T(args[0].num - args[1].num)
+        when "*": Num_T(args[0].num * args[1].num)
+        when "/": Num_T(args[0].num / args[1].num)
+        when ">": Bool_T(args[0].num > args[1].num)
+        when "<": Bool_T(args[0].num < args[1].num)
+        when ">=": Bool_T(args[0].num >= args[1].num)
+        when "<=": Bool_T(args[0].num <= args[1].num)
+        when "=": Bool_T(args[0].num == args[1].num)
+        when "abs": Num_T(abs(args[0].num))
+        when "append": List_T(args[0].items + args[1].items)
+        when "apply": apply(args[0], args[1].items)
+        when "begin": args[len(args)-1]
+        when "car": args[0].items[0]
+        when "cdr": List_T(args[0].items[1..len(args[0].items)-1])
+        when "cons":
+            var items: []Val_T = [args[0]]
+            items.extend(args[1].items)
+            List_T(items)
+        when "eq?" | "equal?": Bool_T(args[0] == args[1])
+        when "length": Num_T(float(len(args[0].items)))
+        when "list": List_T(args)
+        when "list?": Bool_T(args[0] is List_T)
+        when "map":
+            var mapped: []Val_T
+            for item in args[1].items:
+                mapped.append(apply(args[0], [item]))
+            List_T(mapped)
+        when "max": Num_T(max(args[0].num, args[1].num))
+        when "min": Num_T(min(args[0].num, args[1].num))
+        when "not": Bool_T(not args[0].is_true())
+        when "null?": Bool_T(args[0] is List_T and len(args[0].items) == 0)
+        when "number?": Bool_T(args[0] is Num_T)
+        when "procedure?": Bool_T(args[0] is Lambda or args[0] is Builtin_T)
+        when "round": Num_T(float(round(args[0].num)))
+        when "symbol?": Bool_T(args[0] is Sym_T)
+        when "sqrt": Num_T(sqrt(args[0].num))
+        when "sin": Num_T(sin(args[0].num))
+        when "cos": Num_T(cos(args[0].num))
+        when others: fail(f"unknown builtin: {name}")
+
+def apply(callee: Val_T, args: []Val_T) -> Val_T:
+    case callee:
+        when Builtin_T: builtin(callee.name, args)
+        when Lambda:
+            var frame: Env = Env(callee.env)
+            for i in 0..len(callee.parms)-1:
+                frame.bindings[callee.parms[i]] = args[i]
+            evaluate(callee.body, frame)
+        when others: fail(f"not a procedure: {callee}")
+
+# ---- eval
+
+def evaluate(x: Val_T, env: Env) -> Val_T:
+    if x is Sym_T:
+        return lookup(env, x.sym)
+    if x is not List_T:
+        return x
+    case x.items:
+        when [Sym_T("quote"), exp]:
+            return exp
+        when [Sym_T("if"), test, conseq, alt]:
+            return evaluate(conseq if evaluate(test, env).is_true() else alt, env)
+        when [Sym_T("define"), Sym_T(name), exp]:
+            env.bindings[name] = evaluate(exp, env)
+            return Nil_T()
+        when [Sym_T("set!"), Sym_T(name), exp]:
+            lookup(env, name)
+            env.find(name).bindings[name] = evaluate(exp, env)
+            return Nil_T()
+        when [Sym_T("lambda"), List_T(parms), body]:
+            return Lambda([p.sym for p in parms], body, env)
+        when [head, *tail]:
+            return apply(evaluate(head, env), [evaluate(a, env) for a in tail])
+    Nil_T()
+
+# ---- REPL and tests
+
+var env: Env = global_env()
+
+def run(program: str) -> str:
+    let v: Val_T = evaluate(parse(program), env)
+    "" if v is Nil_T else v'Image
+
+if $# == 1:
+    let src: str | !PathFailure_T = Path($1).read_text()
+    if src is PathFailure_T:
+        die(f"{src.op} {src.path}: {src.reason}")
+    print run(src)
+else:
+    assert run("(+ 1 2)") == "3"
+    assert run("(if (> 3 2) 1 2)") == "1"
+    assert run("(quote (a b))") == "(a b)"
+    assert run("(car (list 1 2 3))") == "1"
+    assert run("(cdr (list 1 2 3))") == "(2 3)"
+    assert run("(cons 1 (list 2))") == "(1 2)"
+    assert run("(null? (list))") == "#t"
+    assert run("(null? (list 1))") == "#f"
+    assert run("(equal? (list 1 (list 2)) (list 1 (list 2)))") == "#t"
+    assert run("(equal? (list 1 2) (list 1 3))") == "#f"
+    var _r1: str = run("(define square (lambda (x) (* x x)))")
+    assert run("(square 5)") == "25"
+    var _r2: str = run("(define fact (lambda (n) (if (<= n 1) 1 (* n (fact (- n 1))))))")
+    assert run("(fact 10)") == "3628800"
+    assert run("(map square (list 1 2 3))") == "(1 4 9)"
+    var _r3: str = run("(define x 1)")
+    var _r4: str = run("(set! x 7)")
+    assert run("x") == "7"
+    assert run("(apply + (list 1 2))") == "3"
+    assert run("(length (list 1 2 3))") == "3"
+    assert run("(max 3 8)") == "8"
+    assert run("(begin 1 2 3)") == "3"
+    assert run("(sqrt 16)") == "4"
+
+    print "lispy: all tests passed"
+    print "lispy REPL — :q to quit"
+    stdout.write("lispy> ")
+    stdout.flushFile()
+    for line in stdin.lines:
+        if line == ":q":
+            break
+        if len(line) > 0:
+            var result: str = run(line)
+            if result:
+                print result
+        stdout.write("lispy> ")
+        stdout.flushFile()

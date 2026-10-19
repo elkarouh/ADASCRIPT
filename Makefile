@@ -483,7 +483,8 @@ TOOL_PROGRAMS := \
     TOOLS/LV/lv.ady \
     TOOLS/THIST/Thist.ady \
     TOOLS/LISPY/lispy.ady \
-    TOOLS/LISPY/lispy_union.ady
+    TOOLS/LISPY/lispy_union.ady \
+    TOOLS/LISPY/lispy_short.ady
 
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
@@ -1370,6 +1371,9 @@ test-part-28:
 	        | grep -q "lispy: all tests passed" && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "TOOLS/LISPY/lispy_union.ady (self-test)"; \
 	    $(TOOLDIR)/LISPY/lispy_union < /dev/null 2>&1 \
+	        | grep -q "lispy: all tests passed" && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "TOOLS/LISPY/lispy_short.ady (self-test)"; \
+	    $(TOOLDIR)/LISPY/lispy_short < /dev/null 2>&1 \
 	        | grep -q "lispy: all tests passed" && echo OK || { echo FAIL; exit 1; }
 
 test-part-29:

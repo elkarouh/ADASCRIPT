@@ -705,7 +705,10 @@ def _declare_before_use(lines):
             # a default naming a global has to follow the global
             where = caller
             params = sig[sig.find('('):]
-            for ident in _IDENT.findall(params):
+            # only a default names a global it has to follow, not a parameter
+            # that happens to be called as one is: `env: Env` and `var env`
+            defaults = ' '.join(_re_order.findall(r'=\s*([^,)]*)', params))
+            for ident in _IDENT.findall(defaults):
                 if ident in tops and tops[ident] >= where:
                     where = _top_level_extent(lines, tops[ident])
             if where > caller:
