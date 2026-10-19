@@ -72,20 +72,20 @@ type Setup_T is record:
 # ---- The drag, as a small state machine ----
 #
 #            mousedown on a shape           mousemove more than 4 px
-#   IDLE  ------------------------>  PRESSED  ---------------------->  DRAGGING
+#   IDLE  ------------------------>  HELD, not moved  ---------------->  HELD, moved
 #    ^  ^                               |                                 |
 #    |  +------- mouseup (a click) -----+                                 | mouseup: dropped_cb(..)
 #    |                                                                    |
-#    +------------- click (the browser's, swallowed) ---- DROPPED  <-----+
+#    +------------- click (the browser's, swallowed) ---- ENDED  <--------+
 #
-# IDLE: nothing pressed. PRESSED: a shape is held but has not moved, so letting go is a
-# click. DRAGGING: it has moved. DROPPED: a drag has just ended, and the click the browser
-# sends after it is not a click.
+# IDLE: nothing held. HELD, not moved: a shape is held but has not moved, so letting go is a
+# click. HELD, moved: it has moved, so letting go is a drag. ENDED: a drag has just ended, and
+# the click the browser sends after it is not a click.
 
-# Each phase is a record of its own, and the drag is a union of them. A value is built by
-# naming its phase, `Pressed_T(node, ...)` or `Idle_T()`, and `grip is Pressed_T` asks which
-# phase it is in. Each record holds only the fields of its phase: reading `grip.node` is
-# allowed only where an `is` test has narrowed `grip` to a phase that has a node.
+# Each state is a record of its own, and the drag is a union of them. A value is built by
+# naming its state, `Held_T(node, ...)` or `Idle_T()`, and `grip is Held_T` asks which state
+# it is in. Each record holds only the fields of its state: reading `grip.node` is allowed only
+# where an `is` test has narrowed `grip` to a state that has a node.
 type Idle_T is record: pass             # nothing held
 type Ended_T is record: pass            # a drag has just ended
 type Held_T is record:                  # a shape is held, from the press until it is let go
@@ -161,7 +161,7 @@ def clamp(v: Unit_T, lo: Unit_T, hi: Unit_T) -> Unit_T:
 def no_click_cb(c: Click_T):
     pass
 
-# ---- The listeners: what each mouse event does, by phase ----
+# ---- The listeners: what each mouse event does, by state ----
 
 # A button went down. If it is the left one (button 0) and on a shape, hold that shape.
 def on_down(e: Event):
