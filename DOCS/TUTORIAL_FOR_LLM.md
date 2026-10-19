@@ -533,6 +533,10 @@ NO other statement may take one: an assignment, any other call, a `print`, a
 `raise` under an `if` modifier is a parse error -- `x = 1 if c` opens like the
 conditional expression `x = 1 if c else 2`. A modifier's `if` has no `else`,
 so `x = 1 if flag else 2` is still a ternary.
+So `return a if cond` is a conditional return (falls through when `cond` is
+false), while `return a if cond else b` always returns. The branches of a
+ternary may be different members of a union: `return Sym_T(t) if bad else
+Num_T(n)` in a `-> Val_T` function wraps each in `Val_T`.
 
 A modifier testing an optional establishes the auto-unwrap for the rest of
 the scope, as the indented guard does. Use the plain name after it; an

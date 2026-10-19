@@ -1605,6 +1605,25 @@ one at the end of the line.
 The conditional expression itself is untouched: a modifier's `if` has no
 `else`, so `v: int = 1 if flag else 2` is still a ternary.
 
+So the `else` decides what a `return` means. `return a if cond` is a
+conditional return: it leaves only when `cond` holds, and otherwise the next
+line runs. `return a if cond else b` always returns, one of the two values:
+
+```python
+def evaluate(x: Val_T, env: Env) -> Val_T:
+    return lookup(env, x.sym) if x is Sym_T    # leaves, or falls through
+    return x if x is not List_T                # leaves, or falls through
+    ...
+
+def atom(token: str) -> Val_T:
+    let num: float | !ParseFailure_T = parse_float(token)
+    return Sym_T(token) if num is ParseFailure_T else Num_T(num)   # always
+```
+
+The two branches of a conditional expression may be different members of a
+union; each is wrapped in the union that the `return` (or the declared type)
+asks for.
+
 ### for loops
 
 ```python
