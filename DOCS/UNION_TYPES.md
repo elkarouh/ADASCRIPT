@@ -123,6 +123,12 @@ repeated the whole body in two branches.
   record can hold them, with a flag for the difference, as `Held_T` does.
 - A union's members are not related by inheritance. A function that works on
   any state takes the union, and a function for one state takes that record.
+- A field read on a union that has not been narrowed is checked at run time,
+  not at compile time: `grip.node` outside any `is` test compiles, and stops
+  the program if `grip` holds another member. Inside `if grip is Held_T:`, or
+  after an early return on the other states, the read is checked by the
+  compiler too. `or` does not narrow: `if grip is Held_T or grip is Ended_T:`
+  narrows to neither, so a field read inside it is still a run-time check.
 
 ## Summary
 

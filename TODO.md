@@ -65,6 +65,16 @@ it, all but test_htmx, whose `html:` block is refused as Nim only.
       `runeLen`, `runeAt`, O(n) indexing) or Python works in bytes
       (`s.encode()`, and a `str` no longer Python's). Neither can be told
       apart at transpile time, so neither is refused.
+- [ ] a field read on a union that is not narrowed (`grip.node` where
+      `grip` is `Idle_T | Held_T | Ended_T`) is checked at run time, by Nim,
+      and not at compile time (DOCS/UNION_TYPES.md, Caveats). Kept so: a
+      compile-time refusal broke lispy_short.ady and lispy_union.ady, which
+      read fields that way. A checked accessor, `if x.is_mN: x.mN.f else:
+      raise ...`, does not compile as an operand of `+` (Nim rejects a raise
+      inside an if-expression there). Also open: `or` does not narrow, so
+      `if x is A or x is B:` gives the field reads of both members no
+      narrowing. Open: a way to narrow on `or` or a checked accessor Nim
+      accepts as an operand.
 
 ## Deliberately not done
 
