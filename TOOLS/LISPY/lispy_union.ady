@@ -31,26 +31,19 @@ from strscan import is_space_ch, skip_quoted_esc, skip_while
 # Value representation
 # ============================================================
 
-type Num_T is record:
-    num: float                    # number literal
+type Num_T is record: num: float  # number literal
 
-type Sym_T is record:
-    sym: str                      # symbol / identifier
+type Sym_T is record: sym: str  # symbol / identifier
 
-type Str_T is record:
-    text: str                     # string literal
+type Str_T is record: text: str  # string literal
 
-type Bool_T is record:
-    flag: bool                    # boolean
+type Bool_T is record: flag: bool  # boolean
 
-type Nil_T is record:
-    pass                          # the empty value: carries nothing
+type Nil_T is record: pass  # the empty value: carries nothing
 
-type List_T is record:
-    items: []Val_T                # cons list
+type List_T is record: items: []Val_T  # cons list
 
-type Builtin_T is record:
-    name: str                     # built-in primitive proc
+type Builtin_T is record: name: str  # built-in primitive proc
 
 # A Scheme value. A user-defined closure (Lambda, below) is a member as it is.
 type Val_T is Num_T | Sym_T | Str_T | Bool_T | Nil_T | List_T | Lambda | Builtin_T
@@ -77,8 +70,7 @@ class Lambda:
         frame
 
 # The reason a read or an evaluation has no value.
-type Failure_T is record:
-    message: str
+type Failure_T is record: message: str
 
 def reject(message: str) -> Failure_T:
     Failure_T(message=message)
@@ -119,7 +111,7 @@ def __str__(self: Val_T) -> str:
         when Sym_T: self.sym
         when Str_T: self.text
         when Bool_T: "#t" if self.flag else "#f"
-        when Nil_T: "()"
+        when Nil_T: ""
         when Builtin_T: "#<builtin:" + self.name + ">"
         when Lambda: "#<lambda>"
         when List_T:
@@ -143,16 +135,13 @@ class Env:
 
     def find(self, name: str) -> ?Env:
         """The frame that binds `name`, searching outward; None if none."""
-        if name in self.bindings:
-            return self
-        if self.outer is None:
-            return None
+        return self if name in self.bindings
+        return None if self.outer is None
         self.outer.find(name)
 
     def lookup(self, name: str) -> Val_T:
         let found: ?Env = self.find(name)
-        if found is None:
-            return fail(f"unbound variable: {name}")
+        return fail(f"unbound variable: {name}") if found is None
         found.bindings[name]
 
     def define(self, name: str, val: Val_T) -> None:
@@ -239,8 +228,7 @@ def parse_atom(token: Token_T) -> Val_T:
         when _ if token.startswith("\""): Str_T(token[1..len(token)-2])
         when others:
             let num: float | !ParseFailure_T = parse_float(token)
-            if num is ParseFailure_T:
-                return Sym_T(token)
+            return Sym_T(token) if num is ParseFailure_T
             Num_T(num)
 
 # Named, not written inline: a string holding a `)` inside a call's argument
@@ -265,8 +253,7 @@ class Reader:
         self.tokens = tokens
 
     def read_form(self) -> Val_T | !Failure_T:
-        if self.pos >= len(self.tokens):
-            return reject("unexpected EOF")
+        return reject("unexpected EOF") if self.pos >= len(self.tokens)
         let tok: Token_T = self.tokens[self.pos]
         self.pos += 1
         case tok:
@@ -274,17 +261,14 @@ class Reader:
                 var items: []Val_T
                 while self.pos < len(self.tokens) and self.tokens[self.pos] != ")":
                     let item: Val_T | !Failure_T = self.read_form()
-                    if item is Failure_T:
-                        return item
+                    return item if item is Failure_T
                     items.append(item)
-                if self.pos >= len(self.tokens):
-                    return reject(MISSING_CLOSE)
+                return reject(MISSING_CLOSE) if self.pos >= len(self.tokens)
                 self.pos += 1
                 return List_T(items)
             when "'" | "`" | "," | ",@":
                 let quoted: Val_T | !Failure_T = self.read_form()
-                if quoted is Failure_T:
-                    return quoted
+                return quoted if quoted is Failure_T
                 return List_T([Sym_T(ABBREVIATIONS[tok]), quoted])
             when ")": return reject(STRAY_CLOSE)
             when others: return parse_atom(tok)
@@ -349,8 +333,7 @@ def parse_lambda_params(param_list: []Val_T) -> ([]str, str):
 
 def wrap_body(body: []Val_T) -> Val_T:
     """A body of several forms is one (begin ...) form."""
-    if len(body) == 1:
-        return body[0]
+    return body[0] if len(body) == 1
     var forms: []Val_T = [Sym_T("begin")]
     forms.extend(body)
     List_T(forms)
@@ -378,8 +361,7 @@ class Interpreter:
             when "+":
                 Num_T(sum(a.num for a in args))
             when "-":
-                if len(args) == 1:
-                    return Num_T(-args[0].num)
+                return Num_T(-args[0].num) if len(args) == 1
                 var acc: float = args[0].num
                 for i in 1..len(args)-1:
                     acc -= args[i].num
@@ -390,16 +372,14 @@ class Interpreter:
                     acc *= a.num
                 Num_T(acc)
             when "/":
-                if len(args) == 1:
-                    return Num_T(1.0 / args[0].num)
+                return Num_T(1.0 / args[0].num) if len(args) == 1
                 var acc: float = args[0].num
                 for i in 1..len(args)-1:
                     acc /= args[i].num
                 Num_T(acc)
             when "<" | ">" | "<=" | ">=" | "=":
                 for i in 0..len(args)-2:
-                    if not compare_nums(name, args[i].num, args[i+1].num):
-                        return Bool_T(False)
+                    return Bool_T(False) if not compare_nums(name, args[i].num, args[i+1].num)
                 Bool_T(True)
             when "abs": Num_T(abs(args[0].num))
             when "max":
@@ -423,12 +403,10 @@ class Interpreter:
             when "cos": Num_T(cos(args[0].num))
             when "tan": Num_T(tan(args[0].num))
             when "atan":
-                if len(args) == 2:
-                    return Num_T(arctan2(args[0].num, args[1].num))
+                return Num_T(arctan2(args[0].num, args[1].num)) if len(args) == 2
                 Num_T(arctan(args[0].num))
             when "log":
-                if len(args) == 2:
-                    return Num_T(ln(args[0].num) / ln(args[1].num))
+                return Num_T(ln(args[0].num) / ln(args[1].num)) if len(args) == 2
                 Num_T(ln(args[0].num))
             when "truncate": Num_T(float(int(args[0].num)))
             when "modulo":
@@ -473,12 +451,10 @@ class Interpreter:
             when "pair?": Bool_T(args[0].is_pair())
             when "boolean?": Bool_T(args[0] is Bool_T)
             when "car":
-                if not args[0].is_pair():
-                    return fail("car of non-pair")
+                return fail("car of non-pair") if not args[0].is_pair()
                 args[0].items[0]
             when "cdr":
-                if not args[0].is_pair():
-                    return fail("cdr of non-pair")
+                return fail("cdr of non-pair") if not args[0].is_pair()
                 List_T(args[0].items[1..len(args[0].items)-1])
             when "cons":
                 if args[1] is List_T:
@@ -489,8 +465,7 @@ class Interpreter:
                 List_T([args[0], args[1]])
             when "list": List_T(args)
             when "length":
-                if args[0] is List_T:
-                    return Num_T(float(len(args[0].items)))
+                return Num_T(float(len(args[0].items))) if args[0] is List_T
                 Num_T(0.0)
             when "append":
                 var built: []Val_T
@@ -518,8 +493,7 @@ class Interpreter:
             when "number->string": Str_T(args[0]'Image)
             when "string->number":
                 var parsed: Val_T = parse_atom(args[0].text)
-                if parsed is Num_T:
-                    return parsed
+                return parsed if parsed is Num_T
                 Bool_T(False)
             when "string-length": Num_T(float(len(args[0].text)))
             when "string-append":
@@ -554,13 +528,11 @@ class Interpreter:
             when "assoc" | "assv" | "assq":
                 let key: Val_T = args[0]
                 for pair in args[1].items:
-                    if pair is List_T and len(pair.items) > 0 and pair.items[0] == key:
-                        return pair
+                    return pair if pair is List_T and len(pair.items) > 0 and pair.items[0] == key
                 Bool_T(False)
             when "member" | "memv" | "memq":
                 for i in 0..len(args[1].items)-1:
-                    if args[1].items[i] == args[0]:
-                        return List_T(args[1].items[i..len(args[1].items)-1])
+                    return List_T(args[1].items[i..len(args[1].items)-1]) if args[1].items[i] == args[0]
                 Bool_T(False)
             when "filter":
                 var built: []Val_T
@@ -581,8 +553,7 @@ class Interpreter:
             when others: fail(f"not a procedure: {proc_val}")
 
     def expand_qq(self, x: Val_T, e: Env) -> Val_T:
-        if x is not List_T:
-            return x
+        return x if x is not List_T
         let parts: []Val_T = x.items
         case parts:
             when [Sym_T("unquote"), form]: return self.evaluate(form, e)
@@ -602,8 +573,7 @@ class Interpreter:
     def eval_prefix(self, forms: []Val_T, e: Env) -> Val_T:
         """Evaluate all but the last of `forms` and return the last one
         unevaluated: it is a tail position, and the caller loops on it."""
-        if len(forms) == 0:
-            return Nil_T()
+        return Nil_T() if len(forms) == 0
         for i in 0..len(forms)-2:
             var ignored: Val_T = self.evaluate(forms[i], e)
         forms[len(forms)-1]
@@ -618,22 +588,16 @@ class Interpreter:
                 when List_T: pass
                 when others: return x
             let form_items: []Val_T = x.items
-            if len(form_items) == 0:
-                return Nil_T()
+            return Nil_T() if len(form_items) == 0
 
             case form_items:
                 when [Sym_T("quote"), quoted]: return quoted
                 when [Sym_T("quasiquote"), form]: return self.expand_qq(form, e)
                 when [Sym_T("if"), test, consequence, alternative]:
-                    if self.evaluate(test, e).is_true():
-                        x = consequence
-                    else:
-                        x = alternative
+                    x = consequence if self.evaluate(test, e).is_true() else alternative
                 when [Sym_T("if"), test, consequence]:
-                    if self.evaluate(test, e).is_true():
-                        x = consequence
-                    else:
-                        return Nil_T()
+                    return Nil_T() if not self.evaluate(test, e).is_true()
+                    x = consequence
                 when [Sym_T("define"), Sym_T(var_name), expr]:
                     e.define(var_name, self.evaluate(expr, e))
                     return Nil_T()
@@ -652,32 +616,26 @@ class Interpreter:
                     return Lambda([], rest_name, wrap_body(body), e)
                 when [Sym_T("begin"), *stmts]: x = self.eval_prefix(stmts, e)
                 when [Sym_T("and"), *operands]:
-                    if len(operands) == 0:
-                        return Bool_T(True)
+                    return Bool_T(True) if len(operands) == 0
                     for i in 0..len(operands)-2:
-                        if not self.evaluate(operands[i], e).is_true():
-                            return Bool_T(False)
+                        return Bool_T(False) if not self.evaluate(operands[i], e).is_true()
                     x = operands[len(operands)-1]
                 when [Sym_T("or"), *operands]:
-                    if len(operands) == 0:
-                        return Bool_T(False)
+                    return Bool_T(False) if len(operands) == 0
                     for i in 0..len(operands)-2:
                         let v: Val_T = self.evaluate(operands[i], e)
-                        if v.is_true():
-                            return v
+                        return v if v.is_true()
                     x = operands[len(operands)-1]
                 when [Sym_T("cond"), *clauses]:
                     var found: bool = False
                     for clause in clauses:
                         let test_val: Val_T = self.evaluate(clause.items[0], e)
                         if test_val.is_true():
-                            if len(clause.items) == 1:
-                                return test_val
+                            return test_val if len(clause.items) == 1
                             x = self.eval_prefix(clause.items[1..len(clause.items)-1], e)
                             found = True
                             break
-                    if not found:
-                        return Nil_T()
+                    return Nil_T() if not found
                 when [Sym_T("let"), Sym_T(loop_name), List_T(bind_list), *body]:
                     # named let: (let loop ((x init) ...) body)
                     var parms: []str
@@ -715,15 +673,11 @@ class Interpreter:
                     x = self.eval_prefix(body, rec_env)
                     e = rec_env
                 when [Sym_T("when"), test, *stmts]:
-                    if self.evaluate(test, e).is_true():
-                        x = self.eval_prefix(stmts, e)
-                    else:
-                        return Nil_T()
+                    return Nil_T() if not self.evaluate(test, e).is_true()
+                    x = self.eval_prefix(stmts, e)
                 when [Sym_T("unless"), test, *stmts]:
-                    if not self.evaluate(test, e).is_true():
-                        x = self.eval_prefix(stmts, e)
-                    else:
-                        return Nil_T()
+                    return Nil_T() if self.evaluate(test, e).is_true()
+                    x = self.eval_prefix(stmts, e)
                 when [Sym_T("do"), List_T(var_specs), List_T(term_clause), *do_body]:
                     # (do ((var init step) ...) (test result...) body...)
                     var do_env: Env = Env(e)
@@ -745,8 +699,7 @@ class Interpreter:
                             new_vals.append(self.evaluate(step, do_env))
                         for i in 0..len(do_vars)-1:
                             do_env.define(do_vars[i], new_vals[i])
-                    if len(term_clause) == 1:
-                        return Nil_T()
+                    return Nil_T() if len(term_clause) == 1
                     x = self.eval_prefix(term_clause[1..len(term_clause)-1], do_env)
                     e = do_env
                 when [Sym_T("apply"), proc_expr, args_expr]:
@@ -783,12 +736,8 @@ class Interpreter:
 
     def interpret(self, program: str) -> str | !Failure_T:
         let form: Val_T | !Failure_T = parse(program)
-        if form is Failure_T:
-            return form
-        let v: Val_T = self.evaluate(form, self.global_env)
-        if v is Nil_T:
-            return ""
-        v'Image
+        return form if form is Failure_T
+        self.evaluate(form, self.global_env)'Image
 
 # ============================================================
 # REPL / runner
@@ -799,14 +748,12 @@ var lispy: Interpreter = Interpreter()
 def run(program: str) -> str:
     """Run a program; a read failure is reported and ends the process."""
     let out: str | !Failure_T = lispy.interpret(program)
-    if out is Failure_T:
-        return stop(out.message)
+    return stop(out.message) if out is Failure_T
     out
 
 if $# == 1:
     let src: str | !PathFailure_T = Path($1).read_text()
-    if src is PathFailure_T:
-        die(f"{src.op} {src.path}: {src.reason}")
+    die(f"{src.op} {src.path}: {src.reason}") if src is PathFailure_T
     var result: str = run(src)
     if result:
         print result
@@ -884,8 +831,7 @@ else:
     stdout.write("lispy> ")
     stdout.flushFile()
     for line in stdin.lines:           # ends at end of input
-        if line == ":q":
-            break
+        break if line == ":q"
         if len(line) > 0:
             var result: str = run(line)
             if result:

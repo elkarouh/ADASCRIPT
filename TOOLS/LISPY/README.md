@@ -7,9 +7,9 @@ typed.
 | File | What it is | Lines (code only) | Scheme value is |
 |---|---|---|---|
 | `lispy.py` | Norvig's original, unchanged | 144 (117) | a plain Python `str`, `list` or number |
-| `lispy_short.ady` | Adascript, lis.py's features and no more | 241 (202) | a **union** of records |
+| `lispy_short.ady` | Adascript, lis.py's features and no more | 240 (201) | a **union** of records |
 | `lispy.ady` | Adascript, the full interpreter | 899 (782) | a **variant record** |
-| `lispy_union.ady` | Adascript, the full interpreter | 894 (770) | a **union** of records |
+| `lispy_union.ady` | Adascript, the full interpreter | 840 (716) | a **union** of records |
 
 "Code only" leaves out blank lines and comment lines. `lispy_short.ady` carries
 about 45 lines of self-test and REPL that `lispy.py` has no equivalent of; the

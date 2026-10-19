@@ -198,8 +198,7 @@ def run(program: str) -> str:
 
 if $# == 1:
     let src: str | !PathFailure_T = Path($1).read_text()
-    if src is PathFailure_T:
-        die(f"{src.op} {src.path}: {src.reason}")
+    die(f"{src.op} {src.path}: {src.reason}") if src is PathFailure_T
     print run(src)
 else:
     assert run("(+ 1 2)") == "3"
