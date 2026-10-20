@@ -628,11 +628,11 @@ def include_ady_modules(code, search_dir, _seen=None):
         return None
 
     # the rule of what the file may use of its modules, bundled libraries too
-    stdlib = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "TO_NIM", "STDLIB")
+    stdlib = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "TO_NIM", "STDLIB")
 
     # a bundled library made of what only Nim has (db.ady on db_sqlite) has its
     # Python version beside this file, in TO_PYTHON/STDLIB, taken first
-    py_stdlib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB")
+    py_stdlib = os.path.join(os.path.dirname(os.path.realpath(__file__)), "STDLIB")
 
     def find_checked(name):
         path = find(name, search_dir)

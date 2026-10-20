@@ -779,7 +779,7 @@ def _resolved_imports(code, search_dir):
     """
     from ady_modules import import_map, resolve_imports, normalize_imports
     from ady_modules import module_dirs
-    bases = module_dirs(search_dir) + (os.path.join(os.path.dirname(os.path.abspath(__file__)), "STDLIB"),)
+    bases = module_dirs(search_dir) + (os.path.join(os.path.dirname(os.path.realpath(__file__)), "STDLIB"),)
 
     def find(mod):
         return next((p for p in (os.path.join(b, mod + ".ady") for b in bases)
