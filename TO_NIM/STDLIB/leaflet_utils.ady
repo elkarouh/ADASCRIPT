@@ -7,7 +7,7 @@ This module says it in the words of the map: make one, draw on it, say what a cl
 loads Leaflet (leaflet.js and leaflet.css, from a CDN) and has an element for the map to fill; the
 script imports what it uses:
 
-    from leaflet_utils import Map_T, Point_T, Style_T, style, new_map, fit, polyline, polygon, circle, dot, pin, popup_at, on_click
+    from leaflet_utils import Map_T, Point_T, Style_T, style, new_map, fit, polyline, polygon, circle, dot, pin, popup_at, on_click, new_layer, clear
 
     let map: Map_T = new_map("map")                       # fills <div id="map">, with OpenStreetMap's tiles
     let a: Point_T = Point_T(50.85, 4.35)                  # latitude, longitude, in degrees
@@ -21,10 +21,16 @@ script imports what it uses:
     def clicked(at: Point_T): popup_at(map, at, f"{at.lat:.3f}, {at.lng:.3f}")
     on_click(map, clicked)
 
+A tour that the next one replaces is drawn on a layer, which can be emptied:
+
+    let tour: Layer_T = new_layer(map)
+    polyline(tour, [a, b], style("#d33"))     # whatever is drawn on a map can be drawn on a layer
+    clear(tour)
+
 What is drawn takes a Style_T, made by `style`: its colour (a CSS colour), the width of its line, how much it is filled
 (0.0 for not at all) and whether the line is dashed. A `tip` shows when the mouse is over the shape.
 
-Used by EXAMPLES/MAP_UTILS/LEAFLET.
+Used by EXAMPLES/MAP_UTILS/LEAFLET and EXAMPLES/TSP_LEAFLET.
 
 What is underneath, for the curious: Leaflet's own objects (L.map, L.polyline, ...), which this
 module calls; a Map_T is Leaflet's map. Strings cross into it as the browser's own cstring, which
@@ -37,6 +43,10 @@ jsvar L: JsObject
 
 # A map on the page: what everything is drawn on.
 type Map_T is JsObject
+
+# A layer of the map that can be emptied and drawn on again: a tour that is replaced by the next.
+# Everything that is drawn on a Map_T can be drawn on a Layer_T instead.
+type Layer_T is JsObject
 
 # A place on the earth, in degrees.
 type Point_T is tuple:
@@ -66,10 +76,10 @@ def ats(points: []Point_T) -> JsObject:
     return out.toJs
 
 # Leaflet's options for a style.
-def options(s: Style_T) -> JsObject:
-    var o: JsObject = {"color": cstring(s.color), "weight": s.weight, "opacity": 0.9,
-                       "fill": s.fill > 0.0, "fillColor": cstring(s.color), "fillOpacity": s.fill}
-    if s.dashed:
+def options(look: Style_T) -> JsObject:
+    var o: JsObject = {"color": cstring(look.color), "weight": look.weight, "opacity": 0.9,
+                       "fill": look.fill > 0.0, "fillColor": cstring(look.color), "fillOpacity": look.fill}
+    if look.dashed:
         o["dashArray"] = cstring("6")
     return o
 
@@ -79,9 +89,20 @@ def new_map(id: str) -> Map_T:
     L.tileLayer(cstring(TILES), {"maxZoom": 19, "attribution": cstring(CREDIT)}).addTo(m)
     return m
 
-# Zoom and move the map to show all of POINTS.
+# Zoom and move the map to show all of POINTS (with no animation: a shape drawn while the map is still
+# moving lands in the wrong place).
 def fit(m: Map_T, points: []Point_T):
-    m.fitBounds(ats(points))
+    m.fitBounds(ats(points), {"animate": false})        # drawn at once, so that what is drawn next lands in the right place
+
+# A new, empty layer on the map.
+def new_layer(m: Map_T) -> Layer_T:
+    let layer: Layer_T = L.layerGroup()
+    layer.addTo(m)
+    return layer
+
+# Take everything off LAYER.
+def clear(layer: Layer_T):
+    layer.clearLayers()
 
 def shown(shape: JsObject, m: Map_T, tip: str):
     if tip != "":

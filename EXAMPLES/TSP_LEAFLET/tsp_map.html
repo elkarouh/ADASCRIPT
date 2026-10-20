@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Travelling salesman in Adascript</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    html, body { height: 100%; margin: 0; font: 14px/1.4 system-ui, sans-serif; }
+    body { display: flex; }
+    #side { width: 380px; max-width: 45%; overflow: auto; padding: 12px 14px; box-sizing: border-box; }
+    #map { flex: 1; }
+    h1 { font-size: 16px; margin: 0 0 4px; }
+    p { margin: 4px 0 10px; color: #444; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid #ddd; }
+    th:first-child, td:first-child { text-align: left; }
+    tr.algo { cursor: pointer; }
+    tr.algo:hover { background: #f1f1f1; }
+    tr.selected { background: #fde4e4; font-weight: 600; }
+    .note { margin-top: 10px; }
+    @media (max-width: 700px) { body { flex-direction: column; } #side { width: auto; max-width: none; max-height: 45%; } }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+</head>
+<body>
+  <div id="side">
+    <h1>Fifteen cities, thirteen algorithms</h1>
+    <p>Each row is a way to find a short round trip through the cities. Click one to see its tour; the best tour found is dashed behind it.</p>
+    <p>The algorithms see the cities on a flat map, so even Held-Karp, exact there, can come out a little longer on the ground.</p>
+    <div id="algos"></div>
+  </div>
+  <div id="map"></div>
+  <script src="tsp_map.js"></script>
+</body>
+</html>

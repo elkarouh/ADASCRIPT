@@ -1,0 +1,188 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""tsp_map -- the Travelling Salesman algorithms of tsp.ady, on fifteen real cities, in the browser.
+
+    ady2nim js tsp_map.ady     (writes tsp_map.js; tsp_map.html loads it)
+
+Every algorithm of tsp_algorithms.ady (the module tsp.ady is built on) is run once when the page
+opens, on the same fifteen cities, from Paris to Luxembourg. The table lists them by what they
+find: the length of the tour, how far it is from the best one found, and the time it took in
+this browser. Click a row to see its tour on the map, with the best tour dashed behind it.
+
+The algorithms work on a flat map: the cities' latitudes and longitudes are laid out so that a
+degree of longitude is as long as it is at that latitude (a sinusoidal projection). The lengths in
+the table are the real ones, along the ground (the haversine formula). So a tour the algorithms
+find equal can differ by a few km, and the best one is the shortest of those found, not
+Held-Karp's: that is exact on the flat map only.
+"""
+from js/jsffi nimport *
+from math nimport PI, cos, sin, sqrt, arcsin
+from browser import Element_T, page, element, set_html, number, listen, Event_T, click_of, on
+from leaflet_utils import Map_T, Layer_T, Point_T, style, new_map, new_layer, clear, fit, polyline, dot
+from tsp_algorithms import City_T, Tour_T, nearest_tsp, mst_tsp, greedy_tsp, rep_nearest_tsp, rep_2opt_nearest_tsp, ensemble_tsp, two_opt_tsp, or_opt_tsp, three_opt_tsp, lk_tsp, sa_tsp, tabu_tsp, held_karp_tsp
+
+# jsvar: the browser's clock.
+jsvar performance: JsObject
+
+type Place_T is tuple:
+    name: str
+    lat:  float
+    lng:  float
+
+const PLACES: []Place_T = [
+    ("Paris",      48.8566,  2.3522),
+    ("Brussels",   50.8503,  4.3517),
+    ("Amsterdam",  52.3676,  4.9041),
+    ("Hamburg",    53.5511,  9.9937),
+    ("Berlin",     52.5200, 13.4050),
+    ("Prague",     50.0755, 14.4378),
+    ("Vienna",     48.2082, 16.3738),
+    ("Munich",     48.1351, 11.5820),
+    ("Zurich",     47.3769,  8.5417),
+    ("Milan",      45.4642,  9.1900),
+    ("Lyon",       45.7640,  4.8357),
+    ("Strasbourg", 48.5734,  7.7521),
+    ("Frankfurt",  50.1109,  8.6821),
+    ("Cologne",    50.9375,  6.9603),
+    ("Luxembourg", 49.6116,  6.1319),
+]
+
+const EARTH_KM: float = 6371.0
+
+# A place, laid out flat for the algorithms: kilometres east and north.
+def flat(p: Place_T) -> City_T:
+    let phi: float = p.lat * PI / 180.0
+    let lam: float = p.lng * PI / 180.0
+    return (x: EARTH_KM * lam * cos(phi), y: EARTH_KM * phi)
+
+def where(p: Place_T) -> Point_T:
+    return Point_T(p.lat, p.lng)
+
+# The distance along the ground between two places, in km (haversine).
+def ground(a: Place_T, b: Place_T) -> float:
+    let phi_a: float = a.lat * PI / 180.0
+    let phi_b: float = b.lat * PI / 180.0
+    let half_dlat: float = (b.lat - a.lat) * PI / 360.0
+    let half_dlng: float = (b.lng - a.lng) * PI / 360.0
+    let h: float = sin(half_dlat) ** 2 + cos(phi_a) * cos(phi_b) * sin(half_dlng) ** 2
+    return 2.0 * EARTH_KM * arcsin(sqrt(h))
+
+# ---- the algorithms, run -----------------------------------------------------------------------
+
+type Result_T is record:
+    name: str
+    note: str            # how it works, and what it costs
+    tour: Tour_T
+    km:   float          # along the ground
+    ms:   float          # in this browser
+
+def now() -> float:
+    return performance.now().to(float)
+
+# The tour, as the places it visits, in order: an index into PLACES for each city.
+def order_of(tour: Tour_T, cities: Tour_T) -> []int:
+    var order: []int = []
+    for city in tour:
+        for i in 0 ..< len(cities):
+            if cities[i] == city:
+                order.append(i)
+                break
+    return order
+
+# The length of the tour, back to where it started, along the ground.
+def ground_km(tour: Tour_T, cities: Tour_T) -> float:
+    let order: []int = order_of(tour, cities)
+    var km: float = 0.0
+    for k in 0 ..< len(order):
+        km += ground(PLACES[order[k]], PLACES[order[(k + 1) % len(order)]])
+    return km
+
+# What the algorithms that take more than the cities are given by default.
+def rep_nearest(cities: Tour_T) -> Tour_T:
+    return rep_nearest_tsp(cities)
+
+def rep_2opt_nearest(cities: Tour_T) -> Tour_T:
+    return rep_2opt_nearest_tsp(cities)
+
+def solve_all(cities: Tour_T) -> []Result_T:
+    var results: []Result_T = []
+
+    # Run ALGORITHM on START, and keep what it found.
+    def solve(name: str, note: str, algorithm: (Tour_T) -> Tour_T, start: Tour_T) -> Tour_T:
+        let t0: float = now()
+        let tour: Tour_T = algorithm(start)
+        let ms: float = now() - t0
+        results.append(Result_T(name, note, tour, ground_km(tour, cities), ms))
+        return tour
+
+    let nearest: Tour_T = solve("Nearest neighbour", "Go to the closest city not yet visited. O(n²).", nearest_tsp, cities)
+    solve("Minimum spanning tree", "Walk round the tree of the shortest links; at most twice the best. O(n²).", mst_tsp, cities)
+    solve("Greedy edges", "Add the shortest link that keeps a path, until the tour closes. O(n² log n).", greedy_tsp, cities)
+    solve("Repeated nearest", "Nearest neighbour from 20 different starts; keep the shortest. O(k·n²).", rep_nearest, cities)
+    solve("Repeated nearest + 2-opt", "Nearest neighbour then 2-opt, from 10 starts. O(k·n²).", rep_2opt_nearest, cities)
+    solve("Ensemble", "The better of greedy + 2-opt and repeated nearest + 2-opt.", ensemble_tsp, cities)
+    let two_opt: Tour_T = solve("2-opt", "From nearest neighbour: reverse a stretch whenever that shortens the tour, until none does.", two_opt_tsp, nearest)
+    let or_opt: Tour_T = solve("Or-opt", "From 2-opt: move runs of 1 to 3 cities to a better place, until none does.", or_opt_tsp, two_opt)
+    solve("3-opt", "From Or-opt: remove three links and rejoin them the best way. O(n³) a pass.", three_opt_tsp, or_opt)
+    let lin_kernighan: Tour_T = solve("Lin-Kernighan", "From Or-opt: chains of 2- and 3-opt moves guided by each city's nearest neighbours.", lk_tsp, or_opt)
+    solve("Simulated annealing", "From Lin-Kernighan: take a worse move now and then, less often as it cools.", sa_tsp, lin_kernighan)
+    solve("Tabu search", "From Lin-Kernighan: always make the best move that does not undo a recent one.", tabu_tsp, lin_kernighan)
+    solve("Held-Karp", "Exact on the flat map, by dynamic programming. O(2ⁿ·n²): fifteen cities is about the limit.", held_karp_tsp, cities)
+    return results
+
+# ---- the page ----------------------------------------------------------------------------------
+
+def shortest(results: []Result_T) -> int:
+    var best: int = 0
+    for i in 0 ..< len(results):
+        if results[i].km < results[best].km:
+            best = i
+    return best
+
+# The table, with row SELECTED marked.
+def table(results: []Result_T, selected: int) -> str:
+    let best: float = results[shortest(results)].km
+    var rows: str = "<tr><th>Algorithm</th><th>km</th><th>over best</th><th>ms</th></tr>"
+    for i in 0 ..< len(results):
+        let r: Result_T = results[i]
+        let mark: str = " selected" if i == selected else ""
+        rows = f"{rows}<tr class=\"algo{mark}\" data-i=\"{i}\"><td>{r.name}</td><td>{r.km:.0f}</td><td>{(r.km / best - 1.0) * 100.0:.1f}%</td><td>{r.ms:.1f}</td></tr>"
+    return f"<table>{rows}</table><p class=\"note\"><b>{results[selected].name}.</b> {results[selected].note}</p>"
+
+# A tour on LAYER: a line through its cities, and a dot for each, in the order it visits them.
+def draw_tour(layer: Layer_T, tour: Tour_T, cities: Tour_T, line: str, dashed: bool):
+    let order: []int = order_of(tour, cities)
+    var points: []Point_T = []
+    for i in order:
+        points.append(where(PLACES[i]))
+    points.append(points[0])
+    polyline(layer, points, style(line, weight=4 if not dashed else 3, dashed=dashed))
+    if not dashed:
+        for k in 0 ..< len(order):
+            dot(layer, where(PLACES[order[k]]), style("#222", weight=1, fill=0.9), tip=f"{k + 1}. {PLACES[order[k]].name}")
+
+def show(layer: Layer_T, results: []Result_T, cities: Tour_T, selected: int):
+    clear(layer)
+    let best: int = shortest(results)
+    if selected != best:
+        draw_tour(layer, results[best].tour, cities, "#888", True)
+    draw_tour(layer, results[selected].tour, cities, "#d33", False)
+    set_html(page.element("#algos"), table(results, selected))
+
+def main():
+    let map: Map_T = new_map("map")
+    let layer: Layer_T = new_layer(map)
+    let cities: Tour_T = [flat(p) for p in PLACES]
+    let results: []Result_T = solve_all(cities)
+    fit(map, [where(p) for p in PLACES])
+    show(layer, results, cities, shortest(results))
+
+    # A click on a row of the table shows that algorithm's tour.
+    def pressed(e: Event_T):
+        let row: ?Element_T = click_of(e).on("tr.algo")
+        return if row is None
+        show(layer, results, cities, int(row.number("data_i")))
+
+    listen("click", pressed)
+
+main()
