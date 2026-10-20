@@ -120,20 +120,23 @@ def draw_holding(map: Map_T, beacon: GeoPoint):
         dot(map, hold.latlng(), purple)
     circle(map, beacon.latlng(), float(metre_T(HOLD_RADIUS)), purple, tip="holding pattern")
 
-let map: Map_T = new_map("map")
-let airports: []GeoPoint = [position_of(a) for a in ROUTE]
-let brussels: GeoPoint = airports[0]
-let marseille: GeoPoint = airports[-1]
+def main():
+    let map: Map_T = new_map("map")
+    let airports: []GeoPoint = [position_of(a) for a in ROUTE]
+    let brussels: GeoPoint = airports[0]
+    let marseille: GeoPoint = airports[-1]
 
-draw_legs(map, airports, airspace())
-draw_zones(map, marseille)
-draw_airports(map, airports)
-draw_holding(map, marseille)
-fit(map, spots(airports + outline()))
+    draw_legs(map, airports, airspace())
+    draw_zones(map, marseille)
+    draw_airports(map, airports)
+    draw_holding(map, marseille)
+    fit(map, spots(airports + outline()))
 
-# A click on the map: how far and which way from Brussels, by map_geo.
-def clicked(at: Point_T):
-    let here: GeoPoint = GeoPoint(Latitude_T(at.lat), Longitude_T(at.lng))
-    popup_at(map, at, f"{here.human()}<br>{here - brussels}")
+    # A click on the map: how far and which way from Brussels, by map_geo.
+    def clicked(at: Point_T):
+        let here: GeoPoint = GeoPoint(Latitude_T(at.lat), Longitude_T(at.lng))
+        popup_at(map, at, f"{here.human()}<br>{here - brussels}")
 
-on_click(map, clicked)
+    on_click(map, clicked)
+
+main()
