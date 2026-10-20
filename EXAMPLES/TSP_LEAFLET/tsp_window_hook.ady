@@ -1,0 +1,19 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""tsp_window_hook -- what tsp_window.ady puts into the page before the page's own scripts.
+
+    ady2nim js tsp_window_hook.ady     (writes tsp_window_hook.js)
+
+The errors of the page's scripts reach the terminal, and so does what the page shows once it has
+loaded: how many algorithms the table lists, and which one is selected.
+"""
+from browser import Element_T, Event_T, page, to_host, when_loaded, report_errors
+
+def loaded(e: Event_T):
+    let rows: []Element_T = page.all("tr.algo")
+    let selected: ?Element_T = page.find("tr.selected td")
+    let name: str = selected.text() if selected is not None else ""
+    to_host(f"loaded: {len(rows)} rows, selected: {name}")
+
+report_errors()
+when_loaded(loaded)

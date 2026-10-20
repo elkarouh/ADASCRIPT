@@ -269,3 +269,27 @@ def ask(question: str, answer: str) -> str:
 # Ask the reader to say yes or no to QUESTION.
 def ask_yes(question: str) -> bool:
     return window.confirm(cstring(question))
+
+# ---- A page in a window of its own ----
+
+# The window the page is in, for what it may or may not have: a script in a plain browser tab
+# has no host.
+jsvar globalThis: JsObject
+
+# Say MESSAGE to the program that shows the page in a window of its own (a Nim webview, say),
+# if it bound `host_log` for the page. In a browser tab there is no such program, and nothing
+# happens.
+def to_host(message: str):
+    if not isUndefined(globalThis.host_log):
+        globalThis.host_log(cstring(message))
+
+# Call HANDLER once the page and its scripts have loaded.
+def when_loaded(handler: Listener_T):
+    addEventListener(window, cstring("load"), handler)
+
+# Say to the host (see `to_host`) every error a script of the page runs into.
+def report_errors():
+    def failed(e: Event_T):
+        to_host(f"error: {str(toJs(e).message.to(cstring))}")
+
+    addEventListener(window, cstring("error"), failed)

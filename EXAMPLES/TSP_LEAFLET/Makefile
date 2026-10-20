@@ -32,8 +32,14 @@ run: tsp_map.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/tsp_map.html) &
 	python3 -m http.server $(PORT) --bind 127.0.0.1
 
-window: tsp_map.js
+tsp_window_hook.js: tsp_window_hook.ady ../../TO_NIM/STDLIB/browser.ady
+	@echo "building $@"
+	@$(ADY2NIM) js tsp_window_hook.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@rm -f build.log
+	@cp -L tsp_window_hook.js tsp_window_hook.tmp && mv tsp_window_hook.tmp tsp_window_hook.js
+
+window: tsp_map.js tsp_window_hook.js
 	$(ADY2NIM) c -r --path:$$(nimble path webview) tsp_window.ady
 
 clean:
-	rm -f tsp_window tsp_map.js tsp_map tsp_map.tmp build.log
+	rm -f tsp_window tsp_window_hook.js tsp_map.js tsp_map tsp_map.tmp build.log

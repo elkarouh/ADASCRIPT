@@ -5,28 +5,18 @@
     make window                            open the window (it runs ady2nim c -r tsp_window.ady)
     ady2nim c -r tsp_window.ady -- --check load the page, print what it shows, exit
 
-Run it from this directory. The page is unchanged: the script is put inline, so no server is needed. `nim_log` is bound for
-the page, so its console and errors reach this terminal.
+Run it from this directory, after `ady2nim js tsp_window_hook.ady` (make window does both). The page is unchanged: the script is put inline, so no server is needed.
+`host_log` is bound for
+the page, so what tsp_window_hook says reaches this terminal.
 """
 nimport os, strutils
 from webview nimport *
 from json nimport *
 
-const HOOK: str = """
-for (const level of ["log", "warn", "error"]) {
-  const old = console[level];
-  console[level] = (...a) => { window.nim_log(level + ": " + a.join(" ")); old.apply(console, a); };
-}
-window.addEventListener("error", e => window.nim_log("error: " + e.message));
-window.addEventListener("load", () => setTimeout(() => window.nim_log("loaded: " +
-  document.querySelectorAll("tr.algo").length + " rows, selected: " +
-  (document.querySelector("tr.selected td") || {}).textContent), 500));
-"""
-
 let CHECK: bool = "--check" in os.commandLineParams()
 let W: Webview = newWebview(debug=not CHECK)
 
-def nim_log(id: str, req: JsonNode) -> str:
+def host_log(id: str, req: JsonNode) -> str:
     let msg: str = req[0].get_str()
     print(msg)
     if CHECK and msg.starts_with("loaded:"):
@@ -39,8 +29,8 @@ def main():
 
     W.title = "Travelling salesman in Adascript"
     W.size = (1100, 700)
-    W.bind("nim_log", nim_log)
-    W.init(HOOK)
+    W.bind("host_log", host_log)
+    W.init(read_file("tsp_window_hook.js"))
     W.html = html
     W.run()
     W.destroy()
