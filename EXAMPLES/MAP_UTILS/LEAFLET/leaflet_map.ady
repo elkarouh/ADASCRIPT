@@ -80,20 +80,21 @@ def draw_leg(map: Map_T, start: GeoPoint, leg: GeoVector, air: Airspace_T, label
 
 # ---- the airspace --------------------------------------------------------------------------
 
-def funnel_outline(apex: GeoPoint) -> []GeoPoint:
-    """The outline of the wedge: the apex, then points every 2.5 degrees along its far edge."""
-    var points: []GeoPoint = [apex]
-    let first: float = float(FUNNEL_HEADING) - float(FUNNEL_HALF_ANGLE)
-    let steps: int = int(2.0 * float(FUNNEL_HALF_ANGLE) / 2.5)
-    for k in 0 .. steps:
-        points.append(apex + GeoVector(FUNNEL_RANGE, Degree_T(first + 2.5 * float(k))))
-    return points
-
 def draw_airspace(map: Map_T, apex: GeoPoint):
+    """The three zones: R-1, R-2 and the approach funnel to the apex."""
+    def funnel_outline() -> []GeoPoint:
+        """The wedge: the apex, then points every 2.5 degrees along its far edge."""
+        var points: []GeoPoint = [apex]
+        let first: float = float(FUNNEL_HEADING) - float(FUNNEL_HALF_ANGLE)
+        let steps: int = int(2.0 * float(FUNNEL_HALF_ANGLE) / 2.5)
+        for k in 0 .. steps:
+            points.append(apex + GeoVector(FUNNEL_RANGE, Degree_T(first + 2.5 * float(k))))
+        return points
+
     let red: Style_T = style("#e31a1c", weight=2, fill=0.18)
     polygon(map, spots(outline()), red, tip="R-1: restricted area")
     circle(map, must(GeoPoint(R2_CENTRE)).latlng(), float(metre_T(R2_RADIUS)), red, tip="R-2: restricted circle")
-    polygon(map, spots(funnel_outline(apex)), style("#33a02c", weight=2, fill=0.1), tip="Approach funnel")
+    polygon(map, spots(funnel_outline()), style("#33a02c", weight=2, fill=0.1), tip="Approach funnel")
 
 # ---- the page ------------------------------------------------------------------------------
 
