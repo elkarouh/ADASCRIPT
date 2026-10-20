@@ -26,15 +26,28 @@ from route_check import HOLD_RADIUS, HOLD_POINTS, CRUISE, Hours_T, Airspace_T
 from route_check import position_of, outline, airspace, holding_pattern, hours_minutes
 from leaflet_utils import Map_T, Point_T, Style_T, style, new_map, fit, polyline, polygon, circle, dot, pin, popup_at, on_click
 
-# What the route is in: the colour of a stretch of it.
-type Cover_T is enum PLAIN_LEG, RESTRICTED_LEG, FUNNEL_LEG
-const COLOUR: [Cover_T]str = [PLAIN_LEG: "#1f78b4", RESTRICTED_LEG: "#e31a1c", FUNNEL_LEG: "#33a02c"]
-const MEANING: [Cover_T]str = [PLAIN_LEG: "open airspace", RESTRICTED_LEG: "restricted", FUNNEL_LEG: "approach funnel, unrestricted"]
+# What a point of the route is in: open airspace, a restricted area, or the approach funnel. It
+# decides the colour of that stretch of the route.
+type Kind_T is enum PLAIN, RESTRICTED, FUNNEL
+const COLOUR: [Kind_T]str = [PLAIN: "#1f78b4", RESTRICTED: "#e31a1c", FUNNEL: "#33a02c"]
+const MEANING: [Kind_T]str = [PLAIN: "open airspace", RESTRICTED: "restricted", FUNNEL: "approach funnel, unrestricted"]
 
-def cover_at(point: GeoPoint, air: Airspace_T) -> Cover_T:
-    return RESTRICTED_LEG if point in air.restricted
-    return FUNNEL_LEG if point in air.open_funnel
-    return PLAIN_LEG
+class Cover:
+    var kind: Kind_T
+
+    def __init__(self, point: GeoPoint, air: Airspace_T):
+        if point in air.restricted:
+            self.kind = RESTRICTED
+        elif point in air.open_funnel:
+            self.kind = FUNNEL
+        else:
+            self.kind = PLAIN
+
+    def colour(self) -> str:
+        return COLOUR[self.kind]
+
+    def meaning(self) -> str:
+        return MEANING[self.kind]
 
 # GeoPoints, as the map has them.
 def spots(points: []GeoPoint) -> []Point_T:
@@ -42,18 +55,18 @@ def spots(points: []GeoPoint) -> []Point_T:
 
 # ---- the route ---------------------------------------------------------------------------
 
-def line(map: Map_T, points: []GeoPoint, cover: Cover_T, label: str):
-    polyline(map, spots(points), style(COLOUR[cover], weight=5), tip=f"{label}: {MEANING[cover]}")
+def line(map: Map_T, points: []GeoPoint, cover: Cover, label: str):
+    polyline(map, spots(points), style(cover.colour(), weight=5), tip=f"{label}: {cover.meaning()}")
 
 def draw_leg(map: Map_T, start: GeoPoint, leg: GeoVector, air: Airspace_T, label: str):
     """A leg as polylines, a new one wherever the airspace changes, joined end to start."""
     let total: float = float(leg.magnitude())
     var points: []GeoPoint = []
-    var cover: Cover_T = PLAIN_LEG
+    var cover: Cover = Cover(start, air)
     for k in 0 .. int(total):
         let here: GeoPoint = start + leg * (float(k) / total if total > 0.0 else 0.0)
-        let now: Cover_T = cover_at(here, air)
-        if k > 0 and now != cover:
+        let now: Cover = Cover(here, air)
+        if k > 0 and now.kind != cover.kind:
             points.append(here)                     # the old stretch ends where the new one starts
             line(map, points, cover, label)
             points = []
