@@ -6,6 +6,10 @@ as in Python — and the transpiler maps the whole vocabulary (`None`,
 machinery. You never write `some()`, `none()`, `.get()`, `.isSome` or
 `.isNone` by hand.
 
+If you know C# or Kotlin, `?T` is what they call a *nullable* type. The
+difference is that absence is part of the type: a plain `T` can never be
+`None`; only a `?T` can.
+
 ```
 ?T   ──▶  Python:  T | None
      ──▶  Nim:     Option[T]
