@@ -78,9 +78,9 @@ def draw_leg(map: Map_T, start: GeoPoint, leg: GeoVector, air: Airspace_T, label
     points.append(start + leg)                      # the airport itself, which the last kilometre falls short of
     line(map, points, cover, label)
 
-# ---- the airspace --------------------------------------------------------------------------
+# ---- the zones ------------------------------------------------------------------------------
 
-def draw_airspace(map: Map_T, apex: GeoPoint):
+def draw_zones(map: Map_T, apex: GeoPoint):
     """The three zones: R-1, R-2 and the approach funnel to the apex."""
     def funnel_outline() -> []GeoPoint:
         """The wedge: the apex, then points every 2.5 degrees along its far edge."""
@@ -126,7 +126,7 @@ let brussels: GeoPoint = airports[0]
 let marseille: GeoPoint = airports[-1]
 
 draw_legs(map, airports, airspace())
-draw_airspace(map, marseille)
+draw_zones(map, marseille)
 draw_airports(map, airports)
 draw_holding(map, marseille)
 fit(map, spots(airports + outline()))
