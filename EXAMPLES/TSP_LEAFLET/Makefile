@@ -3,7 +3,7 @@
 #
 #   make        build tsp_map.js (ady2nim js)
 #   make run    build it, serve this directory and open the page
-#   make window build it and open it in a native window (tsp_window.nim; needs Nim's webview
+#   make window build it and open it in a native window (tsp_window.ady; needs Nim's webview
 #               package and, on Linux, libwebkit2gtk-4.1)
 #   make clean  remove what was built
 #
@@ -33,7 +33,7 @@ run: tsp_map.js
 	python3 -m http.server $(PORT) --bind 127.0.0.1
 
 window: tsp_map.js
-	nim c -r --path:$$(nimble path webview) tsp_window.nim
+	$(ADY2NIM) c -r --path:$$(nimble path webview) tsp_window.ady
 
 clean:
 	rm -f tsp_window tsp_map.js tsp_map tsp_map.tmp build.log
