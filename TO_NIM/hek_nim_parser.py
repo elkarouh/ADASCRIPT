@@ -3177,6 +3177,11 @@ def to_nim(self, indent=0):
 
 def _func_def_to_nim_inner(self, indent=0):
     """The body of func_def.to_nim; see the wrapper above for why."""
+    # The function's own scope opens before its parameters are translated, which is where they
+    # are declared: opened after, they were declared in the scope round the function, and a
+    # parameter `s` of one function was then taken for the `s` of whatever was written after it,
+    # in another function or another module.
+    ParserState.symbol_table.push_scope("<func>")
     decos = ""
     name = ""
     params = ""
@@ -3268,7 +3273,6 @@ def _func_def_to_nim_inner(self, indent=0):
                 ParserState.proc_type_param_names = {}
             ParserState.proc_type_param_names[name] = [
                 n.split(":")[0].strip() for n in declared_type_params.strip("[] ").split(",") if n.strip()]
-    ParserState.symbol_table.push_scope(name or "<func>")
     _param_shadow = _shadow_params(re.findall(r"(?:^|,)\s*(?:var\s+)?`?(\w+)`?\s*:", params or ""))
     hc = _block_inline_header_comment(block_node) if block_node else ""
     # A @contextmanager is a Nim template, where fmt cannot see the

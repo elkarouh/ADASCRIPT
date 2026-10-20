@@ -658,8 +658,7 @@ def held_karp_tsp(cities: Tour_T) -> Tour_T:
         dp.append(row_dp)
         parent.append(row_par)
     dp[1][0] = 0.0
-    for subset in 1..<num_sets:
-        let s: int = subset                 # the cities visited so far, one bit each
+    for s in 1..<num_sets:
         if (s & 1) == 0:
             continue
         for u in 0..<sz:

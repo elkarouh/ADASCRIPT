@@ -1,0 +1,25 @@
+#!/usr/bin/env ady2nim
+# test_param_scope.ady -- a parameter belongs to its function, not to what follows it
+#
+#   ady2nim EXAMPLES/test_param_scope.ady -r
+#
+# `paint` has a parameter `s` that is a record. The loop variable `s` of `masks`, which comes
+# after it, is a whole number, and `s | 8` is the bitwise or of two of them: it was once
+# translated as a pipe, because the parameter's type had been taken for the loop variable's.
+#
+# The output is compared between the backends.
+
+type Look_T is record:
+    color: str
+
+def paint(s: Look_T) -> str:
+    return s.color
+
+def masks() -> []int:
+    var found: []int = []
+    for s in 1 ..< 4:
+        found.append(s | 8)
+    return found
+
+print paint(Look_T("red"))
+print masks()
