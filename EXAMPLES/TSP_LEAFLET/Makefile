@@ -11,7 +11,9 @@
 PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
 ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 PORT ?= 8803
-OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || echo true)
+# $(OPEN) is xdg-open, or open on a Mac; on WSL, PowerShell opens the Windows browser.
+# `make run OPEN=firefox` picks one.
+OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 
 .PHONY: all run clean
 
