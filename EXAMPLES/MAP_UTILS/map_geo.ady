@@ -297,6 +297,12 @@ def geo_vector_from_components(east: Kilometers_T, north: Kilometers_T) -> GeoVe
 # Geodetic geometry -- GeoPoint
 # ---------------------------------------------------------------------------
 
+# A place as two plain numbers of degrees: latitude, longitude. A tuple of these names converts
+# to leaflet_utils' Point_T, so a map is given a GeoPoint as `point.latlng()`.
+type LatLng_T is tuple:
+    lat: float
+    lng: float
+
 class GeoPoint:
     """A point on the Earth's surface: latitude and longitude, in decimal degrees.
 
@@ -409,6 +415,10 @@ class GeoPoint:
     def human(self) -> str:
         """Human-readable DMS."""
         dec2human_latlong(self.latitude, self.longitude)
+
+    def latlng(self) -> LatLng_T:
+        """Plain degrees, for a map (leaflet_utils' Point_T is the same pair)."""
+        LatLng_T(lat=float(self.latitude), lng=float(self.longitude))
 
     def decimal(self) -> str:
         """Decimal degrees."""

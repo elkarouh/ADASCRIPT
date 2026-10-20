@@ -36,12 +36,9 @@ def cover_at(point: GeoPoint, air: Airspace_T) -> Cover_T:
     return FUNNEL_LEG if point in air.open_funnel
     return PLAIN_LEG
 
-# A GeoPoint, as the map has it.
-def spot(point: GeoPoint) -> Point_T:
-    return Point_T(float(point.latitude), float(point.longitude))
-
+# GeoPoints, as the map has them.
 def spots(points: []GeoPoint) -> []Point_T:
-    return [spot(p) for p in points]
+    return [p.latlng() for p in points]
 
 # ---- the route ---------------------------------------------------------------------------
 
@@ -79,7 +76,7 @@ def funnel_outline(apex: GeoPoint) -> []GeoPoint:
 def draw_airspace(map: Map_T, apex: GeoPoint):
     let red: Style_T = style("#e31a1c", weight=2, fill=0.18)
     polygon(map, spots(outline()), red, tip="R-1: restricted area")
-    circle(map, spot(must(GeoPoint(R2_CENTRE))), float(metre_T(R2_RADIUS)), red, tip="R-2: restricted circle")
+    circle(map, must(GeoPoint(R2_CENTRE)).latlng(), float(metre_T(R2_RADIUS)), red, tip="R-2: restricted circle")
     polygon(map, spots(funnel_outline(apex)), style("#33a02c", weight=2, fill=0.1), tip="Approach funnel")
 
 # ---- the page ------------------------------------------------------------------------------
@@ -104,12 +101,12 @@ for i in 0 ..< len(points):
         let leg: GeoVector = points[i] - points[i - 1]
         let hours: Hours_T = leg.magnitude() / CRUISE
         note = f"{note}<br>{leg.magnitude():.1f} km from {ROUTE[i - 1]}, {hours_minutes(hours)} at {int(float(CRUISE))} km/h"
-    pin(map, spot(points[i]), note)
+    pin(map, points[i].latlng(), note)
 
 let purple: Style_T = style("#6a3d9a", weight=2, dashed=True)
 for hold in holding_pattern(apex, HOLD_RADIUS, HOLD_POINTS):
-    dot(map, spot(hold), purple)
-circle(map, spot(apex), float(metre_T(HOLD_RADIUS)), purple, tip="holding pattern")
+    dot(map, hold.latlng(), purple)
+circle(map, apex.latlng(), float(metre_T(HOLD_RADIUS)), purple, tip="holding pattern")
 
 fit(map, spots(points + [apex] + outline()))
 
