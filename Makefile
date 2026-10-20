@@ -653,7 +653,7 @@ test-moon:
 # The sections of the test run side by side once everything is built: each is
 # a target of its own (`make test-part-07` runs one), and --output-sync keeps
 # a section's lines together, so the log reads as it did when they ran in turn.
-TEST_PARTS := test-part-js-compared test-part-01 test-part-02 test-part-03 test-part-04 test-part-05 test-part-06 test-part-07 test-part-08 test-part-09 test-part-10 test-part-11 test-part-12 test-part-13 test-part-14 test-part-15 test-part-16 test-part-17 test-part-18 test-part-19 test-part-20 test-part-21 test-part-22 test-part-23 test-part-24 test-part-25 test-part-26 test-part-27 test-part-28 test-part-29 test-part-30 test-part-31 test-part-32 test-part-33 test-part-34 test-part-35 test-part-36 test-part-37 test-part-38 test-part-39 test-part-40 test-part-41 test-part-42 test-part-43 test-part-44 test-part-45 test-part-46 test-part-47 test-part-48 test-part-49 test-part-50 test-part-51 test-part-52 test-part-53 test-part-54 test-part-55 test-part-56 test-part-57
+TEST_PARTS := test-part-js-compared test-part-01 test-part-02 test-part-03 test-part-04 test-part-05 test-part-06 test-part-07 test-part-08 test-part-09 test-part-10 test-part-11 test-part-12 test-part-13 test-part-14 test-part-15 test-part-16 test-part-17 test-part-18 test-part-19 test-part-20 test-part-21 test-part-22 test-part-23 test-part-24 test-part-25 test-part-26 test-part-27 test-part-28 test-part-29 test-part-30 test-part-31 test-part-32 test-part-33 test-part-34 test-part-35 test-part-36 test-part-37 test-part-38 test-part-39 test-part-40 test-part-41 test-part-42 test-part-43 test-part-44 test-part-45 test-part-46 test-part-47 test-part-48 test-part-49 test-part-50 test-part-51 test-part-52 test-part-53 test-part-54 test-part-55 test-part-56 test-part-57 test-part-58
 .PHONY: $(TEST_PARTS)
 
 test: compile
@@ -1788,6 +1788,19 @@ test-part-57:
 	        rm -f $(TOOLDIR)/ACCOUNTING/frontend/accounting_js_events.js; \
 	    fi; \
 	fi
+
+test-part-58:
+	@# EXAMPLES/LITTLE_PAGES: one page per filter, each marking its own tab.
+	@echo "=== EXAMPLES/LITTLE_PAGES (lots of little HTML pages) ==="
+	@printf '  %-42s' "LITTLE_PAGES/little_pages.ady"; \
+	    o=$(TMPDIR)/ady_little_pages; rm -rf $$o; \
+	    $(ADY2NIM) c -r $(EXDIR)/LITTLE_PAGES/little_pages.ady $$o >/dev/null 2>&1 \
+	        && grep -q 'class="here">popular' $$o/popular.html \
+	        && grep -q 'view-transition' $$o/all.html \
+	        && ! grep -q 'A first blog' $$o/recent.html \
+	        && grep -q 'A first blog' $$o/all.html \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -rf $$o $(EXDIR)/LITTLE_PAGES/little_pages
 
 # -----------------------------------------------------------------------
 # clean — remove caches and binary symlinks produced by ady2nim

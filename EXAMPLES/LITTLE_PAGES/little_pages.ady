@@ -1,0 +1,71 @@
+#!/usr/bin/env ady2nim
+"""Lots of little HTML pages -- a filtered list as one page per filter.
+
+A list of posts that can be shown as "recent", "popular" or "all" does not
+need a script in the page. Each filter is a page of its own, written ahead of
+time by this program, and the tabs are plain links. The CSS rule
+`@view-transition { navigation: auto }` makes the browser cross-fade from one
+page to the next, so the links feel like an in-page switch. Nothing runs in
+the browser.
+
+    ady2nim c -r little_pages.ady [DIR]      # writes DIR/recent.html, ... (default: build)
+
+After Jim Nielsen, "Building Websites With LLMS" (lots of little HTML pages).
+"""
+type Post_T is record:
+    title: str
+    year:  int
+    views: int
+
+const POSTS: []Post_T = [
+    Post_T("Aspect ratio in view transitions", 2025, 5200),
+    Post_T("Lots of little HTML pages",        2025, 9100),
+    Post_T("Why I kept a static generator",    2024, 1800),
+    Post_T("Notes on web components",          2023, 7400),
+    Post_T("A first blog",                     2021,  300)]
+
+const FILTERS: []str = ["recent", "popular", "all"]
+
+const CSS: str = """@view-transition { navigation: auto; }
+body { font: 16px sans-serif; max-width: 32em; margin: 2em auto; }
+nav a { margin-right: 1em; }
+nav a.here { font-weight: bold; text-decoration: none; }"""
+
+# Whether POST belongs on the page of FILTER.
+def keeps(filter: str, post: Post_T) -> bool:
+    if filter == "recent":
+        return post.year >= 2025
+    if filter == "popular":
+        return post.views >= 5000
+    return True
+
+# The tabs: a link to every page, the one shown marked.
+def nav_html(here: str) -> str:
+    var links: str = ""
+    for f in FILTERS:
+        let cls: str = ' class="here"' if f == here else ""
+        links += f'<a href="{f}.html"{cls}>{f}</a>'
+    return f"<nav>{links}</nav>"
+
+def page_html(filter: str) -> str:
+    var items: str = ""
+    for post in POSTS:
+        if keeps(filter, post):
+            items += f"<li>{post.title} ({post.year}, {post.views} views)</li>\n"
+    return f"""<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Posts: {filter}</title>
+<style>{CSS}</style></head>
+<body>
+{nav_html(filter)}
+<ul>
+{items}</ul>
+</body>
+</html>
+"""
+
+let dir: Path = Path($1 if $# > 0 else "build")
+assert dir.mkdir() is None
+for f in FILTERS:
+    assert (dir / f"{f}.html").write_text(page_html(f)) is None
+    print f"wrote {f}.html"
