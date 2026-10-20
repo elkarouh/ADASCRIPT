@@ -6,6 +6,9 @@
 #
 # The page loads Leaflet and the OpenStreetMap tiles from the internet.
 
+# This checkout's own transpiler, whatever ady2nim is first on PATH.
+PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
+ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../../TO_NIM/ady2nim.py)
 PORT ?= 8802
 OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || echo true)
 
@@ -15,7 +18,7 @@ all: leaflet_map.js
 
 leaflet_map.js: leaflet_map.ady ../map_base.ady ../map_flat.ady ../map_geo.ady ../regions.ady ../route_check.ady
 	@echo "building $@"
-	@ady2nim js leaflet_map.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@$(ADY2NIM) js leaflet_map.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 run: leaflet_map.js
