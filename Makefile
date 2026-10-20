@@ -208,6 +208,7 @@ STANDALONE := \
     distance_units.ady \
     test_union_args.ady \
     test_union_wide.ady \
+    test_union_shared.ady \
     test_subrange_array.ady \
     test_variant_literal.ady \
     test_foreign_field_unit.ady \
@@ -358,7 +359,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_element_field \
+    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field \
     MAP_UTILS/map_base MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry test_units_dims \
     distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset test_units_stdlib test_cents
@@ -381,7 +382,7 @@ JS_COMPARED := test_do_block test_do_discard test_case_ranges test_ordered_map a
     test_str_repeat test_union_optional test_decorators test_str_case test_optional_tails \
     test_generic_methods test_round_splitlines test_portable_gaps test_optional_union_written \
     test_portable_gaps3 test_portable_gaps4 test_portable_gaps7 test_module_rename \
-    test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_element_field MAP_UTILS/map_base \
+    test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field MAP_UTILS/map_base \
     MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry \
     test_units_dims distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset \

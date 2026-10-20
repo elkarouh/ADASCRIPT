@@ -1,0 +1,21 @@
+# A field that several members of a union have is read off whichever member
+# the union holds, narrowed or not.
+type A_T is record:
+    x: int
+type B_T is record:
+    x: int
+type C_T is record:
+    y: str
+type U_T is A_T | B_T | C_T
+
+def x_of(u: U_T) -> int:
+    if u is A_T or u is B_T:
+        return u.x
+    return 0
+
+assert x_of(A_T(7)) == 7
+assert x_of(B_T(5)) == 5
+assert x_of(C_T("c")) == 0
+let v: U_T = B_T(3)
+assert v.x + v.x == 6
+print "test_union_shared: ok"

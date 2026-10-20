@@ -444,6 +444,20 @@ def _union_member_with_field(expr, field):
     return hits[0] if len(hits) == 1 else None
 
 
+def _union_shared_field(expr, field):
+    """The indexes of the members of the plain union EXPR whose record or
+    class have a field FIELD, when several have it and give it one type --
+    else None. `a.x` then reads the one that EXPR holds."""
+    info = _union_info(_union_type_of(expr))
+    if info is None or info["kind"] != "plain":
+        return None
+    types = ParserState.class_field_types
+    hits = [i for i, m in enumerate(info["values"]) if field in types.get(m, {})]
+    if len(hits) < 2 or len({types[info["values"][i]][field] for i in hits}) != 1:
+        return None
+    return hits
+
+
 def _union_of_member(type_name):
     """(the Nim union, the index of TYPE_NAME in it) for a type that exactly
     one named union -- `type Val_T is Num_T | Sym_T` -- has as a member, or
@@ -4162,6 +4176,16 @@ def to_nim(self, prec=None):
                     _um = _union_member_with_field(result, method_name)
                     if _um is not None:
                         result = f"{result}.m{_um}.{method_name}"
+                        continue
+                    # a field several members share: the one `x` holds,
+                    # chosen where it is read (the last is the unchecked
+                    # else, which stops the program on a member without it)
+                    _hits = _union_shared_field(result, method_name)
+                    if _hits and _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*(\.\w+|\[\w+\])*", result):
+                        result = "(" + " ".join(
+                            (f"elif" if k else "if") + f" {result}.is_m{h}: {result}.m{h}.{method_name}"
+                            for k, h in enumerate(_hits[:-1])) + \
+                            f" else: {result}.m{_hits[-1]}.{method_name})"
                         continue
                 # Only a call is a method: a record field that shares a
                 # Python method's name -- `r.index[k]`, `r.get`, `r.lower`
