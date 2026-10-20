@@ -28,26 +28,30 @@ from leaflet_utils import Map_T, Point_T, Style_T, style, new_map, fit, polyline
 
 # What a point of the route is in: open airspace, a restricted area, or the approach funnel. It
 # decides the colour of that stretch of the route.
-type Kind_T is enum PLAIN, RESTRICTED, FUNNEL
-const COLOUR: [Kind_T]str = [PLAIN: "#1f78b4", RESTRICTED: "#e31a1c", FUNNEL: "#33a02c"]
-const MEANING: [Kind_T]str = [PLAIN: "open airspace", RESTRICTED: "restricted", FUNNEL: "approach funnel, unrestricted"]
+type Kind_T is enum CLEAR, NO_FLY, APPROACH
 
 class Cover:
     var kind: Kind_T
 
     def __init__(self, point: GeoPoint, air: Airspace_T):
         if point in air.restricted:
-            self.kind = RESTRICTED
+            self.kind = NO_FLY
         elif point in air.open_funnel:
-            self.kind = FUNNEL
+            self.kind = APPROACH
         else:
-            self.kind = PLAIN
+            self.kind = CLEAR
 
     def colour(self) -> str:
-        return COLOUR[self.kind]
+        case self.kind:
+            when CLEAR:     return "#1f78b4"
+            when NO_FLY:    return "#e31a1c"
+            when APPROACH:  return "#33a02c"
 
     def meaning(self) -> str:
-        return MEANING[self.kind]
+        case self.kind:
+            when CLEAR:     return "open airspace"
+            when NO_FLY:    return "restricted"
+            when APPROACH:  return "approach funnel, unrestricted"
 
 # GeoPoints, as the map has them.
 def spots(points: []GeoPoint) -> []Point_T:
