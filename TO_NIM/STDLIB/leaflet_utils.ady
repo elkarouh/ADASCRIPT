@@ -1,0 +1,125 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""leaflet_utils -- a map of the world, for a script that runs in the browser (ady2nim js), in plain words.
+
+An Adascript programmer should not have to learn Leaflet.js to put points, lines and areas on a map.
+This module says it in the words of the map: make one, draw on it, say what a click means. The page
+loads Leaflet (leaflet.js and leaflet.css, from a CDN) and has an element for the map to fill; the
+script imports what it uses:
+
+    from leaflet_utils import Map_T, Point_T, Style_T, style, new_map, fit, polyline, polygon, circle, dot, pin, popup_at, on_click
+
+    let map: Map_T = new_map("map")                       # fills <div id="map">, with OpenStreetMap's tiles
+    let a: Point_T = Point_T(50.85, 4.35)                  # latitude, longitude, in degrees
+    let b: Point_T = Point_T(48.85, 2.35)
+    polyline(map, [a, b], style("#d33", weight=5), tip="Brussels to Paris")
+    polygon(map, [a, b, Point_T(49.0, 4.0)], style("#36c", fill=0.2))
+    circle(map, a, 20000.0, style("#36c", fill=0.15))    # a radius in metres
+    dot(map, b, style("#639"))                           # a small round mark
+    pin(map, a, "<b>Brussels</b>")                         # a pin, with a popup when it is clicked
+    fit(map, [a, b])                                       # zoom to show these points
+    def clicked(at: Point_T): popup_at(map, at, f"{at.lat:.3f}, {at.lng:.3f}")
+    on_click(map, clicked)
+
+What is drawn takes a Style_T, made by `style`: its colour (a CSS colour), the width of its line, how much it is filled
+(0.0 for not at all) and whether the line is dashed. A `tip` shows when the mouse is over the shape.
+
+Used by EXAMPLES/MAP_UTILS/LEAFLET.
+
+What is underneath, for the curious: Leaflet's own objects (L.map, L.polyline, ...), which this
+module calls; a Map_T is Leaflet's map. Strings cross into it as the browser's own cstring, which
+this module converts.
+"""
+from js/jsffi nimport *
+
+# Leaflet's global, loaded by the page.
+jsvar L: JsObject
+
+# A map on the page: what everything is drawn on.
+type Map_T is JsObject
+
+# A place on the earth, in degrees.
+type Point_T is tuple:
+    lat: float
+    lng: float
+
+# How a shape looks.
+type Style_T is record:
+    color:  str          # a CSS colour: "#d33", "red"
+    weight: int          # the line's width in pixels
+    fill:   float        # how much of the colour fills it, 0.0 to 1.0
+    dashed: bool
+
+const TILES: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+const CREDIT: str = "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+
+def style(color: str, weight: int = 3, fill: float = 0.0, dashed: bool = False) -> Style_T:
+    return Style_T(color=color, weight=weight, fill=fill, dashed=dashed)
+
+def at(p: Point_T) -> JsObject:
+    return L.latLng(p.lat, p.lng)
+
+def ats(points: []Point_T) -> JsObject:
+    var out: []JsObject = []
+    for p in points:
+        out.add(at(p))
+    return out.toJs
+
+# Leaflet's options for a style.
+def options(s: Style_T) -> JsObject:
+    var o: JsObject = {"color": cstring(s.color), "weight": s.weight, "opacity": 0.9,
+                       "fill": s.fill > 0.0, "fillColor": cstring(s.color), "fillOpacity": s.fill}
+    if s.dashed:
+        o["dashArray"] = cstring("6")
+    return o
+
+# The map that fills the page's element with id ID, showing the whole world until `fit` says where.
+def new_map(id: str) -> Map_T:
+    let m: Map_T = L.map(cstring(id)).setView(L.latLng(20.0, 0.0), 2)
+    L.tileLayer(cstring(TILES), {"maxZoom": 19, "attribution": cstring(CREDIT)}).addTo(m)
+    return m
+
+# Zoom and move the map to show all of POINTS.
+def fit(m: Map_T, points: []Point_T):
+    m.fitBounds(ats(points))
+
+def shown(shape: JsObject, m: Map_T, tip: str):
+    if tip != "":
+        shape.bindTooltip(cstring(tip))
+    shape.addTo(m)
+
+# A line through POINTS.
+def polyline(m: Map_T, points: []Point_T, style: Style_T, tip: str = ""):
+    shown(L.polyline(ats(points), options(style)), m, tip)
+
+# An area inside the outline POINTS.
+def polygon(m: Map_T, points: []Point_T, style: Style_T, tip: str = ""):
+    shown(L.polygon(ats(points), options(style)), m, tip)
+
+# A circle round CENTRE, RADIUS metres across the ground.
+def circle(m: Map_T, centre: Point_T, radius: float, style: Style_T, tip: str = ""):
+    var o: JsObject = options(style)
+    o["radius"] = radius
+    shown(L.circle(at(centre), o), m, tip)
+
+# A small round mark at AT, as many as you like.
+def dot(m: Map_T, spot: Point_T, style: Style_T, tip: str = ""):
+    var o: JsObject = options(style)
+    o["radius"] = 6
+    o["fill"] = true
+    o["fillOpacity"] = 0.9
+    shown(L.circleMarker(at(spot), o), m, tip)
+
+# A pin at SPOT; clicking it opens a popup that says NOTE (HTML).
+def pin(m: Map_T, spot: Point_T, note: str):
+    L.marker(at(spot)).bindPopup(cstring(note)).addTo(m)
+
+# Open a popup at SPOT that says NOTE (HTML).
+def popup_at(m: Map_T, spot: Point_T, note: str):
+    L.popup().setLatLng(at(spot)).setContent(cstring(note)).openOn(m)
+
+# What a click on the map means: WHAT is called with the place clicked.
+def on_click(m: Map_T, what: (Point_T) -> None):
+    def heard(e: JsObject):
+        what(Point_T(e["latlng"]["lat"].to(float), e["latlng"]["lng"].to(float)))
+    m.on("click", heard)

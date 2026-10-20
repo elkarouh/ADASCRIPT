@@ -1721,6 +1721,9 @@ test-part-55:
 	@printf '  %-42s' "STDLIB/browser.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/browser.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "STDLIB/leaflet_utils.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/leaflet_utils.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "STDLIB/svg_drag.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/svg_drag.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
