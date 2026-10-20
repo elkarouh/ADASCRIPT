@@ -3,6 +3,8 @@
 #
 #   make        build tsp_map.js (ady2nim js)
 #   make run    build it, serve this directory and open the page
+#   make window build it and open it in a native window (tsp_window.nim; needs Nim's webview
+#               package and, on Linux, libwebkit2gtk-4.1)
 #   make clean  remove what was built
 #
 # The page loads Leaflet and the OpenStreetMap tiles from the internet.
@@ -15,7 +17,7 @@ PORT ?= 8803
 # `make run OPEN=firefox` picks one.
 OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 
-.PHONY: all run clean
+.PHONY: all run window clean
 
 all: tsp_map.js
 
@@ -30,5 +32,8 @@ run: tsp_map.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/tsp_map.html) &
 	python3 -m http.server $(PORT) --bind 127.0.0.1
 
+window: tsp_map.js
+	nim c -r --path:$$(nimble path webview) tsp_window.nim
+
 clean:
-	rm -f tsp_map.js tsp_map tsp_map.tmp build.log
+	rm -f tsp_window tsp_map.js tsp_map tsp_map.tmp build.log
