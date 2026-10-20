@@ -44,6 +44,11 @@ is in, the zones, the airports, two planes off their track and the holding patte
 layer -- as the original demo drew its points. It needs `pip install folium` for the
 Python that nimpy loads, so `make test` only compiles it.
 
+`LEAFLET/` draws the same route in the browser with Leaflet.js instead of Folium: `leaflet_map.ady`
+is compiled to JavaScript (`ady2nim js`) and `leaflet_map.html` loads it with Leaflet from a CDN.
+It needs no Python. A click on the map gives the distance and bearing from Brussels, by `map_geo`.
+`make -C LEAFLET run` builds and opens it.
+
     ady2nim c map_geo.ady && ./map_geo
     ady2nim c -r test_map_utils.ady
     ady2nim c -r test_hek_map_utils.ady

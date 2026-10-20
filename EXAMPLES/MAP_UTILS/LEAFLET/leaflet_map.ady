@@ -1,0 +1,134 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""leaflet_map -- route_check on a map, with Leaflet.js, in the browser.
+
+    ady2nim js leaflet_map.ady     (writes leaflet_map.js; leaflet_map.html loads it)
+
+The same drawing as route_map.ady, without Python: map_utils works the route out
+(map_geo, regions, route_check), and this script, compiled to JavaScript, hands the
+points to Leaflet, which is loaded from a CDN by leaflet_map.html.  It draws
+
+  * the route, coloured by the airspace it is in: red where it is restricted, green in the
+    approach funnel where it may be used, blue elsewhere;
+  * the airspace: the polygon R-1, the circle R-2 and the approach funnel;
+  * the airports, with what the leg to each takes;
+  * the holding pattern round Marseille.
+
+Click the map: the popup gives the place's distance and bearing from Brussels, worked out
+by map_geo (`GeoPoint - GeoPoint`, the Vincenty inverse formula).
+"""
+from js/jsffi nimport *
+from map_base import Degree_T, Kilometers_T, Latitude_T, Longitude_T
+from units import metre_T
+from map_geo import GeoPoint, GeoVector, must
+from regions import Region
+from route_check import Airport_T, ROUTE, R2_CENTRE, R2_RADIUS, FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE
+from route_check import HOLD_RADIUS, HOLD_POINTS, CRUISE, Hours_T, Airspace_T
+from route_check import position_of, outline, airspace, holding_pattern, hours_minutes
+
+# Leaflet's global, loaded by leaflet_map.html
+jsvar L: JsObject
+
+const TILES: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+type Style_T is enum PLAIN_LEG, RESTRICTED_LEG, FUNNEL_LEG
+const COLOUR: [Style_T]str = [PLAIN_LEG: "#1f78b4", RESTRICTED_LEG: "#e31a1c", FUNNEL_LEG: "#33a02c"]
+const MEANING: [Style_T]str = [PLAIN_LEG: "open airspace", RESTRICTED_LEG: "restricted", FUNNEL_LEG: "approach funnel, unrestricted"]
+
+def style_at(point: GeoPoint, air: Airspace_T) -> Style_T:
+    return RESTRICTED_LEG if point in air.restricted
+    return FUNNEL_LEG if point in air.open_funnel
+    return PLAIN_LEG
+
+# ---- Leaflet, in the few words this needs ----------------------------------------------
+
+def latlng(point: GeoPoint) -> JsObject:
+    return L.latLng(float(point.latitude), float(point.longitude))
+
+def latlngs(points: []GeoPoint) -> JsObject:
+    var out: []JsObject = []
+    for p in points:
+        out.add(latlng(p))
+    return out.toJs
+
+def put(layer: JsObject, into: JsObject):
+    layer.addTo(into)
+
+def line(into: JsObject, points: []GeoPoint, style: Style_T, label: str):
+    put(L.polyline(latlngs(points), {"color": cstring(COLOUR[style]), "weight": 5, "opacity": 0.9}).bindTooltip(cstring(f"{label}: {MEANING[style]}")), into)
+
+# ---- the route ---------------------------------------------------------------------------
+
+def draw_leg(into: JsObject, start: GeoPoint, leg: GeoVector, air: Airspace_T, label: str):
+    """A leg as polylines, a new one wherever the airspace changes, joined end to start."""
+    let total: float = float(leg.magnitude())
+    var points: []GeoPoint = []
+    var style: Style_T = PLAIN_LEG
+    for k in 0 .. int(total):
+        let here: GeoPoint = start + leg * (float(k) / total if total > 0.0 else 0.0)
+        let now: Style_T = style_at(here, air)
+        if k > 0 and now != style:
+            points.append(here)                     # the old stretch ends where the new one starts
+            line(into, points, style, label)
+            points = []
+        points.append(here)
+        style = now
+    points.append(start + leg)                      # the airport itself, which the last kilometre falls short of
+    line(into, points, style, label)
+
+# ---- the airspace --------------------------------------------------------------------------
+
+def funnel_outline(apex: GeoPoint) -> []GeoPoint:
+    """The outline of the wedge: the apex, then points every 2.5 degrees along its far edge."""
+    var points: []GeoPoint = [apex]
+    let first: float = float(FUNNEL_HEADING) - float(FUNNEL_HALF_ANGLE)
+    let steps: int = int(2.0 * float(FUNNEL_HALF_ANGLE) / 2.5)
+    for k in 0 .. steps:
+        points.append(apex + GeoVector(FUNNEL_RANGE, Degree_T(first + 2.5 * float(k))))
+    return points
+
+def draw_airspace(on: JsObject, apex: GeoPoint):
+    let red: JsObject = {"color": "#e31a1c", "weight": 2, "fillColor": "#e31a1c", "fillOpacity": 0.18}
+    put(L.polygon(latlngs(outline()), red).bindTooltip("R-1: restricted area"), on)
+    put(L.circle(latlng(must(GeoPoint(R2_CENTRE))), {"radius": float(metre_T(R2_RADIUS)), "color": "#e31a1c", "weight": 2, "fillColor": "#e31a1c", "fillOpacity": 0.18}).bindTooltip("R-2: restricted circle"), on)
+    put(L.polygon(latlngs(funnel_outline(apex)), {"color": "#33a02c", "weight": 2, "fillColor": "#33a02c", "fillOpacity": 0.1}).bindTooltip("Approach funnel"), on)
+
+# ---- the page ------------------------------------------------------------------------------
+
+let brussels: GeoPoint = position_of(ROUTE[0])
+let apex: GeoPoint = position_of(ROUTE[len(ROUTE) - 1])
+let air: Airspace_T = airspace()
+
+let map: JsObject = L.map("map")
+put(L.tileLayer(cstring(TILES), {"maxZoom": 19, "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"}), map)
+
+var points: []GeoPoint = []
+for a in ROUTE:
+    points.append(position_of(a))
+
+for i in 1 ..< len(points):
+    draw_leg(map, points[i - 1], points[i] - points[i - 1], air, f"{ROUTE[i - 1]} to {ROUTE[i]}")
+
+draw_airspace(map, apex)
+
+for i in 0 ..< len(points):
+    var note: str = f"<b>{ROUTE[i]}</b><br>{points[i].human()}"
+    if i > 0:
+        let leg: GeoVector = points[i] - points[i - 1]
+        let hours: Hours_T = leg.magnitude() / CRUISE
+        note = f"{note}<br>{leg.magnitude():.1f} km from {ROUTE[i - 1]}, {hours_minutes(hours)} at {int(float(CRUISE))} km/h"
+    put(L.marker(latlng(points[i])).bindPopup(cstring(note)), map)
+
+for spot in holding_pattern(apex, HOLD_RADIUS, HOLD_POINTS):
+    put(L.circleMarker(latlng(spot), {"radius": 6, "color": "#6a3d9a", "fillOpacity": 0.9}), map)
+put(L.circle(latlng(apex), {"radius": float(metre_T(HOLD_RADIUS)), "color": "#6a3d9a", "weight": 2, "dashArray": "6", "fill": false}).bindTooltip("holding pattern"), map)
+
+map.fitBounds(latlngs(points + [apex] + outline()))
+
+# A click on the map: how far and which way from Brussels, by map_geo.
+def on_click(e: JsObject):
+    let here: GeoPoint = GeoPoint(Latitude_T(e["latlng"]["lat"].to(float)), Longitude_T(e["latlng"]["lng"].to(float)))
+    let from_brussels: GeoVector = here - brussels
+    L.popup().setLatLng(e["latlng"]).setContent(cstring(f"{here.human()}<br>{from_brussels}")).openOn(map)
+
+map.on("click", on_click)
