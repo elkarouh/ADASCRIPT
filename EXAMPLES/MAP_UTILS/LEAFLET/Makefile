@@ -20,10 +20,12 @@ leaflet_map.js: leaflet_map.ady ../map_base.ady ../map_flat.ady ../map_geo.ady .
 	@echo "building $@"
 	@$(ADY2NIM) js leaflet_map.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
+	@# ady2nim leaves a link to its cache build; the page gets a copy of the file
+	@cp -L leaflet_map.js leaflet_map.tmp && mv leaflet_map.tmp leaflet_map.js
 
 run: leaflet_map.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/leaflet_map.html) &
 	python3 -m http.server $(PORT) --bind 127.0.0.1
 
 clean:
-	rm -f leaflet_map.js leaflet_map build.log
+	rm -f leaflet_map.js leaflet_map leaflet_map.tmp build.log
