@@ -43,15 +43,15 @@ class Cover:
 
     def colour(self) -> str:
         case self.kind:
-            when CLEAR:     return "#1f78b4"
-            when NO_FLY:    return "#e31a1c"
-            when APPROACH:  return "#33a02c"
+            when CLEAR:     "#1f78b4"
+            when NO_FLY:    "#e31a1c"
+            when APPROACH:  "#33a02c"
 
     def meaning(self) -> str:
         case self.kind:
-            when CLEAR:     return "open airspace"
-            when NO_FLY:    return "restricted"
-            when APPROACH:  return "approach funnel, unrestricted"
+            when CLEAR:     "open airspace"
+            when NO_FLY:    "restricted"
+            when APPROACH:  "approach funnel, unrestricted"
 
 # GeoPoints, as the map has them.
 def spots(points: []GeoPoint) -> []Point_T:
