@@ -98,7 +98,7 @@ def draw_airspace(map: Map_T, apex: GeoPoint):
 # ---- the page ------------------------------------------------------------------------------
 
 let brussels: GeoPoint = position_of(ROUTE[0])
-let apex: GeoPoint = position_of(ROUTE[len(ROUTE) - 1])
+let apex: GeoPoint = position_of(ROUTE[-1])
 let air: Airspace_T = airspace()
 let map: Map_T = new_map("map")
 
