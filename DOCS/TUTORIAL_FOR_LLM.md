@@ -792,6 +792,8 @@ class AwkProcessor(AwkBase):
         self.FS = fs    # only caller-supplied fields need explicit init
 ```
 
+**A type in the class body** — `type Kind_T is enum A, B` written inside a class, before its fields, is declared beside the class (before it) in both backends. It is not scoped to the class: `Kind_T` and its members are file-wide names, so two classes cannot each declare a `Kind_T`. An enum cannot be written inline on a field (`var kind: enum A, B` does not parse); name it. See `EXAMPLES/test_class_type.ady`.
+
 **Mutable self** — the transpiler auto-detects if a method mutates `self` (field assignment, `+=`, `.add()`, or a call to a method that does — transitively) and emits `self: var ClassName` in Nim. A method that only reads, even one calling other readers, keeps plain `self`. A method called *on a field*, or `self` passed to another routine, is assumed to write. No annotation needed.
 
 **Parameter mutation** — parameters follow Python's rules. Rebinding the name (`s = s + "!"`) is local: Nim shadows it with `var s = s`. Mutating in place (`xs.append(...)`, `xs[i] = ...`, `+=`) is visible to the caller: Nim emits `xs: var seq[int]`. No annotation needed either way.

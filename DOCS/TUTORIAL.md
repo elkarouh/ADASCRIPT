@@ -2187,6 +2187,27 @@ class AwkProcessor(AwkBase):
         self.OFS = ofs
 ```
 
+### A type written in a class
+
+A type that only one class uses can be written in its body, next to the fields that name it:
+
+```python
+class Cover:
+    type Kind_T is enum CLEAR, NO_FLY, APPROACH
+    var kind: Kind_T
+
+    def colour(self) -> str:
+        case self.kind:
+            when CLEAR:    "blue"
+            when NO_FLY:   "red"
+            when APPROACH: "green"
+```
+
+The type is declared beside the class, before it, in both backends: it is not scoped to the class, so
+`Kind_T` and its members are named bare everywhere in the file, and a second class cannot declare a `Kind_T`
+of its own. An enum cannot be written on the field itself (`var kind: enum CLEAR, NO_FLY` does not parse); it
+needs its name. See `EXAMPLES/test_class_type.ady`.
+
 ### Mutable self in non-virtual classes
 
 For plain (non-`@virtual`) classes, the transpiler automatically detects

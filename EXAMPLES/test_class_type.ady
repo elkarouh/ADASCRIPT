@@ -1,0 +1,30 @@
+#!/usr/bin/env ady2nim
+# test_class_type.ady -- a type written in a class body
+#
+#   ady2nim EXAMPLES/test_class_type.ady -r
+#
+# A `type` in a class body is declared beside the class, before it: the fields and the
+# methods name it, and so do the enum's members, bare. Both backends do the same.
+#
+# The output is compared between the backends.
+
+class Cover:
+    type Kind_T is enum CLEAR, NO_FLY, APPROACH
+    var kind: Kind_T
+
+    def __init__(self, miles: int):
+        if miles < 0:
+            self.kind = NO_FLY
+        elif miles > 100:
+            self.kind = APPROACH
+        else:
+            self.kind = CLEAR
+
+    def colour(self) -> str:
+        case self.kind:
+            when CLEAR:    "blue"
+            when NO_FLY:   "red"
+            when APPROACH: "green"
+
+for miles in [5, -1, 500]:
+    print f"{miles}: {Cover(miles).colour()}"

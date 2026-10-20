@@ -820,6 +820,10 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         _unshadow(_shadowed)
         for _gname in _guard_unwrapped:
             hek_nim_expr._narrow_drop(_gname)
+        # A `type` written in the class body is declared beside the class, before it, where
+        # the fields and methods can name it; class_def puts these lines ahead of the class.
+        self._nested_types = [l for l in "\n".join(lines).split("\n") if l.strip()] if any(
+            l.lstrip().startswith("type ") for l in lines) else []
         return "\n".join(result_lines)
 
     # For non-class blocks, if empty emit discard
@@ -3981,7 +3985,9 @@ def to_nim(self, indent=0):
     # Update symbol kind: ref_class for ref objects (nullable), class for value objects (need Option)
     if name and needs_ref:
         ParserState.symbol_table.add(name, name, "ref_class")
-    result = f"{decos}{_ind(indent)}type {name}{_exp}{type_params} = {ref_keyword}object{parent}\n{body}"
+    nested = getattr(block_node, "_nested_types", None) or []
+    nested_text = "".join(f"{_ind(indent)}{l.strip()}\n" if l.lstrip().startswith("type ") else f"{l}\n" for l in nested)
+    result = f"{nested_text}{decos}{_ind(indent)}type {name}{_exp}{type_params} = {ref_keyword}object{parent}\n{body}"
     # Auto-emit a converter so any JsElem subclass is accepted where JsObject is expected.
     # Appended inline (not nim_top_decls) so it follows the type definition.
     if name == "JsElem" and hek_nim_expr.JS_BACKEND:

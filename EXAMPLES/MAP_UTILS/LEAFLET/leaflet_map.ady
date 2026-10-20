@@ -20,7 +20,7 @@ by map_geo (`GeoPoint - GeoPoint`, the Vincenty inverse formula).
 from map_base import Degree_T, Kilometers_T, Latitude_T, Longitude_T
 from units import metre_T
 from map_geo import GeoPoint, GeoVector, must
-from regions import Region
+from regions import Region          # `point in air.restricted` is Region's __contains__, which has to be in scope
 from route_check import Airport_T, ROUTE, R2_CENTRE, R2_RADIUS, FUNNEL_HEADING, FUNNEL_HALF_ANGLE, FUNNEL_RANGE
 from route_check import HOLD_RADIUS, HOLD_POINTS, CRUISE, Hours_T, Airspace_T
 from route_check import position_of, outline, airspace, holding_pattern, hours_minutes
@@ -28,9 +28,8 @@ from leaflet_utils import Map_T, Point_T, Style_T, style, new_map, fit, polyline
 
 # What a point of the route is in: open airspace, a restricted area, or the approach funnel. It
 # decides the colour of that stretch of the route.
-type Kind_T is enum CLEAR, NO_FLY, APPROACH
-
 class Cover:
+    type Kind_T is enum CLEAR, NO_FLY, APPROACH
     var kind: Kind_T
 
     def __init__(self, point: GeoPoint, air: Airspace_T):

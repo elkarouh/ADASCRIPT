@@ -2398,7 +2398,35 @@ def to_py(self, indent=0):
     body = overload_defs(body, indent + 1)
     if "dataclass" not in decos:        # a dataclass makes its own __init__
         body = _per_instance_fields(body, indent)
-    return f"{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"
+    body, nested_enums = _hoist_nested_enums(body, indent)
+    return f"{nested_enums}{decos}{_ind(indent)}class {name}{type_params}{bases}:{hc}\n{body}"
+
+
+def _hoist_nested_enums(body, indent):
+    """BODY with the enums written in it taken out, and the enums, one level out.
+
+    A type written in a class body is declared beside the class, as in the Nim output: its
+    members are named bare in the fields and the methods, which a Python class body does not
+    let them be. An enum is the class with its members and, after it, the module-level names
+    of the members (`CLEAR = Kind_T.CLEAR`)."""
+    import re as _re
+    inner = _ind(indent + 1)
+    lines = body.split("\n")
+    kept, hoisted, i = [], [], 0
+    while i < len(lines):
+        m = _re.match(_re.escape(inner) + r"class (\w+)\(Enum\):$", lines[i])
+        if not m:
+            kept.append(lines[i])
+            i += 1
+            continue
+        j = i + 1
+        while j < len(lines) and (lines[j].startswith(inner + " ") or not lines[j].strip()):
+            j += 1
+        while j < len(lines) and _re.match(_re.escape(inner) + r"\w+ = " + m.group(1) + r"\.\w+$", lines[j]):
+            j += 1
+        hoisted += [l[len(_ind(1)):] if l.startswith(_ind(1)) else l for l in lines[i:j]]
+        i = j
+    return "\n".join(kept), "".join(l + "\n" for l in hoisted)
 
 
 @method(class_args)
