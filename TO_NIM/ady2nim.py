@@ -1952,6 +1952,16 @@ def run_tests():
          "type B_T is record:\n    b: int\n"
          "var x: !A_T | !B_T\n",
          "at most one failure member"),
+        # Under an `or` of member tests the union may hold any named member:
+        # a field one of them lacks is refused where it is read.
+        ("type A_T is record:\n    n: int\n"
+         "type B_T is record:\n    m: int\n"
+         "type U_T is A_T | B_T\n"
+         "def g(u: U_T) -> int:\n"
+         "    if u is A_T or u is B_T:\n"
+         "        return u.n\n"
+         "    return 0\n",
+         "u may be B_T here, which has no field n"),
         # None is there once: `int | str | None` is ?(int | str), not this.
         ("var x: int | None | None\n",
          "None goes with one other type"),

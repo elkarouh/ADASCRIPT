@@ -458,6 +458,52 @@ def _union_shared_field(expr, field):
     return hits
 
 
+def _union_pick(expr, hits, field):
+    """EXPR's FIELD read off whichever member of HITS it holds: the last
+    is the unchecked else, which stops the program on a member without it."""
+    if len(hits) == 1:
+        return f"{expr}.m{hits[0]}.{field}"
+    return "(" + " ".join(
+        ("elif" if k else "if") + f" {expr}.is_m{h}: {expr}.m{h}.{field}"
+        for k, h in enumerate(hits[:-1])) + f" else: {expr}.m{hits[-1]}.{field})"
+
+
+def among_enter(cond):
+    """`u is A_T or u is B_T`: inside its body u holds A_T or B_T. Records
+    that for a field read; returns what among_exit restores."""
+    saved = dict(getattr(ParserState, "_union_among", None) or {})
+    parts = [_re_mod_pfx.match(r"^\(*\s*(" + NARROW_NAME + r")\.is_m(\d)\s*\)*$", p.strip())
+             for p in cond.split(" or ")]
+    if len(parts) > 1 and all(parts) and len({m.group(1) for m in parts}) == 1:
+        ParserState._union_among = {**saved, parts[0].group(1): sorted({int(m.group(2)) for m in parts})}
+    return saved
+
+
+def among_exit(saved):
+    ParserState._union_among = saved
+
+
+def _union_among_field(expr, field):
+    """EXPR's FIELD under an `or` of member tests, as EXPR holds the member
+    it is: None when EXPR is not under one, or FIELD is no member's. A member
+    the tests name without FIELD is refused here, where it can be seen."""
+    among = (getattr(ParserState, "_union_among", None) or {}).get(expr)
+    info = _union_info(_union_type_of(expr)) if among else None
+    if not info or info["kind"] != "plain":
+        return None
+    types = ParserState.class_field_types
+    have = [i for i in among if field in types.get(info["values"][i], {})]
+    if not have:
+        return None
+    lacking = [info["values"][i] for i in among if i not in have]
+    if lacking:
+        raise SyntaxError(f"{expr} may be {' or '.join(lacking)} here, "
+                          f"which has no field {field}")
+    if len({types[info["values"][i]][field] for i in have}) != 1:
+        return None
+    return _union_pick(expr, have, field)
+
+
 def _union_of_member(type_name):
     """(the Nim union, the index of TYPE_NAME in it) for a type that exactly
     one named union -- `type Val_T is Num_T | Sym_T` -- has as a member, or
@@ -4173,6 +4219,10 @@ def to_nim(self, prec=None):
                 # `x.num` on a union x: the field of the one member that has it,
                 # read through m<i>, which stops the program when x holds another
                 if next_tr is None or type(next_tr).__name__ != "call_trailer":
+                    _am = _union_among_field(result, method_name)
+                    if _am is not None:
+                        result = _am
+                        continue
                     _um = _union_member_with_field(result, method_name)
                     if _um is not None:
                         result = f"{result}.m{_um}.{method_name}"
@@ -4182,10 +4232,7 @@ def to_nim(self, prec=None):
                     # else, which stops the program on a member without it)
                     _hits = _union_shared_field(result, method_name)
                     if _hits and _re_mod_pfx.fullmatch(r"[A-Za-z_]\w*(\.\w+|\[\w+\])*", result):
-                        result = "(" + " ".join(
-                            (f"elif" if k else "if") + f" {result}.is_m{h}: {result}.m{h}.{method_name}"
-                            for k, h in enumerate(_hits[:-1])) + \
-                            f" else: {result}.m{_hits[-1]}.{method_name})"
+                        result = _union_pick(result, _hits, method_name)
                         continue
                 # Only a call is a method: a record field that shares a
                 # Python method's name -- `r.index[k]`, `r.get`, `r.lower`

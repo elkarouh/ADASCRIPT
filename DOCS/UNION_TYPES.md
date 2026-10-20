@@ -127,8 +127,12 @@ repeated the whole body in two branches.
   not at compile time: `grip.node` outside any `is` test compiles, and stops
   the program if `grip` holds another member. Inside `if grip is Held_T:`, or
   after an early return on the other states, the read is checked by the
-  compiler too. `or` does not narrow: `if grip is Held_T or grip is Ended_T:`
-  narrows to neither, so a field read inside it is still a run-time check.
+  compiler too. A field that several members share, with one type, is read off
+  whichever member the union holds, narrowed or not.
+- `if u is A_T or u is B_T:` narrows `u` to those two. In the body, a field
+  that both have reads off whichever `u` holds, and a field only one of them
+  has is refused where it is read: `u may be B_T here, which has no field n`.
+
 
 ## Summary
 

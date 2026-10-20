@@ -1,7 +1,9 @@
 # A field that several members of a union have is read off whichever member
-# the union holds, narrowed or not.
+# the union holds, narrowed or not. Under `a is A_T or a is B_T` the union is
+# one of those two, so a field only A_T has (`a.n`) is refused: see ady2nim --test.
 type A_T is record:
     x: int
+    n: int
 type B_T is record:
     x: int
 type C_T is record:
@@ -13,7 +15,7 @@ def x_of(u: U_T) -> int:
         return u.x
     return 0
 
-assert x_of(A_T(7)) == 7
+assert x_of(A_T(7, 1)) == 7
 assert x_of(B_T(5)) == 5
 assert x_of(C_T("c")) == 0
 let v: U_T = B_T(3)

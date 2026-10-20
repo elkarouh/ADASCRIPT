@@ -874,9 +874,11 @@ def to_nim(self, indent=0):
     import re as _re_if
     _newly = [v for v, sfx in _proved_in_body(cond)
               if hek_nim_expr._narrow_add(v, sfx)]
+    _among = hek_nim_expr.among_enter(cond)
     try:
         body = self.nodes[1].to_nim(indent + 1)
     finally:
+        hek_nim_expr.among_exit(_among)
         for _v in _newly:
             hek_nim_expr._narrow_drop(_v)
     return f"{_ind(indent)}elif {cond}:{hc}\n{body}"
@@ -966,7 +968,11 @@ def to_nim(self, indent=0):
     # b.isSome:` unwraps both; anything else (an `or`, a call) proves nothing.
     _newly_unwrapped = [v for v, sfx in _proved_in_body(cond)
                         if hek_nim_expr._narrow_add(v, sfx)]
-    body = self.nodes[1].to_nim(indent + 1)
+    _among = hek_nim_expr.among_enter(cond)
+    try:
+        body = self.nodes[1].to_nim(indent + 1)
+    finally:
+        hek_nim_expr.among_exit(_among)
     for _v in _newly_unwrapped:
         hek_nim_expr._narrow_drop(_v)
     result = f"{_hoist}{_ind(indent)}if {cond}:{hc}\n{body}"
