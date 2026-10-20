@@ -6,12 +6,13 @@
 #   make all      build the server and dijkstra_js_events.js, start nothing
 #   make clean    remove what was built
 #
-# $(OPEN) is xdg-open, or open on a Mac; `make app OPEN=firefox` picks one.
+# $(OPEN) is xdg-open, or open on a Mac; on WSL, PowerShell opens the Windows browser.
+# `make app OPEN=firefox` picks one.
 
 # This checkout's own transpiler, whatever ady2nim is first on PATH.
 PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
 ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
-OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
+OPEN    ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 PORT    ?= 8810
 
 .PHONY: all app test clean

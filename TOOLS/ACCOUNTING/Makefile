@@ -11,7 +11,8 @@
 #   make test       the model and the ledger, no GUI (Nim only)
 #   make all        build the programs and the pages, open none
 #
-# $(OPEN) is xdg-open, or open on a Mac; `make gui OPEN=firefox` picks one.
+# $(OPEN) is xdg-open, or open on a Mac; on WSL, PowerShell opens the Windows browser.
+# `make gui OPEN=firefox` picks one.
 
 # backend/   compiled to C: the ledger, the server, the page it draws
 # frontend/  compiled to JavaScript: accounting_js_events.ady, and the vendored htmx.min.js
@@ -22,7 +23,9 @@
 # imports) is the one used, whatever ady2nim is first on PATH.
 PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
 ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
-OPEN    ?= $(shell command -v xdg-open || command -v open || echo true)
+OPEN    ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
+# On WSL, PowerShell's Start-Process opens the default browser, given a file: URL.
+WINPATH  = $(if $(findstring powershell.exe,$(OPEN)),$(shell echo file:$$(wslpath -m $(1))),$(1))
 PORT    ?= 8802
 
 .PHONY: all app ledger server gui test clean
@@ -61,7 +64,7 @@ build/htmx.min.js: frontend/htmx.min.js
 	@cp frontend/htmx.min.js $@
 
 gui: build/accounting_gui.html
-	$(OPEN) $(CURDIR)/$<
+	$(OPEN) "$(call WINPATH,$(CURDIR)/$<)"
 
 app: server build/accounting_js_events.js build/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &

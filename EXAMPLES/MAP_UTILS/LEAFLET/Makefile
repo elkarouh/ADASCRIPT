@@ -10,7 +10,7 @@
 PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
 ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../../TO_NIM/ady2nim.py)
 PORT ?= 8802
-OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || echo true)
+OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 
 .PHONY: all run clean
 
