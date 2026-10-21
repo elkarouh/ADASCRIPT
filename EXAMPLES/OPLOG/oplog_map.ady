@@ -54,7 +54,7 @@ def main():
         dot(map, at, style("#1f78b4"), tip=clock(p.json_number("seconds")) + level)
     if len(points) > 0:
         polyline(map, points, style("#1f78b4", weight=3))
-        fit(map, points)
+        fit(map, points, max_zoom=7)    # far enough out to see the coast the flight is near
 
     var items: []str = []
     for e in entries:

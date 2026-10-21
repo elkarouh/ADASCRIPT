@@ -1,8 +1,8 @@
 # OPLOG: the ARCHIVED_OPLOG decoder, and a map of one flight from it.
 #
 #   make                          build decode_oplog and oplog_map.js (ady2nim js)
-#   make page CALLSIGN=TAM8149    write the flight's page, flight.html, from sample_oplog.txt
-#   make run  CALLSIGN=TAM8149    ... then serve this directory and open it
+#   make page CALLSIGN=SAS123    write the flight's page, flight.html, from sample_oplog.txt
+#   make run  CALLSIGN=SAS123    ... then serve this directory and open it
 #   make clean                    remove what was built
 #
 # The page loads Leaflet and the OpenStreetMap tiles from the internet.
@@ -11,7 +11,7 @@
 PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
 ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 PORT ?= 8803
-CALLSIGN ?= TAM8149
+CALLSIGN ?= SAS123
 OPEN ?= $(shell command -v xdg-open || command -v open || command -v wslview || echo true)
 
 .PHONY: all page run clean

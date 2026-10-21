@@ -96,8 +96,10 @@ def new_map(id: str) -> Map_T:
 
 # Zoom and move the map to show all of POINTS (with no animation: a shape drawn while the map is still
 # moving lands in the wrong place).
-def fit(m: Map_T, points: []Point_T):
-    m.fitBounds(ats(points), {"animate": false})        # drawn at once, so that what is drawn next lands in the right place
+# MAX_ZOOM keeps a short track from filling the map: zoomed in too far, a track over the sea shows
+# nothing but blue.
+def fit(m: Map_T, points: []Point_T, max_zoom: int = 18):
+    m.fitBounds(ats(points), {"animate": false, "maxZoom": max_zoom})        # drawn at once, so that what is drawn next lands in the right place
 
 # A new, empty layer on the map.
 def new_layer(m: Map_T) -> Layer_T:
