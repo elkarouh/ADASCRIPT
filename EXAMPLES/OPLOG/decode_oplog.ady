@@ -129,9 +129,7 @@ def ascii_image_decode(s: str) -> Octets_T | !Decode_Failure_T:
         else:
             let hi: ?Octet_T = hex_value(c1)
             let lo: ?Octet_T = hex_value(c2)
-            if hi is None:
-                return Decode_Failure_T(f"'{c1}{c2}' is not a hexadecimal octet")
-            if lo is None:
+            if hi is None or lo is None:
                 return Decode_Failure_T(f"'{c1}{c2}' is not a hexadecimal octet")
             out.append(Octet_T(hi * 16 + lo))
     return out
@@ -889,10 +887,7 @@ class Selection:
         return subject == self.callsign or ifps_id == self.callsign
 
     def add(self, stamp: str, kind: str, subject: str, summary: str, mine: []Report):
-        let hours: int = int(stamp[8:10])
-        let minutes: int = int(stamp[10:12])
-        let secs: int = int(stamp[12:14])
-        let seconds: int = hours * 3600 + minutes * 60 + secs
+        let seconds: int = int(stamp[8:10]) * 3600 + int(stamp[10:12]) * 60 + int(stamp[12:14])
         self.entries.append(Entry_T(stamp, kind, subject, seconds, summary))
         for r in mine:
             if r.position is not None and r.time_of_track is not None:

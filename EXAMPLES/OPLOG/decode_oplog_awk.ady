@@ -129,9 +129,7 @@ def ascii_image_decode(s: str) -> Octets_T | !Decode_Failure_T:
         else:
             let hi: ?Octet_T = hex_value(c1)
             let lo: ?Octet_T = hex_value(c2)
-            if hi is None:
-                return Decode_Failure_T(f"'{c1}{c2}' is not a hexadecimal octet")
-            if lo is None:
+            if hi is None or lo is None:
                 return Decode_Failure_T(f"'{c1}{c2}' is not a hexadecimal octet")
             out.append(Octet_T(hi * 16 + lo))
     return out
