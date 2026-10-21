@@ -91,9 +91,18 @@ class AwkProcessor:
         self.finish()
 
     def try_run_file(self, path: str) -> None | !AwkFailure_T:
-        let source: str | !PathFailure_T = Path(path).read_text()
-        if source is PathFailure_T:
-            return AwkFailure_T(f"cannot read {path}: {source.reason}")
+        var source: str = ""
+        if path.endswith(".gz"):
+            # a gzipped file is read as what it holds
+            let unzipped: str | !ShellFailure_T = shell: gzip -dc -- {!path}
+            if unzipped is ShellFailure_T:
+                return AwkFailure_T(f"cannot read {path}: {unzipped.stderr.strip()}")
+            source = unzipped
+        else:
+            let plain: str | !PathFailure_T = Path(path).read_text()
+            if plain is PathFailure_T:
+                return AwkFailure_T(f"cannot read {path}: {plain.reason}")
+            source = plain
         self.start()
         if self.RS == "\n":
             for raw in source.splitlines():

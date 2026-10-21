@@ -1019,10 +1019,18 @@ class OplogFile:
     var records: []OplogRecord
 
     def __init__(self, path: Path) -> None | !Decode_Failure_T:
-        let res: str | !PathFailure_T = path.read_text()
-        if res is PathFailure_T:
-            return Decode_Failure_T(f"cannot read {path}: {res.reason}")
-        let lines: []str = res.split("\r\n")
+        var text: str = ""
+        if str(path).endswith(".gz"):
+            let unzipped: str | !ShellFailure_T = shell: gzip -dc -- {!path}
+            if unzipped is ShellFailure_T:
+                return Decode_Failure_T(f"cannot read {path}: {unzipped.stderr.strip()}")
+            text = unzipped
+        else:
+            let plain: str | !PathFailure_T = path.read_text()
+            if plain is PathFailure_T:
+                return Decode_Failure_T(f"cannot read {path}: {plain.reason}")
+            text = plain
+        let lines: []str = text.split("\r\n")
         if not lines[0].startswith("CFMU_FILE_VERSION="):
             return Decode_Failure_T(f"{path}: not an ARCHIVED_OPLOG file: {lines[0]}")
         self.records = []
@@ -1082,7 +1090,7 @@ def write_page(path: Path, sel: Selection):
 
 
 def usage() -> str:
-    return f"usage: {$0} <ARCHIVED_OPLOG_file>... [--callsign CALLSIGN [--html PAGE.html]]"
+    return f"usage: {$0} <ARCHIVED_OPLOG_file[.gz]>... [--callsign CALLSIGN [--html PAGE.html]]"
 
 
 type Options_T is record:

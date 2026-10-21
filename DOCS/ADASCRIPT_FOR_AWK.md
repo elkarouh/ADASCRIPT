@@ -189,6 +189,9 @@ the reason when a file cannot be read, or when `process_record` calls
 read). `p.try_run_file(path)` and `p.try_run()` do the same but give the reason
 back as a `None | !AwkFailure_T`, to take like any failure. `EXAMPLES/test_awk_stop.ady`.
 
+A path ending in `.gz` is read as what it holds (through `gzip -dc`), by `run_file` and
+`try_run_file` alike.
+
 ---
 
 ## 3. Patterns: `case` instead of a pattern list
