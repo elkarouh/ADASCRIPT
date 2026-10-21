@@ -52,6 +52,7 @@ TOOLS/LISPY/lispy
 TOOLS/LISPY/lispy_union
 TOOLS/LISPY/lispy_short
 TOOLS/LV/lv
+TOOLS/LV/lv_awk
 TOOLS/LV/*_gen.py
 
 # Thist, the same again.
