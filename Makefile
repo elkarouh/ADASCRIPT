@@ -65,7 +65,6 @@ STANDALONE := \
     dijkstra.ady \
     GEO_SERVER/geo_server.ady \
     GEO_SERVER/test_geo_server.ady \
-    MAP_UTILS/map_base.ady \
     MAP_UTILS/map_flat.ady \
     MAP_UTILS/map_geo.ady \
     MAP_UTILS/test_map_utils.ady \
@@ -133,6 +132,7 @@ STANDALONE := \
     test_nim_module.ady \
     test_nim_quirks.ady \
     test_small_fixes.ady \
+    test_decoder_gaps.ady \
     test_union_optional.ady \
     test_decorators.ady \
     test_str_case.ady \
@@ -361,7 +361,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
     test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field \
-    MAP_UTILS/map_base MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
+    MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry test_units_dims \
     distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset test_units_stdlib test_cents test_class_type
 
@@ -383,7 +383,7 @@ JS_COMPARED := test_do_block test_do_discard test_case_ranges test_ordered_map a
     test_str_repeat test_union_optional test_decorators test_str_case test_optional_tails \
     test_generic_methods test_round_splitlines test_portable_gaps test_optional_union_written \
     test_portable_gaps3 test_portable_gaps4 test_portable_gaps7 test_module_rename \
-    test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field MAP_UTILS/map_base \
+    test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field \
     MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry \
     test_units_dims distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset \
@@ -614,7 +614,7 @@ test-kilo:
 	$(kilo_tests)
 
 # -----------------------------------------------------------------------
-# The moon tests: MOON/moon_sim.ady (Nim only: it builds on MAP_UTILS/map_base.ady and map_flat.ady). The
+# The moon tests: MOON/moon_sim.ady (Nim only: it builds on STDLIB/map_base.ady and MAP_UTILS/map_flat.ady). The
 # deterministic half of the mission is checked against the Python original's numbers, to the
 # digit, and the lander must have landed. It plots with matplotlib (pyimport), so it SKIPs
 # without it. Shared by `test` and by `test-moon`.

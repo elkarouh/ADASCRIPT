@@ -141,7 +141,7 @@ IMU -> Navigation -> Guidance -> Autopilot -> Propulsion) written in Adascript.
     ady2nim c -r moon_sim.ady --out moon_mission.png      # about 2.5 s
     make test-moon
 
-**Nim only**: it imports `MAP_UTILS/map_base.ady` and `map_flat.ady` for its units and flat-plane geometry, and those
+**Nim only**: it imports `map_base.ady` (the standard library, `TO_NIM/STDLIB`) and `MAP_UTILS/map_flat.ady` for its units and flat-plane geometry, and those
 files are Nim only (they do `from math nimport ...`; `ady2py` cannot run it). The first version of this
 example had its own `Vec2` and ran on both backends, with identical output; this one trades that for
 the shared types.

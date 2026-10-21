@@ -262,6 +262,7 @@ def to_nim(self):
                 _tsym = ParserState.symbol_table.lookup(parts[0])
                 if isinstance(_tsym, dict):
                     _rhs = _coerce_string_to_char(_rhs, _tsym.get("type") or "")
+                    _rhs = _coerce_char_to_string(_rhs, _tsym.get("type") or "")
                 parts.append(_rhs)
     # Skip var for dotted assignments (field mutation), indexed assignments,
     # and variables already declared in the current scope
@@ -429,6 +430,16 @@ def to_nim(self):
     # wrap RHS in some(...)
     if len(parts) == 2 and prefix == "":
         sym = ParserState.symbol_table.lookup(lhs)
+        # A field of a variable of a declared record or class is what that type
+        # says it is: the symbol for `r.field` reads an optional field as its T.
+        import re as _re_own
+        _own = _re_own.match(r'^(\w+)\.(\w+)$', lhs)
+        if _own:
+            _osym = ParserState.symbol_table.lookup(_own.group(1))
+            _otype = ((_osym.get("type") or "") if _osym else "").replace("var ", "").strip()
+            _oft = ParserState.class_field_types.get(_otype, {}).get(_own.group(2), "")
+            if _oft.startswith("Option["):
+                sym = {"type": _oft}
         # Also handle field access: obj.field where field type is Option[T]
         # (a field first assigned `None` was recorded as a void variable)
         if not sym or sym.get("type") in ("void", ""):
@@ -579,6 +590,13 @@ def _coerce_char_to_string(value, annotation):
     """
     if annotation not in ("string", "str"):
         return value
+    # '"' is written as a char literal wherever it is met (see the literal
+    # converter): in a declaration of a str it is the one-character string, alone
+    # or as a branch of a conditional expression.
+    if value == "'\"'":
+        return '"\\""'
+    import re as _re_cq
+    value = _re_cq.sub(r"(?<=: )'\"'(?= else:)|(?<=else: )'\"'(?=\))", lambda m: '"\\""', value)
     from hek_nim_expr import _expr_is_char
     if not _expr_is_char(value):
         return value
@@ -1564,18 +1582,23 @@ def _note_tuple_result_units(value, names, kw):
     beside them reads the literal as a Force_T, as it does for a name declared one."""
     import re as _re_tu
     from ady_declarations import is_distinct
+    if _re_tu.search(r"\.(?:r?split|splitWhitespace|r?partition)\(", value):
+        return                          # typed by _note_split_parts
     m = _re_tu.search(r"([A-Za-z_]\w*)\([^()]*(?:\([^()]*\)[^()]*)*\)$", value.strip())
     if not m:
         return
     rt = hek_nim_expr._proc_ret_nim(m.group(1)).strip()
     if not (rt.startswith("(") and rt.endswith(")")):
-        return
-    parts = [p.strip() for p in _split_top_level_commas(rt[1:-1])]
+        parts = [""] * len(names)       # a tuple type by name: unknown, but not a field's
+    else:
+        parts = [p.strip() for p in _split_top_level_commas(rt[1:-1])]
     if len(parts) != len(names):
         return
     for n, ty in zip(names, parts):
         n = n.strip()
-        if _re_tu.fullmatch(r"[A-Za-z_]\w*", n) and is_distinct(ty):
+        if _re_tu.fullmatch(r"[A-Za-z_]\w*", n):
+            # every name is entered, so that a field of the same name
+            # (`track_number: ?int`) is not taken for what it is
             ParserState.symbol_table.add(n, ty, kw)
 
 
@@ -1596,6 +1619,7 @@ def to_nim(self):
     val = self.nodes[0].to_nim()
     ret_type = getattr(ParserState, "_current_return_type", "")
     val = _coerce_string_to_char(val, ret_type.lstrip(": ").strip())
+    val = _coerce_char_to_string(val, ret_type.lstrip(": ").strip())
     # An inline tuple return type that merely *contains* an Option --
     # `def f() -> (int, ?S_T)` -- is not itself an Option, and wrapping the
     # whole tuple in some() typed nothing: `some((1, nil))` is

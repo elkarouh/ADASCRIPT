@@ -324,6 +324,31 @@ def _check_override_vars(class_name, name, params):
         parent = _class_parents.get(base)
 
 
+def _passed_as_var_argument(pname, text):
+    """True when TEXT (generated Nim, literals blanked) calls a routine of this
+    program with the name PNAME as an argument that routine takes by `var`."""
+    for callee, positions in ParserState.var_param_positions.items():
+        for m in re.finditer(rf"(?<![.\w`]){re.escape(callee)}\(", text):
+            depth, j = 1, m.end()
+            while j < len(text) and depth:
+                depth += {"(": 1, "[": 1, "{": 1, ")": -1, "]": -1, "}": -1}.get(text[j], 0)
+                j += 1
+            args = hek_nim_expr._split_args(text[m.end():j - 1])
+            if any(i < len(args) and args[i].strip() == pname for i in positions):
+                return True
+    # ...and a routine of the program not translated yet may take it so: noted,
+    # for the second pass translate() makes when one does
+    for m in re.finditer(r"(?<![.\w`])([A-Za-z_]\w*)\(([^()]*)\)", text):
+        callee = m.group(1)
+        if (callee in ParserState.user_top_level_procs
+                and callee not in ParserState.var_param_positions
+                and callee not in ParserState.by_value_procs
+                and callee not in ParserState.var_param_procs
+                and pname in [a.strip() for a in hek_nim_expr._split_args(m.group(2))]):
+            ParserState._forward_var_calls.add(callee)
+    return False
+
+
 def _refuse_hidden_param_write(class_name, name, param, body):
     """Refuse a method that changes what a by-value parameter holds -- a field
     written (`ed.top = 1`) or a method called that changes its object
@@ -3222,6 +3247,9 @@ def _func_def_to_nim_inner(self, indent=0):
         decos = (decos + "\n") if decos else ""
 
     # Store return type so return_stmt can use it for Option wrapping
+    # a def nested in another is translated in the middle of the outer one's body:
+    # the outer routine's return type is what the rest of that body is read with
+    _outer_ret_type = getattr(ParserState, '_current_return_type', '')
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
     _mark_docstring(block_node, ret_ann)
     _mark_either_tail(block_node, ret_ann)
@@ -3299,7 +3327,7 @@ def _func_def_to_nim_inner(self, indent=0):
                 if not hasattr(ParserState, "noreturn_procs"):
                     ParserState.noreturn_procs = set()
                 ParserState.noreturn_procs.add(name)
-    ParserState._current_return_type = ""
+    ParserState._current_return_type = _outer_ret_type
     # Strip trailing 'discard' from implicit return — the value is the return value
     _void_rets_set = {"void", "None", "unit"}
     _ret_is_void = ret_ann and ret_ann.lstrip(": ").strip() in _void_rets_set
@@ -3429,6 +3457,13 @@ def _func_def_to_nim_inner(self, indent=0):
                 _inplace = _re.search(
                     _anchor + r"(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\.\w+\s*[+\-*/&]?=(?!=)|\[.*\]\s*[+\-*/&]?=(?!=)|[+\-*/&]=" + _mutator_calls + ")",
                     _scan)
+                # A call of a mutating method is one wherever it stands: inside the
+                # arguments of another call, `f(c.take())`, as much as on a line
+                # of its own. The anchor above skips a name that follows `(` or `,`
+                # because there it may be a named argument.
+                if not _inplace and _mutators:
+                    _inplace = _re.search(
+                        rf"(?<![.\w]){_re.escape(pname)}\s*\.(?:{_mutators})\(", _scan)
                 # ...and so is mutating what a field or an element holds, as
                 # the `self` check below allows: `p.items.add(x)`,
                 # `p.index[k] = i`, `p.files[k][i].commits.add(c)`. Without
@@ -3438,6 +3473,11 @@ def _func_def_to_nim_inner(self, indent=0):
                     _inplace = _re.search(
                         _anchor + r"(?:\.\w+|\[[^\]\n]*\])+\s*(?:\.(?:add|append|extend|pop|clear|remove|sort|del|incl|excl)\(|[+\-*/&]?=(?!=))",
                         _scan)
+                # Handing the parameter on as an argument a routine takes by `var`
+                # changes what it holds just as a mutating call does: `fx_chain(cur)`
+                # (a routine defined above; the others are not known yet).
+                if not _inplace and getattr(ParserState, "var_param_positions", None) is not None:
+                    _inplace = _passed_as_var_argument(pname, _scan)
                 # Rebinding the name (s = ...) is local to the function in
                 # Python and must not turn the parameter into an out-parameter;
                 # shadow it with a mutable local instead.
@@ -3767,6 +3807,13 @@ def _func_def_to_nim_inner(self, indent=0):
         # nested proc counts too: it is emitted before the body around it
         # is looked at.
         _takes_var = bool(_re_gp.search(r'(?:^|[(,;])\s*[\w`, ]+:\s*var\b', params))
+        if _takes_var:
+            _positions = {i for i, _p in enumerate(hek_nim_expr._split_args(params))
+                          if re.match(r"\s*[\w`]+\s*:\s*var\b", _p)}
+            if _positions:
+                if getattr(ParserState, "var_param_positions", None) is None:
+                    ParserState.var_param_positions = {}
+                ParserState.var_param_positions[name] = _positions
         (ParserState.var_param_procs if _takes_var
          else ParserState.by_value_procs).add(name)
     return f"{decos}{_ind(indent)}{keyword} {nim_name}{_exp}{_generic_params}({params}){ret_ann}{_pragmas} ={hc}\n{body}"
@@ -5897,6 +5944,9 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             block_node = node
 
     # Store return type so return_stmt can use it for Option wrapping
+    # a def nested in another is translated in the middle of the outer one's body:
+    # the outer routine's return type is what the rest of that body is read with
+    _outer_ret_type = getattr(ParserState, '_current_return_type', '')
     ParserState._current_return_type = ret_ann  # e.g. ': seq[seq[string]]'
     _mark_docstring(block_node, ret_ann)
     _mark_either_tail(block_node, ret_ann)
@@ -6149,7 +6199,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     if nim_name is None:
         _unshadow(_param_shadow)
         ParserState.symbol_table.pop_scope()
-        ParserState._current_return_type = ""
+        ParserState._current_return_type = _outer_ret_type
         return []  # skip (e.g. __init__)
     if nim_kw == "iterator":
         keyword = "iterator"
@@ -6202,7 +6252,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
 
     _unshadow(_param_shadow)
     ParserState.symbol_table.pop_scope()
-    ParserState._current_return_type = ""
+    ParserState._current_return_type = _outer_ret_type
     return lines
 
 

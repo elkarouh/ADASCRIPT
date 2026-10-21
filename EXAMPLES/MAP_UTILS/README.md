@@ -5,7 +5,7 @@ flat-plane `Vector` / `Position`, and the geodetic `GeoVector` / `GeoPoint` with
 the Vincenty direct and inverse formulae, so that `GeoPoint + GeoVector` and
 `GeoPoint - GeoPoint` work like their flat-plane counterparts.
 
-`map_base.ady`, `map_flat.ady` and `map_geo.ady` are the same module in Adascript (Nim backend: it uses
+`map_base.ady` (now in the standard library, `TO_NIM/STDLIB`, so any program can `from map_base import Degree_T`), `map_flat.ady` and `map_geo.ady` are the same module in Adascript (Nim backend: it uses
 `math`), in three parts that import one another in that order: `map_base` has the units, the
 trigonometry on `Radians_T` and the DMS conversions, `map_flat` the flat-plane `Vector`, `Position`,
 `Velocity` and `Acceleration`, and `map_geo` Vincenty, `GeoVector`, `GeoPoint` and the demo.

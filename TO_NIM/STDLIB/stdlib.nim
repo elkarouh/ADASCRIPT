@@ -155,6 +155,11 @@ proc adaSide*[T, E, V](R: typedesc[Result[T, E]]; v: V): Result[T, E] =
   ## says which side it is on -- a failure is the error, anything else the value.
   when V is E and V isnot T: R.err(v) else: R.ok(v)
 
+# a `T | !E` given where a `?T | !E` is wanted: the value, when there is one, is present
+proc adaLiftOption*[T, E](r: Result[T, E]): Result[Option[T], E] =
+  if r.adaIsErr: Result[Option[T], E](adaIsErr: true, adaErr: r.adaErr)
+  else: Result[Option[T], E](adaIsErr: false, adaVal: some(r.adaVal))
+
 proc is_ok*[T, E](r: Result[T, E]): bool = not r.adaIsErr
 proc is_err*[T, E](r: Result[T, E]): bool = r.adaIsErr
 

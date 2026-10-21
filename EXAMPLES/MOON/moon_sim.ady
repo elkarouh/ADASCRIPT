@@ -35,7 +35,7 @@ Nim only (map_flat is):  ady2nim c -r moon_sim.ady
 
 from math nimport sqrt, exp, ln, PI
 from units import kilogram_T, metre_T, second_T
-from MAP_UTILS/map_base import Accel_T, AngMom_T, Bearing_T, Degree_T, Kilometers_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
+from map_base import Accel_T, AngMom_T, Bearing_T, Degree_T, Kilometers_T, Radians_T, Speed_T, SquareMeters_T, cos, sin
 from MAP_UTILS/map_flat import Acceleration, Position, Vector, Velocity
 pyimport matplotlib
 pyimport matplotlib.pyplot as plt

@@ -179,6 +179,8 @@ def _nim_reset():
     # and not the second takes every argument by value (see _purity_evidence)
     ParserState.by_value_procs = set()
     ParserState.var_param_procs = set()
+    ParserState.var_param_positions = dict(_seed_var_param_positions)   # proc -> the positions of its `var` parameters
+    ParserState._forward_var_calls = set()   # routines a parameter was handed to before they were translated
     ParserState.var_self_methods = set()   # methods that take self by var
     ParserState.class_names = set()     # all class names defined in this translation unit
     ParserState._current_lhs_type = ""  # annotation of current assignment LHS (set by stmt handlers)
@@ -817,7 +819,35 @@ def _nim_import_line():
     return "import " + ", ".join(mods)
 
 
+# Routines of the module being translated that take a parameter by `var`, with the
+# positions of those parameters: seeded into a second pass, see translate().
+_seed_var_param_positions: dict = {}
+
+
 def translate(code, export_symbols=False):
+    """translate_once(), twice when it has to be.
+
+    A parameter handed on to a routine that takes it by `var` is itself `var`,
+    and that is known when the callee has been translated -- which, when the
+    callee is defined further down, it has not. The first pass notes the calls
+    it could not judge; if any of those routines turned out to take a `var`,
+    the module is translated again knowing which."""
+    global _seed_var_param_positions
+    _seed_var_param_positions = {}
+    from hek_parsec import ParserState
+    out = translate_once(code, export_symbols)
+    _late = getattr(ParserState, "_forward_var_calls", set())
+    _known = getattr(ParserState, "var_param_positions", {})
+    if _late & set(_known):
+        _seed_var_param_positions = dict(_known)
+        try:
+            out = translate_once(code, export_symbols)
+        finally:
+            _seed_var_param_positions = {}
+    return out
+
+
+def translate_once(code, export_symbols=False):
     """Parse Python source and translate to Nim via to_nim().
 
     When export_symbols=True, all top-level declarations get the Nim export

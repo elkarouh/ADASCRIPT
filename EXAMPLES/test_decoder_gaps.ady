@@ -1,0 +1,136 @@
+#!/usr/bin/env ady2nim
+"""Gaps met translating a binary-record decoder (decode_oplog.py), Nim backend:
+
+* `?T | !F`: a function that may find nothing and may fail -- None, a value, or a failure;
+* the one-character literal '"' in a str declaration, and ord() of a one-character str;
+* a field `error: str` of one class is not the `error: ?str` of another record;
+* a `do:` after a def nested in the same routine still passes failures up that routine;
+* a class instance handed down through routines, however they are ordered, that
+  change it, is a `var` parameter all the way.
+"""
+
+type Fail_T is record:
+    reason: str
+
+def lookup(msg: str) -> ?int | !Fail_T:
+    if msg == "x":
+        return None
+    if msg == "bad":
+        return Fail_T("bad")
+    return len(msg)
+
+# a `T | !F` handed on as the `?T | !F`
+def checked(msg: str) -> int | !Fail_T:
+    if msg == "bad":
+        return Fail_T("bad")
+    return len(msg)
+
+def maybe(msg: str) -> ?int | !Fail_T:
+    return checked(msg)
+
+def total(msgs: []str) -> int:
+    var t: int = 0
+    for m in msgs:
+        let r: ?int | !Fail_T = lookup(m)
+        if r is Fail_T:
+            continue
+        if r is None:
+            continue
+        t += r
+    return t
+
+def describe(m: str) -> str:
+    let r: ?int | !Fail_T = lookup(m)
+    if r is Fail_T:
+        return "failed: " + r.reason
+    if r is not None:
+        return f"length {r}"
+    return "nothing"
+
+type Even_T is int where n: n % 2 == 0
+
+# a nested def, then a do: whose failures are this routine's
+def two_evens(first: int) -> int | !ParseFailure_T:
+    var next: int = first
+
+    def take() -> int:
+        next += 1
+        return next - 1
+
+    do:
+        a <- Even_T(take())
+        b <- Even_T(take() + 1)
+    return a + b
+
+def quote_for(s: str) -> str:
+    let has_single: bool = "'" in s
+    let has_double: bool = '"' in s
+    return '"' if has_single and not has_double else "'"
+
+def code_of(ch: str) -> int:
+    return ord(ch)
+
+type Block is record:
+    error: ?str
+    n: int
+
+class Cursor:
+    var pos: int
+    var error: str
+
+    def __init__(self):
+        self.pos = 0
+        self.error = ""
+
+    def bump(self) -> int:
+        self.pos += 1
+        if self.pos > 3:
+            self.error = "too far"
+        return self.pos
+
+# defined below the routines that use it, and itself passing the cursor on
+def outer(cur: Cursor) -> int:
+    return inner(cur)
+
+def inner(cur: Cursor) -> int:
+    return cur.bump()
+
+def twice(cur: Cursor) -> int:
+    return outer(cur) + outer(cur)
+
+def in_a_call(cur: Cursor, n: int) -> int:
+    return max(cur.bump(), n)
+
+def run() -> Block:
+    var cur: Cursor = Cursor()
+    while cur.error == "":
+        twice(cur)
+    return Block(cur.error, cur.pos)
+
+def main():
+    assert total(["x", "bad", "abc", "hello"]) == 8
+    assert describe("x") == "nothing"
+    assert describe("bad") == "failed: bad"
+    assert describe("hi") == "length 2"
+    assert describe("a") == "length 1"
+    let m: ?int | !Fail_T = maybe("four")
+    assert m is not Fail_T
+    assert maybe("bad") is Fail_T
+
+    let ok: int | !ParseFailure_T = two_evens(2)
+    assert ok is not ParseFailure_T and ok == 6
+    assert two_evens(3) is ParseFailure_T
+
+    assert quote_for("it's") == "\""
+    assert quote_for("plain") == "'"
+    assert code_of("A") == 65
+
+    var cur: Cursor = Cursor()
+    assert twice(cur) == 3
+    assert in_a_call(cur, 0) == 3
+    let b: Block = run()
+    assert b.n == 4 and b.error == "too far"
+    print "test_decoder_gaps: ok"
+
+if __name__ == "__main__":
+    main()

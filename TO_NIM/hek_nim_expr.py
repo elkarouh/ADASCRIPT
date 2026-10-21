@@ -1187,13 +1187,24 @@ def _result_wrap(val, rtype):
     _ut = _union_type_of(val)
     if _ut and _ut.replace(" ", "") == rtype.replace(" ", ""):
         return val
+    values, failure = info["values"], info["failure"]
+    # a `T | !F` handed on as a `?T | !F`: its value, if it has one, is present
+    if (info["kind"] == "either" and not info["multi"] and values[0].startswith("Option[")
+            and _ut.startswith("Result[")):
+        _sides = _split_result(_ut)
+        if _sides and _sides[0].replace(" ", "") == values[0][len("Option["):-1].replace(" ", ""):
+            ParserState.nim_imports.add("options")
+            return f"adaLiftOption({val})"
     if info["kind"] == "either" and not info["multi"] and _expr_is_result(val):
         return val
-    values, failure = info["values"], info["failure"]
     _void = values == ["void"]
     if val.strip() == "nil":
         if _void:
             return f"{rtype}.ok()"
+        # `?T | !F`: the value may be absent, and None is that, not a failure
+        if info["kind"] == "either" and not info["multi"] and values[0].startswith("Option["):
+            ParserState.nim_imports.add("options")
+            return f"{rtype}.ok(none({values[0][len('Option['):-1]}))"
         raise SyntaxError(
             f"None is not a member of {' | '.join(values + ([failure] if failure else []))}")
     _t = _value_nim_type(val)
@@ -1212,6 +1223,9 @@ def _result_wrap(val, rtype):
     if info["kind"] == "either" and not info["multi"]:
         if _void:
             return f"{rtype}.ok()"
+        if values[0].startswith("Option[") and _t and _t == values[0][len("Option["):-1]:
+            ParserState.nim_imports.add("options")
+            return f"{rtype}.ok(some({val}))"
         # a value whose type cannot be told here: Nim tells, and picks the side
         return f"{rtype}.ok({val})" if _t else f"adaSide({rtype}, {val})"
     if info["multi"] and _t and _t.replace(" ", "") == _split_result(rtype)[0].replace(" ", ""):
@@ -1244,6 +1258,13 @@ def _result_is_test(chain, right, negated):
     if (_nm and _nm.group(1) in getattr(ParserState, "_option_unwrap_vars", ())
             and _narrow_suffix(_nm.group(1)) == _nm.group(2)
             and _union_info(_union_type_of(_nm.group(1))) is not None):
+        # ...except that `x is None` on the value a `?T | !F` proved present
+        # asks that optional, which is what `x.value` is
+        _ninfo = _union_info(_union_type_of(_nm.group(1)))
+        if (right == "nil" and _nm.group(2) == ".value" and _ninfo["kind"] == "either"
+                and not _ninfo["multi"] and _ninfo["values"][0].startswith("Option[")):
+            ParserState.nim_imports.add("options")
+            return f"{chain}.isSome" if negated else f"{chain}.isNone"
         chain = _nm.group(1)
     _ut = _union_type_of(chain)
     if not _ut and right != "nil":
@@ -1316,6 +1337,13 @@ def _narrow_add(name, suffix):
     _vars = getattr(ParserState, "_option_unwrap_vars", None)
     if _vars is None:
         _vars = ParserState._option_unwrap_vars = set()
+    # the optional a `?T | !F` holds, `r.value`, proved present: r reads as
+    # r.value.get() until that ends (_narrow_drop puts r.value back)
+    if (name.endswith(".value") and suffix == ".get()" and name[:-6] in _vars
+            and _narrow_suffix(name[:-6]) == ".value"):
+        ParserState._unwrap_suffix[name[:-6]] = ".value.get()"
+        ParserState.nim_imports.add("options")
+        return True
     name = _narrow_base(name)
     if name in _vars:
         # an optional union already unwrapped may narrow further, to a member;
@@ -1403,6 +1431,10 @@ def _narrow_base(name):
 
 def _narrow_drop(name):
     name = _narrow_base(name)
+    if (name.endswith(".value") and name[:-6] in getattr(ParserState, "_option_unwrap_vars", ())
+            and _narrow_suffix(name[:-6]) == ".value.get()"):
+        ParserState._unwrap_suffix[name[:-6]] = ".value"
+        return
     _prev = getattr(ParserState, "_narrow_prev", {}).get(name)
     if _prev:
         _prev.pop()
@@ -4029,6 +4061,11 @@ def to_nim(self, prec=None):
             # Convert string arg to char literal: ord("0") -> ord('0')
             if len(arg) == 3 and arg[0] == chr(34) and arg[2] == chr(34):
                 arg = chr(39) + arg[1] + chr(39)
+            # ord of a one-character *string* variable, as Python's builtin takes:
+            # the character is its first byte
+            _osym = ParserState.symbol_table.lookup(arg)
+            if _osym and (_osym.get("type") or "") in ("string", "str"):
+                arg = f"{arg}[0]"
             return f"ord({arg})"
         if raw_name in ("int", "float", "bool"):
             call_node = self.nodes[1].nodes[0]
@@ -6240,6 +6277,16 @@ def _expr_is_option(expr_str):
             ftype = fields.get(field_name)
             if ftype and "Option[" in ftype:
                 return True
+        # An object whose type is known has that type's field and no other: a
+        # `?str` field `error` of one record does not make `cur.error` of a
+        # Cursor, whose `error` is a plain str, an Option.
+        _osym = (ParserState.symbol_table.lookup(m.group(1).strip())
+                 if _re.fullmatch(r"[A-Za-z_]\w*", m.group(1).strip()) else None)
+        _otype = ((_osym.get("type") or "") if _osym else "").replace("var ", "").strip()
+        if _otype in ParserState.class_field_types:
+            _ofield = ParserState.class_field_types[_otype].get(field_name)
+            if _ofield is not None:
+                return "Option[" in _ofield
         # Also search all classes for this field name
         for cname, fmap in ParserState.class_field_types.items():
             ftype = fmap.get(field_name)
