@@ -182,6 +182,7 @@ def _nim_reset():
     ParserState.var_param_positions = dict(_seed_var_param_positions)   # proc -> the positions of its `var` parameters
     ParserState._forward_var_calls = set()   # routines a parameter was handed to before they were translated
     ParserState.var_self_methods = set()   # methods that take self by var
+    ParserState.var_self_final = set()     # ...of which, the ones whose emitted signature does
     ParserState.class_names = set()     # all class names defined in this translation unit
     ParserState._current_lhs_type = ""  # annotation of current assignment LHS (set by stmt handlers)
     ParserState.proc_return_types = {}  # method/proc name -> return type string

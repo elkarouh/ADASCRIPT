@@ -840,6 +840,10 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # If no fields or methods, emit discard for empty body
         if not result_lines:
             result_lines.append(_ind(indent) + "discard")
+        # the methods that, as written, take self by var: var_self_methods
+        # counts every one a first look took for one
+        ParserState.var_self_final.update(
+            _re.findall(r"proc\s+(\w+)\*?\(self: var ", "\n".join(result_lines)))
         ParserState._current_class_name = None
         ParserState._class_siblings, ParserState._pure_methods = _saved_purity
         _unshadow(_shadowed)
@@ -3461,9 +3465,11 @@ def _func_def_to_nim_inner(self, indent=0):
                 # arguments of another call, `f(c.take())`, as much as on a line
                 # of its own. The anchor above skips a name that follows `(` or `,`
                 # because there it may be a named argument.
-                if not _inplace and _mutators:
+                _final = "|".join(_re.escape(m) for m in sorted(
+                    ParserState.var_self_methods & ParserState.var_self_final))
+                if not _inplace and _final:
                     _inplace = _re.search(
-                        rf"(?<![.\w]){_re.escape(pname)}\s*\.(?:{_mutators})\(", _scan)
+                        rf"(?<![.\w]){_re.escape(pname)}\s*\.(?:{_final})\(", _scan)
                 # ...and so is mutating what a field or an element holds, as
                 # the `self` check below allows: `p.items.add(x)`,
                 # `p.index[k] = i`, `p.files[k][i].commits.add(c)`. Without
