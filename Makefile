@@ -53,7 +53,7 @@ LIBS := \
 # pyimport_similar.ady is the one file in here that pyimports on purpose: it
 # is the worked example for when the bridge is worth its cost, so it has to
 # be exercised rather than described. It runs rather than compile-only
-# because difflib ships with Python -- unlike tsp.ady below, which wants
+# because difflib ships with Python -- unlike TSP/tsp.ady below, which wants
 # matplotlib and therefore only compiles. `make test` already requires
 # nimpy; see README.md.
 # -----------------------------------------------------------------------
@@ -254,9 +254,9 @@ STANDALONE := \
 # Stdin tests — piped from a sample file
 # -----------------------------------------------------------------------
 STDIN_EXAMPLES := \
-    awk_example.ady \
+    AWK/awk_example.ady \
     TESTS/test_awk.ady \
-    average_line.ady
+    AWK/average_line.ady
 
 # -----------------------------------------------------------------------
 # Arg tests — run with explicit arguments
@@ -329,24 +329,24 @@ ADA_INDENT_TESTS := \
 
 # -----------------------------------------------------------------------
 # Skipped at runtime (compiled only):
-#   tsp.ady         — matplotlib not installed by default (pyimport)
+#   TSP/tsp.ady         — matplotlib not installed by default (pyimport)
 #   KALMAN_WIENER/kalman_wiener.ady — numpy, scipy, matplotlib (pyimport); writes PNGs
 #   MOON/moon_sim.ady — the same; run by moon_tests below when matplotlib is there
 #   MAP_UTILS/route_map.ady — folium not installed by default (pyimport)
 #   BENCH_SEARCH/bench_search.ady — a timing program: its output is the clock
 # -----------------------------------------------------------------------
 COMPILE_ONLY := \
-    tsp.ady \
+    TSP/tsp.ady \
     KALMAN_WIENER/kalman_wiener.ady \
     MOON/moon_sim.ady \
     MAP_UTILS/route_map.ady \
     TESTS/test_input.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
-    awk_logscan.ady \
+    AWK/awk_logscan.ady \
     sh_janitor.ady \
-    config_check.ady \
-    html_body.ady \
+    AWK/config_check.ady \
+    AWK/html_body.ady \
     DOC/awk_snippets.ady \
     DOC/shell_snippets.ady \
     DOC/why_snippets.ady \
@@ -408,7 +408,7 @@ JS_COMPARED := TESTS/test_do_block TESTS/test_do_discard TESTS/test_case_ranges 
 # skipped, quietly.
 nim_has = $(shell PATH="$(PATH)"; d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
-NEEDS_NIMPY := pyimport_similar.ady TESTS/test_pyobject_calls.ady tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
+NEEDS_NIMPY := pyimport_similar.ady TESTS/test_pyobject_calls.ady TSP/tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
 NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
 SKIPPED :=
 ifeq ($(call nim_has,nimpy),)
@@ -1275,11 +1275,11 @@ test-part-22:
 	done
 
 test-part-23:
-	@echo "=== Stdin examples (piped from test_awk_sample.txt) ==="
+	@echo "=== Stdin examples (piped from AWK/test_awk_sample.txt) ==="
 	@for f in $(STDIN_EXAMPLES); do \
 	    name=$${f%.ady}; \
 	    printf '  %-42s' "$$f"; \
-	    $(EXDIR)/$$name < $(EXDIR)/test_awk_sample.txt >/dev/null 2>&1 \
+	    $(EXDIR)/$$name < $(EXDIR)/AWK/test_awk_sample.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	done
 
@@ -1334,23 +1334,23 @@ test-part-26:
 	        && [ "$$one" = "$$two" ] && [ $$(echo "$$two" | grep -c "callsign=TAM8149") -eq 43 ] \
 	        && echo OK || { echo FAIL; rm -rf $$d; exit 1; }; \
 	    rm -rf $$d
-	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
+	@# AWK/awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
 	@# check is on its output, not its exit status: the report is what the
 	@# document quotes.
-	@printf '  %-42s' "awk_logscan.ady"; \
-	    $(EXDIR)/awk_logscan < $(EXDIR)/awk_logscan_sample.txt 2>&1 \
+	@printf '  %-42s' "AWK/awk_logscan.ady"; \
+	    $(EXDIR)/AWK/awk_logscan < $(EXDIR)/AWK/awk_logscan_sample.txt 2>&1 \
 	        | grep -q "slowest : 2317 ms" && echo OK || { echo FAIL; exit 1; }
 	@# The same report, written in awk, kept next to it. The document says
 	@# the two agree byte for byte on this sample; this is where that stops
 	@# being an assertion. POSIX awk, so mawk runs it too.
 	@# ... on the sample, and on a log with no requests in it, which is the
 	@# input that once crashed the Adascript side.
-	@for input in awk_logscan_sample.txt awk_logscan_norecords.txt; do \
-	    name=$${input%.txt}; name=$${name#awk_logscan_}; \
-	    printf '  %-42s' "awk_logscan.awk == .ady ($$name)"; \
-	    awk -f $(EXDIR)/awk_logscan.awk $(EXDIR)/$$input \
+	@for input in AWK/awk_logscan_sample.txt AWK/awk_logscan_norecords.txt; do \
+	    name=$${input%.txt}; name=$${name#AWK/awk_logscan_}; \
+	    printf '  %-42s' "AWK/awk_logscan.awk == .ady ($$name)"; \
+	    awk -f $(EXDIR)/AWK/awk_logscan.awk $(EXDIR)/$$input \
 	        > $(TMPDIR)/ady_logscan_awk.out 2>&1; \
-	    $(EXDIR)/awk_logscan < $(EXDIR)/$$input \
+	    $(EXDIR)/AWK/awk_logscan < $(EXDIR)/$$input \
 	        > $(TMPDIR)/ady_logscan_ady.out 2>&1; \
 	    cmp -s $(TMPDIR)/ady_logscan_awk.out $(TMPDIR)/ady_logscan_ady.out \
 	        && echo OK || { echo FAIL; \
@@ -1364,28 +1364,28 @@ test-part-26:
 	    $(EXDIR)/sh_janitor >/dev/null 2>&1 \
 	        && test -f "$(TMPDIR)/ady_janitor/quiet service.log.gz" \
 	        && echo OK || { echo FAIL; exit 1; }
-	@# config_check reports findings and exits 1 when any of them is an
+	@# AWK/config_check reports findings and exits 1 when any of them is an
 	@# error, which is the point -- so the check is on what it printed.
-	@printf '  %-42s' "config_check.ady"; \
-	    $(EXDIR)/config_check 2>&1 \
+	@printf '  %-42s' "AWK/config_check.ady"; \
+	    $(EXDIR)/AWK/config_check 2>&1 \
 	        | grep -q "200 is outside 1 .. 64" && echo OK || { echo FAIL; exit 1; }
-	@# html_body rewrites links to absolute paths, so its output depends on
+	@# AWK/html_body rewrites links to absolute paths, so its output depends on
 	@# where the repository is. The stable parts are what it did: the id
 	@# taken from the page's own name, the footer gone, and the link made
 	@# absolute against this directory.
-	@printf '  %-42s' "html_body.ady"; \
-	    out=$$($(EXDIR)/html_body $(EXDIR)/html_body_sample.html 2>&1); \
+	@printf '  %-42s' "AWK/html_body.ady"; \
+	    out=$$($(EXDIR)/AWK/html_body $(EXDIR)/AWK/html_body_sample.html 2>&1); \
 	    echo "$$out" | grep -q 'id="html_body_sample"' \
 	        && ! echo "$$out" | grep -q 'test_ignored' \
 	        && echo "$$out" | grep -q "href=\"$(EXDIR)/test_alpha.html\"" \
 	        && echo OK || { echo FAIL; exit 1; }
 	@# The same checker in awk, kept next to it: same schema, same findings,
-	@# same bytes. Runs after config_check, which is what writes the fixture.
-	@for input in $(TMPDIR)/ady_config_check/app.conf $(EXDIR)/config_check_other.conf; do \
+	@# same bytes. Runs after AWK/config_check, which is what writes the fixture.
+	@for input in $(TMPDIR)/ady_config_check/app.conf $(EXDIR)/AWK/config_check_other.conf; do \
 	    name=$$(basename $$input .conf); name=$${name#config_check_}; \
-	    printf '  %-42s' "config_check.awk == .ady ($$name)"; \
-	    awk -f $(EXDIR)/config_check.awk $$input > $(TMPDIR)/ady_cfg_awk.out 2>&1; \
-	    $(EXDIR)/config_check $$input > $(TMPDIR)/ady_cfg_ady.out 2>&1; \
+	    printf '  %-42s' "AWK/config_check.awk == .ady ($$name)"; \
+	    awk -f $(EXDIR)/AWK/config_check.awk $$input > $(TMPDIR)/ady_cfg_awk.out 2>&1; \
+	    $(EXDIR)/AWK/config_check $$input > $(TMPDIR)/ady_cfg_ady.out 2>&1; \
 	    cmp -s $(TMPDIR)/ady_cfg_awk.out $(TMPDIR)/ady_cfg_ady.out \
 	        && echo OK || { echo FAIL; \
 	           diff $(TMPDIR)/ady_cfg_awk.out $(TMPDIR)/ady_cfg_ady.out | head -10; \

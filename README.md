@@ -5192,9 +5192,9 @@ first three must agree byte for byte, and the fourth must not.
 
 | Adascript | Written against | Same output? |
 |---|---|---|
-| `EXAMPLES/awk_logscan.ady` | `EXAMPLES/awk_logscan.awk` | yes, on two inputs |
-| `EXAMPLES/config_check.ady` | `EXAMPLES/config_check.awk` | yes, on two inputs |
-| `EXAMPLES/html_body.ady` | `EXAMPLES/process_html.awk` | yes, except one case below |
+| `EXAMPLES/AWK/awk_logscan.ady` | `EXAMPLES/AWK/awk_logscan.awk` | yes, on two inputs |
+| `EXAMPLES/AWK/config_check.ady` | `EXAMPLES/AWK/config_check.awk` | yes, on two inputs |
+| `EXAMPLES/AWK/html_body.ady` | `EXAMPLES/AWK/process_html.awk` | yes, except one case below |
 | `EXAMPLES/sh_janitor.ady` | `EXAMPLES/sh_janitor.sh` | **no**, and that is the point |
 
 Run any of them yourself:
@@ -5204,13 +5204,13 @@ when the two agree:
 
 ```bash
 # a log scanner: two kinds of record, a state machine, two lists at the end
-awk -f EXAMPLES/awk_logscan.awk EXAMPLES/awk_logscan_sample.txt \
-    | diff - <(EXAMPLES/awk_logscan < EXAMPLES/awk_logscan_sample.txt)
+awk -f EXAMPLES/AWK/awk_logscan.awk EXAMPLES/AWK/awk_logscan_sample.txt \
+    | diff - <(EXAMPLES/AWK/awk_logscan < EXAMPLES/AWK/awk_logscan_sample.txt)
 
 # a config checker against a four-shape schema
-EXAMPLES/config_check                     # writes its fixture under /tmp
-awk -f EXAMPLES/config_check.awk /tmp/ady_config_check/app.conf \
-    | diff - <(EXAMPLES/config_check /tmp/ady_config_check/app.conf)
+EXAMPLES/AWK/config_check                     # writes its fixture under /tmp
+awk -f EXAMPLES/AWK/config_check.awk /tmp/ady_config_check/app.conf \
+    | diff - <(EXAMPLES/AWK/config_check /tmp/ady_config_check/app.conf)
 
 # lifting the <body> out of an HTML page (needs gawk: gensub is a GNU thing)
 cd EXAMPLES && gawk -f process_html.awk html_body_sample.html \
@@ -5235,7 +5235,7 @@ on one: a page whose footer contains a `<div>` on a line of its own. The awk
 spends the page's id on that line and then drops the line, so the output has
 no id at all. Its tagging rule tests `in_body`, and the footer is inside the
 body; the translation cannot do this because the states that drop a record
-never rewrite it. `EXAMPLES/html_body_wasted_id.html` is that page.
+never rewrite it. `EXAMPLES/AWK/html_body_wasted_id.html` is that page.
 
 `sh_janitor.sh` disagrees on every run, silently:
 

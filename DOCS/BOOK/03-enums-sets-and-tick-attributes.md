@@ -117,7 +117,7 @@ enum adds is a *named* domain: `costs[HIGH]` rather than `costs[2]`.
 
 In Nim this is `array[Priority, int]` — a fixed-size, stack-allocated array
 with O(1) indexing and *no hashing*. In Python it becomes a dict keyed by
-enum members. `EXAMPLES/awk_example.ady` tallies log-line severities in one:
+enum members. `EXAMPLES/AWK/awk_example.ady` tallies log-line severities in one:
 
 ```python
 type Severity_T is enum INFO, WARN, ERROR, OTHER

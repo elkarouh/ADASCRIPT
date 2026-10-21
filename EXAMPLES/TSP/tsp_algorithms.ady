@@ -2,7 +2,7 @@
 """tsp_algorithms -- the Travelling Salesman algorithms of tsp.ady, as a module.
 
 Nothing here prints, plots or reads the clock, so the same algorithms serve tsp.ady (native, with
-matplotlib) and TSP_LEAFLET (in the browser, `ady2nim js`). The comparison of the algorithms,
+matplotlib) and TSP/LEAFLET (in the browser, `ady2nim js`). The comparison of the algorithms,
 their cost and what they find is in tsp.ady's docstring.
 """
 

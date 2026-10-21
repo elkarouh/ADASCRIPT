@@ -3,7 +3,7 @@
 awk_logscan — an application-log scanner, written the way an awk programmer
 would think about it, using the parts of Adascript that awk does not have.
 
-    ./awk_logscan < EXAMPLES/awk_logscan_sample.txt
+    ./awk_logscan < EXAMPLES/AWK/awk_logscan_sample.txt
 
 The file holds records of two kinds. Most are timestamped events; the lines
 after a failure are a stack trace, and a trace has no timestamp of its own --

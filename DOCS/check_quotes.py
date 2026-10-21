@@ -10,7 +10,7 @@ Every ```python block in a checked document is one of three kinds, and an
 HTML comment immediately above it says which. The comment does not render,
 so the documents read the same as before.
 
-    <!-- from: EXAMPLES/awk_logscan.ady -->
+    <!-- from: EXAMPLES/AWK/awk_logscan.ady -->
         a quote. Every non-blank line must appear in that file, verbatim.
 
     <!-- illustrative: why it cannot be a quote -->

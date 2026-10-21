@@ -75,10 +75,10 @@ how much state you carry.
 
 ### The flat form
 
-For a filter, iterate `stdin.lines` and be done. `EXAMPLES/awk_example.ady`
+For a filter, iterate `stdin.lines` and be done. `EXAMPLES/AWK/awk_example.ady`
 is this shape (quoted in full in §10.1):
 
-<!-- from: EXAMPLES/awk_example.ady -->
+<!-- from: EXAMPLES/AWK/awk_example.ady -->
 ```python
 def main():
     for raw in stdin.lines:
@@ -307,7 +307,7 @@ This is the centre of the argument. In AWK a severity is a string, a parser
 state is an integer, and a status class is a key you hope you spelled the
 same way in both places. In Adascript each is a type.
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 type Severity_T   is enum DEBUG, INFO, WARN, ERROR
 type Scan_State_T is enum OUTSIDE, IN_TRACE
@@ -396,7 +396,7 @@ quietly creating a fifth bucket, which is what AWK would have done.
 cannot reach it. They are range-checked at run time on the Nim backend —
 including under `-d:release`.
 
-<!-- from: EXAMPLES/awk_example.ady -->
+<!-- from: EXAMPLES/AWK/awk_example.ady -->
 ```python
 var NR        : Natural = 0
 var total_len : Natural = 0
@@ -413,7 +413,7 @@ instead of as a nonsense average at the end of the report.
 The AWK idiom is `user[i]`, `host[i]`, `build[i]` and an `i` you increment by
 hand. A record names the row:
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 type Request_T is record:      # a timestamped event
     """One served request, taken apart by a single regex."""
@@ -443,7 +443,7 @@ A plain record gives every row the same fields. When the rows are genuinely
 list — Ada's answer is a record whose field set depends on an enum
 discriminant, and Adascript adopts the syntax:
 
-<!-- from: EXAMPLES/config_check.ady -->
+<!-- from: EXAMPLES/AWK/config_check.ady -->
 ```python
 type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
 
@@ -465,7 +465,7 @@ about. On the Nim backend the field is not there to read at all. And a `case`
 over the discriminant needs no `when others:` — the enum has four members, so
 the compiler checks that all four are handled:
 
-<!-- from: EXAMPLES/config_check.ady -->
+<!-- from: EXAMPLES/AWK/config_check.ady -->
 ```python
 def describe(s: Spec_T) -> str:
     """One line per shape. No `when others:` -- the enum has four members and
@@ -479,7 +479,7 @@ def describe(s: Spec_T) -> str:
 
 In AWK this is `kind[i]`, `lo[i]`, `hi[i]`, `allowed[i]` and a convention
 about which of them are meaningful for a given `i` — written down in a
-comment if you were lucky. `EXAMPLES/config_check.ady` is a configuration
+comment if you were lucky. `EXAMPLES/AWK/config_check.ady` is a configuration
 checker whose whole schema is one variant record; §10.2 walks through it.
 
 ---
@@ -537,7 +537,7 @@ assert none_.line == None          # comparing against None is always fine
 **early-return guard**, which narrows what it tested to a plain `Natural`
 below it:
 
-<!-- from: EXAMPLES/config_check.ady -->
+<!-- from: EXAMPLES/AWK/config_check.ady -->
 ```python
 def where(f: Finding_T) -> str:
     if f.line is None:
@@ -629,7 +629,7 @@ The plainest case first: one kind of record, no memory of the records
 before it. This is §2's flat form, in full — every line is classified and
 printed on its own, and nothing about line *N* depends on line *N-1*:
 
-<!-- from: EXAMPLES/awk_example.ady -->
+<!-- from: EXAMPLES/AWK/awk_example.ady -->
 ```python
 #!/usr/bin/env ady2nim
 """
@@ -723,7 +723,7 @@ the same shape. `config_check.ady` checks a config file against a schema
 where a setting is a flag, a bounded number, a word from a list, or a path,
 and a variant record gives each shape only the fields that shape has (§7.1):
 
-<!-- from: EXAMPLES/config_check.ady -->
+<!-- from: EXAMPLES/AWK/config_check.ady -->
 ```python
 type Kind_T is enum FLAG, NUMBER, CHOICE, PATHNAME
 
@@ -740,7 +740,7 @@ type Spec_T (kind: Kind_T) is record:
             must_exist: bool
 ```
 
-The awk is next to it, as `EXAMPLES/config_check.awk`: same schema, same
+The awk is next to it, as `EXAMPLES/AWK/config_check.awk`: same schema, same
 findings, same bytes, and `make test` runs `cmp` on the two. Here is its
 schema, which is the whole argument for the variant record:
 
@@ -769,7 +769,7 @@ branch is not a mistake to be careful about; on the Nim backend the field is
 not there to read. (`TRUE_WORDS` and `FALSE_WORDS` are two module-level word
 lists defined earlier in the file.)
 
-<!-- from: EXAMPLES/config_check.ady -->
+<!-- from: EXAMPLES/AWK/config_check.ady -->
 ```python
 def check_value(s: Spec_T, value: str) -> str:
     """Empty means the value is fine; otherwise the complaint.
@@ -804,7 +804,7 @@ The schema itself is a plain dict from setting name to `Spec_T`, which is
 where AWK's associative array is doing fine — the shape that needs the
 variant record is the *value*, not the lookup:
 
-<!-- from: EXAMPLES/config_check.ady -->
+<!-- from: EXAMPLES/AWK/config_check.ady -->
 ```python
 let SCHEMA: {str}Spec_T = {
     "verbose":  FLAG(on_by_default=False),
@@ -820,11 +820,11 @@ looks the key up in `SCHEMA`, and calls `check_value` — no state carried
 from one line to the next, only a `seen` set so a key set twice is a warning
 rather than silently keeping the last one. The full file, with the report
 loop and the self-contained fixture `main()` writes under `/tmp`, is in
-`EXAMPLES/config_check.ady`.
+`EXAMPLES/AWK/config_check.ady`.
 
 ### 10.3 A state machine: `awk_logscan.ady`
 
-`EXAMPLES/awk_logscan.ady` is §1's five points in one file. An application
+`EXAMPLES/AWK/awk_logscan.ady` is §1's five points in one file. An application
 log holds **two kinds of record**: timestamped events, and the stack traces
 that follow a failure. A trace carries no timestamp, so nothing in the line
 says whom it belongs to — only **the state the scanner is in**. Each kind is
@@ -832,7 +832,7 @@ gathered into **its own list**, some work is done **on the way past** and the
 rest **once both lists are complete**.
 
 The same report, written in awk, is next to it as
-`EXAMPLES/awk_logscan.awk` — POSIX awk, no GNU extensions, and not a straw
+`EXAMPLES/AWK/awk_logscan.awk` — POSIX awk, no GNU extensions, and not a straw
 man: it is what this program looks like with awk's tools and only those.
 The two agree byte for byte on the sample, and `make test` runs `cmp` on
 their output, so the comparisons below can be checked rather than believed.
@@ -860,7 +860,7 @@ type Trace_T is record:        # the lines after a failure
 
 **The two lists, and the totals kept on the way past:**
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 class LogScan(AwkProcessor):
     var state    : Scan_State_T          = OUTSIDE
@@ -881,7 +881,7 @@ class LogScan(AwkProcessor):
 over the state is the *whole* dispatch — one branch per state, and nothing
 outside it:
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 def process_record(self):
     case self.state:
@@ -912,7 +912,7 @@ one.
 traces, a record is an event, the start of a trace, or noise. One regex takes
 an event apart, and the groups go straight into a record:
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 def _outside(self) -> None:
     """Between traces: a record is an event, the start of one, or noise."""
@@ -949,7 +949,7 @@ the state, and it hands the very same record straight to `_in_trace()` — the
 state it has just entered — so the line that started the trace is also
 counted by it. Inside a trace, every record is part of it until one is not:
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 def _in_trace(self) -> None:
     """Inside a trace: every record is part of it until one is not."""
@@ -1006,7 +1006,7 @@ The status class is the third `case`, over ranges this time, and it is not a
 method: nothing about it concerns one scanner, so it is a plain function of
 the code.
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 def status_class(status: Natural) -> Status_T:
     """A case over ranges, which awk has to spell as an if/else chain.
@@ -1027,7 +1027,7 @@ def status_class(status: Natural) -> Status_T:
 streaming form cannot do: a trace that runs to the end of the file has no
 following record to close it, so this is where the last one is filed.
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 if self.state == IN_TRACE:
     self.traces.append(self.open_trace)
@@ -1037,7 +1037,7 @@ Then the questions no running total can answer, because they need every
 record in hand before any of them has one — a percentile has to sort, and a
 maximum has to have seen the last record:
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 var times: []Natural = []
 for r in self.requests:
@@ -1053,7 +1053,7 @@ for r in self.requests:
 ...next to the totals that were already answered on the way past, and a walk
 over the *other* list:
 
-<!-- from: EXAMPLES/awk_logscan.ady -->
+<!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
 for s in Severity_T:
     print f"  {s:<5} {self.counts[s]}"
@@ -1064,7 +1064,7 @@ for t in self.traces:
 Run it:
 
 ```
-$ EXAMPLES/awk_logscan < EXAMPLES/awk_logscan_sample.txt
+$ EXAMPLES/AWK/awk_logscan < EXAMPLES/AWK/awk_logscan_sample.txt
 --- awk_logscan ---
 records : 17
 requests: 9    traces: 2
@@ -1118,9 +1118,9 @@ that input too.
 
 ### 10.4 State that decides what to keep: `html_body.ady`
 
-`EXAMPLES/html_body.ady` is a translation of a real awk script — one that
+`EXAMPLES/AWK/html_body.ady` is a translation of a real awk script — one that
 lifts the `<body>` out of an HTML page so it can be included in another one.
-The original is in the repository as `EXAMPLES/process_html.awk`, 48 lines,
+The original is in the repository as `EXAMPLES/AWK/process_html.awk`, 48 lines,
 so every claim below can be checked against it.
 It is the state machine again, turned a quarter turn: in §10.3 the state
 decided *which kind* of record had arrived, here it decides whether the
@@ -1142,12 +1142,12 @@ combinations against each other, and every reader has to reconstruct what
 
 Four states, and the case over them is the whole dispatch:
 
-<!-- from: EXAMPLES/html_body.ady -->
+<!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
 type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
 ```
 
-<!-- from: EXAMPLES/html_body.ady -->
+<!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
     def process_record(self):
         case self.state:
@@ -1167,7 +1167,7 @@ compiler counts it when it checks that the `case` is complete.
 Each state is a `case` over the record, with the regexes that matter in that
 state and no others:
 
-<!-- from: EXAMPLES/html_body.ady -->
+<!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
     def _body(self) -> None:
         """Inside the body: rewrite, print, and watch for the two exits."""
@@ -1196,7 +1196,7 @@ after the first has to work out what the `&&` is guarding against.
 There is a third boolean in the awk, `div_processed`, and it survives the
 translation:
 
-<!-- from: EXAMPLES/html_body.ady -->
+<!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
     var div_done: bool         = false
 ```
@@ -1234,8 +1234,8 @@ own:
 The tagging rule tests `in_body`, and the footer is inside the body — so the
 id lands on that inner `<div>`, `div_processed` latches, and the line is then
 not printed. The page comes out with **no id at all**. That page is
-`EXAMPLES/html_body_wasted_id.html` in the repository, and the original is
-`EXAMPLES/process_html.awk`, so this is checkable rather than asserted
+`EXAMPLES/AWK/html_body_wasted_id.html` in the repository, and the original is
+`EXAMPLES/AWK/process_html.awk`, so this is checkable rather than asserted
 (with gawk — `gensub` is a GNU extension):
 
 ```
@@ -1279,7 +1279,7 @@ produces has neither: it is about to be pasted into a bigger page.
 
 That is what `div_done` is for, and why it is a latch rather than a state:
 
-<!-- from: EXAMPLES/html_body.ady -->
+<!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
         if not self.div_done:
             case self.line:
@@ -1302,7 +1302,7 @@ original shells out three times — `realpath`, then `dirname`, then
 three chances to get the quoting wrong on a path with a space in it, and
 three strings that are all just strings afterwards:
 
-<!-- from: EXAMPLES/html_body.ady -->
+<!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
 def anchor(arg: str) -> Anchor_T:
     let full: Path = Path(arg).resolve()
@@ -1321,8 +1321,8 @@ branches in §3 are.
 Run it:
 
 ```
-$ cp EXAMPLES/html_body_sample.html /tmp/ady_html_body/results.html
-$ EXAMPLES/html_body /tmp/ady_html_body/results.html
+$ cp EXAMPLES/AWK/html_body_sample.html /tmp/ady_html_body/results.html
+$ EXAMPLES/AWK/html_body /tmp/ady_html_body/results.html
 <div class="content" data-kind="page" id="results">
 <h1>Results</h1>
 <p>See <a href="/tmp/ady_html_body/test_alpha.html">alpha</a> and <a href="/tmp/ady_html_body/test_beta.html">beta</a>.</p>
@@ -1406,14 +1406,14 @@ record *is* a request, and the groups it hands back are the parts of one.
 
 ## 12. Where to go next
 
-- `EXAMPLES/awk_example.ady` — the flat form, in full in §10.1, runs on both backends
+- `EXAMPLES/AWK/awk_example.ady` — the flat form, in full in §10.1, runs on both backends
 - `EXAMPLES/TESTS/test_awk.ady` — the same program as an `AwkProcessor` subclass
-- `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
-- `EXAMPLES/config_check.awk` — the same checker in POSIX awk, to read against it
-- `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
-- `EXAMPLES/awk_logscan.awk` — the same report in POSIX awk, to read against it
-- `EXAMPLES/html_body.ady` — a real AWK script translated, in full in §10.4: state that decides what to keep
-- `EXAMPLES/process_html.awk` — that script, as it was, to read against the translation
+- `EXAMPLES/AWK/config_check.ady` — the variant-record schema, walked through in §10.2
+- `EXAMPLES/AWK/config_check.awk` — the same checker in POSIX awk, to read against it
+- `EXAMPLES/AWK/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once
+- `EXAMPLES/AWK/awk_logscan.awk` — the same report in POSIX awk, to read against it
+- `EXAMPLES/AWK/html_body.ady` — a real AWK script translated, in full in §10.4: state that decides what to keep
+- `EXAMPLES/AWK/process_html.awk` — that script, as it was, to read against the translation
 - `EXAMPLES/CFMU/Tstatus_monitor.ady` — a real AWK script, translated
 - `DOCS/BOOK/05-pattern-matching.md` — `case`/`when` in full
 - `DOCS/BOOK/07-regex.md` — every regex form

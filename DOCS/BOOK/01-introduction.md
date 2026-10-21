@@ -104,7 +104,7 @@ identical source runs at native speed.
 ## 1.3 A four-line filter
 
 Adascript is also meant for the small end of the scale — the scripts you
-would otherwise write in AWK. `EXAMPLES/average_line.ady` in its entirety:
+would otherwise write in AWK. `EXAMPLES/AWK/average_line.ady` in its entirety:
 
 ```python
 #!/usr/bin/env ady2nim

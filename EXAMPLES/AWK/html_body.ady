@@ -3,7 +3,7 @@
 html_body — lift the body out of an HTML page so it can be included in
 another one, rewriting its links to still point at the right files.
 
-    ./html_body EXAMPLES/html_body_sample.html
+    ./html_body EXAMPLES/AWK/html_body_sample.html
 
 Three jobs at once, which is why it is a state machine and not a filter:
 
@@ -27,7 +27,7 @@ fragment has neither once it has been pasted into a bigger page:
     find it. It goes on the first <div> because that is the block the
     whole page was, and only on the first: a page has one name.
 
-A translation of EXAMPLES/process_html.awk, kept next to this file so the
+A translation of EXAMPLES/AWK/process_html.awk, kept next to this file so the
 two can be read side by side. The awk needs gawk: `gensub` is a GNU
 extension and the mawk that is /usr/bin/awk on many machines refuses it.
 """

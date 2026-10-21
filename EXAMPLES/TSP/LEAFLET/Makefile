@@ -1,4 +1,4 @@
-# TSP_LEAFLET: the travelling salesman algorithms of ../tsp_algorithms.ady, run on real cities in the
+# TSP/LEAFLET: the travelling salesman algorithms of ../tsp_algorithms.ady, run on real cities in the
 # browser and drawn with Leaflet.js.
 #
 #   make        build tsp_map.js (ady2nim js)
@@ -11,7 +11,7 @@
 
 # This checkout's own transpiler, whatever ady2nim is first on PATH.
 PYTHON  ?= $(shell command -v python3.12 2>/dev/null || command -v python3.14 || command -v python3)
-ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
+ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../../TO_NIM/ady2nim.py)
 PORT ?= 8803
 # $(OPEN) is xdg-open, or open on a Mac; on WSL, PowerShell opens the Windows browser.
 # `make run OPEN=firefox` picks one.
@@ -32,7 +32,7 @@ run: tsp_map.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/tsp_map.html) &
 	python3 -m http.server $(PORT) --bind 127.0.0.1
 
-tsp_window_hook.js: tsp_window_hook.ady ../../TO_NIM/STDLIB/browser.ady
+tsp_window_hook.js: tsp_window_hook.ady ../../../TO_NIM/STDLIB/browser.ady
 	@echo "building $@"
 	@$(ADY2NIM) js tsp_window_hook.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log

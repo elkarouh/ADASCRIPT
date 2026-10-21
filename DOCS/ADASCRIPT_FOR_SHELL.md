@@ -589,7 +589,7 @@ answer in `$VAR`. There the bridge earns its cost, and
 
 `EXAMPLES/pyimport_similar.ady` is what that looks like: the file whose
 whole subject is the bridge, and the only one `make test` actually runs
-across it. (`EXAMPLES/tsp.ady` keeps a `pyimport` too — `matplotlib`, to
+across it. (`EXAMPLES/TSP/tsp.ady` keeps a `pyimport` too — `matplotlib`, to
 draw its tours — but that one needs an install, so it is compiled and not
 run.) It asks `difflib`
 which of a tool's subcommands a typo most resembles. `grep` answers

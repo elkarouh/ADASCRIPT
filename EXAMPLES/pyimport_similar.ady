@@ -27,7 +27,7 @@ timestamp.
 `difflib` is in the Python standard library, which is why `make test` can
 run this file at all -- a demonstration that needed `pip install` first
 would not be much of a demonstration. That is the difference from
-EXAMPLES/tsp.ady, which pyimports `matplotlib` for a real reason of its own
+EXAMPLES/TSP/tsp.ady, which pyimports `matplotlib` for a real reason of its own
 and is therefore compiled but never run. The mechanism is the same one
 `pyimport numpy` or `pyimport requests` uses; only the install step differs.
 
