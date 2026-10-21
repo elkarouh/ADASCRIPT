@@ -2254,7 +2254,7 @@ def main(argv=None):
     #   than translating the one file on its own: a `nimport`ed module's  #
     #   declarations are needed to emit the importing file correctly, and #
     #   the result is written to the very path a later build reads.  On   #
-    #   its own, `-t` on EXAMPLES/TESTS/test_awk.ady emitted a constructor      #
+    #   its own, `-t` on EXAMPLES/test_awk.ady emitted a constructor      #
     #   without the parameters test_awk inherits from awk.ady, cached it, #
     #   and the next build compiled that and failed on an argument the    #
     #   proc no longer took.                                              #
