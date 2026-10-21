@@ -5,16 +5,28 @@ from ansi import (
     fg_white, fg_yellow, inverted,
 )
 # The order rows are grouped in. A state not listed here -- BUSY, which only
-# the status column carries, a typo, none at all -- sorts after every listed
-# one, and is shown as it was written.
-let STATES: []str = ["ACTIVE", "READY", "OPS-BUG", "DONE", "BLOCKED", "ON-HOLD", "IDLE",
-                     "BACKGROUND", "INTEGRATED", "MERGED", "REJECTED"]
+# the status column carries, a typo, none at all -- is UNLISTED, sorts after every
+# listed one, and is shown as it was written.
+type State_T is enum:
+    ACTIVE
+    READY
+    OPS_BUG
+    DONE
+    BLOCKED
+    ON_HOLD
+    IDLE
+    BACKGROUND
+    INTEGRATED
+    MERGED
+    REJECTED
+    UNLISTED
 
-def state_rank(state: str) -> int:
-    for i in 0..<len(STATES):
-        if STATES[i] == state:
-            return i
-    return len(STATES)
+# the state a README or the status column spells: OPS-BUG is OPS_BUG
+def state_of(text: str) -> State_T:
+    let parsed: State_T | !ParseFailure_T = parse_enum(State_T, text.replace("-", "_"))
+    if parsed is ParseFailure_T:
+        return UNLISTED
+    return parsed
 
 # A column: the text of a function, padded on the right to WIDTH.
 @decorator
@@ -64,12 +76,14 @@ class Cls_View_Line:
     var baseline: str
     var env_id: str
     var state: str
+    var kind: State_T
     var comment: str
     def __init__(self, view: str, baseline: str, env_id: str, state: str, comment: str):
         self.view = view
         self.baseline = baseline
         self.env_id = env_id
         self.state = state
+        self.kind = state_of(state)
         self.comment = comment
 
 def get_lines() -> []str:
@@ -111,7 +125,7 @@ def main():
 
         view_lines.append(Cls_View_Line(view=view_name, baseline=baseline, env_id=env_id, state=state, comment=comment))
 
-    view_lines = sorted(view_lines, key=lambda v: (state_rank(v.state), v.view))
+    view_lines = sorted(view_lines, key=lambda v: (v.kind, v.view))
 
     var previous_state: str = ""
     var first: bool = True
