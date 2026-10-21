@@ -21,6 +21,12 @@ work, refactoring, and some of the more difficult feature implementations, so
 the project does include some AI-assisted code and writing. That said, the
 overall design, review, and ongoing maintenance of the project are handled by me.
 
+**Why two backends.** Adascript began more than ten years ago as an
+augmented-Python-to-Python translator, which is why the Python backend came
+first. About five years ago I added the Nim backend, because Nim generates C
+and JavaScript: one language can then write a whole application, the server
+side as a native program and the browser side as a script.
+
 > **The two backends are not equal.** The Nim backend (`ady2nim`) is the
 > reference: it supports every feature of the language and its compiler does
 > the checking. The Python backend (`ady2py`) supports less -- it refuses some
