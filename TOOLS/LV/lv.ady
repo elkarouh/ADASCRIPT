@@ -1,6 +1,4 @@
 #! /usr/bin/env ady2nim
-nimport sequtils
-from algorithm nimport sortedByIt
 # the colours and effects to pipe a string through
 from ansi import (
     bg_black, bg_blue, bg_green, bg_white, bg_yellow, blink, bold, dim, fg_black, fg_blue,
@@ -113,7 +111,7 @@ def main():
 
         view_lines.append(Cls_View_Line(view=view_name, baseline=baseline, env_id=env_id, state=state, comment=comment))
 
-    view_lines = view_lines.sortedByIt((state_rank(it.state), it.view))
+    view_lines = sorted(view_lines, key=lambda v: (state_rank(v.state), v.view))
 
     var previous_state: str = ""
     var first: bool = True
