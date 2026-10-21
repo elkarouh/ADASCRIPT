@@ -1,0 +1,152 @@
+#! /usr/bin/env ady2nim
+"""lv_awk -- lv, written as an AwkProcessor: the listing of the views comes in on stdin, one record a line.
+
+    Clsworkspace -user $USER | lv_awk
+
+The first three lines of the listing are its heading. Each other line is a view: its name, what it is
+based on, its environment and its status. What the README of the view says (its state, and a comment)
+is looked up for each. The views are shown once the listing is complete, grouped by state.
+"""
+from awk import AwkProcessor
+# the colours and effects to pipe a string through
+from ansi import (
+    bg_black, bg_blue, bg_green, bg_white, bg_yellow, blink, bold, dim, fg_black, fg_blue,
+    fg_white, fg_yellow, inverted,
+)
+# The order rows are grouped in. A state not listed here -- BUSY, which only
+# the status column carries, a typo, none at all -- is UNLISTED, sorts after every
+# listed one, and is shown as it was written.
+type State_T is enum:
+    ACTIVE
+    READY
+    OPS_BUG
+    DONE
+    BLOCKED
+    ON_HOLD
+    IDLE
+    BACKGROUND
+    INTEGRATED
+    MERGED
+    REJECTED
+    UNLISTED
+
+# the state a README or the status column spells: OPS-BUG is OPS_BUG
+def state_of(text: str) -> State_T:
+    let parsed: State_T | !ParseFailure_T = parse_enum(State_T, text.replace("-", "_"))
+    if parsed is ParseFailure_T:
+        return UNLISTED
+    return parsed
+
+# A column: the text of a function, padded on the right to WIDTH.
+@decorator
+def aligned(width: int, f: (str) -> str, s: str) -> str:
+    return f"{f(s):<{width}}"
+
+@aligned(64)
+def colored_viewname(view_name: str) -> str:
+    let parts: []str = view_name.split('.')
+    let login_name: str = parts[0]
+    let view: str = parts[1]
+    if view.startswith("I2_"):
+        return f"{login_name}.{view | inverted | bold | fg_blue | bg_white}"
+    else:
+        return f"{login_name}.{view | dim | bold | fg_black | bg_white}"
+
+@aligned(105)
+def colored_baseline(baseline: str) -> str:
+    let parts: []str = baseline.split('.')
+    output: str = f"{parts[0] | bold | fg_yellow | bg_black}.{parts[1]}.{parts[2]}.{parts[3] | bold | fg_yellow}"
+    if len(parts) > 5:
+        return f"{output}.{parts[4]}.{parts[5] | bold | bg_blue | fg_white}"
+    else:
+        return f"{output}.{parts[4] | bold | bg_blue | fg_white}"
+
+@aligned(40)
+def colored_env_id(env_id: str) -> str:
+    let parts: []str = env_id.split('.')
+    if parts[1] == "OP":
+        return f"{parts[0]}.{parts[1] | bold | fg_yellow | bg_black}.{parts[2]}"
+    else:
+        return f"{parts[0]}.{parts[1] | bold | fg_blue | bg_white}.{parts[2]}"
+
+@aligned(36)
+def colored_status(state: str) -> str:
+    case state:
+        when "OPS-BUG": state | bold | blink | fg_black | bg_white
+        when "BUSY":    state | bold | fg_black | bg_yellow
+        when others:    state | bold | fg_yellow | bg_green
+
+@aligned(35)
+def colored_comment(comment: str) -> str:
+    return comment.strip() | bold | fg_black | bg_white
+
+# one row of the listing: STATE as written, KIND what it makes of it
+type View_Line_T is record:
+    view: str
+    baseline: str
+    env_id: str
+    state: str
+    kind: State_T
+    comment: str
+
+class ViewLister(AwkProcessor):
+    var view_lines: []View_Line_T
+
+    def __init__(self):
+        super().__init__()
+        self.view_lines = []
+
+    def start(self):
+        print("-" * 100)
+        print("View".alignLeft(31) + "Based On".alignLeft(37) + "ENV_ID".alignLeft(15) + "State".alignLeft(11) + "COMMENT")
+        print("-" * 100)
+
+    def process_record(self):
+        if self.NR <= 3:
+            return
+        if self.NF < 5:
+            if len(self.line) > 0:
+                print(f"unable to parse: {self.line}")
+            return
+        let view_name: str = self.Fields[1]
+        let baseline: str = self.Fields[2]
+        let env_id: str = self.Fields[3]
+        let status: str = self.Fields[5]
+        if view_name.endswith("build_eld_only_t"):
+            return
+
+        var state: str = ""
+        var comment: str = ""
+
+        var comment_path: Path = Path("/auto/local_build/dhws149/disk1/ekhassan/cm") / view_name / "NM/README.txt"
+        if -f comment_path:
+            let (comment_line, _) = shell: head -1 {comment_path}
+            let (first, _, rest) = comment_line.strip().partition(" ")
+            state = first
+            comment = rest
+
+        if status != "---":
+            state = status
+
+        self.view_lines.append(View_Line_T(view=view_name, baseline=baseline, env_id=env_id, state=state,
+                                           kind=state_of(state), comment=comment))
+
+    def finish(self):
+        let view_lines: []View_Line_T = sorted(self.view_lines, key=lambda v: (v.kind, v.view))
+
+        var previous_state: str = ""
+        var first: bool = True
+        for R in view_lines:
+            if not first and R.state != previous_state:
+                print("-" * 120)
+            var colored_line: str = (
+                f"{colored_viewname(R.view)} {colored_baseline(R.baseline)} "
+                f"{colored_env_id(R.env_id)} {colored_status(R.state)}")
+            if R.state != "MERGED":
+                colored_line += f" {colored_comment(R.comment)}"
+            print(colored_line)
+            previous_state = R.state
+            first = False
+
+
+ViewLister().run()

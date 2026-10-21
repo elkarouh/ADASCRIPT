@@ -495,6 +495,7 @@ TOOL_PROGRAMS := \
     TOOLS/LOLCATE/lolcate.ady \
     TOOLS/C500/c500.ady \
     TOOLS/LV/lv.ady \
+    TOOLS/LV/lv_awk.ady \
     TOOLS/THIST/Thist.ady \
     TOOLS/LISPY/lispy.ady \
     TOOLS/LISPY/lispy_union.ady \
