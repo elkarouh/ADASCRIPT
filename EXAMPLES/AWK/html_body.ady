@@ -31,7 +31,7 @@ A translation of EXAMPLES/AWK/process_html.awk, kept next to this file so the
 two can be read side by side. The awk needs gawk: `gensub` is a GNU
 extension and the mawk that is /usr/bin/awk on many machines refuses it.
 """
-from awk import AwkProcessor, AwkFailure_T
+from awk import FileProcessor, AwkRecord_T, AwkFailure_T
 
 
 # Where in the page we are. The record on its own does not say: </div>
@@ -66,7 +66,7 @@ def anchor(arg: str) -> Anchor_T:
     Anchor_T(dir=full.parent, stem=stem)
 
 
-class HtmlBody(AwkProcessor):
+class HtmlBody(FileProcessor):
     var state   : Scan_State_T = HEAD
     var at      : Anchor_T     = Anchor_T()
     # A latch, not a state: set once when the id is placed, never cleared,
@@ -74,7 +74,7 @@ class HtmlBody(AwkProcessor):
     # thing -- what goes wrong there is where it is read, not that it exists.
     var div_done: bool         = false
 
-    def process_record(self):
+    def process_record(self, rec: AwkRecord_T):
         """One branch per state, and nothing outside it.
 
         The case covers every member of Scan_State_T, so there is no
@@ -85,35 +85,34 @@ class HtmlBody(AwkProcessor):
         reconstructed by the reader every time they meet `&& in_footer`.
         """
         case self.state:
-            when HEAD:   self._head()
-            when BODY:   self._body()
-            when FOOTER: self._footer()
+            when HEAD:   self._head(rec)
+            when BODY:   self._body(rec)
+            when FOOTER: self._footer(rec)
             when DONE:   pass          # awk's `exit`, spelled as a state
 
-    def _head(self) -> None:
+    def _head(self, rec: AwkRecord_T) -> None:
         """Before the body: preamble, dropped, and the <body> tag with it."""
-        case self.line:
+        case rec.line:
             when /<body[^>]*>/: self.state = BODY
             when others:        pass
 
-    def _body(self) -> None:
+    def _body(self, rec: AwkRecord_T) -> None:
         """Inside the body: rewrite, print, and watch for the two exits."""
-        case self.line:
+        case rec.line:
             when /<\/body>/:             self.state = DONE
             when /<div title="footer">/: self.state = FOOTER
             when others:
-                self._rewrite()
-                print self.line
+                print self._rewrite(rec.line)
 
-    def _footer(self) -> None:
+    def _footer(self, rec: AwkRecord_T) -> None:
         """Inside the footer: dropped, up to the </div> that closes it."""
-        case self.line:
+        case rec.line:
             when /<\/body>/: self.state = DONE
             when /<\/div>/:  self.state = BODY
             when others:     pass
 
-    def _rewrite(self) -> None:
-        """The three edits, in the order awk applies them to one line.
+    def _rewrite(self, text: str) -> str:
+        """The three edits, in the order awk applies them to one line, LINE as they leave it.
 
         Called only from the body, so a record that is dropped is never
         rewritten. That is what keeps the id from being spent on a line
@@ -122,22 +121,23 @@ class HtmlBody(AwkProcessor):
         lands on a record that is then not printed and the page comes out
         with no id at all.
         """
+        var line: str = text
         if not self.div_done:
-            case self.line:
+            case line:
                 when /(<div[^>]+)>/:
                     # $+1 is the open tag without its `>`: put the id
                     # inside the tag it came from, wherever on the line
                     # that tag is.
                     let open: str = $+1
-                    self.line = self.line.replace(open + ">",
-                                                  open + " id=\"" + self.at.stem + "\">")
+                    line = line.replace(open + ">", open + " id=\"" + self.at.stem + "\">")
                     self.div_done = true
                 when others: pass
 
         # Relative links, made absolute: the fragment is about to be read
         # from somewhere else, and `test_x.html` would follow it there.
-        self.line = self.line.replace("href=\"test_", "href=\"" + self.at.dir + "/test_")
-        self.line = self.line.replace("<img src=\"",  "<img src=\"" + self.at.dir + "/")
+        line = line.replace("href=\"test_", "href=\"" + self.at.dir + "/test_")
+        line = line.replace("<img src=\"",  "<img src=\"" + self.at.dir + "/")
+        return line
 
 
 def main():
@@ -145,9 +145,9 @@ def main():
         print "usage: html_body PAGE.html"
         quit(2)
 
-    var p: HtmlBody = HtmlBody()
+    var p: HtmlBody = HtmlBody($1)
     p.at = anchor($1)
-    let done: None | !AwkFailure_T = p.try_run_file($1)
+    let done: None | !AwkFailure_T = p.run()
     if done is AwkFailure_T:
         print f"html_body: {done.reason}"
         quit(1)

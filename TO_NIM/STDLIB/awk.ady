@@ -1,28 +1,51 @@
 #!/usr/bin/env ady2nim
 """
-awk_base — generic stdin record-processor framework.
+awk -- a record-processor framework: awk's loop, with the records coming from wherever the base class says.
 
-Subclass AwkProcessor and override:
-    process_record()   — called once per record after read_record()
-    start()            — called before the main loop  (default: no-op)
-    finish()           — called after the main loop   (default: no-op)
+`AwkProcessor.run` is the whole loop:
 
-awk variables supported:
+    for each record that get_record() gives:
+        process_record(rec)
+
+and three kinds of input are there to build on, each a base class that says where the records come from:
+
+    StdinProcessor     the records of stdin             (what awk reads with no file)
+    FileProcessor      the records of a file, FileProcessor(path); a path ending in .gz is read through gzip
+    TextProcessor      the records of a text already in hand, TextProcessor(text): what a command printed
+
+A program subclasses the one it wants and overrides
+
+    process_record(rec)  -- called once per record
+    start()              -- called before the first record  (default: no-op)
+    finish()             -- called after the last one       (default: no-op)
+
+and any other source of records is a subclass of AwkProcessor that overrides `get_record`: it gives
+the next record, made with `self.record(raw)`, or None when there are no more.
+
+awk variables, on the processor:
     FS   field separator         (default: " " = split on whitespace)
     OFS  output field separator  (default: " ")
     RS   record separator        (default: "\n" = one line per record)
     ORS  output record separator (default: "\n", available to subclasses)
 
-Fields layout:
-    self.line        = full record  (awk $0)
-    Fields[0..NF-1] = individual fields  (awk $1..$NF)
-    NF              = number of fields
+and on the record that process_record is given:
+    rec.line      = the record  (awk $0)
+    rec.Fields    = Fields[0] the record, Fields[1..NF] its fields  (awk $0, $1..$NF)
+    rec.NF        = number of fields
+    rec.NR        = number of the record, from 1
 """
 
 
 # why a run stopped: a failed read, or a record the subclass gave up on with stop()
 type AwkFailure_T is record:
     reason: str
+
+# one record: what process_record is given
+type AwkRecord_T is record:
+    line:   str
+    Fields: []str
+    NF:     int
+    NR:     int
 
 
 @virtual
@@ -31,10 +54,7 @@ class AwkProcessor:
     var OFS       : str
     var RS        : str = "\n"
     var ORS       : str = "\n"
-    var line      : str
-    var Fields    : []str
     var NR        : int = 0
-    var NF        : int = 0
     var total_len : int = 0
     var total_nf  : int = 0
     var failure   : str = ""
@@ -45,18 +65,22 @@ class AwkProcessor:
         self.RS  = rs
         self.ORS = ors
 
-    def read_record(self, raw: str):
-        self.line       = raw.rstrip()
-        let parts: []str = (self.line.split() if self.FS == " " else self.line.split(self.FS))
-        self.NF         = parts'Length
-        self.Fields     = ["" for _ in 0 .. self.NF]  # NF+1 slots: Fields[0]=$0, Fields[1..NF]=$1..$NF
-        self.Fields[0]  = self.line
-        self.Fields[1:] = parts
-        self.NR        += 1
-        self.total_len += self.line'Length
-        self.total_nf  += self.NF
+    # The next record, or None when there are no more. What differs from one use case to another.
+    def get_record(self) -> ?AwkRecord_T:
+        raise NotImplementedError("Override get_record()")
 
-    def process_record(self):
+    # The record that the text RAW is: its line, its fields by FS, its number.
+    def record(self, raw: str) -> AwkRecord_T:
+        let line: str = raw.rstrip()
+        let parts: []str = (line.split() if self.FS == " " else line.split(self.FS))
+        self.NR        += 1
+        self.total_len += line'Length
+        self.total_nf  += parts'Length
+        var fields: []str = [line]
+        fields.extend(parts)
+        return AwkRecord_T(line=line, Fields=fields, NF=parts'Length, NR=self.NR)
+
+    def process_record(self, rec: AwkRecord_T):
         raise NotImplementedError("Override process_record()")
 
     def start(self):
@@ -65,75 +89,108 @@ class AwkProcessor:
     def finish(self):
         pass
 
-    # Stop the run, saying why: the records after this one are not read. `run` and
-    # `run_file` end the program with the reason; `try_run` and `try_run_file` give it
-    # back as an AwkFailure_T.
+    # Stop the run, saying why: the records after this one are not read, and `run` gives the
+    # reason back as an AwkFailure_T.
     def stop(self, reason: str):
         if self.failure == "":
             self.failure = reason
 
-    def try_run(self) -> None | !AwkFailure_T:
+    def run(self) -> None | !AwkFailure_T:
         self.start()
-        if self.RS == "\n":
-            for raw in stdin.lines:
-                self.read_record(raw)
-                self.process_record()
-                break if self.failure != ""
-        else:
-            let all: str = stdin.readAll()
-            for raw in all.split(self.RS):
-                if raw'Length > 0:
-                    self.read_record(raw)
-                    self.process_record()
-                    break if self.failure != ""
+        while self.failure == "":
+            let rec: ?AwkRecord_T = self.get_record()
+            if rec is None:
+                break
+            self.process_record(rec)
         if self.failure != "":
             return AwkFailure_T(self.failure)
         self.finish()
 
-    def try_run_file(self, path: str) -> None | !AwkFailure_T:
-        var source: str = ""
-        if path.endswith(".gz"):
-            # a gzipped file is read as what it holds
-            let unzipped: str | !ShellFailure_T = shell: gzip -dc -- {!path}
-            if unzipped is ShellFailure_T:
-                return AwkFailure_T(f"cannot read {path}: {unzipped.stderr.strip()}")
-            source = unzipped
-        else:
-            let plain: str | !PathFailure_T = Path(path).read_text()
-            if plain is PathFailure_T:
-                return AwkFailure_T(f"cannot read {path}: {plain.reason}")
-            source = plain
-        return self.try_run_text(source)
 
-    # The records of SOURCE, a text already in hand: what a command printed, say.
-    def try_run_text(self, source: str) -> None | !AwkFailure_T:
-        self.start()
+# What a file holds, as text: a path ending in .gz is read through gzip. For a processor that
+# reads files of its own: FileProcessor reads its one this way.
+def read_source(path: str) -> str | !AwkFailure_T:
+    if path.endswith(".gz"):
+        let unzipped: str | !ShellFailure_T = shell: gzip -dc -- {!path}
+        if unzipped is ShellFailure_T:
+            return AwkFailure_T(f"cannot read {path}: {unzipped.stderr.strip()}")
+        return unzipped
+    let plain: str | !PathFailure_T = Path(path).read_text()
+    if plain is PathFailure_T:
+        return AwkFailure_T(f"cannot read {path}: {plain.reason}")
+    return plain
+
+
+# The records of stdin: a line each, or, for another RS, the input cut at RS.
+class StdinProcessor(AwkProcessor):
+    var pending : []str
+    var next_at : int = 0
+    var loaded  : bool = False
+
+    def __init__(self, fs: str = " ", ofs: str = " ", rs: str = "\n", ors: str = "\n"):
+        super().__init__(fs, ofs, rs, ors)
+        self.pending = []
+
+    def get_record(self) -> ?AwkRecord_T:
         if self.RS == "\n":
-            for raw in source.splitlines():
-                self.read_record(raw)
-                self.process_record()
-                break if self.failure != ""
-        else:
-            for raw in source.split(self.RS):
+            let line: str | !InputFailure_T = stdin.readLine()
+            if line is InputFailure_T:
+                return None
+            return self.record(line)
+        # another separator: the input is read whole, and cut
+        if not self.loaded:
+            self.loaded = True
+            for raw in stdin.readAll().split(self.RS):
                 if raw'Length > 0:
-                    self.read_record(raw)
-                    self.process_record()
-                    break if self.failure != ""
-        if self.failure != "":
-            return AwkFailure_T(self.failure)
-        self.finish()
+                    self.pending.append(raw)
+        if self.next_at >= len(self.pending):
+            return None
+        self.next_at += 1
+        return self.record(self.pending[self.next_at - 1])
 
-    def run(self):
-        let r: None | !AwkFailure_T = self.try_run()
-        if r is AwkFailure_T:
-            die(r.reason)
 
-    def run_file(self, path: str):
-        let r: None | !AwkFailure_T = self.try_run_file(path)
-        if r is AwkFailure_T:
-            die(r.reason)
+# The records of a text in hand -- what a command printed, say.
+class TextProcessor(AwkProcessor):
+    var text    : str
+    var pending : []str
+    var next_at : int = 0
+    var loaded  : bool = False
 
-    def run_text(self, source: str):
-        let r: None | !AwkFailure_T = self.try_run_text(source)
-        if r is AwkFailure_T:
-            die(r.reason)
+    def __init__(self, text: str = "", fs: str = " ", ofs: str = " ", rs: str = "\n", ors: str = "\n"):
+        super().__init__(fs, ofs, rs, ors)
+        self.text = text
+        self.pending = []
+
+    # The text to cut into records, or why it is not there: for a processor of another kind of text.
+    def load(self) -> str | !AwkFailure_T:
+        return self.text
+
+    def get_record(self) -> ?AwkRecord_T:
+        if not self.loaded:
+            self.loaded = True
+            let source: str | !AwkFailure_T = self.load()
+            if source is AwkFailure_T:
+                self.stop(source.reason)
+                return None
+            if self.RS == "\n":
+                self.pending = source.splitlines()
+            else:
+                for raw in source.split(self.RS):
+                    if raw'Length > 0:
+                        self.pending.append(raw)
+        if self.next_at >= len(self.pending):
+            return None
+        self.next_at += 1
+        return self.record(self.pending[self.next_at - 1])
+
+
+# The records of a file, whose name is PATH; a name ending in .gz is read as what it holds.
+class FileProcessor(TextProcessor):
+    var path : str
+
+    def __init__(self, path: str, fs: str = " ", ofs: str = " ", rs: str = "\n", ors: str = "\n"):
+        super().__init__("", fs, ofs, rs, ors)
+        self.path = path
+
+    def load(self) -> str | !AwkFailure_T:
+        return read_source(self.path)

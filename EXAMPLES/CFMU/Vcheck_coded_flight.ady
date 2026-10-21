@@ -13,7 +13,7 @@ the test-report directory.
 E.g.:
     Vcheck_coded_flight 30.0.0.6 VVL.TACT_PHASERND2
 """
-from awk import AwkProcessor, AwkFailure_T
+from awk import FileProcessor, AwkRecord_T, AwkFailure_T
 
 
 type State_T is enum OUT_OF_HIST, IN_HIST
@@ -31,7 +31,7 @@ type Histogram_T is record:
     max_bucket: Natural = 0      # largest bound with entries in it
 
 
-class HistogramExtractor(AwkProcessor):
+class HistogramExtractor(FileProcessor):
     var hist : Histogram_T = Histogram_T()
     var state: State_T     = OUT_OF_HIST
 
@@ -51,14 +51,14 @@ class HistogramExtractor(AwkProcessor):
             let av: Natural = int(self.hist.weighted / float(self.hist.total) + 0.5)
             print f"  max_bucket={mb}  avg={av}  (n={self.hist.total})"
 
-    def process_record(self):
-        let F: []str = self.Fields
+    def process_record(self, rec: AwkRecord_T):
+        let F: []str = rec.Fields
         # Order carries the state machine: inside a histogram a bucket line
         # extends it and anything else ends it, and only outside one does a
         # header start the next.
-        case self.line:
+        case rec.line:
             when /^< [0-9]+ +bytes:/ if self.state == IN_HIST:
-                self._fold(int(F[2]), int(F[self.NF]))
+                self._fold(int(F[2]), int(F[rec.NF]))
             when _ if self.state == IN_HIST:
                 self._report()
                 self.state     = OUT_OF_HIST
@@ -89,8 +89,8 @@ def resolve_log(label: str) -> str:
 
 
 def extract_histogram(log: str):
-    var p: HistogramExtractor = HistogramExtractor()
-    let done: None | !AwkFailure_T = p.try_run_file(log)
+    var p: HistogramExtractor = HistogramExtractor(log)
+    let done: None | !AwkFailure_T = p.run()
     if done is AwkFailure_T:
         print f"{done.reason}"
 

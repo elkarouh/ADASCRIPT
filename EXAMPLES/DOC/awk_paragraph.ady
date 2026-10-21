@@ -6,14 +6,16 @@ paragraph mode -- a blank line ends a record -- and nothing else in the
 program changes: process_record() still gets one record at a time and
 still does not know how the input was cut up.
 """
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T, AwkFailure_T
 
-class Para(AwkProcessor):
-    def process_record(self):
-        print f"record {self.NR}: NF={self.NF} [{self.line}]"
+class Para(StdinProcessor):
+    def process_record(self, rec: AwkRecord_T):
+        print f"record {rec.NR}: NF={rec.NF} [{rec.line}]"
 
 def main():
     var p: Para = Para(rs = "\n\n")      # a blank line ends a record
-    p.run()
+    let done: None | !AwkFailure_T = p.run()
+    if done is AwkFailure_T:
+        die(done.reason)
 
 main()

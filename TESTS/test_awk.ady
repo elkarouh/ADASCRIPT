@@ -7,38 +7,38 @@ Usage:
     cat FILE | ./awk_OO ,             # FS = comma
     cat FILE | ./awk_OO '\t'          # FS = tab
 """
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T, AwkFailure_T
 
 type Severity_T is enum INFO, WARN, ERROR, OTHER
 
-class SeverityProcessor(AwkProcessor): 
+class SeverityProcessor(StdinProcessor):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
-    def classify_record(self) -> Severity_T:
-        case self.line:
+    def classify_record(self, rec: AwkRecord_T) -> Severity_T:
+        case rec.line:
             when /error/i:      return ERROR
             when /warn/i:       return WARN
             when /info|debug/i: return INFO
             when others:        return OTHER
 
-    def process_record(self):
-        let F:    []str = self.Fields # F[0..NF-1] = fields; self.line = full record ($0)
-        let sev: Severity_T = self.classify_record()
+    def process_record(self, rec: AwkRecord_T):
+        let F:    []str = rec.Fields # F[1..NF] = fields; F[0] = full record ($0)
+        let sev: Severity_T = self.classify_record(rec)
         case sev:
             when ERROR:
-                print f"!! {self.NR:>3}: {F[0]}" # F[0] contains the entire line !!!
+                print f"!! {rec.NR:>3}: {F[0]}" # F[0] contains the entire line !!!
             when WARN:
-                print f" ! {self.NR:>3}: {F[0]}"
+                print f" ! {rec.NR:>3}: {F[0]}"
             when INFO:
-                if self.NF >= 1:
+                if rec.NF >= 1:
                     let first: str = F[1]
-                    let last:  str = F[self.NF]
-                    print f"[info] NR={self.NR} NF={self.NF} first={first}{self.OFS}last={last}"
+                    let last:  str = F[rec.NF]
+                    print f"[info] NR={rec.NR} NF={rec.NF} first={first}{self.OFS}last={last}"
                 else:
-                    print f"[info] NR={self.NR} (empty)"
+                    print f"[info] NR={rec.NR} (empty)"
             when others:
                 let joined: str = self.OFS.join(F[1:])
-                print f"   {self.NR:>3}: {joined}"
+                print f"   {rec.NR:>3}: {joined}"
         self.counts[sev] += 1
 
     def start(self):
@@ -61,7 +61,9 @@ class SeverityProcessor(AwkProcessor):
 def main():
     let fs: str = ($1 if $# > 0 else " ")
     var processor: SeverityProcessor = SeverityProcessor(fs)
-    processor.run()
+    let done: None | !AwkFailure_T = processor.run()
+    if done is AwkFailure_T:
+        die(done.reason)
 
 
 main()

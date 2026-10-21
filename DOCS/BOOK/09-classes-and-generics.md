@@ -36,11 +36,11 @@ generated constructor. `__init__` then only sets what varies per instance —
 or disappears entirely. `TESTS/test_awk.ady`:
 
 ```python
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T
 
-class SeverityProcessor(AwkProcessor):
+class SeverityProcessor(StdinProcessor):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
-    # no __init__ at all — a forwarding constructor calling AwkProcessor's
+    # no __init__ at all — a forwarding constructor calling StdinProcessor's
     # initialiser is generated automatically
 ```
 
@@ -131,26 +131,27 @@ one purpose: **cross-module dispatch**. It makes the Nim backend emit
 
 The `awk` stdlib base class is the working illustration. `TO_NIM/awk.ady`
 ships a `@virtual class AwkProcessor` implementing the AWK machinery (`FS`,
-`OFS`, `NR`, `NF`, `read_record`, `run`); user programs `import awk` and
+`OFS`, `run`, and a `get_record` per kind of input: `StdinProcessor`,
+`FileProcessor`, `TextProcessor`); user programs `import awk` and
 override the hooks. `TESTS/test_awk.ady`:
 
 ```python
-class SeverityProcessor(AwkProcessor):
+class SeverityProcessor(StdinProcessor):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
-    def classify_record(self) -> Severity_T:
-        case self.line:
+    def classify_record(self, rec: AwkRecord_T) -> Severity_T:
+        case rec.line:
             when /error/i:      return ERROR
             when /warn/i:       return WARN
             when /info|debug/i: return INFO
             when others:        return OTHER
 
-    def process_record(self):
-        let F: []str = self.Fields
-        let sev: Severity_T = self.classify_record()
+    def process_record(self, rec: AwkRecord_T):
+        let F: []str = rec.Fields
+        let sev: Severity_T = self.classify_record(rec)
         ...
 
-    def begin(self):  print "--- awk report ---"
+    def start(self):  print "--- awk report ---"
     def finish(self): ...   # summary
 ```
 

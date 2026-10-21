@@ -8,7 +8,7 @@ Usage:
     tacot_corico ... | ./Tstatus_monitor
 """
 nimport time
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T, AwkFailure_T
 
 
 # A row is filled in over several records, and it is in the table from the
@@ -31,7 +31,7 @@ class Build:
     var nr_success: str = ""
 
 
-class ShowBuilds(AwkProcessor):
+class ShowBuilds(StdinProcessor):
     # The table, one row per build, in the order the builds were seen, and
     # the row every record fills in.  current_build is already in builds, so
     # opening the next one is all it takes to finish the current one -- except
@@ -91,8 +91,9 @@ class ShowBuilds(AwkProcessor):
         if log_file == /\/cm\/nasdata|\/auto\/home/:
             b.test_mode = "TACTDEV"
 
-    def _config(self, F: []str) -> None:
+    def _config(self, rec: AwkRecord_T) -> None:
         """`TACT.TACT_CONFIG ...` / `IFPS.FPL_CONFIG ...` — the build itself."""
+        let F: []str = rec.Fields
         if not self.newhost:
             # No "Host:" line since the last build: the config line belongs to
             # another build on the same host, so carry who and where forward.
@@ -105,10 +106,10 @@ class ShowBuilds(AwkProcessor):
 
         let b: Build = self.current_build
         b.build      = F[1]
-        b.version    = (F[2] if self.NF >= 2 else "")
-        b.load_sched = (F[3] if self.NF >= 3 else "")
+        b.version    = (F[2] if rec.NF >= 2 else "")
+        b.load_sched = (F[3] if rec.NF >= 3 else "")
 
-        if self.NF < 4 or F[4] == "":
+        if rec.NF < 4 or F[4] == "":
             b.vnc  = ""
             b.team = "?"
         else:
@@ -126,9 +127,9 @@ class ShowBuilds(AwkProcessor):
                 b.team = b.user
         self.newhost = False
 
-    def process_record(self):
-        let line: str  = self.line
-        let F:    []str = self.Fields
+    def process_record(self, rec: AwkRecord_T):
+        let line: str  = rec.line
+        let F:    []str = rec.Fields
 
         # --- valgrind state, carried between records ---
         case line:
@@ -144,26 +145,26 @@ class ShowBuilds(AwkProcessor):
                 pass
 
         # --- main record action ---
-        if self.NF >= 1:
+        if rec.NF >= 1:
             case F[1]:
-                when "Showing" if self.NF >= 12:
+                when "Showing" if rec.NF >= 12:
                     self._showing(F)
-                when "User:" if self.NF >= 2:
+                when "User:" if rec.NF >= 2:
                     self._open_build()
                     self.current_build.user = F[2]
-                when "Host:" if self.NF >= 2:
+                when "Host:" if rec.NF >= 2:
                     self.current_build.host      = F[2]
                     self.current_build.test_mode = "REGRESS"
                     self.newhost = True
                 when /TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG/:
-                    self._config(F)
+                    self._config(rec)
                 when others:
                     pass
 
-        if self.NF >= 4 and F[4] == "replay_day:":
+        if rec.NF >= 4 and F[4] == "replay_day:":
             self.current_build.test_mode = "REPLAY"
 
-        if line == /General result:/ and self.NF >= 6:
+        if line == /General result:/ and rec.NF >= 6:
             self.current_build.nr_failed  = F[3]
             self.current_build.nr_success = F[6]
 
@@ -205,7 +206,9 @@ class ShowBuilds(AwkProcessor):
 
 def main():
     var p: ShowBuilds = ShowBuilds()
-    p.run()
+    let done: None | !AwkFailure_T = p.run()
+    if done is AwkFailure_T:
+        die(done.reason)
 
 
 main()

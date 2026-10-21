@@ -104,29 +104,45 @@ sight.
 ### The AwkProcessor form
 
 When the program is a state machine — when what a record *means* depends on
-the records before it — subclass `AwkProcessor` from the bundled library
-(`TO_NIM/STDLIB/awk.ady`) and override three methods:
+the records before it — subclass one of the processors in the bundled library
+(`TO_NIM/STDLIB/awk.ady`) and override `process_record`:
 
 <!-- illustrative: the shape of an AwkProcessor program, with every method body elided -->
 ```python
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T
 
-class LogScan(AwkProcessor):
+class LogScan(StdinProcessor):
     def start(self):           # awk's BEGIN
         ...
-    def process_record(self):  # the pattern/action body
+    def process_record(self, rec: AwkRecord_T):  # the pattern/action body
         ...
     def finish(self):          # awk's END
         ...
 
-LogScan().run()
+let done: None | !AwkFailure_T = LogScan().run()
 ```
 
-`AwkProcessor` gives you the AWK variables under their own names: `self.line` is
-`$0`, `self.Fields[1] .. self.Fields[NF]` are `$1 .. $NF` (`Fields[0]` is the
-whole record, exactly as in AWK), and `self.NR`, `self.NF`, `self.FS`,
-`self.OFS`, `self.RS`, `self.ORS` are what you expect. `run_file(path)` is
-the same loop over a named file.
+`run()` is the whole loop, and the same one for every program: `start()`, then
+`process_record(rec)` for every record that `get_record()` gives, then `finish()`.
+What differs from one program to the next is where the records come from, and
+that is the processor you subclass:
+
+| subclass | the records are |
+|----------|-----------------|
+| `StdinProcessor` | those of stdin, awk's default |
+| `FileProcessor(path)` | those of a file; a path ending in `.gz` is read as what it holds |
+| `TextProcessor(text)` | those of a text already in hand, such as what a command printed |
+
+Any other source is a subclass of `AwkProcessor` that overrides `get_record`:
+it returns the next record, made with `self.record(raw)`, or `None` when there
+are no more. `EXAMPLES/OPLOG/decode_oplog_awk.ady` merges the records of several
+files in time order this way, and `TOOLS/LV/lv_cmd.ady` takes them from the
+output of a command it runs itself.
+
+A record is what `process_record` is given: `rec.line` is `$0`,
+`rec.Fields[1] .. rec.Fields[rec.NF]` are `$1 .. $NF` (`Fields[0]` is the
+whole record, exactly as in AWK), and `rec.NR` and `rec.NF` are what you
+expect. `self.FS`, `self.OFS`, `self.RS` and `self.ORS` are the processor's.
 
 One caveat: ady2py does not merge the bundled libraries, so the
 `AwkProcessor` form is Nim-only. The flat form runs on both backends.
@@ -140,9 +156,9 @@ of iterating lines:
 
 <!-- from: EXAMPLES/DOC/awk_paragraph.ady -->
 ```python
-class Para(AwkProcessor):
-    def process_record(self):
-        print f"record {self.NR}: NF={self.NF} [{self.line}]"
+class Para(StdinProcessor):
+    def process_record(self, rec: AwkRecord_T):
+        print f"record {rec.NR}: NF={rec.NF} [{rec.line}]"
 
 def main():
     var p: Para = Para(rs = "\n\n")      # a blank line ends a record
@@ -173,7 +189,7 @@ record 3: NF=4 [User: carol
 Host: build03]
 ```
 
-`self.line` is the whole multi-line record and the fields run across the
+`rec.line` is the whole multi-line record and the fields run across the
 newlines, which is what AWK's paragraph mode does. Any other separator works
 the same way — `rs = "%%\n"` for a marker, `rs = "\x1e"` for a record
 separator byte. Nothing else in the program changes: `process_record` still
@@ -183,14 +199,10 @@ The cost is the one AWK has too — a non-newline `RS` reads the input whole
 rather than streaming it, so it is for files that fit in memory. The default
 `rs = "\n"` streams.
 
-**When the input is wrong.** `p.run_file(path)` and `p.run()` end the program with
-the reason when a file cannot be read, or when `process_record` calls
-`self.stop(reason)` on a record it cannot accept (the records after it are not
-read). `p.try_run_file(path)` and `p.try_run()` do the same but give the reason
-back as a `None | !AwkFailure_T`, to take like any failure. `TESTS/test_awk_stop.ady`.
-
-A path ending in `.gz` is read as what it holds (through `gzip -dc`), by `run_file` and
-`try_run_file` alike.
+**When the input is wrong.** `p.run()` gives back a `None | !AwkFailure_T`, to take
+like any failure: the reason a file could not be read, or the one `process_record`
+gave with `self.stop(reason)` on a record it cannot accept (the records after it are
+not read). `TESTS/test_awk_stop.ady`.
 
 ---
 
@@ -216,23 +228,23 @@ strings, regexes and ranges mix freely in one `case`:
 <!-- from: EXAMPLES/CFMU/Tstatus_monitor.ady -->
 ```python
 case F[1]:
-    when "Showing" if self.NF >= 12:
+    when "Showing" if rec.NF >= 12:
         self._showing(F)
-    when "User:" if self.NF >= 2:
+    when "User:" if rec.NF >= 2:
         self._open_build()
         self.current_build.user = F[2]
-    when "Host:" if self.NF >= 2:
+    when "Host:" if rec.NF >= 2:
         self.current_build.host      = F[2]
         self.current_build.test_mode = "REGRESS"
         self.newhost = True
     when /TACT\.TACT_CONFIG|IFPS\.FPL_CONFIG/:
-        self._config(F)
+        self._config(rec)
     when others:
         pass
 ```
 
 That is from `EXAMPLES/CFMU/Tstatus_monitor.ady`, a translation of a real
-AWK script. The guard — `if self.NF >= 12` — is the `pattern && condition`
+AWK script. The guard — `if rec.NF >= 12` — is the `pattern && condition`
 you would have written in AWK, except that it sits with the pattern instead
 of at the top of the action.
 
@@ -862,7 +874,7 @@ type Trace_T is record:        # the lines after a failure
 
 <!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
-class LogScan(AwkProcessor):
+class LogScan(StdinProcessor):
     var state    : Scan_State_T          = OUTSIDE
 
     # One list per kind of record. Both are complete by finish().
@@ -883,10 +895,10 @@ outside it:
 
 <!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
-def process_record(self):
+def process_record(self, rec: AwkRecord_T):
     case self.state:
-        when OUTSIDE:  self._outside()
-        when IN_TRACE: self._in_trace()
+        when OUTSIDE:  self._outside(rec)
+        when IN_TRACE: self._in_trace(rec)
 ```
 
 That shape is worth copying, and it is not the obvious one. The tempting
@@ -914,10 +926,10 @@ an event apart, and the groups go straight into a record:
 
 <!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
-def _outside(self) -> None:
+def _outside(self, rec: AwkRecord_T) -> None:
     """Between traces: a record is an event, the start of one, or noise."""
     # One regex takes the record apart; $+1 .. $+7 are its groups.
-    case self.line:
+    case rec.line:
         when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
             let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
             let sev: Severity_T = Severity_T($+3.upper())
@@ -934,7 +946,7 @@ def _outside(self) -> None:
                 let prev: Request_T = self.requests[self.requests'Length - 1]
                 self.open_trace.under = prev.verb + " " + prev.path
             self.state = IN_TRACE
-            self._in_trace()
+            self._in_trace(rec)
         when others:
             pass                      # a line belonging to neither kind
 ```
@@ -951,16 +963,16 @@ counted by it. Inside a trace, every record is part of it until one is not:
 
 <!-- from: EXAMPLES/AWK/awk_logscan.ady -->
 ```python
-def _in_trace(self) -> None:
+def _in_trace(self, rec: AwkRecord_T) -> None:
     """Inside a trace: every record is part of it until one is not."""
-    case self.line:
+    case rec.line:
         when /^\d{4}-\d{2}-\d{2} /:
             # A timestamped line is not part of the trace: close it, leave
             # the state, and hand this same record to the state just
             # entered -- it is an event, and is counted as one.
             self.traces.append(self.open_trace)
             self.state = OUTSIDE
-            self._outside()
+            self._outside(rec)
         when /^([A-Z]\w+(Error|Exception)): /:
             self.open_trace.lines  += 1
             self.open_trace.failure = $+1
@@ -972,11 +984,11 @@ The hand-off is symmetric, and worth seeing as one pattern rather than two.
 Neither transition ever handles the boundary record itself: each recognises
 that the record belongs to the *other* state and re-dispatches it there,
 rather than special-casing it in place. Going in, `_outside()` does no setup
-at all — it flips the flag and calls `self._in_trace()`, and the first branch
+at all — it flips the flag and calls `self._in_trace(rec)`, and the first branch
 above, now looking at the same line a second time, is what actually opens
 `open_trace`. Coming out, `_in_trace()` does the opposite: it finishes its
 own bookkeeping first — the completed trace goes on the list — *then* flips
-the flag and calls `self._outside()`, so the timestamped line that closed the
+the flag and calls `self._outside(rec)`, so the timestamped line that closed the
 trace is itself counted as the event it is, by the ordinary event branch,
 rather than by any special case for "the line after a trace." One recursion
 each way, and no record is ever dropped or double-handled.
@@ -1149,11 +1161,11 @@ type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
 
 <!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
-    def process_record(self):
+    def process_record(self, rec: AwkRecord_T):
         case self.state:
-            when HEAD:   self._head()
-            when BODY:   self._body()
-            when FOOTER: self._footer()
+            when HEAD:   self._head(rec)
+            when BODY:   self._body(rec)
+            when FOOTER: self._footer(rec)
             when DONE:   pass          # awk's `exit`, spelled as a state
 ```
 
@@ -1169,18 +1181,17 @@ state and no others:
 
 <!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
-    def _body(self) -> None:
+    def _body(self, rec: AwkRecord_T) -> None:
         """Inside the body: rewrite, print, and watch for the two exits."""
-        case self.line:
+        case rec.line:
             when /<\/body>/:             self.state = DONE
             when /<div title="footer">/: self.state = FOOTER
             when others:
-                self._rewrite()
-                print self.line
+                print self._rewrite(rec.line)
 
-    def _footer(self) -> None:
+    def _footer(self, rec: AwkRecord_T) -> None:
         """Inside the footer: dropped, up to the </div> that closes it."""
-        case self.line:
+        case rec.line:
             when /<\/body>/: self.state = DONE
             when /<\/div>/:  self.state = BODY
             when others:     pass
@@ -1282,14 +1293,13 @@ That is what `div_done` is for, and why it is a latch rather than a state:
 <!-- from: EXAMPLES/AWK/html_body.ady -->
 ```python
         if not self.div_done:
-            case self.line:
+            case line:
                 when /(<div[^>]+)>/:
                     # $+1 is the open tag without its `>`: put the id
                     # inside the tag it came from, wherever on the line
                     # that tag is.
                     let open: str = $+1
-                    self.line = self.line.replace(open + ">",
-                                                  open + " id=\"" + self.at.stem + "\">")
+                    line = line.replace(open + ">", open + " id=\"" + self.at.stem + "\">")
                     self.div_done = true
                 when others: pass
 ```
@@ -1350,12 +1360,13 @@ keeps checking.
 |-----|-----------|
 | `BEGIN { }` | `def start(self):` — or just code before the loop |
 | `END { }` | `def finish(self):` |
-| `{ action }` | `def process_record(self):` |
-| `$0` (the record) | `self.line`, or `Fields[0]` |
-| `$1`, `$NF` (a field) | `Fields[1]`, `Fields[self.NF]` |
-| `NR`, `NF`, `FS`, `OFS`, `RS` | `self.NR`, `self.NF`, `self.FS`, `self.OFS`, `self.RS` |
-| `RS=""` (paragraph mode) | `AwkProcessor(rs = "\\n\\n")` |
-| `RS="%%\\n"` (a marker) | `AwkProcessor(rs = "%%\\n")` |
+| `{ action }` | `def process_record(self, rec: AwkRecord_T):` |
+| `$0` (the record) | `rec.line`, or `rec.Fields[0]` |
+| `$1`, `$NF` (a field) | `rec.Fields[1]`, `rec.Fields[rec.NF]` |
+| `NR`, `NF` | `rec.NR`, `rec.NF` |
+| `FS`, `OFS`, `RS` | `self.FS`, `self.OFS`, `self.RS` |
+| `RS=""` (paragraph mode) | `StdinProcessor(rs = "\\n\\n")` |
+| `RS="%%\\n"` (a marker) | `StdinProcessor(rs = "%%\\n")` |
 | `/re/ { a }` | `when /re/:` in a `case` over the record |
 | `/re/ && cond { a }` | `when /re/ if cond:` |
 | `$0 ~ /re/` | `line == /re/` |

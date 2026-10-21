@@ -3793,7 +3793,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 
 | Name              | Provides                                                  |
 |-------------------|-----------------------------------------------------------|
-| `import awk`      | `AwkProcessor` — generic stdin record-processor base class      |
+| `import awk`      | `AwkProcessor` — the record loop (`run`: `get_record`, `process_record`), with `StdinProcessor`, `FileProcessor` and `TextProcessor` for where the records come from |
 | `import iters`    | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
 | `import strscan`  | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
 | `import ansi`     | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `fg_bright_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`); `bold + fg_red` is one style with both codes |
@@ -3813,19 +3813,21 @@ Example — a custom awk processor in any directory:
 
 ```python
 #!/usr/bin/env ady2nim
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T, AwkFailure_T
 
-class WordCounter(AwkProcessor):
+class WordCounter(StdinProcessor):
     var word_count: int = 0
 
-    def process_record(self):
-        self.word_count += self.NF
+    def process_record(self, rec: AwkRecord_T):
+        self.word_count += rec.NF
 
     def finish(self):
         print f"total words: {self.word_count}"
 
 var wc: WordCounter = WordCounter()
-wc.run()
+let done: None | !AwkFailure_T = wc.run()
+if done is AwkFailure_T:
+    die(done.reason)
 ```
 
 ### Splitting a library from its tests
@@ -5644,24 +5646,24 @@ version, demonstrating field defaults, auto-`var self`, and inheritance:
 class AwkProcessor:
     var FS: str
     var NR: int = 0
-    var NF: int = 0
 
-    def read_record(self, raw: str): ...   # parse line into self.line / self.Fields
-    def process_record(self): raise NotImplementedError(...)
-    def begin(self): pass
+    def get_record(self) -> ?AwkRecord_T: ...   # the next record, None at the end: per use case
+    def process_record(self, rec: AwkRecord_T): raise NotImplementedError(...)
+    def start(self): pass
     def finish(self): pass
-    def run(self):
-        self.begin()
-        for raw in stdin.lines:
-            self.read_record(raw)
-            self.process_record()
+    def run(self) -> None | !AwkFailure_T:
+        self.start()
+        while True:
+            let rec: ?AwkRecord_T = self.get_record()
+            break if rec is None
+            self.process_record(rec)
         self.finish()
 
-class SeverityProcessor(AwkProcessor):   # no __init__ needed
+class SeverityProcessor(StdinProcessor):   # StdinProcessor: get_record reads stdin
     var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
 
-    def process_record(self): ...
-    def begin(self): print "--- awk report ---"
+    def process_record(self, rec: AwkRecord_T): ...
+    def start(self): print "--- awk report ---"
     def finish(self): ...  # print summary
 ```
 

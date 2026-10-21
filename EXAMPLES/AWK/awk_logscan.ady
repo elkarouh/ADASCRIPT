@@ -13,7 +13,7 @@ So: a state machine decides which kind of record this is, each kind is
 gathered into its own list of its own record type, some work is done on the
 way past and the rest once both lists are complete.
 """
-from awk import AwkProcessor
+from awk import StdinProcessor, AwkRecord_T, AwkFailure_T
 
 
 type Severity_T   is enum DEBUG, INFO, WARN, ERROR
@@ -54,7 +54,7 @@ def status_class(status: Natural) -> Status_T:
         when 500 .. 599: SERVER_ERROR
         when others:     ODD
 
-class LogScan(AwkProcessor):
+class LogScan(StdinProcessor):
     var state    : Scan_State_T          = OUTSIDE
 
     # One list per kind of record. Both are complete by finish().
@@ -71,7 +71,7 @@ class LogScan(AwkProcessor):
         self.counts[sev] += 1
         self.by_status[status_class(req.status)] += 1
 
-    def process_record(self):
+    def process_record(self, rec: AwkRecord_T):
         """The whole dispatch: one branch per state, and nothing outside it.
 
         Every record is handled by the state it arrives in. Because the case
@@ -81,13 +81,13 @@ class LogScan(AwkProcessor):
         and a condition repeated on the front of every pattern.
         """
         case self.state:
-            when OUTSIDE:  self._outside()
-            when IN_TRACE: self._in_trace()
+            when OUTSIDE:  self._outside(rec)
+            when IN_TRACE: self._in_trace(rec)
 
-    def _outside(self) -> None:
+    def _outside(self, rec: AwkRecord_T) -> None:
         """Between traces: a record is an event, the start of one, or noise."""
         # One regex takes the record apart; $+1 .. $+7 are its groups.
-        case self.line:
+        case rec.line:
             when /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) (\w+) +(\w+) (\S+) (\d{3}) (\d+)ms$/:
                 let req: Request_T = Request_T(at=$+1 + " " + $+2, verb=$+4, path=$+5, status=int($+6), ms=int($+7))
                 let sev: Severity_T = Severity_T($+3.upper())
@@ -104,20 +104,20 @@ class LogScan(AwkProcessor):
                     let prev: Request_T = self.requests[self.requests'Length - 1]
                     self.open_trace.under = prev.verb + " " + prev.path
                 self.state = IN_TRACE
-                self._in_trace()
+                self._in_trace(rec)
             when others:
                 pass                      # a line belonging to neither kind
 
-    def _in_trace(self) -> None:
+    def _in_trace(self, rec: AwkRecord_T) -> None:
         """Inside a trace: every record is part of it until one is not."""
-        case self.line:
+        case rec.line:
             when /^\d{4}-\d{2}-\d{2} /:
                 # A timestamped line is not part of the trace: close it, leave
                 # the state, and hand this same record to the state just
                 # entered -- it is an event, and is counted as one.
                 self.traces.append(self.open_trace)
                 self.state = OUTSIDE
-                self._outside()
+                self._outside(rec)
             when /^([A-Z]\w+(Error|Exception)): /:
                 self.open_trace.lines  += 1
                 self.open_trace.failure = $+1
@@ -171,7 +171,9 @@ class LogScan(AwkProcessor):
 
 def main():
     var p: LogScan = LogScan()
-    p.run()
+    let done: None | !AwkFailure_T = p.run()
+    if done is AwkFailure_T:
+        die(done.reason)
 
 
 main()

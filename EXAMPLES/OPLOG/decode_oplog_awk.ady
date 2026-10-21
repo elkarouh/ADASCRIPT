@@ -39,7 +39,7 @@ reports packed with no per-report length prefix). Categories 62 (TACT's own vari
 # the decoder's angles are map_base's Degree_T, Latitude_T and Longitude_T (EXAMPLES/MAP_UTILS)
 from map_base import Degree_T, LatLong_T, Latitude_T, Longitude_T
 from units import metre_T, second_T
-from awk import AwkProcessor
+from awk import AwkProcessor, AwkRecord_T, AwkFailure_T, read_source
 
 # ---------------------------------------------------------------------------
 # Header (fixed-width record) parsing
@@ -897,40 +897,76 @@ class OplogRecord:
             print("     -", r)
 
 
-# an ARCHIVED_OPLOG file: a version line, then one record per CR LF, collected as they are read
-class OplogFile(AwkProcessor):
-    var records: []OplogRecord
+# a record's line with its time stamp, to put the records of several files in time order
+type Stamped_T is record:
+    stamp: str
+    line:  str
 
-    def __init__(self):
+
+# The records of ARCHIVED_OPLOG files -- a version line, then one record per CR LF -- of all the
+# files named, in the order of their time stamps; records with the same time stamp stay in the
+# order of the files and of the lines. What differs from any other AwkProcessor is where the
+# records come from, which is `get_record`; `process_record` shows each.
+class OplogProcessor(AwkProcessor):
+    var paths   : []str
+    var merged  : []str
+    var next_at : int = 0
+    var loaded  : bool = False
+
+    def __init__(self, paths: []str):
         super().__init__(rs="\r\n")
-        self.records = []
+        self.paths = paths
+        self.merged = []
 
-    def process_record(self):
-        if self.NR == 1:
-            if not self.line.startswith("CFMU_FILE_VERSION="):
-                self.stop(f"not an ARCHIVED_OPLOG file: {self.line}")
+    # the lines of the records of all the files, sorted by time stamp; or why they cannot be
+    def load(self) -> None | !AwkFailure_T:
+        var stamped: []Stamped_T = []
+        for path in self.paths:
+            let text: str | !AwkFailure_T = read_source(path)
+            if text is AwkFailure_T:
+                return text
+            let lines: []str = text.split("\r\n")
+            if not lines[0].startswith("CFMU_FILE_VERSION="):
+                return AwkFailure_T(f"{path}: not an ARCHIVED_OPLOG file: {lines[0]}")
+            var index: int = 0
+            for raw in lines[1:]:
+                continue if raw == ""
+                let parsed: OplogRecord | !ParseFailure_T = OplogRecord(raw)
+                if parsed is ParseFailure_T:
+                    return AwkFailure_T(f"{path}: record {index}: bad {parsed.what} field: '{parsed.text}'")
+                stamped.append(Stamped_T(str(parsed.time_stamp), raw))
+                index += 1
+        for s in sorted(stamped, key=lambda s: s.stamp):
+            self.merged.append(s.line)
+
+    def get_record(self) -> ?AwkRecord_T:
+        if not self.loaded:
+            self.loaded = True
+            let loaded: None | !AwkFailure_T = self.load()
+            if loaded is AwkFailure_T:
+                self.stop(loaded.reason)
+                return None
+        if self.next_at >= len(self.merged):
+            return None
+        self.next_at += 1
+        return self.record(self.merged[self.next_at - 1])
+
+    def process_record(self, rec: AwkRecord_T):
+        let parsed: OplogRecord | !ParseFailure_T = OplogRecord(rec.line)
+        if parsed is ParseFailure_T:
+            self.stop(f"record {rec.NR - 1}: bad {parsed.what} field: '{parsed.text}'")
             return
-        let rec: OplogRecord | !ParseFailure_T = OplogRecord(self.line)
-        if rec is ParseFailure_T:
-            self.stop(f"record {len(self.records)}: bad {rec.what} field: '{rec.text}'")
-            return
-        self.records.append(rec)
+        parsed.show(rec.NR - 1)
 
 
 def main() -> int:
     if $# < 1:
-        stderr.writeLine(f"usage: {$0} <ARCHIVED_OPLOG_file>...")
+        stderr.writeLine(f"usage: {$0} <ARCHIVED_OPLOG_file[.gz]>...")
         return 1
-    # the records of all the files, in the order of their time stamps; records with the
-    # same time stamp stay in the order of the files and of the lines
-    var records: []OplogRecord = []
-    for name in $@:
-        var file: OplogFile = OplogFile()
-        file.run_file(name)    # a file it cannot read, or a corrupt record, ends the program here
-        records.extend(file.records)
-    records = sorted(records, key=lambda r: str(r.time_stamp))
-    for i, rec in enumerate(records):
-        rec.show(i)
+    var oplog: OplogProcessor = OplogProcessor($@)
+    let done: None | !AwkFailure_T = oplog.run()     # a file it cannot read, or a corrupt record, ends the program
+    if done is AwkFailure_T:
+        die(done.reason)
     return 0
 
 

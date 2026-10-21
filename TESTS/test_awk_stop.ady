@@ -1,45 +1,64 @@
 #!/usr/bin/env ady2nim
 """Test: AwkProcessor failures -- a file it cannot read, a record the subclass gives up on.
 
-`try_run_file(path)` is a `None | !AwkFailure_T`; `run_file` is the same and ends the
-program with the reason. `self.stop(reason)` in `process_record` ends the run there.
+`run()` is a `None | !AwkFailure_T`: the reason a file could not be read, or the reason
+`self.stop(reason)` gave in `process_record`, which ends the run at that record. A text in hand
+(`TextProcessor`) and a file (`FileProcessor`, a `.gz` too) are read the same way.
 """
-from awk import AwkProcessor, AwkFailure_T
+from awk import AwkFailure_T, AwkRecord_T, FileProcessor, TextProcessor
 
-class Counter(AwkProcessor):
+class Counter(FileProcessor):
     var seen: int = 0
 
-    def process_record(self):
+    def process_record(self, rec: AwkRecord_T):
         self.seen += 1
-        if self.line == "bad":
-            self.stop(f"record {self.NR} is bad")
+        if rec.line == "bad":
+            self.stop(f"record {rec.NR} is bad")
+
+class TextCounter(TextProcessor):
+    var seen: int = 0
+
+    def process_record(self, rec: AwkRecord_T):
+        self.seen += 1
+        if rec.line == "bad":
+            self.stop(f"record {rec.NR} is bad")
 
 let path: Path = Path("/tmp/test_awk_stop_input.txt")
 let wrote: None | !PathFailure_T = path.write_text("a\nb\nbad\nc\n")
 assert not (wrote is PathFailure_T)
 
-var good: Counter = Counter()
-let missing: None | !AwkFailure_T = good.try_run_file("/tmp/test_awk_stop_missing.txt")
+var good: Counter = Counter("/tmp/test_awk_stop_missing.txt")
+let missing: None | !AwkFailure_T = good.run()
 assert missing is AwkFailure_T
 assert good.seen == 0
 
-var stopped: Counter = Counter()
-let r: None | !AwkFailure_T = stopped.try_run_file("/tmp/test_awk_stop_input.txt")
+var stopped: Counter = Counter("/tmp/test_awk_stop_input.txt")
+let r: None | !AwkFailure_T = stopped.run()
 assert r is AwkFailure_T
 assert r.reason == "record 3 is bad"
 assert stopped.seen == 3
 
-var paragraphs: Counter = Counter(rs = "\n\n")
-let ok: None | !AwkFailure_T = paragraphs.try_run_file("/tmp/test_awk_stop_input.txt")
+var paragraphs: Counter = Counter("/tmp/test_awk_stop_input.txt", rs = "\n\n")
+let ok: None | !AwkFailure_T = paragraphs.run()
 assert not (ok is AwkFailure_T)     # "a\nb\nbad\nc" is one record, not "bad"
 assert paragraphs.seen == 1
+
 # a text already in hand, as what a command printed
-var from_text: Counter = Counter()
-let t: None | !AwkFailure_T = from_text.try_run_text("a\nb\nbad\nc\n")
+var from_text: TextCounter = TextCounter("a\nb\nbad\nc\n")
+let t: None | !AwkFailure_T = from_text.run()
 assert t is AwkFailure_T
 assert t.reason == "record 3 is bad"
 assert from_text.seen == 3
-var whole: Counter = Counter()
-whole.run_text("x\ny\n")
+var whole: TextCounter = TextCounter("x\ny\n")
+let w: None | !AwkFailure_T = whole.run()
+assert not (w is AwkFailure_T)
 assert whole.seen == 2
+
+# a gzipped file is read as what it holds
+let zipped: None | !ShellFailure_T = shell: gzip -c {path} > /tmp/test_awk_stop_input.txt.gz
+assert not (zipped is ShellFailure_T)
+var from_gz: Counter = Counter("/tmp/test_awk_stop_input.txt.gz")
+let g: None | !AwkFailure_T = from_gz.run()
+assert g is AwkFailure_T
+assert g.reason == "record 3 is bad"
 print "test_awk_stop: ok"

@@ -1,5 +1,5 @@
 #! /usr/bin/env ady2nim
-"""lv_cmd -- lv_awk, with Clsworkspace run by the program and its output fed to the AwkProcessor.
+"""lv_cmd -- lv_awk, with the records coming from Clsworkspace itself: the processor runs it, in get_record.
 
     lv_cmd
 
@@ -7,7 +7,7 @@ The first three lines of the listing are its heading. Each other line is a view:
 based on, its environment and its status. What the README of the view says (its state, and a comment)
 is looked up for each. The views are shown once the listing is complete, grouped by state.
 """
-from awk import AwkProcessor
+from awk import AwkProcessor, AwkRecord_T, AwkFailure_T
 # the colours and effects to pipe a string through
 from ansi import (
     bg_black, bg_blue, bg_green, bg_white, bg_yellow, blink, bold, dim, fg_black, fg_blue,
@@ -91,27 +91,45 @@ type View_Line_T is record:
 
 class ViewLister(AwkProcessor):
     var view_lines: []View_Line_T
+    var listing: []str
+    var next_at: int = 0
+    var asked: bool = False
 
     def __init__(self):
         super().__init__()
         self.view_lines = []
+        self.listing = []
+
+    # The lines Clsworkspace prints, one a record. The command is run when the first is asked for.
+    def get_record(self) -> ?AwkRecord_T:
+        if not self.asked:
+            self.asked = True
+            let out: str | !ShellFailure_T = shell: Clsworkspace -user $USER
+            if out is ShellFailure_T:
+                self.stop(f"Clsworkspace failed: {out.stderr.strip()}")
+                return None
+            self.listing = out.splitlines()
+        if self.next_at >= len(self.listing):
+            return None
+        self.next_at += 1
+        return self.record(self.listing[self.next_at - 1])
 
     def start(self):
         print("-" * 100)
         print("View".alignLeft(31) + "Based On".alignLeft(37) + "ENV_ID".alignLeft(15) + "State".alignLeft(11) + "COMMENT")
         print("-" * 100)
 
-    def process_record(self):
-        if self.NR <= 3:
+    def process_record(self, rec: AwkRecord_T):
+        if rec.NR <= 3:
             return
-        if self.NF < 5:
-            if len(self.line) > 0:
-                print(f"unable to parse: {self.line}")
+        if rec.NF < 5:
+            if len(rec.line) > 0:
+                print(f"unable to parse: {rec.line}")
             return
-        let view_name: str = self.Fields[1]
-        let baseline: str = self.Fields[2]
-        let env_id: str = self.Fields[3]
-        let status: str = self.Fields[5]
+        let view_name: str = rec.Fields[1]
+        let baseline: str = rec.Fields[2]
+        let env_id: str = rec.Fields[3]
+        let status: str = rec.Fields[5]
         if view_name.endswith("build_eld_only_t"):
             return
 
@@ -150,11 +168,9 @@ class ViewLister(AwkProcessor):
 
 
 def main():
-    var lister: ViewLister = ViewLister()
-    let listing: str | !ShellFailure_T = shell: Clsworkspace -user $USER
-    if listing is ShellFailure_T:
-        die(f"Clsworkspace failed: {listing.stderr.strip()}")
-    lister.run_text(listing)
+    let done: None | !AwkFailure_T = ViewLister().run()
+    if done is AwkFailure_T:
+        die(done.reason)
 
 
 main()
