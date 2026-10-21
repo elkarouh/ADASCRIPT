@@ -221,7 +221,7 @@ reach for the Nim names when they are simply better tools — `sortedByIt` and
 ## 12.6 The generated-code contract
 
 It helps to know what the backends emit for each construct — the translation
-tables in `README.md` and `DOCS/TUTORIAL.md` are the authority, but the
+tables in `README.md` are the authority, but the
 shape is:
 
 - Python output is *plain* Python 3: `Enum`/`NamedTuple`/`@dataclass`

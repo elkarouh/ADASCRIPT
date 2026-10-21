@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""Every snippet quoted in the "named types" sections of DOCS/TUTORIAL.md
+"""Every snippet quoted in the "named types" sections of README.md
 and DOCS/TUTORIAL_FOR_LLM.md. `make test` runs it.
 """
 

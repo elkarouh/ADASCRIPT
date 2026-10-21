@@ -60,7 +60,7 @@ it, all but test_htmx, whose `html:` block is refused as Nim only.
       unless a narrower rule (a `warn`, say, as the guard's non-leaving
       sibling) turns out to read as well as the guards do.
 - [ ] `len`, indexing, slicing and `for c in s` of text beyond ASCII count
-      bytes on Nim and characters on Python (TUTORIAL §2, "Text beyond
+      bytes on Nim and characters on Python (README, "Text beyond
       ASCII"). To make them agree, either Nim works in runes (`std/unicode`:
       `runeLen`, `runeAt`, O(n) indexing) or Python works in bytes
       (`s.encode()`, and a `str` no longer Python's). Neither can be told

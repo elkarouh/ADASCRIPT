@@ -213,9 +213,9 @@ Limitations") and `TODO.md`.
 
 ## A.5 Further reading in this repository
 
-- `README.md` — feature reference with translation tables.
-- `DOCS/TUTORIAL.md` — the long-form tutorial this book complements
-  (20 sections, including the full memory-ownership chapter).
+- `README.md` — the language guide and feature reference, with translation
+  tables; it carries the long-form tutorial this book complements, including
+  the full memory-ownership chapter.
 - `DOCS/TUTORIAL_FOR_LLM.md` — a condensed variant tuned for language models.
 - Chapters [5](05-pattern-matching.md) and [10](10-optionals.md) of this book
   are the reference for pattern matching and for optional types; the standalone
