@@ -18,6 +18,7 @@ EXDIR  := $(CURDIR)/EXAMPLES
 TMPDIR ?= /tmp/adascript-test-$(shell id -un)
 export TMPDIR
 $(shell mkdir -p $(TMPDIR))
+EDDIR  := $(CURDIR)/EDITORS
 TOOLDIR:= $(CURDIR)/TOOLS
 AIDIR  := $(TOOLDIR)/ADA_INDENT
 G1DIR  := $(TOOLDIR)/GIT1
@@ -126,9 +127,6 @@ STANDALONE := \
     trcks_example.ady \
     test_nimport_modules.ady \
     test_nimport_qualified.ady \
-    test_vi_highlight.ady \
-    test_vi_loop.ady \
-    test_kilo_editor.ady \
     test_nim_module.ady \
     test_nim_quirks.ady \
     test_small_fixes.ady \
@@ -159,7 +157,6 @@ STANDALONE := \
     test_optional_union_written.ady \
     test_format_zero_decimals.ady \
     test_region_operators.ady \
-    test_vi_save.ady \
     test_str_partition.ady \
     test_and_or_mix.ady \
     test_enum_values.ady \
@@ -344,9 +341,6 @@ COMPILE_ONLY := \
     MOON/moon_sim.ady \
     MAP_UTILS/route_map.ady \
     test_input.ady \
-    VI/vi_curses.ady \
-    VI/vi_raw.ady \
-    KILO/kilo.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     awk_logscan.ady \
@@ -370,7 +364,7 @@ BOTH_BACKENDS_COMPARED := test_do_block test_do_discard test_fstring_width test_
     test_ordered_map test_function_type test_distinct test_units test_units_fields test_tuple_assign_block test_self_tuple_assign test_math_names test_min3_notimpl test_option_literals test_fstring_flags test_fstring_leading_newline test_call_field_literal test_local_named_like_field test_narrowed_value test_seq_field_concat test_distinct_float_range test_narrowed_type test_mod_type test_ring_buffer test_negative_int_range test_overload_types test_slice_semantics test_money accounting \
     test_subrange_array test_variant_literal test_set_operators \
     test_path_relative_to test_path_io test_parse trcks_example \
-    test_nimport_modules test_nimport_qualified test_vi_highlight test_vi_loop test_format_zero_decimals test_region_operators test_vi_save test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field \
+    test_nimport_modules test_nimport_qualified test_format_zero_decimals test_region_operators test_str_partition test_and_or_mix test_enum_values test_case_narrowed test_not_operand test_str_repeat test_small_fixes test_union_optional test_decorators test_str_case test_optional_tails test_generic_methods test_round_splitlines test_portable_gaps test_union_slips test_portable_gaps2 test_optional_union_written test_portable_gaps3 test_portable_gaps4 test_portable_gaps5 test_portable_gaps6 test_portable_gaps7 test_module_rename test_portable_gaps8 test_json_value test_value_cycle test_union_wide test_union_shared test_element_field \
     MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry test_units_dims \
     distance_units mars_climate_orbiter physics_calc test_scaled_units test_units_offset test_units_stdlib test_cents test_class_type
@@ -501,6 +495,21 @@ TOOL_PROGRAMS := \
     TOOLS/LISPY/lispy_union.ady \
     TOOLS/LISPY/lispy_short.ady
 
+# The text editors under EDITORS/, built beside the tools. The three test_*
+# programs are the editors' logic tests, run below by vi_tests and kilo_tests;
+# vi_py.ady is built by ady2py there.
+EDITOR_PROGRAMS := \
+    EDITORS/VI/vi_curses.ady \
+    EDITORS/VI/vi_raw.ady \
+    EDITORS/KILO/kilo.ady \
+    EDITORS/test_vi_highlight.ady \
+    EDITORS/test_vi_loop.ady \
+    EDITORS/test_vi_save.ady \
+    EDITORS/test_kilo_editor.ady
+
+# The editors' tests that run on both backends and are compared.
+EDITOR_COMPARED := test_vi_highlight test_vi_loop test_vi_save
+
 # -----------------------------------------------------------------------
 # compile — transpile + build everything
 # -----------------------------------------------------------------------
@@ -556,6 +565,9 @@ compile: lint-emitters check-quotes
 	@echo "=== Compiling $(words $(TOOL_PROGRAMS)) tools ==="
 	@printf '%s\n' $(TOOL_PROGRAMS) | xargs -P $(JOBS) -I{} sh -c '$(call compile_quietly,$(CURDIR)/{},{})'
 	@printf '  %-42s%s\n' "all $(words $(TOOL_PROGRAMS))" OK
+	@echo "=== Compiling $(words $(EDITOR_PROGRAMS)) editor programs ==="
+	@printf '%s\n' $(EDITOR_PROGRAMS) | xargs -P $(JOBS) -I{} sh -c '$(call compile_quietly,$(CURDIR)/{},{})'
+	@printf '  %-42s%s\n' "all $(words $(EDITOR_PROGRAMS))" OK
 	@echo "=== Compile step complete ==="
 
 # -----------------------------------------------------------------------
@@ -565,19 +577,29 @@ compile: lint-emitters check-quotes
 # -----------------------------------------------------------------------
 define vi_tests
 	@echo "=== vi, typed keys in a pty of its own: vi_py.ady (curses, Python), vi_curses.ady (illwill) and vi_raw.ady (Nim) ==="
-	@printf '  %-62s' "EXAMPLES/VI/vi_py.ady (69 key scripts, 9 screen checks)"; \
+	@printf '  %-62s' "EDITORS/VI/vi_py.ady (69 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import curses, pty' 2>/dev/null; then echo "SKIP (no curses or pty)"; else \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EDDIR)/VI/vi_py.ady > $(TMPDIR)/ady_vi.py || { echo FAIL; exit 1; }; \
+	    $(PYTHON) $(EDDIR)/VI/test_vi.py $(TMPDIR)/ady_vi.py > $(TMPDIR)/ady_vi.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi.out || tail -n 8 $(TMPDIR)/ady_vi.out; exit 1; }; fi
-	@printf '  %-62s' "EXAMPLES/VI/vi_curses.ady (72 key scripts, 9 screen checks)"; \
+	@printf '  %-62s' "EDITORS/VI/vi_curses.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_curses > $(TMPDIR)/ady_vi_curses.out 2>&1 \
+	    $(PYTHON) $(EDDIR)/VI/test_vi.py $(EDDIR)/VI/vi_curses > $(TMPDIR)/ady_vi_curses.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_curses.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_curses.out || tail -n 8 $(TMPDIR)/ady_vi_curses.out; exit 1; }; fi
-	@printf '  %-62s' "EXAMPLES/VI/vi_raw.ady (72 key scripts, 9 screen checks)"; \
+	@printf '  %-62s' "EDITORS/VI/vi_raw.ady (72 key scripts, 9 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/VI/test_vi.py $(EXDIR)/VI/vi_raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
+	    $(PYTHON) $(EDDIR)/VI/test_vi.py $(EDDIR)/VI/vi_raw > $(TMPDIR)/ady_vi_raw.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_vi_raw.out | head -20; grep -q FAIL $(TMPDIR)/ady_vi_raw.out || tail -n 8 $(TMPDIR)/ady_vi_raw.out; exit 1; }; fi
+	@for t in $(EDITOR_COMPARED); do \
+	    printf '  %-62s' "EDITORS/$$t.ady (python = nim)"; \
+	    o=$(TMPDIR)/ady_$$t; \
+	    $(EDDIR)/$$t > $$o.nim.out 2>&1 || { echo "FAIL (nim)"; exit 1; }; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EDDIR)/$$t.ady > $$o.py \
+	        && $(PYTHON) $$o.py > $$o.py.out 2>&1 \
+	        && cmp -s $$o.nim.out $$o.py.out \
+	        && echo OK || { echo FAIL; diff $$o.nim.out $$o.py.out; exit 1; }; \
+	    rm -f $$o.nim.out $$o.py $$o.py.out; \
+	done
 endef
 
 # -----------------------------------------------------------------------
@@ -586,10 +608,10 @@ endef
 .PHONY: test-vi
 test-vi:
 	@mkdir -p $(TMPDIR)
-	@for v in vi_curses vi_raw; do \
-	    if ! $(ADY2NIM) c $(EXDIR)/VI/$$v.ady >/dev/null 2>&1; then \
-	        echo "  EXAMPLES/VI/$$v.ady                    FAIL (does not build)"; \
-	        $(ADY2NIM) c $(EXDIR)/VI/$$v.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
+	@for v in VI/vi_curses VI/vi_raw $(addprefix ,$(EDITOR_COMPARED)); do \
+	    if ! $(ADY2NIM) c $(EDDIR)/$$v.ady >/dev/null 2>&1; then \
+	        echo "  EDITORS/$$v.ady                    FAIL (does not build)"; \
+	        $(ADY2NIM) c $(EDDIR)/$$v.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
 	    fi; \
 	done
 	$(vi_tests)
@@ -598,13 +620,16 @@ test-vi:
 # The kilo tests: key scripts typed into KILO/kilo.ady (the Nim backend, on the raw
 # terminal) in a pty of its own, and the file it saves compared; then what it draws, read
 # for colours, the status bar and the search. Shared by `test` and by `test-kilo`. The logic
-# of the editor with no terminal is test_kilo_editor.ady, in the self-contained examples.
+# of the editor with no terminal is EDITORS/test_kilo_editor.ady, run here too.
 # -----------------------------------------------------------------------
 define kilo_tests
+	@printf '  %-62s' "EDITORS/test_kilo_editor.ady"; \
+	    $(EDDIR)/test_kilo_editor > $(TMPDIR)/ady_kilo_editor.out 2>&1 \
+	        && echo OK || { echo FAIL; tail -n 8 $(TMPDIR)/ady_kilo_editor.out; exit 1; }
 	@echo "=== kilo, typed keys in a pty of its own: KILO/kilo.ady (Nim) ==="
-	@printf '  %-62s' "EXAMPLES/KILO/kilo.ady (47 key scripts, 11 screen checks)"; \
+	@printf '  %-62s' "EDITORS/KILO/kilo.ady (47 key scripts, 11 screen checks)"; \
 	    if ! $(PYTHON) -c 'import pty' 2>/dev/null; then echo "SKIP (no pty)"; else \
-	    $(PYTHON) $(EXDIR)/KILO/test_kilo.py $(EXDIR)/KILO/kilo > $(TMPDIR)/ady_kilo.out 2>&1 \
+	    $(PYTHON) $(EDDIR)/KILO/test_kilo.py $(EDDIR)/KILO/kilo > $(TMPDIR)/ady_kilo.out 2>&1 \
 	        && echo OK || { echo FAIL; grep -A2 FAIL $(TMPDIR)/ady_kilo.out | head -20; grep -q FAIL $(TMPDIR)/ady_kilo.out || tail -n 8 $(TMPDIR)/ady_kilo.out; exit 1; }; fi
 endef
 
@@ -615,14 +640,11 @@ endef
 test-kilo:
 	@mkdir -p $(TMPDIR)
 	@for k in KILO/kilo test_kilo_editor; do \
-	    if ! $(ADY2NIM) c $(EXDIR)/$$k.ady >/dev/null 2>&1; then \
-	        echo "  EXAMPLES/$$k.ady                    FAIL (does not build)"; \
-	        $(ADY2NIM) c $(EXDIR)/$$k.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
+	    if ! $(ADY2NIM) c $(EDDIR)/$$k.ady >/dev/null 2>&1; then \
+	        echo "  EDITORS/$$k.ady                    FAIL (does not build)"; \
+	        $(ADY2NIM) c $(EDDIR)/$$k.ady 2>&1 | grep -E 'Error:' | head -5; exit 1; \
 	    fi; \
 	done
-	@printf '  %-62s' "EXAMPLES/test_kilo_editor.ady"; \
-	    $(EXDIR)/test_kilo_editor > $(TMPDIR)/ady_kilo_editor.out 2>&1 \
-	        && echo OK || { echo FAIL; tail -n 8 $(TMPDIR)/ady_kilo_editor.out; exit 1; }
 	$(kilo_tests)
 
 # -----------------------------------------------------------------------
@@ -1947,6 +1969,9 @@ clean:
 	@for f in $(ALL_COMPILE); do \
 	    name=$${f%.ady}; \
 	    rm -f $(EXDIR)/$$name; \
+	done
+	@for t in $(EDITOR_PROGRAMS); do \
+	    rm -f $(CURDIR)/$${t%.ady}; \
 	done
 	@for t in $(TOOL_PROGRAMS); do \
 	    rm -f $(CURDIR)/$${t%.ady}; \

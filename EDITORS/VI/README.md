@@ -172,12 +172,12 @@ leaves. Undo is one step per change, as in vi; typing in replace mode past the e
 line makes the line grow. Nine screen checks per terminal read what it writes to its
 pty: colour before a keyword, a string, a number, a type name and a comment, the
 cursor's character reversed, the cursor's line marked, and no colour in a `.txt`.
-`EXAMPLES/test_vi_highlight.ady` tests the scan itself, on both backends: one letter for
-each character, so a line and its colours read side by side. `EXAMPLES/test_vi_loop.ady`
+`EDITORS/test_vi_highlight.ady` tests the scan itself, on both backends: one letter for
+each character, so a line and its colours read side by side. `EDITORS/test_vi_loop.ady`
 tests `edit` on a `Terminal` that is a script of keys, with no pty, on both backends: the
 window asked for twice a key, the `Frame_T` it is handed, a message flashed once and
 cleared, ^S's "Saved", a quit that says nothing, and the terminal with nothing attached.
-`EXAMPLES/test_vi_save.ady` covers a write that fails.
+`EDITORS/test_vi_save.ady` covers a write that fails.
 
     python3 test_vi.py vi_py.py     # or ./vi_curses, or ./vi_raw
     make test-vi                    # from the top: builds vi_curses and vi_raw, runs all three (about 20 s)

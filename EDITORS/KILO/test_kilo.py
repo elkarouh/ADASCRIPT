@@ -6,7 +6,7 @@ then what it writes to the terminal is read for colours, the status bar and the 
     python3 test_kilo.py PROGRAM
 
 The script ends with ^S and ^Q unless the program has quit by itself. The unit tests of the
-editor's logic, with no terminal at all, are EXAMPLES/test_kilo_editor.ady.
+editor's logic, with no terminal at all, are EDITORS/test_kilo_editor.ady.
 """
 import fcntl, os, pathlib, pty, re, select, signal, struct, subprocess, sys, tempfile, termios
 

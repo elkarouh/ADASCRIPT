@@ -3803,7 +3803,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, `request(method, url, fields, target, include)`, a `Click` |
 | `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
 | `import svg_path` | paths for an SVG drawing, as the `d` of a `<path>`; plain arithmetic, so it compiles both to C and to JavaScript: `connector_d(x1, y1, x2, y2, leave, stop_short)`, an S-shaped curve between two boxes; `EXAMPLES/ROI_HTMX` uses it |
-| `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EXAMPLES/VI/vi_curses.ady` uses it |
+| `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EDITORS/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
 
 `stdlib.nim` in the same directory is a Nim shim for a few Python builtins
@@ -5713,6 +5713,13 @@ def suggest(word: str) -> []str:
 ```
 
 ---
+
+## Editors
+
+[`EDITORS/`](EDITORS) holds the text editors: [`KILO/`](EDITORS/KILO), a
+translation of antirez's kilo, and [`VI/`](EDITORS/VI), a small vi with three
+terminals, each with its README and its tests. `make test-kilo` and
+`make test-vi` run them alone.
 
 ## Tools
 
