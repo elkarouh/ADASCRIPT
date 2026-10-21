@@ -103,6 +103,10 @@ class AwkProcessor:
             if plain is PathFailure_T:
                 return AwkFailure_T(f"cannot read {path}: {plain.reason}")
             source = plain
+        return self.try_run_text(source)
+
+    # The records of SOURCE, a text already in hand: what a command printed, say.
+    def try_run_text(self, source: str) -> None | !AwkFailure_T:
         self.start()
         if self.RS == "\n":
             for raw in source.splitlines():
@@ -126,5 +130,10 @@ class AwkProcessor:
 
     def run_file(self, path: str):
         let r: None | !AwkFailure_T = self.try_run_file(path)
+        if r is AwkFailure_T:
+            die(r.reason)
+
+    def run_text(self, source: str):
+        let r: None | !AwkFailure_T = self.try_run_text(source)
         if r is AwkFailure_T:
             die(r.reason)

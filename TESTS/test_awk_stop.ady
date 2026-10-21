@@ -33,4 +33,13 @@ var paragraphs: Counter = Counter(rs = "\n\n")
 let ok: None | !AwkFailure_T = paragraphs.try_run_file("/tmp/test_awk_stop_input.txt")
 assert not (ok is AwkFailure_T)     # "a\nb\nbad\nc" is one record, not "bad"
 assert paragraphs.seen == 1
+# a text already in hand, as what a command printed
+var from_text: Counter = Counter()
+let t: None | !AwkFailure_T = from_text.try_run_text("a\nb\nbad\nc\n")
+assert t is AwkFailure_T
+assert t.reason == "record 3 is bad"
+assert from_text.seen == 3
+var whole: Counter = Counter()
+whole.run_text("x\ny\n")
+assert whole.seen == 2
 print "test_awk_stop: ok"
