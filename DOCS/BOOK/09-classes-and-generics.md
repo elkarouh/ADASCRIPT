@@ -33,7 +33,7 @@ class TrieNode:
 
 Field declarations can carry defaults, which the transpiler injects into the
 generated constructor. `__init__` then only sets what varies per instance —
-or disappears entirely. `EXAMPLES/test_awk.ady`:
+or disappears entirely. `EXAMPLES/TESTS/test_awk.ady`:
 
 ```python
 from awk import AwkProcessor
@@ -112,7 +112,7 @@ the same way: `Vector(length, angle)` and `Vector(x, y)` are two `__init__`s,
 told apart by the types of the arguments:
 
 ```python
-# EXAMPLES/test_overload_types.ady
+# EXAMPLES/TESTS/test_overload_types.ady
     def __init__(self, a: Distance_T, b: Distance_T) -> None:
         self.a = a
         self.b = b
@@ -132,7 +132,7 @@ one purpose: **cross-module dispatch**. It makes the Nim backend emit
 The `awk` stdlib base class is the working illustration. `TO_NIM/awk.ady`
 ships a `@virtual class AwkProcessor` implementing the AWK machinery (`FS`,
 `OFS`, `NR`, `NF`, `read_record`, `run`); user programs `import awk` and
-override the hooks. `EXAMPLES/test_awk.ady`:
+override the hooks. `EXAMPLES/TESTS/test_awk.ady`:
 
 ```python
 class SeverityProcessor(AwkProcessor):

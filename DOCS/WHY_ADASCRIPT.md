@@ -785,7 +785,7 @@ it, not a negative total in a ledger. (The Python backend keeps a plain
 The mistakes this catches are the ones that reach production: a total that
 adds a dollar figure to a euro figure, a conversion applied twice, or applied
 the wrong way round. `usd / rate` does not compile, because dividing dollars
-by euros-per-dollar is not a currency. `EXAMPLES/test_money.ady` is a whole
+by euros-per-dollar is not a currency. `EXAMPLES/TESTS/test_money.ady` is a whole
 order — lines, tax, a discount, a budget, and a conversion of each line — and
 the compiler holds every step to it.
 
@@ -935,7 +935,7 @@ rates; and the only way back to cents is a conversion that rounds, to the
 nearest cent with halves away from zero, written on the line where it
 happens:
 
-<!-- from: EXAMPLES/test_cents.ady -->
+<!-- from: EXAMPLES/TESTS/test_cents.ady -->
 ```python
 type Dollar_in_cent_T is distinct int
 type Dollar_T         is 100 * Dollar_in_cent_T
@@ -947,7 +947,7 @@ def to_euro(amount: Dollar_in_cent_T, rate: Eur_per_usd_T) -> Euro_in_cent_T:
     return Euro_in_cent_T(Dollar_T(amount) * rate)    # the one rounding
 ```
 
-<!-- from: EXAMPLES/test_cents.ady -->
+<!-- from: EXAMPLES/TESTS/test_cents.ady -->
 ```python
 assert line // 3 == price
 assert Dollar_in_cent_T(Dollar_T(1.005)) == 101  # 1.005 * 100 is 100.49999999999999
@@ -1019,14 +1019,14 @@ latitude is a `Degree_T` that is only ever between -90 and 90, and it goes up
 to a `Degree_T` with no cast but comes down only through a checked
 conversion:
 
-<!-- from: EXAMPLES/test_narrowed_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_narrowed_type.ady -->
 ```python
 type Degree_T is distinct float
 type Latitude_T is Degree_T range -90 .. 90
 type Longitude_T is Degree_T range -180 .. 180
 ```
 
-<!-- from: EXAMPLES/test_narrowed_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_narrowed_type.ady -->
 ```python
     let lat: Latitude_T = Latitude_T(45.5)
     let wide: Degree_T = lat                  # up to the parent: no cast
@@ -1039,13 +1039,13 @@ not compile, which two plain `Degree_T` would have let through. A bearing is
 the other case: 360 is north again, so the type wraps rather than refuses, and
 the `modulo` helper that every bearing calculation carries is gone:
 
-<!-- from: EXAMPLES/test_mod_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_mod_type.ady -->
 ```python
 type Degree_T is distinct float
 type Bearing_T is Degree_T mod 360
 ```
 
-<!-- from: EXAMPLES/test_mod_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_mod_type.ady -->
 ```python
     let b: Bearing_T = Bearing_T(-10.0)
     show(b)                                    # up to the parent, no cast
@@ -1067,7 +1067,7 @@ index is a mod type, and it is also the type of the array it indexes, so the
 capacity is written once and there is no `% CAPACITY` and no cast anywhere in
 the class:
 
-<!-- from: EXAMPLES/test_ring_buffer.ady -->
+<!-- from: EXAMPLES/TESTS/test_ring_buffer.ady -->
 ```python
 const CAPACITY: int = 4
 type Index_T is mod CAPACITY
@@ -1173,7 +1173,7 @@ faces of a die is a table of probabilities that adds up to one, and the two
 levels are two types, because the entries being fine does not make the table
 fine:
 
-<!-- from: EXAMPLES/test_where_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_where_type.ady -->
 ```python
 type Dice_T is 1 .. 6
 type Pdf_T is [Dice_T]Prob_T where pdf: abs(sum(pdf[d] for d in Dice_T) - 1.0) < 1e-9
@@ -1226,7 +1226,7 @@ def prob(x: float) -> float:
 In Adascript it is one line, and the conversion that checks it returns the
 failure instead of raising:
 
-<!-- from: EXAMPLES/test_where_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_where_type.ady -->
 ```python
 type Prob_T is float where 0 <= x <= 1
 ```
@@ -1295,7 +1295,7 @@ Step four is the one that is easy to miss. A derived unit cannot carry a range
 of its own, because a division is not a place where a value is made. What can
 carry one is a type declared over it:
 
-<!-- from: EXAMPLES/test_where_type.ady -->
+<!-- from: EXAMPLES/TESTS/test_where_type.ady -->
 ```python
 type Legal_Speed_T is Speed_T where v: float(v) <= 299_792_458.0    # no faster than light
 let legal: Legal_Speed_T | !ParseFailure_T = Legal_Speed_T(pace)

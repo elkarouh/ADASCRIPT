@@ -482,7 +482,7 @@ divided are the declared unit of the dimension that comes out, whether or not
 a declaration names that pair:
 
 ```python
-# EXAMPLES/test_units_dims.ady
+# EXAMPLES/TESTS/test_units_dims.ady
 type Force_T    is kilogram_T * Accel_T
 type MassFlow_T is kilogram_T / second_T
 
@@ -511,7 +511,7 @@ unit of its own -- a mile plus a metre is a bug -- but the step between them
 is fixed, so it can be declared once rather than written out at every use:
 
 ```python
-# EXAMPLES/test_scaled_units.ady
+# EXAMPLES/TESTS/test_scaled_units.ady
 const METRES_PER_MILE: float = 1609.344          # exact, by definition
 
 type Distance_T          is distinct float                # metres
@@ -579,7 +579,7 @@ A number over a `Second_T` is a `Hertz_T`, a number over a `Hertz_T` is a
 `Second_T`, and a `Hertz_T` times a `Second_T` is a plain number: cycles. A
 `Hertz_T` is a unit like any other, so it adds, compares and scales, and takes
 part in derived units (`Metre_T * Hertz_T` is a `Speed_T` when one is
-declared). `EXAMPLES/test_units_offset.ady` runs both on both backends.
+declared). `EXAMPLES/TESTS/test_units_offset.ady` runs both on both backends.
 
 ### Money
 
@@ -617,7 +617,7 @@ plain `int` there.)
 `total + to_euro(total, rate)` adds dollars to euros, `total * total` is
 dollars squared, and `total / rate` applies the rate the wrong way round:
 none compiles, and each is a bug that otherwise reaches the ledger.
-`EXAMPLES/test_money.ady` is a whole order — lines, tax, a discount, a
+`EXAMPLES/TESTS/test_money.ady` is a whole order — lines, tax, a discount, a
 budget and a conversion of each line — that the compiler holds to every
 step.
 
@@ -628,7 +628,7 @@ dollar is a hundred of them. The scaled unit of the last section does that
 over a `distinct int`:
 
 ```python
-# EXAMPLES/test_cents.ady
+# EXAMPLES/TESTS/test_cents.ady
 type Dollar_in_cent_T is distinct int
 type Dollar_T         is 100 * Dollar_in_cent_T
 type Euro_in_cent_T   is distinct int
@@ -677,14 +677,14 @@ it comes *down* only by an explicit conversion that checks the range, and it
 is not a sibling of another type narrowed from the same parent:
 
 ```python
-# EXAMPLES/test_narrowed_type.ady
+# EXAMPLES/TESTS/test_narrowed_type.ady
 type Degree_T is distinct float
 type Latitude_T is Degree_T range -90 .. 90
 type Longitude_T is Degree_T range -180 .. 180
 ```
 
 ```python
-# EXAMPLES/test_narrowed_type.ady
+# EXAMPLES/TESTS/test_narrowed_type.ady
     let lat: Latitude_T = Latitude_T(45.5)
     let wide: Degree_T = lat                  # up to the parent: no cast
     let sum: Degree_T = lat + Degree_T(1.0)  # arithmetic is the parent's
@@ -707,7 +707,7 @@ a compass bearing, an angle, a clock hand, a ring-buffer index. Making one, and
 it, on both backends:
 
 ```python
-# EXAMPLES/test_mod_type.ady
+# EXAMPLES/TESTS/test_mod_type.ady
     let b: Bearing_T = Bearing_T(-10.0)
     show(b)                                    # up to the parent, no cast
     show(turn(b, Degree_T(30.0)))
@@ -724,7 +724,7 @@ buffer wants: the index comes round by itself, and the array has exactly as
 many slots as the index has values.
 
 ```python
-# EXAMPLES/test_ring_buffer.ady
+# EXAMPLES/TESTS/test_ring_buffer.ady
 const CAPACITY: int = 4
 type Index_T is mod CAPACITY
 type Count_T is int range 0 .. CAPACITY      # how many are held: 0 to CAPACITY, one more than an index

@@ -208,7 +208,7 @@ def is_true(self: Val_T) -> bool:
 A variant record names its shapes and gives each its fields. When the shapes
 are types that already exist, a *union* says the same thing in one line:
 `int | float` holds an int or a float, and the value itself says which.
-`EXAMPLES/test_union.ady` is the spec:
+`EXAMPLES/TESTS/test_union.ady` is the spec:
 
 ```python
 def compute(n: int) -> int | float:

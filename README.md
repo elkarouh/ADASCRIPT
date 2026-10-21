@@ -1107,7 +1107,7 @@ let lat2: Latitude_T = 12.5                # a literal takes the declared type, 
 
 It is a unit with a range, where `distinct float range lo .. hi` (see [Float subranges](#float-subranges)) is a unit of its own that has no parent. Use the narrowing when there is a parent to go up to.
 
-<!-- tested by EXAMPLES/test_narrowed_type.ady -->
+<!-- tested by EXAMPLES/TESTS/test_narrowed_type.ady -->
 
 ### A type that wraps: `mod`
 
@@ -1161,7 +1161,7 @@ class Ring:
         return self.items[self.head - back]         # back = 0 is the newest
 ```
 
-  After six pushes of 10, 20, ... 60 into this four-slot ring, `latest(0)` is 60 and `latest(3)` is 30. The count is not an `Index_T`: it runs from 0 to `CAPACITY`, one more value than an index has, so it is an `int range 0 .. CAPACITY`. `CAPACITY` appears twice, in the two types, there is no `% CAPACITY` anywhere, and `head - Index_T(1)` is the newest slot even when `head` is 0. This is `EXAMPLES/test_ring_buffer.ady`.
+  After six pushes of 10, 20, ... 60 into this four-slot ring, `latest(0)` is 60 and `latest(3)` is 30. The count is not an `Index_T`: it runs from 0 to `CAPACITY`, one more value than an index has, so it is an `int range 0 .. CAPACITY`. `CAPACITY` appears twice, in the two types, there is no `% CAPACITY` anywhere, and `head - Index_T(1)` is the newest slot even when `head` is 0. This is `EXAMPLES/TESTS/test_ring_buffer.ady`.
 - The value wraps with the sign of the modulus, as Python's `%` does, on both backends: `Slot_T(-1)` is 7, not -1.
 - `Slot_T` has no parent: it is a type of its own, and a plain `int` is given to it by `Slot_T(n)`. `Bearing_T` has `Degree_T`: a `Bearing_T` goes up to it without a cast, `bearing + degrees` is a `Bearing_T`, and a `Degree_T` comes down only by `Bearing_T(d)`, which wraps it. A literal takes the declared type, wrapped: `let c: Bearing_T = 400.0` is 40.0.
 - `*` by a plain number gives the same type, wrapped; `/` by a plain number does too, and `Bearing_T / Bearing_T` is a plain ratio. Comparisons compare the wrapped values.
@@ -1169,7 +1169,7 @@ class Ring:
 - A mod type wraps and never raises. Use `range` when a value outside should be an error, and `mod` when it should come round.
 - Python: `class Bearing_T(Degree_T)`, whose `__new__` and operators wrap. Nim: a `distinct float` with a `to_Bearing_T` that wraps with `floorMod`, wrapping operators, and a converter up.
 
-<!-- tested by EXAMPLES/test_mod_type.ady -->
+<!-- tested by EXAMPLES/TESTS/test_mod_type.ady -->
 
 ### A unit made from a unit: momentum and energy
 
@@ -1196,8 +1196,8 @@ print kinetic(m, v) / v           # an Energy over a Speed is a Momentum
 says how to split it. The ½ scales for free. `m * (v * v)` is refused too,
 because `Speed_T * Speed_T` has no unit unless one is declared; declare
 `type SpeedSq_T is Speed_T * Speed_T` and `m * (v * v)` is an `Energy_T` too,
-by dimension. It is all in `EXAMPLES/test_units.ady` and
-`EXAMPLES/test_units_dims.ady`.
+by dimension. It is all in `EXAMPLES/TESTS/test_units.ady` and
+`EXAMPLES/TESTS/test_units_dims.ady`.
 
 ### Money: `Dollar_T`, and converting to `Euro_T`
 
@@ -1252,7 +1252,7 @@ let fee: Dollar_T = tax_rate      # a plain number is not money
 Format money with `:.2f`. Amounts you must add up exactly are better held
 as a `distinct int` in cents (`Cents_T`); a rate is a float, so a conversion
 between the two is written out, where you decide how to round.
-`EXAMPLES/test_money.ady` is a whole order: lines, tax, a discount, a
+`EXAMPLES/TESTS/test_money.ady` is a whole order: lines, tax, a discount, a
 budget, and each line converted.
 
 Where it is checked: the Nim compiler checks every use. The Python backend
@@ -1492,7 +1492,7 @@ Python's operators work on both kinds: `a & b` (intersection), `a | b`
 augmented forms `seen |= more`. Nim spells them `*`, `+`, `-+-` and `-`; the
 emitter picks from the operand types, so the same source builds on both
 backends. On integers the same signs stay bitwise. The snippets are in
-`EXAMPLES/test_set_operators.ady`.
+`EXAMPLES/TESTS/test_set_operators.ady`.
 
 ### Enum-indexed arrays `[E]T`
 
@@ -2644,7 +2644,7 @@ This is what makes an operator work on more than one type: `Velocity` has `__mul
 - Nim overloads natively. On Python the defs are renamed and a def of the name dispatches on the types of the arguments, the exact type first, then what each is an instance of; a type it cannot test (a union, a generic) matches anything. Arithmetic on a distinct value is a plain number in Python, so as a last resort a plain number matches a distinct type of numbers; write `Meters_T(a + b)` where overloads differ only in such types. Call overloads by position.
 - Decorated defs, and defs with `*args` or `**kwargs`, are left as they are.
 
-<!-- tested by EXAMPLES/test_overload_types.ady -->
+<!-- tested by EXAMPLES/TESTS/test_overload_types.ady -->
 
 ### Decorators
 
@@ -2676,7 +2676,7 @@ decorated def, or it is refused. On a method, the wrapper is handed the
 method bound to self, so `@shout` on `def greet(self, other: str) -> str`
 wraps a `(str) -> str`, and the method may write to self.
 
-<!-- tested by EXAMPLES/test_decorators.ady -->
+<!-- tested by EXAMPLES/TESTS/test_decorators.ady -->
 
 ### Nested functions and closures
 
@@ -2849,7 +2849,7 @@ class Cover:
 The type is declared beside the class, before it, in both backends: it is not scoped to the class, so
 `Kind_T` and its members are named bare everywhere in the file, and a second class cannot declare a `Kind_T`
 of its own. An enum cannot be written on the field itself (`var kind: enum CLEAR, NO_FLY` does not parse); it
-needs its name. See `EXAMPLES/test_class_type.ady`.
+needs its name. See `EXAMPLES/TESTS/test_class_type.ady`.
 
 ### Mutable self in non-virtual classes
 
@@ -3029,7 +3029,7 @@ A class that holds itself needs no `@virtual`: on Nim a value cannot contain
 itself, so a class with a field of its own type (`next: ?Node`), or one that
 holds itself by way of a record (a `Closure` whose `body: Expr_T` is a variant
 record with a `fun: Closure` case), is made a `ref object` by the transpiler,
-and is shared on assignment on both backends. EXAMPLES/test_value_cycle.ady
+and is shared on assignment on both backends. EXAMPLES/TESTS/test_value_cycle.ady
 is the second kind.
 
 ### Generic Classes
@@ -3737,7 +3737,7 @@ the module did, and gets it without a `nimport tables` of its own. Its other
 imports stay its own -- `times` would bring a `Days` that is `DAYS` to Nim.
 
 Inheritance works across files as well: a `@virtual` base class in one module
-and a subclass in another (that is `EXAMPLES/test_awk.ady` over the bundled
+and a subclass in another (that is `EXAMPLES/TESTS/test_awk.ady` over the bundled
 `awk.ady`), including the inherited constructor.
 
 ### Rules to respect
@@ -4097,7 +4097,7 @@ float`. The members must be told apart at run time -- `[]int | []str` and
 `int | bool` are refused. `T | None` is `?T`, and a union with a failure
 member is a value-or-failure (next section). Python holds the member
 itself; Nim holds stdlib.nim's `OneOf2[A, B]`. The book's section 4.4 has
-the whole of it; `EXAMPLES/test_union.ady` is the spec.
+the whole of it; `EXAMPLES/TESTS/test_union.ady` is the spec.
 
 **Which test says what.** `x is A` asks about the *type*: `A` is a type, and
 inside the branch `x` is an `A`, with no cast and no second variable.
@@ -4237,7 +4237,7 @@ chapter 10.12, *Forgetting the `!`*, has the details.
 On Python the value is the T or the F itself; on Nim it is stdlib.nim's
 `Result[T, F]`, and `r` reads as its `.value` or `.error` where a test has
 narrowed it. The whole of it is in the book, chapter 10.12;
-`EXAMPLES/test_result.ady` is the spec, and `TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady`
+`EXAMPLES/TESTS/test_result.ady` is the spec, and `TOOLS/RSYNC_TIME_MACHINE/rsync_time_machine.ady`
 a full-size program written this way.
 
 ---
@@ -4901,7 +4901,7 @@ transpiler emits calls to the bundled `expect` standard library
 (`forkpty + select + re`, links against `-lutil`):
 
 ```python
-# from EXAMPLES/test_shell_block.ady
+# from EXAMPLES/TESTS/test_shell_block.ady
 shell:
     bc -q
     send("2 + 2\n")
@@ -5965,7 +5965,7 @@ parameter must have the decorated function's type, the parameters after it
 must be the decorated function's, and the leading ones are the decorator's
 arguments; each mismatch is a one-line error. Stacked decorators apply
 bottom-up. A wrapper keeps no state of its own, and lives in the same file as
-what it decorates (`EXAMPLES/test_decorators.ady`).
+what it decorates (`EXAMPLES/TESTS/test_decorators.ady`).
 
 **Exhaustiveness is a Nim-build property** — a `case` block is checked for
 completeness only when the Nim backend can make it a native `case`: an

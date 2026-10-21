@@ -216,7 +216,7 @@ Nim. A distinct type is its own type here: a `Duration_T` finds the overload
 that names it, not the one that names `float`.
 
 ```python
-# EXAMPLES/test_overload_types.ady
+# EXAMPLES/TESTS/test_overload_types.ady
 def describe(n: int) -> str:
     return f"int {n}"
 
@@ -242,7 +242,7 @@ arguments, then `f` (the function it wraps, with that function's type), then
 the arguments of a call. `lv.ady` pads the text of each column this way:
 
 ```python
-# EXAMPLES/test_decorators.ady
+# EXAMPLES/TESTS/test_decorators.ady
 @decorator
 def aligned(width: int, f: (str) -> str, s: str) -> str:
     return f"{f(s):<{width}}"
@@ -275,7 +275,7 @@ which the transpiler declares; one that gives it names the table, which the
 program can then read or clear:
 
 ```python
-# EXAMPLES/test_decorators.ady
+# EXAMPLES/TESTS/test_decorators.ady
 var fib_cache: {int}int = {:}
 
 @decorator
@@ -307,7 +307,7 @@ logs it, is written generic. `T` and `R` are bound from the function it
 decorates, so one `@timed` serves an `(int) -> int` and a `(str) -> str`:
 
 ```python
-# EXAMPLES/test_decorators.ady
+# EXAMPLES/TESTS/test_decorators.ady
 nimport time
 
 var timings: {str}float = {:}
@@ -358,7 +358,7 @@ parameters, so `@shout` on `def greet(self, other: str) -> str` wraps a
 `(str) -> str`. The method may write to its object:
 
 ```python
-# EXAMPLES/test_decorators.ady
+# EXAMPLES/TESTS/test_decorators.ady
 class Counter:
     var n: int
 
