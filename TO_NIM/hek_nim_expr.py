@@ -6269,6 +6269,17 @@ def _expr_is_option(expr_str):
     # element, `logs[0].rc` -- whose field it is; matching names only made
     # `make(0).rc is None` a `== nil`, which Nim rejects on an Option.
     m = _re.match(r"^(.+)\.([A-Za-z_]\w*)$", expr_str.strip())
+    if m:
+        # `a == self.x` is a comparison whose right side is a field, not a field
+        # of `a == self`: an operator between words, outside any brackets
+        _flat = m.group(1)
+        while True:
+            _inner = _re.sub(r"\([^()]*\)|\[[^\[\]]*\]", "", _flat)
+            if _inner == _flat:
+                break
+            _flat = _inner
+        if _re.search(r"\s(?:==|!=|<=|>=|<|>|and|or|not|in|is|\+|-|\*|/)\s", _flat):
+            m = None
     if m and not _re.fullmatch(r"-?\d+", m.group(1)):
         field_name = m.group(2)
         class_name = getattr(ParserState, "_current_class_name", None)
@@ -6277,6 +6288,8 @@ def _expr_is_option(expr_str):
             ftype = fields.get(field_name)
             if ftype and "Option[" in ftype:
                 return True
+            if ftype and m.group(1).strip() == "self":
+                return False            # self's own field, a plain one: no other class's decides
         # An object whose type is known has that type's field and no other: a
         # `?str` field `error` of one record does not make `cur.error` of a
         # Cursor, whose `error` is a plain str, an Option.

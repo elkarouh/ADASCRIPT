@@ -437,9 +437,13 @@ def to_nim(self):
         if _own:
             _osym = ParserState.symbol_table.lookup(_own.group(1))
             _otype = ((_osym.get("type") or "") if _osym else "").replace("var ", "").strip()
+            if _own.group(1) == "self" and not _otype:
+                _otype = getattr(ParserState, "_current_class_name", None) or ""
             _oft = ParserState.class_field_types.get(_otype, {}).get(_own.group(2), "")
             if _oft.startswith("Option["):
                 sym = {"type": _oft}
+            elif _otype in ParserState.class_field_types and _own.group(2) in ParserState.class_field_types[_otype]:
+                sym = {"type": ParserState.class_field_types[_otype][_own.group(2)]}
         # Also handle field access: obj.field where field type is Option[T]
         # (a field first assigned `None` was recorded as a void variable)
         if not sym or sym.get("type") in ("void", ""):

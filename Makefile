@@ -1287,6 +1287,15 @@ test-part-26:
 	    b=$$($(EXDIR)/OPLOG/decode_oplog_awk $(EXDIR)/OPLOG/sample_oplog.txt 2>&1); \
 	    [ "$$a" = "$$b" ] && echo "$$a" | grep -q "callsign=QTR27C" \
 	        && echo OK || { echo FAIL; exit 1; }
+	@# One flight: only its records, and a page with its track and entries.
+	@printf '  %-42s' "OPLOG/decode_oplog --callsign --html"; \
+	    page=$$(mktemp); \
+	    out=$$($(EXDIR)/OPLOG/decode_oplog $(EXDIR)/OPLOG/sample_oplog.txt --callsign TAM8149 --html $$page 2>&1); \
+	    [ $$(echo "$$out" | grep -c "callsign=TAM8149") -eq 43 ] \
+	        && grep -q '"callsign": "TAM8149", "track": \[{' $$page \
+	        && grep -q 'src="oplog_map.js"' $$page \
+	        && echo OK || { echo FAIL; rm -f $$page; exit 1; }; \
+	    rm -f $$page
 	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
 	@# check is on its output, not its exit status: the report is what the
 	@# document quotes.
@@ -1737,6 +1746,9 @@ test-part-55:
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "STDLIB/browser.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/browser.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "OPLOG/oplog_map.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(CURDIR)/EXAMPLES/OPLOG/oplog_map.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "STDLIB/leaflet_utils.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(CURDIR)/TO_NIM/STDLIB/leaflet_utils.ady >/dev/null 2>&1 \

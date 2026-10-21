@@ -39,6 +39,7 @@ reports packed with no per-report length prefix). Categories 62 (TACT's own vari
 # the decoder's angles are map_base's Degree_T, Latitude_T and Longitude_T (EXAMPLES/MAP_UTILS)
 from map_base import Degree_T, LatLong_T, Latitude_T, Longitude_T
 from units import metre_T, second_T
+from json_value import json_string
 
 # ---------------------------------------------------------------------------
 # Header (fixed-width record) parsing
@@ -266,6 +267,24 @@ class Report:
         if self.expansion_field_fault is not None:
             parts.append(f"expansion-field-fault: {self.expansion_field_fault}")
         return " ".join(parts)
+    # the callsign the report names, its own or its flight plan's; "" when it names none
+    def named(self) -> str:
+        if self.callsign is not None:
+            return self.callsign
+        if self.flight_plan is not None:
+            let plan: FlightPlan = self.flight_plan
+            if plan.callsign is not None:
+                return plan.callsign
+        return ""
+
+    # whether the report is of the flight CALLSIGN: it names it, or it is of an aircraft
+    # (by Mode-S address) that was seen naming it
+    def flies(self, callsign: str, addresses: []str) -> bool:
+        if self.named() == callsign:
+            return True
+        if self.aircraft_address is not None:
+            return str(self.aircraft_address) in addresses
+        return False
 
 
 
@@ -828,6 +847,80 @@ def decode_cat_block(payload: Octets_T) -> Decoded | !Decode_Failure_T:
 # CLI
 # ---------------------------------------------------------------------------
 
+# a place the flight was reported at
+type TrackPoint_T is record:
+    seconds: float      # since midnight
+    lat: float
+    lon: float
+    level: ?float       # in hundreds of feet
+    entry: int          # the entry of the log it was reported in
+
+# an entry of the log that is about the flight
+type Entry_T is record:
+    stamp: str
+    kind: str
+    subject: str
+    seconds: int        # since midnight, from the time stamp
+    summary: str
+
+class Selection:
+    var callsign: str                 # "" selects everything
+    var addresses: []str              # Mode-S addresses seen with the callsign
+    var track: []TrackPoint_T
+    var entries: []Entry_T
+
+    def __init__(self, callsign: str):
+        self.callsign = callsign
+        self.addresses = []
+        self.track = []
+        self.entries = []
+
+    # remember the aircraft addresses that REPORTS give the callsign, so that the reports
+    # that name no callsign are found too
+    def learn(self, reports: []Report):
+        for r in reports:
+            if r.named() == self.callsign and r.aircraft_address is not None:
+                let address: str = str(r.aircraft_address)
+                if address not in self.addresses:
+                    self.addresses.append(address)
+
+    # whether a record with this subject and IFPS id is about the callsign
+    def names(self, subject: str, ifps_id: str) -> bool:
+        return subject == self.callsign or ifps_id == self.callsign
+
+    def add(self, stamp: str, kind: str, subject: str, summary: str, mine: []Report):
+        let hours: int = int(stamp[8:10])
+        let minutes: int = int(stamp[10:12])
+        let secs: int = int(stamp[12:14])
+        let seconds: int = hours * 3600 + minutes * 60 + secs
+        self.entries.append(Entry_T(stamp, kind, subject, seconds, summary))
+        for r in mine:
+            if r.position is not None and r.time_of_track is not None:
+                var level: ?float = None
+                if r.measured_flight_level is not None:
+                    level = float(r.measured_flight_level)
+                elif r.flight_level is not None:
+                    level = float(r.flight_level)
+                self.track.append(TrackPoint_T(float(r.time_of_track), float(r.position.latitude),
+                                               float(r.position.longitude), level, len(self.entries) - 1))
+
+    # what the page draws, as JSON
+    def as_json(self) -> str:
+        var points: []str = []
+        for p in self.track:
+            var level: str = "\"level\": 0, \"has_level\": false"
+            if p.level is not None:
+                level = f"\"level\": {p.level}, \"has_level\": true"
+            points.append(f"{{\"seconds\": {p.seconds}, \"lat\": {p.lat}, \"lon\": {p.lon}, {level}, \"entry\": {p.entry}}}")
+        var entries: []str = []
+        for e in self.entries:
+            entries.append(f"{{\"stamp\": {json_string(e.stamp)}, \"kind\": {json_string(e.kind)}, "
+                           f"\"subject\": {json_string(e.subject)}, \"seconds\": {e.seconds}, "
+                           f"\"summary\": {json_string(e.summary)}}}")
+        return (f"{{\"callsign\": {json_string(self.callsign)}, \"track\": [" + ", ".join(points)
+                + "], \"entries\": [" + ", ".join(entries) + "]}")
+
+
 # one line of the file: a fixed-width header, then the message. A line that does not
 # have that shape fails with the field that is wrong.
 class OplogRecord:
@@ -874,28 +967,56 @@ class OplogRecord:
         self.message_length = message_length
         self.msg = line[pos:pos + self.message_length]
 
-    # the record as a line, then the reports of its CPM/CPF message
-    def show(self, i: int):
-        print(f"[{i}] {self.time_stamp} {str(self.classification).strip()} {str(self.kind).strip():<10} "
-              f"subject={str(self.subject).strip()} seq={self.sequence_number} tact_id={self.tact_id}")
+    # the position reports of the record's CPM/CPF message: none for another kind of record
+    def reports(self) -> []Report:
         let extracted: ?Octets_T | !Decode_Failure_T = extract_cpm_payload(self.msg)
         if extracted is Decode_Failure_T:
             die(extracted.reason)
         if extracted is None:
-            print(f"    msg={self.msg[0 ..< min(80, len(self.msg))]}")
-            return
+            return []
         let decoded: Decoded | !Decode_Failure_T = decode_cat_block(extracted)
         if decoded is Decode_Failure_T:
-            print(f"    !! failed to decode CPM/CPF payload: {decoded.reason}")
-            return
-        print(f"    blocks={len(decoded.blocks)} "
-              f"reports={len(decoded.reports)} "
-              f"trailing_bytes={decoded.trailing_bytes}")
-        for b in decoded.blocks:
-            if b.problem is not None:
-                print(f"     !! block cat={b.category} len={b.length}: {b.problem}")
-        for r in decoded.reports:
+            return []
+        return decoded.reports
+
+    # the record as a line, then the reports of its CPM/CPF message; of one flight only,
+    # when SEL names one
+    def show(self, i: int, sel: Selection):
+        var lines: []str = []
+        var reports: []Report = []
+        var summary: str = self.msg[0 ..< min(80, len(self.msg))]
+        let extracted: ?Octets_T | !Decode_Failure_T = extract_cpm_payload(self.msg)
+        if extracted is Decode_Failure_T:
+            die(extracted.reason)
+        if extracted is None:
+            lines.append(f"    msg={summary}")
+        else:
+            let decoded: Decoded | !Decode_Failure_T = decode_cat_block(extracted)
+            if decoded is Decode_Failure_T:
+                lines.append(f"    !! failed to decode CPM/CPF payload: {decoded.reason}")
+            else:
+                lines.append(f"    blocks={len(decoded.blocks)} "
+                             f"reports={len(decoded.reports)} "
+                             f"trailing_bytes={decoded.trailing_bytes}")
+                for b in decoded.blocks:
+                    if b.problem is not None:
+                        lines.append(f"     !! block cat={b.category} len={b.length}: {b.problem}")
+                reports = decoded.reports
+        var mine: []Report = reports
+        if sel.callsign != "":
+            mine = [r for r in reports if r.flies(sel.callsign, sel.addresses)]
+            if len(mine) == 0 and not sel.names(str(self.subject).strip(), str(self.ifps_id).strip()):
+                return
+            if len(reports) > 0:
+                summary = f"{len(mine)} position report(s) of {len(reports)}"
+        print(f"[{i}] {self.time_stamp} {str(self.classification).strip()} {str(self.kind).strip():<10} "
+              f"subject={str(self.subject).strip()} seq={self.sequence_number} tact_id={self.tact_id}")
+        for line in lines:
+            print(line)
+        for r in mine:
             print("     -", r)
+        if sel.callsign != "":
+            sel.add(str(self.time_stamp), str(self.kind).strip(), str(self.subject).strip(), summary, mine)
 
 
 # an ARCHIVED_OPLOG file: a version line, then one record per line
@@ -918,15 +1039,100 @@ class OplogFile:
             self.records.append(rec)
 
 
+# ---------------------------------------------------------------------------
+# One flight: --callsign picks the records and reports of a callsign, --html draws them
+# ---------------------------------------------------------------------------
+
+# The page: a map and the list of entries. oplog_map.js (built from oplog_map.ady, beside this
+# program) reads the data below and draws them, with Leaflet.
+const PAGE: str = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>@CALLSIGN@ in the operational log</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    html, body { height: 100%; margin: 0; font-family: sans-serif; }
+    body { display: flex; }
+    #map { flex: 1; }
+    #side { width: 26em; overflow-y: auto; padding: 0 1em; border-left: 1px solid #ccc; }
+    #entries { padding-left: 0; list-style: none; }
+    li.entry { border-bottom: 1px solid #eee; padding: .4em 0; cursor: pointer; }
+    li.entry:hover { background: #f3f7ff; }
+    li.entry small { color: #666; display: block; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="side">
+    <h2>@CALLSIGN@</h2>
+    <p id="summary"></p>
+    <ul id="entries"></ul>
+  </div>
+  <script type="application/json" id="oplog-data">@DATA@</script>
+  <script src="oplog_map.js"></script>
+</body>
+</html>
+"""
+
+def write_page(path: Path, sel: Selection):
+    let page: str = PAGE.replace("@CALLSIGN@", sel.callsign).replace("@DATA@", sel.as_json())
+    let wrote: None | !PathFailure_T = path.write_text(page)
+    if wrote is PathFailure_T:
+        die(f"cannot write {path}: {wrote.reason}")
+
+
+def usage() -> str:
+    return f"usage: {$0} <ARCHIVED_OPLOG_file> [--callsign CALLSIGN [--html PAGE.html]]"
+
+
+type Options_T is record:
+    file: str
+    callsign: str
+    html: str
+
+
+def read_options(argv: []str) -> Options_T:
+    var opt: Options_T = Options_T("", "", "")
+    var i: int = 0
+    while i < len(argv):
+        let arg: str = argv[i]
+        case arg:
+            when "-h" | "--help":
+                print usage()
+                quit(0)
+            when "--callsign":
+                i += 1
+                die(f"--callsign needs a callsign\n{usage()}", code = 2) if i >= len(argv)
+                opt.callsign = argv[i]
+            when "--html":
+                i += 1
+                die(f"--html needs a file name\n{usage()}", code = 2) if i >= len(argv)
+                opt.html = argv[i]
+            when others:
+                die(f"unknown option {arg}\n{usage()}", code = 2) if arg.startswith("-") or opt.file != ""
+                opt.file = arg
+        i += 1
+    die(usage(), code = 2) if opt.file == ""
+    die(f"--html needs --callsign\n{usage()}", code = 2) if opt.html != "" and opt.callsign == ""
+    return opt
+
+
 def main() -> int:
-    if $# != 1:
-        stderr.writeLine(f"usage: {$0} <ARCHIVED_OPLOG_file>")
-        return 1
-    let file: OplogFile | !Decode_Failure_T = OplogFile(Path($1))
+    let opt: Options_T = read_options($@)
+    let file: OplogFile | !Decode_Failure_T = OplogFile(Path(opt.file))
     if file is Decode_Failure_T:
         die(file.reason)
+    var sel: Selection = Selection(opt.callsign)
+    if opt.callsign != "":
+        for rec in file.records:
+            sel.learn(rec.reports())
     for i, rec in enumerate(file.records):
-        rec.show(i)
+        rec.show(i, sel)
+    if opt.html != "":
+        write_page(Path(opt.html), sel)
     return 0
 
 

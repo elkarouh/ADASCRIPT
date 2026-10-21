@@ -28,3 +28,7 @@
 
 # Makefile has no dot in its name and is not build output.
 !Makefile
+
+# the OPLOG flight page and its script, built by EXAMPLES/OPLOG/Makefile
+OPLOG/oplog_map.js
+OPLOG/flight.html

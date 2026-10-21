@@ -1,0 +1,81 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""oplog_map -- one flight of the operational log, on a map, with Leaflet.js, in the browser.
+
+    ady2nim js oplog_map.ady       (writes oplog_map.js; the page decode_oplog writes loads it)
+
+    decode_oplog sample_oplog.txt --callsign THY59E --html thy59e.html
+
+The page holds the flight's data as JSON (the track, the entries of the log about it), and this
+script draws it: the track as a line with a dot at every report (the tooltip says when, and at what
+level), and the entries in the list beside the map. Click an entry to see the reports it holds:
+the map zooms to them.
+"""
+from browser import Element_T, Event_T, Click_T, page, element, text, set_html, number, listen, click_of, on
+from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag
+from leaflet_utils import Map_T, Point_T, style, new_map, fit, polyline, dot, pin, popup_at
+
+# text that is safe to put in the page
+def escaped(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+def two(n: int) -> str:
+    return f"{n:02d}"
+
+# hh:mm:ss of a time of day given in seconds
+def clock(seconds: float) -> str:
+    let whole: int = int(seconds)
+    return two(whole // 3600) + ":" + two(whole // 60 % 60) + ":" + two(whole % 60)
+
+def main():
+    let log: ?Json_T = read_json(page.element("#oplog-data").text())
+    if log is None:
+        page.element("#summary").set_html("The page has no data.")
+        return
+    let track: []Json_T = log.json_list("track")
+    let entries: []Json_T = log.json_list("entries")
+    page.element("#summary").set_html(f"{len(track)} position reports, {len(entries)} entries")
+
+    let map: Map_T = new_map("map")
+    var points: []Point_T = []
+    var times: []float = []
+    var owners: []int = []
+    for p in track:
+        let at: Point_T = Point_T(p.json_number("lat"), p.json_number("lon"))
+        let level: str = f", FL{p.json_number('level'):.0f}" if p.json_flag("has_level") else ""
+        points.append(at)
+        times.append(p.json_number("seconds"))
+        owners.append(int(p.json_number("entry")))
+        dot(map, at, style("#1f78b4"), tip=clock(p.json_number("seconds")) + level)
+    if len(points) > 0:
+        polyline(map, points, style("#1f78b4", weight=3))
+        fit(map, points)
+
+    var items: []str = []
+    for e in entries:
+        items.append(f"<li class=\"entry\" data-index=\"{len(items)}\">"
+                     f"<b>{clock(e.json_number('seconds'))}</b> {escaped(e.json_text('kind'))}"
+                     f"<small>{escaped(e.json_text('stamp'))} &middot; {escaped(e.json_text('summary'))}</small></li>")
+    page.element("#entries").set_html("".join(items))
+
+    # the reports of the entry that was clicked
+    def clicked(event: Event_T):
+        let c: Click_T = click_of(event)
+        let hit: ?Element_T = c.on("li.entry")
+        if hit is None:
+            return
+        let index: int = int(hit.number("data_index"))
+        var held: []Point_T = []
+        var first: float = 0.0
+        for i in 0 ..< len(points):
+            if owners[i] == index:
+                if len(held) == 0:
+                    first = times[i]
+                held.append(points[i])
+        if len(held) > 0:
+            fit(map, held)
+            popup_at(map, held[0], f"{len(held)} report(s) from {clock(first)}")
+
+    listen("click", clicked)
+
+main()
