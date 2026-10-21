@@ -254,14 +254,19 @@ proc adascriptCasefold(s: string): string =
 _ARRAY_REPR_HELPER = """\
 proc `$`[I, T](xs: array[I, T]): string {.used.} =
   ## An array prints as a list does, its values in index order -- an [E]T
-  ## too, as Python prints it.
-  result = "["
-  var first = true
-  for x in xs:
-    if not first: result.add ", "
-    first = false
-    result.add adascriptRepr(x)
-  result.add "]"
+  ## too, as Python prints it. An array of char is a finite-length string:
+  ## it prints as its text.
+  when T is char:
+    result = ""
+    for x in xs: result.add x
+  else:
+    result = "["
+    var first = true
+    for x in xs:
+      if not first: result.add ", "
+      first = false
+      result.add adascriptRepr(x)
+    result.add "]"
 """
 
 
