@@ -27,7 +27,11 @@ def pair(a: ?int, b: ?int) -> int:
     return a + b
 
 
+def by_length(words: []str) -> []str:
+    return sorted(words, key=lambda w: len(w))
+
 def main():
+    assert by_length(["ccc", "a", "bb"]) == ["a", "bb", "ccc"]
     assert secs("20241124002011") == 1211
     let cs: [3]char = ['a', 'b', ' ']
     assert chained(cs) == "ab"

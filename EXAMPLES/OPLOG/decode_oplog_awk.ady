@@ -897,30 +897,40 @@ class OplogRecord:
             print("     -", r)
 
 
-# an ARCHIVED_OPLOG file: a version line, then one record per CR LF, each shown as it is read
+# an ARCHIVED_OPLOG file: a version line, then one record per CR LF, collected as they are read
 class OplogFile(AwkProcessor):
+    var records: []OplogRecord
+
     def __init__(self):
         super().__init__(rs="\r\n")
+        self.records = []
 
     def process_record(self):
         if self.NR == 1:
             if not self.line.startswith("CFMU_FILE_VERSION="):
                 self.stop(f"not an ARCHIVED_OPLOG file: {self.line}")
             return
-        let index: int = self.NR - 2
         let rec: OplogRecord | !ParseFailure_T = OplogRecord(self.line)
         if rec is ParseFailure_T:
-            self.stop(f"record {index}: bad {rec.what} field: '{rec.text}'")
+            self.stop(f"record {len(self.records)}: bad {rec.what} field: '{rec.text}'")
             return
-        rec.show(index)
+        self.records.append(rec)
 
 
 def main() -> int:
-    if $# != 1:
-        stderr.writeLine(f"usage: {$0} <ARCHIVED_OPLOG_file>")
+    if $# < 1:
+        stderr.writeLine(f"usage: {$0} <ARCHIVED_OPLOG_file>...")
         return 1
-    var file: OplogFile = OplogFile()
-    file.run_file($1)    # a file it cannot read, or a corrupt record, ends the program here
+    # the records of all the files, in the order of their time stamps; records with the
+    # same time stamp stay in the order of the files and of the lines
+    var records: []OplogRecord = []
+    for name in $@:
+        var file: OplogFile = OplogFile()
+        file.run_file(name)    # a file it cannot read, or a corrupt record, ends the program here
+        records.extend(file.records)
+    records = sorted(records, key=lambda r: str(r.time_stamp))
+    for i, rec in enumerate(records):
+        rec.show(i)
     return 0
 
 

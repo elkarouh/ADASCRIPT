@@ -5737,6 +5737,17 @@ def _translate_stdlib_patterns(expr):
                   else "SortOrder.Ascending")
         return f"{_sorted_operand(_sorted_rev.group(1))}.sorted({_order})"
 
+    # --- 6c. sorted(X, key=lambda v: f(v)) -> X.sortedByIt(f(it)) ---
+    # The lambda is already a proc by now: `key = proc (v: auto): auto =\n  f(v)`.
+    _sorted_key = _re.match(
+        r'^sorted\((.+?),\s*key\s*=\s*proc\s*\((\w+)[^)]*\)\s*:\s*\w+\s*=\s*(.+)\)$',
+        expr, _re.DOTALL)
+    if _sorted_key and _balanced(_sorted_key.group(1)):
+        _param, _body = _sorted_key.group(2), _sorted_key.group(3).strip()
+        ParserState.nim_imports.add("algorithm")
+        return (f"{_sorted_operand(_sorted_key.group(1))}"
+                f".sortedByIt({_re.sub(r'\b' + _re.escape(_param) + r'\b', 'it', _body)})")
+
     # --- 7. sorted(X) -> X.sorted ---
     _sorted_plain = _re.match(r'^sorted\((.+)\)$', expr)
     if _sorted_plain:

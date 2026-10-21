@@ -1297,6 +1297,16 @@ test-part-26:
 	        && grep -q 'src="oplog_map.js"' $$page \
 	        && echo OK || { echo FAIL; rm -f $$page; exit 1; }; \
 	    rm -f $$page
+	@# Several files are one log: the records of the files, in the order of their time
+	@# stamps, whatever the order of the files on the command line.
+	@printf '  %-42s' "OPLOG/decode_oplog FILE FILE"; \
+	    d=$$(mktemp -d); s=$(EXDIR)/OPLOG/sample_oplog.txt; \
+	    $(PYTHON) -c 'import sys; h, *r = open(sys.argv[1], "rb").read().split(b"\r\n"); r = [x for x in r if x]; open(sys.argv[2] + "/a.txt", "wb").write(b"\r\n".join([h] + r[0::2]) + b"\r\n"); open(sys.argv[2] + "/b.txt", "wb").write(b"\r\n".join([h] + r[1::2]) + b"\r\n")' $$s $$d; \
+	    one=$$($(EXDIR)/OPLOG/decode_oplog $$s --callsign TAM8149 | sed 's/^\[[0-9]*\]//'); \
+	    two=$$($(EXDIR)/OPLOG/decode_oplog $$d/b.txt $$d/a.txt --callsign TAM8149 | sed 's/^\[[0-9]*\]//'); \
+	    [ "$$one" = "$$two" ] && [ $$(echo "$$two" | grep -c "callsign=TAM8149") -eq 43 ] \
+	        && echo OK || { echo FAIL; rm -rf $$d; exit 1; }; \
+	    rm -rf $$d
 	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
 	@# check is on its output, not its exit status: the report is what the
 	@# document quotes.

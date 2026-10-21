@@ -8,6 +8,7 @@
 
 ```
 decode_oplog sample_oplog.txt                       # everything
+decode_oplog day1.txt day2.txt                      # several files: their records in time order
 decode_oplog sample_oplog.txt --callsign TAM8149    # the records and reports of one flight
 decode_oplog sample_oplog.txt --callsign TAM8149 --html flight.html
 ```

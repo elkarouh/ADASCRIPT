@@ -1024,13 +1024,13 @@ class OplogFile:
             return Decode_Failure_T(f"cannot read {path}: {res.reason}")
         let lines: []str = res.split("\r\n")
         if not lines[0].startswith("CFMU_FILE_VERSION="):
-            return Decode_Failure_T(f"not an ARCHIVED_OPLOG file: {lines[0]}")
+            return Decode_Failure_T(f"{path}: not an ARCHIVED_OPLOG file: {lines[0]}")
         self.records = []
         for raw in lines[1:]:
             continue if raw == ""
             let rec: OplogRecord | !ParseFailure_T = OplogRecord(raw)
             if rec is ParseFailure_T:
-                return Decode_Failure_T(f"record {len(self.records)}: bad {rec.what} field: '{rec.text}'")
+                return Decode_Failure_T(f"{path}: record {len(self.records)}: bad {rec.what} field: '{rec.text}'")
             self.records.append(rec)
 
 
@@ -1080,17 +1080,17 @@ def write_page(path: Path, sel: Selection):
 
 
 def usage() -> str:
-    return f"usage: {$0} <ARCHIVED_OPLOG_file> [--callsign CALLSIGN [--html PAGE.html]]"
+    return f"usage: {$0} <ARCHIVED_OPLOG_file>... [--callsign CALLSIGN [--html PAGE.html]]"
 
 
 type Options_T is record:
-    file: str
+    files: []str
     callsign: str
     html: str
 
 
 def read_options(argv: []str) -> Options_T:
-    var opt: Options_T = Options_T("", "", "")
+    var opt: Options_T = Options_T([], "", "")
     var i: int = 0
     while i < len(argv):
         let arg: str = argv[i]
@@ -1107,24 +1107,30 @@ def read_options(argv: []str) -> Options_T:
                 die(f"--html needs a file name\n{usage()}", code = 2) if i >= len(argv)
                 opt.html = argv[i]
             when others:
-                die(f"unknown option {arg}\n{usage()}", code = 2) if arg.startswith("-") or opt.file != ""
-                opt.file = arg
+                die(f"unknown option {arg}\n{usage()}", code = 2) if arg.startswith("-")
+                opt.files.append(arg)
         i += 1
-    die(usage(), code = 2) if opt.file == ""
+    die(usage(), code = 2) if len(opt.files) == 0
     die(f"--html needs --callsign\n{usage()}", code = 2) if opt.html != "" and opt.callsign == ""
     return opt
 
 
 def main() -> int:
     let opt: Options_T = read_options($@)
-    let file: OplogFile | !Decode_Failure_T = OplogFile(Path(opt.file))
-    if file is Decode_Failure_T:
-        die(file.reason)
+    # the records of all the files, in the order of their time stamps; records with the
+    # same time stamp stay in the order of the files and of the lines
+    var records: []OplogRecord = []
+    for name in opt.files:
+        let file: OplogFile | !Decode_Failure_T = OplogFile(Path(name))
+        if file is Decode_Failure_T:
+            die(file.reason)
+        records.extend(file.records)
+    records = sorted(records, key=lambda r: str(r.time_stamp))
     var sel: Selection = Selection(opt.callsign)
     if opt.callsign != "":
-        for rec in file.records:
+        for rec in records:
             sel.learn(rec.reports())
-    for i, rec in enumerate(file.records):
+    for i, rec in enumerate(records):
         rec.show(i, sel)
     if opt.html != "":
         write_page(Path(opt.html), sel)
