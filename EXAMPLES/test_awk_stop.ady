@@ -1,0 +1,36 @@
+#!/usr/bin/env ady2nim
+"""Test: AwkBase failures -- a file it cannot read, a record the subclass gives up on.
+
+`try_run_file(path)` is a `None | !AwkFailure_T`; `run_file` is the same and ends the
+program with the reason. `self.stop(reason)` in `process_record` ends the run there.
+"""
+from awk import AwkBase, AwkFailure_T
+
+class Counter(AwkBase):
+    var seen: int = 0
+
+    def process_record(self):
+        self.seen += 1
+        if self.line == "bad":
+            self.stop(f"record {self.NR} is bad")
+
+let path: Path = Path("/tmp/test_awk_stop_input.txt")
+let wrote: None | !PathFailure_T = path.write_text("a\nb\nbad\nc\n")
+assert not (wrote is PathFailure_T)
+
+var good: Counter = Counter()
+let missing: None | !AwkFailure_T = good.try_run_file("/tmp/test_awk_stop_missing.txt")
+assert missing is AwkFailure_T
+assert good.seen == 0
+
+var stopped: Counter = Counter()
+let r: None | !AwkFailure_T = stopped.try_run_file("/tmp/test_awk_stop_input.txt")
+assert r is AwkFailure_T
+assert r.reason == "record 3 is bad"
+assert stopped.seen == 3
+
+var paragraphs: Counter = Counter(rs = "\n\n")
+let ok: None | !AwkFailure_T = paragraphs.try_run_file("/tmp/test_awk_stop_input.txt")
+assert not (ok is AwkFailure_T)     # "a\nb\nbad\nc" is one record, not "bad"
+assert paragraphs.seen == 1
+print "test_awk_stop: ok"

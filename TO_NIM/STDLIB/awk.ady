@@ -20,6 +20,11 @@ Fields layout:
 """
 
 
+# why a run stopped: a failed read, or a record the subclass gave up on with stop()
+type AwkFailure_T is record:
+    reason: str
+
+
 @virtual
 class AwkBase:
     var FS        : str
@@ -32,6 +37,7 @@ class AwkBase:
     var NF        : int = 0
     var total_len : int = 0
     var total_nf  : int = 0
+    var failure   : str = ""
 
     def __init__(self, fs: str = " ", ofs: str = " ", rs: str = "\n", ors: str = "\n"):
         self.FS  = fs
@@ -59,32 +65,57 @@ class AwkBase:
     def finish(self):
         pass
 
-    def run(self):
+    # Stop the run, saying why: the records after this one are not read. `run` and
+    # `run_file` end the program with the reason; `try_run` and `try_run_file` give it
+    # back as an AwkFailure_T.
+    def stop(self, reason: str):
+        if self.failure == "":
+            self.failure = reason
+
+    def try_run(self) -> None | !AwkFailure_T:
         self.start()
         if self.RS == "\n":
             for raw in stdin.lines:
                 self.read_record(raw)
                 self.process_record()
+                break if self.failure != ""
         else:
             let all: str = stdin.readAll()
             for raw in all.split(self.RS):
                 if raw'Length > 0:
                     self.read_record(raw)
                     self.process_record()
+                    break if self.failure != ""
+        if self.failure != "":
+            return AwkFailure_T(self.failure)
         self.finish()
 
-    def run_file(self, path: str):
+    def try_run_file(self, path: str) -> None | !AwkFailure_T:
+        let source: str | !PathFailure_T = Path(path).read_text()
+        if source is PathFailure_T:
+            return AwkFailure_T(f"cannot read {path}: {source.reason}")
         self.start()
         if self.RS == "\n":
-            for raw in path.lines:
+            for raw in source.splitlines():
                 self.read_record(raw)
                 self.process_record()
+                break if self.failure != ""
         else:
-            let f: File = open(path, fmRead)
-            let all: str = f.readAll()
-            f.close()
-            for raw in all.split(self.RS):
+            for raw in source.split(self.RS):
                 if raw'Length > 0:
                     self.read_record(raw)
                     self.process_record()
+                    break if self.failure != ""
+        if self.failure != "":
+            return AwkFailure_T(self.failure)
         self.finish()
+
+    def run(self):
+        let r: None | !AwkFailure_T = self.try_run()
+        if r is AwkFailure_T:
+            die(r.reason)
+
+    def run_file(self, path: str):
+        let r: None | !AwkFailure_T = self.try_run_file(path)
+        if r is AwkFailure_T:
+            die(r.reason)

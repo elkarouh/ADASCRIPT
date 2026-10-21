@@ -183,6 +183,12 @@ The cost is the one AWK has too — a non-newline `RS` reads the input whole
 rather than streaming it, so it is for files that fit in memory. The default
 `rs = "\n"` streams.
 
+**When the input is wrong.** `p.run_file(path)` and `p.run()` end the program with
+the reason when a file cannot be read, or when `process_record` calls
+`self.stop(reason)` on a record it cannot accept (the records after it are not
+read). `p.try_run_file(path)` and `p.try_run()` do the same but give the reason
+back as a `None | !AwkFailure_T`, to take like any failure. `EXAMPLES/test_awk_stop.ady`.
+
 ---
 
 ## 3. Patterns: `case` instead of a pattern list
