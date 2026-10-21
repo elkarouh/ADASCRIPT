@@ -4,8 +4,8 @@ awk -- a record-processor framework: awk's loop, with the records coming from wh
 
 `AwkProcessor.run` is the whole loop:
 
-    for each record that get_record() gives:
-        process_record(rec)
+    for rec in self.get_record():
+        self.process_record(rec)
 
 and three kinds of input are there to build on, each a base class that says where the records come from:
 
@@ -19,8 +19,9 @@ A program subclasses the one it wants and overrides
     start()              -- called before the first record  (default: no-op)
     finish()             -- called after the last one       (default: no-op)
 
-and any other source of records is a subclass of AwkProcessor that overrides `get_record`: it gives
-the next record, made with `self.record(raw)`, or None when there are no more.
+and any other source of records is a subclass of AwkProcessor that overrides `get_record`, a
+generator: it yields each record, made with `self.record(raw)`, and ends when there are no more.
+A source that cannot be read calls `self.stop(reason)` and ends.
 
 awk variables, on the processor:
     FS   field separator         (default: " " = split on whitespace)
@@ -65,9 +66,11 @@ class AwkProcessor:
         self.RS  = rs
         self.ORS = ors
 
-    # The next record, or None when there are no more. What differs from one use case to another.
-    def get_record(self) -> ?AwkRecord_T:
+    # The records, one after the other: what differs from one use case to another. A subclass
+    # overrides it, and `run` loops over the override's.
+    def get_record(self) -> AwkRecord_T:
         raise NotImplementedError("Override get_record()")
+        yield self.record("")            # never reached: it makes this a generator, as its overrides are
 
     # The record that the text RAW is: its line, its fields by FS, its number.
     def record(self, raw: str) -> AwkRecord_T:
@@ -97,11 +100,9 @@ class AwkProcessor:
 
     def run(self) -> None | !AwkFailure_T:
         self.start()
-        while self.failure == "":
-            let rec: ?AwkRecord_T = self.get_record()
-            if rec is None:
-                break
+        for rec in self.get_record():
             self.process_record(rec)
+            break if self.failure != ""
         if self.failure != "":
             return AwkFailure_T(self.failure)
         self.finish()
@@ -123,65 +124,44 @@ def read_source(path: str) -> str | !AwkFailure_T:
 
 # The records of stdin: a line each, or, for another RS, the input cut at RS.
 class StdinProcessor(AwkProcessor):
-    var pending : []str
-    var next_at : int = 0
-    var loaded  : bool = False
-
     def __init__(self, fs: str = " ", ofs: str = " ", rs: str = "\n", ors: str = "\n"):
         super().__init__(fs, ofs, rs, ors)
-        self.pending = []
 
-    def get_record(self) -> ?AwkRecord_T:
+    def get_record(self) -> AwkRecord_T:
         if self.RS == "\n":
-            let line: str | !InputFailure_T = stdin.readLine()
-            if line is InputFailure_T:
-                return None
-            return self.record(line)
-        # another separator: the input is read whole, and cut
-        if not self.loaded:
-            self.loaded = True
+            for raw in stdin.lines:
+                yield self.record(raw)
+        else:
+            # another separator: the input is read whole, and cut
             for raw in stdin.readAll().split(self.RS):
                 if raw'Length > 0:
-                    self.pending.append(raw)
-        if self.next_at >= len(self.pending):
-            return None
-        self.next_at += 1
-        return self.record(self.pending[self.next_at - 1])
+                    yield self.record(raw)
 
 
 # The records of a text in hand -- what a command printed, say.
 class TextProcessor(AwkProcessor):
-    var text    : str
-    var pending : []str
-    var next_at : int = 0
-    var loaded  : bool = False
+    var text : str
 
     def __init__(self, text: str = "", fs: str = " ", ofs: str = " ", rs: str = "\n", ors: str = "\n"):
         super().__init__(fs, ofs, rs, ors)
         self.text = text
-        self.pending = []
 
     # The text to cut into records, or why it is not there: for a processor of another kind of text.
     def load(self) -> str | !AwkFailure_T:
         return self.text
 
-    def get_record(self) -> ?AwkRecord_T:
-        if not self.loaded:
-            self.loaded = True
-            let source: str | !AwkFailure_T = self.load()
-            if source is AwkFailure_T:
-                self.stop(source.reason)
-                return None
-            if self.RS == "\n":
-                self.pending = source.splitlines()
-            else:
-                for raw in source.split(self.RS):
-                    if raw'Length > 0:
-                        self.pending.append(raw)
-        if self.next_at >= len(self.pending):
-            return None
-        self.next_at += 1
-        return self.record(self.pending[self.next_at - 1])
+    def get_record(self) -> AwkRecord_T:
+        let source: str | !AwkFailure_T = self.load()
+        if source is AwkFailure_T:
+            self.stop(source.reason)
+            return
+        if self.RS == "\n":
+            for raw in source.splitlines():
+                yield self.record(raw)
+        else:
+            for raw in source.split(self.RS):
+                if raw'Length > 0:
+                    yield self.record(raw)
 
 
 # The records of a file, whose name is PATH; a name ending in .gz is read as what it holds.

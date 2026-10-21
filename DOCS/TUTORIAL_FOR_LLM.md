@@ -757,7 +757,7 @@ def clamp(x: int, lo: int, hi: int) -> int:
     max(lo, min(x, hi))    # implicitly returned
 ```
 
-**Generator functions:** `yield` transpiles to Python generators and Nim iterators.
+**Generator functions:** `yield` transpiles to Python generators and Nim iterators. A generator method of a `@virtual` class is dispatched on the object like any other method, so a subclass overrides it and the base class's `for x in self.items()` runs the override (Nim: a method returning a closure iterator; the type it yields is declared, `def items(self) -> T`; `super().items()` is not available).
 ```adascript
 def shortest_path(self, start_state: S, end_state: S):
     while fringe:

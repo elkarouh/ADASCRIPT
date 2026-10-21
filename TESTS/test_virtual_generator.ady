@@ -1,0 +1,95 @@
+#!/usr/bin/env ady2nim
+"""Test: a generator method of a @virtual class is dispatched on the object.
+
+`for x in self.items()` in the base class runs the subclass's `items`, as any other method of
+the class would. (A Nim iterator is resolved at compile time; a generator of a @virtual class is
+a method returning a closure iterator instead, and the loop calls what it returns.)
+"""
+
+type Item_T is record:
+    name: str
+    size: int
+
+@virtual
+class Source:
+    var served: int = 0
+
+    # the base class's own: never reached, it makes this a generator for the overrides to match
+    def items(self) -> Item_T:
+        raise NotImplementedError("Override items()")
+        yield Item_T("", 0)
+
+    # a generator with arguments
+    def upto(self, limit: int) -> int:
+        for i in 0 ..< limit:
+            yield i
+
+    # the base class loops over what a subclass gives
+    def total(self) -> int:
+        var sum: int = 0
+        for item in self.items():
+            sum += item.size
+            self.served += 1
+        return sum
+
+    def names(self) -> str:
+        var joined: str = ""
+        for item in self.items():
+            joined += item.name
+        return joined
+
+class Fixed(Source):
+    var sizes: []int
+
+    def __init__(self, sizes: []int):
+        self.sizes = sizes
+
+    def items(self) -> Item_T:
+        for i, size in enumerate(self.sizes):
+            yield Item_T(f"f{i}", size)
+
+# an override of an override
+class Doubled(Fixed):
+    def items(self) -> Item_T:
+        for i, size in enumerate(self.sizes):
+            yield Item_T(f"f{i}!", size * 2)
+
+class Counting(Source):
+    def items(self) -> Item_T:
+        yield Item_T("a", 1)
+        yield Item_T("b", 2)
+
+    def upto(self, limit: int) -> int:
+        for i in 1 .. limit:
+            yield i * 10
+
+def describe(s: Source) -> str:
+    var parts: []str = []
+    for item in s.items():
+        parts.append(f"{item.name}={item.size}")
+    return ",".join(parts)
+
+def main():
+    var fixed: Fixed = Fixed([3, 4])
+    assert fixed.total() == 7
+    assert fixed.names() == "f0f1"
+    assert fixed.served == 2
+    var doubled: Doubled = Doubled([3, 4])
+    assert doubled.total() == 14
+    assert describe(doubled) == "f0!=6,f1!=8"
+    var counting: Counting = Counting()
+    assert counting.total() == 3 and counting.names() == "ab"
+    assert describe(counting) == "a=1,b=2"
+    var seen: []int = []
+    for i in fixed.upto(3):
+        seen.append(i)
+    assert seen == [0, 1, 2]
+    var tens: []int = []
+    for i in counting.upto(3):
+        tens.append(i)
+    assert tens == [10, 20, 30]
+    var base: Source = fixed
+    assert describe(base) == "f0=3,f1=4"
+    print "test_virtual_generator: ok"
+
+main()

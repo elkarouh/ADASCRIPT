@@ -112,7 +112,7 @@ _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations", "unit_dims
                     "narrowed_types", "mod_types", "overloaded_procs",
                     "generic_funcs",
                     "class_field_types", "noreturn_procs",
-                    "iterator_names", "contextmanager_funcs",
+                    "iterator_names", "virtual_iterators", "contextmanager_funcs",
                     "by_value_procs", "var_param_procs", "var_self_methods",
                     "failure_types", "ctor_overloads", "where_types")
 _nimport_carried: dict = {}
@@ -187,6 +187,7 @@ def _nim_reset():
     ParserState._current_lhs_type = ""  # annotation of current assignment LHS (set by stmt handlers)
     ParserState.proc_return_types = {}  # method/proc name -> return type string
     ParserState.iterator_names = set()  # names of defs that become Nim iterators (have 'yield')
+    ParserState.virtual_iterators = set()  # names of generator methods of @virtual classes
     ParserState.nimpy_len_needed = False  # set when len() is called on a PyObject
     ParserState._option_unwrap_vars = set()  # Option vars proven non-None by enclosing if-guard
     ParserState.noreturn_procs = set()  # procs that always quit/raise, so a guard calling one leaves

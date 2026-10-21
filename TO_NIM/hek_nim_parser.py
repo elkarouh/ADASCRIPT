@@ -1258,9 +1258,18 @@ def to_nim(self, indent=0):
     # Nim tuple unpacking in for: for x, y in seq -> for (x, y) in seq
     if "," in target and not target.startswith("("):
         target = f"({target})"
+    # A generator method of a @virtual class is a method returning a closure iterator:
+    # the loop calls what the method returns
+    from hek_nim_expr import _is_whole_call
+    _vm = re.match(r'^(?:[\w\[\]]+(?:\([^()]*\))?\.)*(\w+)\(', iterable.strip())
+    if _vm and _vm.group(1) in getattr(ParserState, "virtual_iterators", set()) and _is_whole_call(iterable.strip()):
+        register_virtual = iterable
+        iterable = f"{iterable}()"
+    else:
+        register_virtual = None
     # Register loop variable type from iterable's element type
     from hek_nim_expr import register_loop_var_types
-    register_loop_var_types(target, iterable)
+    register_loop_var_types(target, register_virtual or iterable)
     hc = _block_inline_header_comment(self.nodes[2])
     body = self.nodes[2].to_nim(indent + 1)
     result = f"{_ind(indent)}for {target} in {iterable}:{hc}\n{body}"
@@ -6167,6 +6176,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             body_text = "\n".join(body_lines)
 
     params_str = ", ".join(params)
+    _virt_gen = ""
     # Detect if body contains yield -> use iterator instead of proc/method
     has_yield = any("yield " in line or line.strip() == "yield" for line in body_lines)
     if is_contextmanager:
@@ -6184,6 +6194,21 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         pragma = ""
         keyword = "template"
         getattr(ParserState, 'contextmanager_funcs', set()).add(name)
+    elif has_yield and is_virtual and class_name and name and not force_proc:
+        # A generator of a @virtual class may be overridden, and a Nim iterator is not
+        # dispatched on the object: `for x in self.items()` in the base class would run
+        # the base class's. So it is a method that returns a closure iterator, and the
+        # loop calls what it returns (see for_stmt).
+        _virt_elem = ret_ann.lstrip(": ").strip()
+        if not _virt_elem:
+            raise SyntaxError(
+                f"{class_name}.{name}: a generator of a @virtual class is overridden, and so "
+                f"needs the type it yields, as `def {name}(self) -> T:`")
+        _virt_gen = _virt_elem
+        getattr(ParserState, "virtual_iterators", set()).add(name)
+        pragma = " {.base.}" if _is_new_method(class_name, name) else ""
+        keyword = "method"
+        ret_ann = f": (iterator(): {_virt_elem})"
     elif has_yield:
         # Closure iterator needed when the iterator calls itself recursively
         is_recursive = any(
@@ -6240,7 +6265,12 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     # equivalent strip for plain procs lives in _func_def_to_nim_inner; methods
     # never had one, because nothing used to add a discard here.
     _m_ret_void = (not ret_ann) or ret_ann.lstrip(": ").strip() in ("void", "None", "unit")
-    if not _m_ret_void:
+    if _virt_gen:
+        # the body is the closure iterator's
+        _flat_gen = "\n".join(_mbody).split("\n")
+        _mbody = ([f"{_ind(indent + 1)}return iterator(): {_virt_gen} ="]
+                  + [("    " + _l if _l.strip() else _l) for _l in _flat_gen])
+    elif not _m_ret_void:
         _m_idx = len(_mbody) - 1
         while _m_idx >= 0 and (_mbody[_m_idx].strip() == ""
                                or _mbody[_m_idx].lstrip().startswith("#")):

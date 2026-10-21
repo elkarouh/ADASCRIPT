@@ -5647,15 +5647,13 @@ class AwkProcessor:
     var FS: str
     var NR: int = 0
 
-    def get_record(self) -> ?AwkRecord_T: ...   # the next record, None at the end: per use case
+    def get_record(self) -> AwkRecord_T: ...   # a generator, overridden per use case
     def process_record(self, rec: AwkRecord_T): raise NotImplementedError(...)
     def start(self): pass
     def finish(self): pass
     def run(self) -> None | !AwkFailure_T:
         self.start()
-        while True:
-            let rec: ?AwkRecord_T = self.get_record()
-            break if rec is None
+        for rec in self.get_record():
             self.process_record(rec)
         self.finish()
 

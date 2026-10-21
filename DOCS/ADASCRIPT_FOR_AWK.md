@@ -123,7 +123,7 @@ let done: None | !AwkFailure_T = LogScan().run()
 ```
 
 `run()` is the whole loop, and the same one for every program: `start()`, then
-`process_record(rec)` for every record that `get_record()` gives, then `finish()`.
+`for rec in self.get_record(): self.process_record(rec)`, then `finish()`.
 What differs from one program to the next is where the records come from, and
 that is the processor you subclass:
 
@@ -133,9 +133,9 @@ that is the processor you subclass:
 | `FileProcessor(path)` | those of a file; a path ending in `.gz` is read as what it holds |
 | `TextProcessor(text)` | those of a text already in hand, such as what a command printed |
 
-Any other source is a subclass of `AwkProcessor` that overrides `get_record`:
-it returns the next record, made with `self.record(raw)`, or `None` when there
-are no more. `EXAMPLES/OPLOG/decode_oplog_awk.ady` merges the records of several
+Any other source is a subclass of `AwkProcessor` that overrides `get_record`, a
+generator: it yields each record, made with `self.record(raw)`, and ends when there
+are no more (a source that cannot be read calls `self.stop(reason)` and ends). `EXAMPLES/OPLOG/decode_oplog_awk.ady` merges the records of several
 files in time order this way, and `TOOLS/LV/lv_cmd.ady` takes them from the
 output of a command it runs itself.
 

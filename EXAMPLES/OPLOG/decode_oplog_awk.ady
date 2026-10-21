@@ -910,8 +910,6 @@ type Stamped_T is record:
 class OplogProcessor(AwkProcessor):
     var paths   : []str
     var merged  : []str
-    var next_at : int = 0
-    var loaded  : bool = False
 
     def __init__(self, paths: []str):
         super().__init__(rs="\r\n")
@@ -939,17 +937,13 @@ class OplogProcessor(AwkProcessor):
         for s in sorted(stamped, key=lambda s: s.stamp):
             self.merged.append(s.line)
 
-    def get_record(self) -> ?AwkRecord_T:
-        if not self.loaded:
-            self.loaded = True
-            let loaded: None | !AwkFailure_T = self.load()
-            if loaded is AwkFailure_T:
-                self.stop(loaded.reason)
-                return None
-        if self.next_at >= len(self.merged):
-            return None
-        self.next_at += 1
-        return self.record(self.merged[self.next_at - 1])
+    def get_record(self) -> AwkRecord_T:
+        let loaded: None | !AwkFailure_T = self.load()
+        if loaded is AwkFailure_T:
+            self.stop(loaded.reason)
+            return
+        for line in self.merged:
+            yield self.record(line)
 
     def process_record(self, rec: AwkRecord_T):
         let parsed: OplogRecord | !ParseFailure_T = OplogRecord(rec.line)

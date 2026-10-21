@@ -7137,7 +7137,13 @@ def register_loop_var_types(target, iterable):
             # the loop variable's type is the iterator's per-yield return type,
             # used directly (an iterator's annotation IS the element type).
             _callee_m = _re_for.match(r'^(\w+)\(', iterable.strip())
-            if _callee_m and _callee_m.group(1) in getattr(ParserState, "iterator_names", set()):
+            if not _callee_m:
+                # a generator method of a @virtual class: `self.records(...)`
+                _vcm = _re_for.match(r'^(?:[\w\[\]]+\.)+(\w+)\(', iterable.strip())
+                if _vcm and _vcm.group(1) in getattr(ParserState, "virtual_iterators", set()):
+                    _callee_m = _vcm
+            if _callee_m and (_callee_m.group(1) in getattr(ParserState, "iterator_names", set())
+                              or _callee_m.group(1) in getattr(ParserState, "virtual_iterators", set())):
                 _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee_m.group(1), "")
                 if _ret and "," not in _ret:
                     ParserState.symbol_table.add(target.strip("()\n "), _ret, "let")
