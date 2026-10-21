@@ -71,20 +71,14 @@ def colored_status(state: str) -> str:
 def colored_comment(comment: str) -> str:
     return comment.strip() | bold | fg_black | bg_white
 
-class Cls_View_Line:
-    var view: str
-    var baseline: str
-    var env_id: str
-    var state: str
-    var kind: State_T
-    var comment: str
-    def __init__(self, view: str, baseline: str, env_id: str, state: str, comment: str):
-        self.view = view
-        self.baseline = baseline
-        self.env_id = env_id
-        self.state = state
-        self.kind = state_of(state)
-        self.comment = comment
+# one row of the listing: STATE as written, KIND what it makes of it
+type View_Line_T is record:
+    view: str
+    baseline: str
+    env_id: str
+    state: str
+    kind: State_T
+    comment: str
 
 def get_lines() -> []str:
     shellLines: Clsworkspace -user $USER
@@ -95,7 +89,7 @@ def main():
     print("View".alignLeft(31) + "Based On".alignLeft(37) + "ENV_ID".alignLeft(15) + "State".alignLeft(11) + "COMMENT")
     print("-" * 100)
 
-    var view_lines: []Cls_View_Line
+    var view_lines: []View_Line_T
 
     for line in lines[min(3, len(lines)):]:
         let fields: []str = line.split()
@@ -123,7 +117,8 @@ def main():
         if view_name.endswith("build_eld_only_t"):
             continue
 
-        view_lines.append(Cls_View_Line(view=view_name, baseline=baseline, env_id=env_id, state=state, comment=comment))
+        view_lines.append(View_Line_T(view=view_name, baseline=baseline, env_id=env_id, state=state,
+                                      kind=state_of(state), comment=comment))
 
     view_lines = sorted(view_lines, key=lambda v: (v.kind, v.view))
 
