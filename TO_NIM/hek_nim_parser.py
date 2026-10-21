@@ -489,6 +489,17 @@ def note_option_guard(chunk, collected=None):
                  r'\s*(.*?)\s*(?:#.*)?$',
                  chunk_lines[0])
     if not m:
+        # `if a is None or b is None: return` leaves unless both are there: each
+        # of them is proved by what follows, as by a guard of its own
+        mo = re.match(r'^(\s*)if\s+(.+?):\s*(.*?)\s*(?:#.*)?$', chunk_lines[0])
+        if mo and " or " in mo.group(2):
+            tests = [t.strip() for t in mo.group(2).split(" or ")]
+            one = re.compile(r'^' + hek_nim_expr.NARROW_NAME + r'\.(?:' + hek_nim_expr.NARROW_TESTS + r')$')
+            if all(one.match(t) for t in tests):
+                for t in tests:
+                    note_option_guard("\n".join([f"{mo.group(1)}if {t}: {mo.group(3)}".rstrip()] + chunk_lines[1:]), collected)
+                return
+    if not m:
         # `assert r is not F` is a guard that leaves by failing: what it
         # asserts holds in everything after it, as in the body of an `if`
         ma = re.match(r'^\s*assert\s+(' + hek_nim_expr.NARROW_NAME + r')\.('

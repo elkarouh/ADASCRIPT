@@ -829,6 +829,19 @@ def _result_type_of(expr_str):
     return _t if _t.startswith("Result[") else ""
 
 
+def _is_whole_call(text):
+    """True when TEXT, which starts with a call, is that call and no more: the
+    one the first `(` opens closes at the very end. `adascriptSliceStr(s, 8, 10).parseInt() * 3600`
+    starts with a string-returning call and is a number."""
+    a = text.strip()
+    depth = 0
+    for i in range(a.index("("), len(a)):
+        depth += {"(": 1, ")": -1}.get(a[i], 0)
+        if depth == 0:
+            return i == len(a) - 1
+    return True
+
+
 def _balanced(text):
     """True when TEXT closes every bracket it opens. A bracket inside a string
     or char literal is text, not a bracket: `"missing )"` is balanced."""
@@ -1692,7 +1705,7 @@ def _nim_expr_type(expr):
             return None
 
         # known string-returning stdlib calls
-        if s.startswith(_STRING_RETURNING_CALLS):
+        if s.startswith(_STRING_RETURNING_CALLS) and _is_whole_call(s):
             return "string"
         if s.startswith("adascriptWhich("):
             return "Option[Path]"
@@ -2233,7 +2246,7 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 left_is_str = (result.startswith('"') or result.startswith('fmt"')
                                or result.startswith('r"') or result.startswith('$')
                                or result.endswith('.join("")') or result.endswith(".join(\"\")")
-                               or result.startswith(_STRING_RETURNING_CALLS)
+                               or (result.startswith(_STRING_RETURNING_CALLS) and _is_whole_call(result))
                                # already a string concat chain -- but only
                                # when the `&` is this expression's own
                                # operator. Inside a call or a bracket it
@@ -2245,7 +2258,7 @@ def binop_to_nim(self, prec=None, my_prec=None):
                 right_is_str = (right.startswith('"') or right.startswith('fmt"')
                                 or right.startswith('r"') or right.startswith('$')
                                 or right.endswith('.join("")') or right.endswith(".join(\"\")")
-                                or right.startswith(_STRING_RETURNING_CALLS)
+                                or (right.startswith(_STRING_RETURNING_CALLS) and _is_whole_call(right))
                                 or '.join(' in right)
 
                 # field access on typed object (e.g. self.off where off: string):
@@ -3770,6 +3783,12 @@ def to_nim(self, prec=None):
                         _asym = ParserState.symbol_table.lookup(_a)
                         if _asym and _asym.get("type") in ("int", "int64", "uint", "uint64"):
                             _is_int_arg = True
+                        elif (_nim_expr_type(_a) or "") in ("int", "int64", "uint", "uint64"):
+                            _is_int_arg = True
+                        elif (not _re_enum.search(r"[\"'`]", _a)
+                              and _re_enum.search(r"\s(?:shr|shl|and|or|xor|div|mod|\+|-|\*)\s", _a)):
+                            # arithmetic or bits, `(v shr 25) and 0x3`: a number
+                            _is_int_arg = True
                 if _is_int_arg:
                     return f"{raw_name}({', '.join(args)}){rest}"
                 ParserState.nim_imports.add("strutils")
@@ -5258,6 +5277,30 @@ def _expr_is_float(arg):
     return False
 
 
+def _balanced(text):
+    """True when TEXT closes every bracket it opens and never closes one it did not."""
+    depth = 0
+    quote = ""
+    escaped = False
+    for ch in text:
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
 def _expr_is_string(arg):
     """True when ARG is known to be a string rather than a char."""
     import re as _re_st
@@ -5269,7 +5312,7 @@ def _expr_is_string(arg):
     if " & " in a:
         return True
     if a.startswith(_STRING_RETURNING_CALLS):
-        return True
+        return _is_whole_call(a)
     if _re_st.fullmatch(r"[A-Za-z_]\w*", a):
         sym = ParserState.symbol_table.lookup(a)
         return bool(sym) and (sym.get("type") or "") in ("string", "str")
@@ -5574,6 +5617,28 @@ def _translate_stdlib_patterns(expr):
     # DOTALL: the argument may hold a newline -- an f-string with a "\n" in it
     # is a triple-quoted fmt""" on Nim, which spans two lines
     m = _re.match(r"^(.+)\.join\((.+)\)$", expr, _re.DOTALL)
+    # the join's own parenthesis must be the last one: `"".join(xs).strip()` is a
+    # call of strip on a join, whose `)` the pattern would otherwise take as its own
+    if m and not _balanced(m.group(2)):
+        m = None
+        _jm = _re.match(r"^((?:\"[^\"]*\"|'[^']*'))\.join\(", expr)
+        if _jm:
+            _depth, _end = 1, _jm.end()
+            while _end < len(expr) and _depth:
+                _depth += {"(": 1, ")": -1}.get(expr[_end], 0)
+                _end += 1
+            _rest = expr[_end:]
+            if _depth == 0 and _rest.startswith("."):
+                m = _re.match(r"^(.+)\.join\((.+)\)$", expr[:_end], _re.DOTALL)
+                if m and _is_join_receiver(m.group(1)) and _is_str_join_call(m.group(1), m.group(2)):
+                    sep, arg = m.group(1), m.group(2)
+                    ParserState.nim_imports.add("strutils")
+                    if len(sep) == 3 and sep[0] == "'" and sep[-1] == "'":
+                        sep = "$" + sep
+                    elif len(sep) == 3 and sep[0] == '"' and sep[-1] == '"':
+                        sep = "$'" + sep[1] + "'"
+                    return f"{_paren_if_compound(arg)}.join({sep}){_rest}"
+                m = None
     if m and _is_join_receiver(m.group(1)) and _is_str_join_call(m.group(1), m.group(2)):
         sep, arg = m.group(1), m.group(2)
         ParserState.nim_imports.add("strutils")

@@ -314,6 +314,8 @@ def to_nim(self):
         prefix = ""
     # Record type in symbol table (after checking for re-declaration)
     name = self.nodes[0].to_nim() if hasattr(self.nodes[0], "to_nim") else None
+    if name and "[" in name:
+        name = None             # an element is not a new name: raw[i] = 'x' does not make raw[i] a string
     if name and rhs_node:
         inferred = _infer_literal_nim_type(rhs_node)
         # Only update type if symbol is not already typed (preserve annotation types)
@@ -409,6 +411,7 @@ def to_nim(self):
                 parts[1] = _coerce_string_to_char(
                     hek_nim_expr._js_table_literal(parts[1], _otype), _otype)
             parts[1] = _to_ordered_table(parts[1], _otype)
+            parts[1] = _coerce_string_to_char(parts[1], _otype)
         # `self.flown = 0.0`: the literal is of the target's distinct type
         from hek_nim_expr import _distinct_type_of
         _dt = _distinct_type_of(lhs)
@@ -635,19 +638,36 @@ def _coerce_string_to_char(value, annotation):
     ann = (annotation or "").strip()
     if ann == "char":
         lit = _char_literal_arg(value)
-        return lit if lit is not None else value
-    if ann in ("seq[char]", "openArray[char]"):
+        if lit is not None:
+            return lit
+        # a conditional expression whose branches are the literals:
+        # `(if i < n: text[i] else: ' ')`
         v = (value or "").strip()
-        if not (v.startswith("@[") and v.endswith("]")):
+        if v.startswith("(if ") and v.endswith(")"):
+            cond, colon, rest = _split_top_level_colon(v[4:-1])
+            if colon:
+                then_part, else_kw, else_part = _split_top_level_else(rest)
+                if else_kw:
+                    t = _char_literal_arg(then_part)
+                    e = _char_literal_arg(else_part)
+                    if t is not None or e is not None:
+                        return f"(if {cond}: {t if t is not None else then_part.strip()} else: {e if e is not None else else_part.strip()})"
+        return value
+    import re as _re_arr
+    _arr_char = _re_arr.match(r"^array\[.+,\s*char\]$", ann)
+    if ann in ("seq[char]", "openArray[char]") or _arr_char:
+        v = (value or "").strip()
+        _open = "[" if _arr_char else "@["
+        if not (v.startswith(_open) and v.endswith("]")):
             return value
-        inner = v[2:-1].strip()
+        inner = v[len(_open):-1].strip()
         if not inner:
             return value
         items = [i.strip() for i in inner.split(",")]
         lits = [_char_literal_arg(i) for i in items]
         if any(l is None for l in lits):
             return value
-        return "@[" + ", ".join(lits) + "]"
+        return _open + ", ".join(lits) + "]"
     # {char}V, {K}char: the keys or the values of a table literal, the same
     # way -- `{'s': "1"}` declared {char}str reached Nim as {"s": "1"}, a
     # Table[string, string], and was refused where Table[char, string] was.
@@ -679,6 +699,30 @@ def _coerce_string_to_char(value, annotation):
             pairs.append(f"{k}: {val}")
         return "{" + ", ".join(pairs) + "}.toTable"
     return value
+
+
+def _split_top_level_else(text):
+    """TEXT split at its first ` else: ` outside brackets and string literals:
+    (before, "else:", after), or (text, "", "") when there is none."""
+    depth, quote, escaped = 0, "", False
+    for i, ch in enumerate(text):
+        if quote:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and text.startswith(" else: ", i):
+            return text[:i], "else:", text[i + len(" else: "):]
+    return text, "", ""
 
 
 def _split_top_level_colon(text):

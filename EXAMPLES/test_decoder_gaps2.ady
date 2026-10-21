@@ -1,0 +1,41 @@
+type Day_T is enum TODAY, YESTERDAY, TOMORROW, UNKNOWN_DAY
+
+def secs(stamp: str) -> int:
+    return int(stamp[8:10]) * 3600 + int(stamp[10:12]) * 60 + int(stamp[12:14])
+
+def chained(chars: [*]char) -> str:
+    return "".join([str(c) for c in chars]).strip()
+
+def chars() -> [4]char:
+    var raw: [4]char
+    for i in 0 ..< 4:
+        raw[i] = '7'
+    return raw
+
+def blanks(text: str) -> [4]char:
+    var raw: [4]char
+    for i in 0 ..< 4:
+        raw[i] = text[i] if i < len(text) else ' '
+    return raw
+
+def day(v: int) -> Day_T:
+    return Day_T((v >> 25) & 0x3)
+
+def pair(a: ?int, b: ?int) -> int:
+    if a is None or b is None:
+        return 0
+    return a + b
+
+
+def main():
+    assert secs("20241124002011") == 1211
+    let cs: [3]char = ['a', 'b', ' ']
+    assert chained(cs) == "ab"
+    assert str(chars()) == "7777"
+    assert str(blanks("ab")) == "ab  "
+    assert day(1 << 25) == YESTERDAY
+    assert pair(1, 2) == 3 and pair(None, 2) == 0
+    print "test_decoder_gaps2: ok"
+
+if __name__ == "__main__":
+    main()
