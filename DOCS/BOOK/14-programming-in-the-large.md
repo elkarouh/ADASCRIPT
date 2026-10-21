@@ -148,7 +148,7 @@ Two consequences worth internalising:
   `bin/tool.ady`, `import lib/util` misses `bin/lib/util.ady` and then hits
   `<project>/lib/util.ady` by rule 2. `EXAMPLES/TIMETABLE/timetable_server.ady`
   lives on this rule: its `import timetable_engine` and `import timetable_sa`
-  resolve to `EXAMPLES/timetable_engine.ady` and `EXAMPLES/timetable_sa.ady`,
+  resolve to `EXAMPLES/TIMETABLE/timetable_engine.ady` and `EXAMPLES/TIMETABLE/timetable_sa.ady`,
   one directory up.
 
 There is no `..` syntax: a module name starts with a letter, so

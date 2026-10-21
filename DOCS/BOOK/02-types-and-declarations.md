@@ -157,7 +157,7 @@ A program that iterates a `{…}` type and depends on what comes out first is
 therefore not portable between the backends — sort the keys, or use an
 ordered form.
 
-The notations compose freely. `EXAMPLES/graph.ady` models a graph as a type
+The notations compose freely. `EXAMPLES/SHORTEST_PATH/graph.ady` models a graph as a type
 alias built from two of them:
 
 ```python
@@ -168,7 +168,7 @@ graph: Graph_T = {A: [B, C], B: [C, D], C: [D], D: [C], E: [F], F: [C]}
 
 `{Node_T}[]Node_T` — a dict mapping each node to a list of neighbours — would
 be `dict[Node_T, list[Node_T]]` in Python and `Table[Node_T, seq[Node_T]]`
-in Nim. `EXAMPLES/dijkstra.ady` maps each node to a list of tuples — an
+in Nim. `EXAMPLES/SHORTEST_PATH/dijkstra.ady` maps each node to a list of tuples — an
 adjacency list, weights included:
 
 ```python

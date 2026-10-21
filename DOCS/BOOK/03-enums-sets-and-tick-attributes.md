@@ -282,7 +282,7 @@ the apostrophe never confuses the Python-shaped grammar.
 | `expr'Image` | string representation |
 | `s'Length` | length of a string/sequence |
 
-They work on more than enums. `EXAMPLES/floyd.ady` — Floyd's algorithm for
+They work on more than enums. `EXAMPLES/SHORTEST_PATH/floyd.ady` — Floyd's algorithm for
 sampling k distinct integers — applies `'choose` to a *range expression*:
 
 ```python
@@ -312,7 +312,7 @@ def make_boxes() -> [Prisoner_T]Box_T:
 ```
 
 and `average_line.ady` uses `line'Length` on a plain string. Stepping
-through an enum uses `'Next` — here from `EXAMPLES/test_shortest_path.ady`,
+through an enum uses `'Next` — here from `EXAMPLES/SHORTEST_PATH/test_shortest_path.ady`,
 advancing a knapsack solver to its next stage:
 
 ```python

@@ -8,7 +8,7 @@
 #
 # Runtime baseline (not listed below):
 #   Nim  >= 2.2.10  (install via choosenim: https://github.com/dom96/choosenim)
-#   Zig  >= 0.14.0  (optional: preferred by state_search.ady and others using
+#   Zig  >= 0.14.0  (optional: preferred by SHORTEST_PATH/state_search.ady and others using
 #                    --cc:clang --clang.exe:zigcc; ady2nim falls back to the
 #                    default C compiler when it is absent)
 #   Python >= 3.12  (required by ady2nim transpiler)
@@ -46,7 +46,7 @@ nimpy >= 0.3.1
 karax >= 1.5.0
 
 # db_connector — SQLite bindings for Nim 2.x; required by:
-#   timetable_engine.ady, timetable_backtrack.ady, timetable_sa.ady
+#   TIMETABLE/timetable_engine.ady, TIMETABLE/timetable_backtrack.ady, TIMETABLE/timetable_sa.ady
 db_connector
 
 
@@ -92,7 +92,7 @@ ripgrep
 bc
 
 # sqlite3  — SQLite CLI; required for populating the timetable database
-#   timetable_backtrack.ady, timetable_sa.ady  (use --db flag)
+#   TIMETABLE/timetable_backtrack.ady, TIMETABLE/timetable_sa.ady  (use --db flag)
 # Debian/Ubuntu: apt install sqlite3
 # macOS:         brew install sqlite
 sqlite3
@@ -106,9 +106,9 @@ libpcre3
 # pin the compiler via '#ady2nim-args c --cc:clang --clang.exe:zigcc', but not
 # required — ady2nim drops a pin whose binary is missing (noting it on stderr)
 # and falls back to nim's default C compiler, so these files build without zig:
-#   state_search.ady, shortest_path.ady, test_shortest_path.ady,
-#   test_state_search.ady, timetable_engine.ady, timetable_sa.ady,
-#   timetable_backtrack.ady, TIMETABLE/timetable_server.ady
+#   SHORTEST_PATH/state_search.ady, SHORTEST_PATH/shortest_path.ady, SHORTEST_PATH/test_shortest_path.ady,
+#   SHORTEST_PATH/test_state_search.ady, TIMETABLE/timetable_engine.ady, TIMETABLE/timetable_sa.ady,
+#   TIMETABLE/timetable_backtrack.ady, TIMETABLE/timetable_server.ady
 # 'zigcc' is a thin wrapper around 'zig cc' (a clang frontend); put it on PATH:
 #   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc
 # Download from: https://ziglang.org/download/  (no OS package available)

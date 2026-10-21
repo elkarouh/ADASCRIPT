@@ -149,7 +149,7 @@ classes: one may use a class defined below it (§9.7).
 ## 8.4 Generators
 
 `yield` is fully supported: Python output is a generator, Nim output an
-iterator. The signature feature of `EXAMPLES/shortest_path.ady` is a
+iterator. The signature feature of `EXAMPLES/SHORTEST_PATH/shortest_path.ady` is a
 generator *method* that lazily yields ever-costlier solutions — callers take
 one and break, or keep iterating for alternatives:
 

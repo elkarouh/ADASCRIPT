@@ -10,9 +10,9 @@ truth.  Invalid states -- an even number of votes, no healthy majority of
 voters, a priority on a non-voting node -- are pruned, so every path the
 search returns keeps quorum at every intermediate step.
 
-    V1  BreadthPlanner   BFS over the generic EXAMPLES/state_search.ady:
+    V1  BreadthPlanner   BFS over the generic EXAMPLES/SHORTEST_PATH/state_search.ady:
                          fewest operations to the source of truth.
-    V2  WeightedPlanner  Dijkstra over EXAMPLES/shortest_path.ady:
+    V2  WeightedPlanner  Dijkstra over EXAMPLES/SHORTEST_PATH/shortest_path.ady:
                          edge weight = misconfiguration(state) * time(op),
                          so quick fixes that cut exposure come first.  When
                          the goal cannot be reached (a node whose hardware
@@ -23,8 +23,8 @@ Simulation and execution share one `apply`, as in the article's
 CommonContext: what the planner simulates is what the executor runs.
 """
 
-from state_search import StateSearcher, Step_T
-from shortest_path import Minimizer
+from SHORTEST_PATH/state_search import StateSearcher, Step_T
+from SHORTEST_PATH/shortest_path import Minimizer
 
 type Host_T is enum A, B, C
 

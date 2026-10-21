@@ -155,7 +155,7 @@ an algorithm is rarely the one in the textbook.
 
 Here is Dijkstra's shortest paths in Adascript, types and all:
 
-<!-- from: EXAMPLES/dijkstra.ady -->
+<!-- from: EXAMPLES/SHORTEST_PATH/dijkstra.ady -->
 ```python
 from stdlib nimport PriorityQueue
 type Node_T is enum A, B, C, D

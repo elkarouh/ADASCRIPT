@@ -43,9 +43,9 @@ BINDIR ?= $(PREFIX)/bin
 # Libraries — no main block; compile only, never run
 # -----------------------------------------------------------------------
 LIBS := \
-    state_search.ady \
-    shortest_path.ady \
-    timetable_engine.ady
+    SHORTEST_PATH/state_search.ady \
+    SHORTEST_PATH/shortest_path.ady \
+    TIMETABLE/timetable_engine.ady
 
 # -----------------------------------------------------------------------
 # Self-contained — no stdin, no mandatory args
@@ -61,9 +61,9 @@ STANDALONE := \
     monty_hall.ady \
     sudoku.ady \
     prisoners.ady \
-    graph.ady \
-    floyd.ady \
-    dijkstra.ady \
+    SHORTEST_PATH/graph.ady \
+    SHORTEST_PATH/floyd.ady \
+    SHORTEST_PATH/dijkstra.ady \
     GEO_SERVER/geo_server.ady \
     GEO_SERVER/test_geo_server.ady \
     MAP_UTILS/map_flat.ady \
@@ -74,8 +74,8 @@ STANDALONE := \
     MAP_UTILS/test_regions.ady \
     openarray_demo.ady \
     ../TESTS/test_inline_suite.ady \
-    test_state_search.ady \
-    test_shortest_path.ady \
+    SHORTEST_PATH/test_state_search.ady \
+    SHORTEST_PATH/test_shortest_path.ady \
     primes.ady \
     ../TESTS/test_ownership.ady \
     ../TESTS/test_nimport.ady \
@@ -278,8 +278,8 @@ EXPECT_EXAMPLES := \
 # Timetable tests — require db_connector (nimble) + a populated SQLite DB
 # -----------------------------------------------------------------------
 TIMETABLE_EXAMPLES := \
-    timetable_backtrack.ady \
-    timetable_sa.ady
+    TIMETABLE/timetable_backtrack.ady \
+    TIMETABLE/timetable_sa.ady
 
 # -----------------------------------------------------------------------
 # CFMU — the build-status monitor, fed its own sample of tacot_corico output
@@ -409,7 +409,7 @@ JS_COMPARED := ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_cas
 nim_has = $(shell PATH="$(PATH)"; d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
 NEEDS_NIMPY := pyimport_similar.ady ../TESTS/test_pyobject_calls.ady TSP/tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
-NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
+NEEDS_DB_CONNECTOR := TIMETABLE/timetable_engine.ady TIMETABLE/timetable_backtrack.ady TIMETABLE/timetable_sa.ady
 SKIPPED :=
 ifeq ($(call nim_has,nimpy),)
 SKIPPED += $(NEEDS_NIMPY)

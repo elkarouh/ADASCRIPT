@@ -28,7 +28,7 @@ from timetable_engine import (
     db_init, db_load, get_cpu_secs, load_problem_from_json, print_timetable, sa_phase2,
     soft_score,
 )
-from state_search import StateSearcher, Step_T
+from SHORTEST_PATH/state_search import StateSearcher, Step_T
 from db import DB
 nimport math
 nimport random

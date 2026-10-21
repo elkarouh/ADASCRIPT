@@ -130,7 +130,7 @@ shell-scripting side of the language goes.
 ## 1.4 Dijkstra, entire
 
 The claim this book keeps returning to is that Adascript reads as executable
-pseudocode. `EXAMPLES/dijkstra.ady` is the shortest way to see what that
+pseudocode. `EXAMPLES/SHORTEST_PATH/dijkstra.ady` is the shortest way to see what that
 means — this is the whole file, nothing elided:
 
 ```python

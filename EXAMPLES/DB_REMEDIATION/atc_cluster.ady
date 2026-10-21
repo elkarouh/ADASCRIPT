@@ -22,8 +22,8 @@ Same planners as db_remediation.ady: BFS via state_search.ady, Dijkstra via
 shortest_path.ady (weight = misconfiguration(state) * time(op)).
 """
 
-from state_search import StateSearcher, Step_T
-from shortest_path import Minimizer
+from SHORTEST_PATH/state_search import StateSearcher, Step_T
+from SHORTEST_PATH/shortest_path import Minimizer
 
 type Host_T is enum M1, M2, M3
 type Role_T is enum OFF, STANDBY, ACTIVE

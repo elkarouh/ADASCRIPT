@@ -22,7 +22,7 @@ Construction uses `(field: value)` syntax — note the colon, not `=`:
 p = Point(x: 1.0, y: 2.5)
 ```
 
-`EXAMPLES/dijkstra.ady` uses a named tuple as its priority-queue element, so
+`EXAMPLES/SHORTEST_PATH/dijkstra.ady` uses a named tuple as its priority-queue element, so
 ordering comes for free from the first field:
 
 ```python
@@ -38,7 +38,7 @@ while queue:
 ```
 
 Named-tuple literals work anywhere an expression does — inside collections,
-as arguments, in queue pushes. `EXAMPLES/test_shortest_path.ady` initialises
+as arguments, in queue pushes. `EXAMPLES/SHORTEST_PATH/test_shortest_path.ady` initialises
 a capital-budgeting search with one:
 
 ```python
