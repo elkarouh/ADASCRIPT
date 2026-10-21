@@ -13,7 +13,7 @@ So: a state machine decides which kind of record this is, each kind is
 gathered into its own list of its own record type, some work is done on the
 way past and the rest once both lists are complete.
 """
-from awk import AwkBase
+from awk import AwkProcessor
 
 
 type Severity_T   is enum DEBUG, INFO, WARN, ERROR
@@ -54,7 +54,7 @@ def status_class(status: Natural) -> Status_T:
         when 500 .. 599: SERVER_ERROR
         when others:     ODD
 
-class LogScan(AwkBase):
+class LogScan(AwkProcessor):
     var state    : Scan_State_T          = OUTSIDE
 
     # One list per kind of record. Both are complete by finish().

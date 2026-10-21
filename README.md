@@ -2797,7 +2797,7 @@ both backends: a field without a default starts at its zero, and a list,
 table or object default is made afresh for each instance, never shared:
 
 ```python
-class AwkProcessor(AwkBase):
+class SeverityProcessor(AwkProcessor):
     var NR        : int = 0
     var NF        : int = 0
     var total_len : int = 0
@@ -2937,7 +2937,7 @@ initialiser automatically:
 
 ```python
 @virtual
-class AwkBase:
+class AwkProcessor:
     var FS: str
     var OFS: str
 
@@ -2945,9 +2945,9 @@ class AwkBase:
         self.FS  = fs
         self.OFS = ofs
 
-class AwkProcessor(AwkBase):
+class SeverityProcessor(AwkProcessor):
     var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
-    # no __init__ needed — AwkProcessor(fs, ofs) is generated automatically
+    # no __init__ needed — SeverityProcessor(fs, ofs) is generated automatically
 ```
 
 ### Inheritance and `super()`
@@ -3779,7 +3779,7 @@ On one line each, the three kinds of import look like this:
 ```python
 nimport strutils, sequtils, algorithm
 nimport stdlib                      # PriorityQueue, FifoQueue, ANY shims
-from awk import AwkBase            # the bundled record-processor stdlib
+from awk import AwkProcessor            # the bundled record-processor stdlib
 from shortest_path import Minimizer, Maximizer   # another .ady file compiled as a library
 ```
 
@@ -3793,7 +3793,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 
 | Name              | Provides                                                  |
 |-------------------|-----------------------------------------------------------|
-| `import awk`      | `AwkBase` — generic stdin record-processor base class      |
+| `import awk`      | `AwkProcessor` — generic stdin record-processor base class      |
 | `import iters`    | itertools equivalents (`take`, `chunks`, `pairwise`, …), generic over the element type |
 | `import strscan`  | character classification and the small scanners a hand-written lexer needs (`is_digit_ch`, `skip_quoted`, `lead_ident`, `strip_line_comment`, …) |
 | `import ansi`     | terminal colours and effects as values a pipe applies: `"x" \| bold \| fg_white \| bg_red` (`fg_*`, `fg_bright_*`, `bg_*`, `bold`, `dim`, `blink`, `inverted`, `reset`); `bold + fg_red` is one style with both codes |
@@ -3813,9 +3813,9 @@ Example — a custom awk processor in any directory:
 
 ```python
 #!/usr/bin/env ady2nim
-from awk import AwkBase
+from awk import AwkProcessor
 
-class WordCounter(AwkBase):
+class WordCounter(AwkProcessor):
     var word_count: int = 0
 
     def process_record(self):
@@ -5641,7 +5641,7 @@ version, demonstrating field defaults, auto-`var self`, and inheritance:
 
 ```python
 @virtual
-class AwkBase:
+class AwkProcessor:
     var FS: str
     var NR: int = 0
     var NF: int = 0
@@ -5657,7 +5657,7 @@ class AwkBase:
             self.process_record()
         self.finish()
 
-class AwkProcessor(AwkBase):   # no __init__ needed
+class SeverityProcessor(AwkProcessor):   # no __init__ needed
     var counts: [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
 
     def process_record(self): ...
@@ -5863,7 +5863,7 @@ ADASCRIPT/
 │   ├── ady2nim.py             Entry point: parse + emit Nim
 │   └── STDLIB/                Bundled runtime, reachable with `nimport`
 │       ├── stdlib.nim         Nim shim for Python builtins (PriorityQueue, etc.)
-│       ├── awk.ady            AwkBase record processor
+│       ├── awk.ady            AwkProcessor record processor
 │       ├── graphs.ady         Shortest paths, generic in the node type
 │       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       ├── illwill.nim        Curses-like terminal library, pure Nim (one file)

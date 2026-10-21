@@ -290,6 +290,13 @@ CFMU_EXAMPLES := \
     CFMU/Tstatus_monitor.ady \
     CFMU/Vcheck_coded_flight.ady
 
+# -----------------------------------------------------------------------
+# OPLOG — the TACT ARCHIVED_OPLOG decoder, twice, run on its sample
+# -----------------------------------------------------------------------
+OPLOG_EXAMPLES := \
+    OPLOG/decode_oplog.ady \
+    OPLOG/decode_oplog_awk.ady
+
 # The rest of CFMU/ drives lftp against a real FTPS server and queries an
 # Oracle-backed configuration, so there is nothing to run here -- but there is
 # something to compile. They were outside every list until now, which is how
@@ -435,6 +442,7 @@ ALL_COMPILE := \
     $(STANDALONE) \
     $(STDIN_EXAMPLES) \
     $(CFMU_EXAMPLES) \
+    $(OPLOG_EXAMPLES) \
     $(CFMU_COMPILE_ONLY) \
     $(ARG_EXAMPLES) \
     $(EXPECT_EXAMPLES) \
@@ -1273,6 +1281,12 @@ test-part-25:
 
 test-part-26:
 	@echo "=== Examples fed their own samples, against their awk / sh twins ==="
+	@# The two OPLOG decoders are one program written twice: the same bytes out.
+	@printf '  %-42s' "OPLOG/decode_oplog*.ady"; \
+	    a=$$($(EXDIR)/OPLOG/decode_oplog $(EXDIR)/OPLOG/sample_oplog.txt 2>&1); \
+	    b=$$($(EXDIR)/OPLOG/decode_oplog_awk $(EXDIR)/OPLOG/sample_oplog.txt 2>&1); \
+	    [ "$$a" = "$$b" ] && echo "$$a" | grep -q "callsign=QTR27C" \
+	        && echo OK || { echo FAIL; exit 1; }
 	@# awk_logscan is the worked example in DOCS/ADASCRIPT_FOR_AWK.md, so the
 	@# check is on its output, not its exit status: the report is what the
 	@# document quotes.

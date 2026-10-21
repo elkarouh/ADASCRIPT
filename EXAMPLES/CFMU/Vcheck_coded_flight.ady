@@ -13,7 +13,7 @@ the test-report directory.
 E.g.:
     Vcheck_coded_flight 30.0.0.6 VVL.TACT_PHASERND2
 """
-from awk import AwkBase, AwkFailure_T
+from awk import AwkProcessor, AwkFailure_T
 
 
 type State_T is enum OUT_OF_HIST, IN_HIST
@@ -31,7 +31,7 @@ type Histogram_T is record:
     max_bucket: Natural = 0      # largest bound with entries in it
 
 
-class HistogramExtractor(AwkBase):
+class HistogramExtractor(AwkProcessor):
     var hist : Histogram_T = Histogram_T()
     var state: State_T     = OUT_OF_HIST
 

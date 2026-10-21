@@ -17,7 +17,7 @@ that buys them.
 
 Every example quoted here is a real, runnable file under `EXAMPLES/`, and
 `make test` runs it. Most run on **both** backends — `ady2nim` and `ady2py`;
-the exceptions are `awk_logscan.ady` and `html_body.ady`, whose `AwkBase`
+the exceptions are `awk_logscan.ady` and `html_body.ady`, whose `AwkProcessor`
 form is Nim-only (§2). §10 works through four of them, built up in stages:
 no state, then one record shape or another, then a state machine deciding
 which shape a record even is, and one deciding whether a record is wanted at
@@ -101,17 +101,17 @@ A `Path` has `.lines` too: when the input is always a file, `for line in
 Path(file_arg).lines:` opens it, reads it and closes it, with no `File` in
 sight.
 
-### The AwkBase form
+### The AwkProcessor form
 
 When the program is a state machine — when what a record *means* depends on
-the records before it — subclass `AwkBase` from the bundled library
+the records before it — subclass `AwkProcessor` from the bundled library
 (`TO_NIM/STDLIB/awk.ady`) and override three methods:
 
-<!-- illustrative: the shape of an AwkBase program, with every method body elided -->
+<!-- illustrative: the shape of an AwkProcessor program, with every method body elided -->
 ```python
-from awk import AwkBase
+from awk import AwkProcessor
 
-class LogScan(AwkBase):
+class LogScan(AwkProcessor):
     def start(self):           # awk's BEGIN
         ...
     def process_record(self):  # the pattern/action body
@@ -122,25 +122,25 @@ class LogScan(AwkBase):
 LogScan().run()
 ```
 
-`AwkBase` gives you the AWK variables under their own names: `self.line` is
+`AwkProcessor` gives you the AWK variables under their own names: `self.line` is
 `$0`, `self.Fields[1] .. self.Fields[NF]` are `$1 .. $NF` (`Fields[0]` is the
 whole record, exactly as in AWK), and `self.NR`, `self.NF`, `self.FS`,
 `self.OFS`, `self.RS`, `self.ORS` are what you expect. `run_file(path)` is
 the same loop over a named file.
 
 One caveat: ady2py does not merge the bundled libraries, so the
-`AwkBase` form is Nim-only. The flat form runs on both backends.
+`AwkProcessor` form is Nim-only. The flat form runs on both backends.
 
 ### 2.1 When a record is not a line
 
 `RS` is the record separator, and setting it is the whole of the answer to
 §1's second point. Pass it at construction and the loop changes shape
-underneath you — `AwkBase` reads the input whole and splits on `RS` instead
+underneath you — `AwkProcessor` reads the input whole and splits on `RS` instead
 of iterating lines:
 
 <!-- from: EXAMPLES/DOC/awk_paragraph.ady -->
 ```python
-class Para(AwkBase):
+class Para(AwkProcessor):
     def process_record(self):
         print f"record {self.NR}: NF={self.NF} [{self.line}]"
 
@@ -707,7 +707,7 @@ def main():
 main()
 ```
 
-Nothing here needs `AwkBase` at all — module-level `var`s stand in for `NR`
+Nothing here needs `AwkProcessor` at all — module-level `var`s stand in for `NR`
 and the running totals, and `for raw in stdin.lines: process(raw)` is the
 whole loop. `Severity_T` is doing real work even in the simplest case: a
 severity is a type from the first line of the program, not a string
@@ -859,7 +859,7 @@ type Trace_T is record:        # the lines after a failure
 
 <!-- from: EXAMPLES/awk_logscan.ady -->
 ```python
-class LogScan(AwkBase):
+class LogScan(AwkProcessor):
     var state    : Scan_State_T          = OUTSIDE
 
     # One list per kind of record. Both are complete by finish().
@@ -1155,7 +1155,7 @@ type Scan_State_T is enum HEAD, BODY, FOOTER, DONE
 ```
 
 `DONE` is worth a second look. The awk says `exit` when it reaches
-`</body>`, which leaves the program; `AwkBase` has no early exit, so the
+`</body>`, which leaves the program; `AwkProcessor` has no early exit, so the
 translation needs a state for "everything from here on is not wanted" — and
 that turns out to be the better answer. `exit` says *stop*; `DONE` says
 *why*, and it is a member of the same type as the other three, so the
@@ -1351,8 +1351,8 @@ keeps checking.
 | `$0` (the record) | `self.line`, or `Fields[0]` |
 | `$1`, `$NF` (a field) | `Fields[1]`, `Fields[self.NF]` |
 | `NR`, `NF`, `FS`, `OFS`, `RS` | `self.NR`, `self.NF`, `self.FS`, `self.OFS`, `self.RS` |
-| `RS=""` (paragraph mode) | `AwkBase(rs = "\\n\\n")` |
-| `RS="%%\\n"` (a marker) | `AwkBase(rs = "%%\\n")` |
+| `RS=""` (paragraph mode) | `AwkProcessor(rs = "\\n\\n")` |
+| `RS="%%\\n"` (a marker) | `AwkProcessor(rs = "%%\\n")` |
 | `/re/ { a }` | `when /re/:` in a `case` over the record |
 | `/re/ && cond { a }` | `when /re/ if cond:` |
 | `$0 ~ /re/` | `line == /re/` |
@@ -1404,7 +1404,7 @@ record *is* a request, and the groups it hands back are the parts of one.
 ## 12. Where to go next
 
 - `EXAMPLES/awk_example.ady` — the flat form, in full in §10.1, runs on both backends
-- `EXAMPLES/test_awk.ady` — the same program as an `AwkBase` subclass
+- `EXAMPLES/test_awk.ady` — the same program as an `AwkProcessor` subclass
 - `EXAMPLES/config_check.ady` — the variant-record schema, walked through in §10.2
 - `EXAMPLES/config_check.awk` — the same checker in POSIX awk, to read against it
 - `EXAMPLES/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once

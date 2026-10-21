@@ -166,7 +166,7 @@ in order to build.
 | Import | Provides | Exercised by |
 |--------|----------|--------------|
 | `nimport stdlib` | `PriorityQueue`, `FifoQueue`, `LifoQueue`, `Counter_T`, `ANY` | `dijkstra.ady`, `shortest_path.ady`, `state_search.ady`, `spell.ady` |
-| `import awk` | `AwkBase` record-processor base class | `test_awk.ady` |
+| `import awk` | `AwkProcessor` record-processor base class | `test_awk.ady` |
 | `import iters` | itertools analogues (`pairwise`, `chain`, `combinations`, …) | `test_iters.ady` |
 | `import graphs` | `dijkstra[Node_T]`, `shortest_path[Node_T]` over `{Node_T}[](float, Node_T)` | `test_graphs.ady` |
 | `nimport expect` | `Spawn`, `send`, `expect` PTY automation | `test_expect.ady` |

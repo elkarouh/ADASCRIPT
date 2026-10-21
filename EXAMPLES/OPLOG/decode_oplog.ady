@@ -1,0 +1,933 @@
+#!/usr/bin/env ady2nim
+"""Decode TACT ARCHIVED_OPLOG_[A-E] files.
+
+Reverse-engineered from the TACT Ada sources
+(NM/TACT/ENV/sources/operational_log*.adb, NM/ELD/GEO_ENV/sources/{cpm,position_report,track_*}.ad?).
+
+File layout
+-----------
+Line 1: "CFMU_FILE_VERSION=10"
+Each following line (CRLF terminated) is one fixed-width OPLOG record:
+
+    offset  width  field
+    0       2      Classification ("IM", "HI", ...)
+    2       50     Kind, space-padded
+    52      50     Subject
+    102     25     Correspondent
+    127     8      Logging_Id.User_Id
+    135     8      Logging_Id.Workstation_Id
+    143     10     IFPS_Id (callsign)
+    153     9      TACT_Id
+    162     14     Time_Stamp, YYYYMMDDHHMMSS
+    176     10     Sequence_Number
+    186     10     Message_Length (decimal, ASCII)
+    196     *      Msg (Message_Length bytes)             e.g. "CPM: [...]"
+    ...     2      CRLF
+
+For CPM/CPF entries, Msg is "CPM: [<payload>]" / "CPF: [<payload>]" where <payload> is
+raw bytes encoded 2-characters-per-byte by Hex_Text.ASCII_Image:
+    byte 0x00-0x1F, 0x7F (control)  -> '^' + chr(byte ^ 0x40)
+    byte 0x20-0x7E (printable)      -> ' ' + chr(byte)
+    byte 0x80-0xFF                  -> 2 uppercase hex digits
+
+Decoded, the payload is a sequence of back-to-back ASTERIX-like "data blocks" (1-byte
+category, 2-byte big-endian length including the header, then FSPEC-driven position
+reports packed with no per-report length prefix). Categories 62 (TACT's own variant,
+1998 synthetic test data) and 21 (Aireon ADS-B, real traffic) are implemented.
+"""
+
+# the decoder's angles are map_base's Degree_T, Latitude_T and Longitude_T (EXAMPLES/MAP_UTILS)
+from map_base import Degree_T, LatLong_T, Latitude_T, Longitude_T
+from units import metre_T, second_T
+
+# ---------------------------------------------------------------------------
+# Header (fixed-width record) parsing
+# ---------------------------------------------------------------------------
+
+# The width of each field, and what fills it. A record is only made of fields that
+# fit, so a line that does not parse is refused where it is read.
+const CLASSIFICATION_W: int = 2
+const KIND_W: int = 50
+const SUBJECT_W: int = 50
+const CORRESPONDENT_W: int = 25
+const USER_ID_W: int = 8
+const WORKSTATION_ID_W: int = 8
+const IFPS_ID_W: int = 10
+const TACT_ID_W: int = 9
+const TIME_STAMP_W: int = 14
+const SEQUENCE_NUMBER_W: int = 10
+const MESSAGE_LENGTH_W: int = 10
+
+const HEADER_WIDTH: int = (CLASSIFICATION_W + KIND_W + SUBJECT_W + CORRESPONDENT_W + USER_ID_W
+                           + WORKSTATION_ID_W + IFPS_ID_W + TACT_ID_W + TIME_STAMP_W
+                           + SEQUENCE_NUMBER_W + MESSAGE_LENGTH_W)
+assert HEADER_WIDTH == 196
+
+# The text fields are as wide as they are on the wire: space-padded, a record of the
+# file's own shape. str(field).strip() gives one without its padding.
+type Classification_T is [CLASSIFICATION_W]char   # "IM", "HI", ...
+type Kind_T is [KIND_W]char
+type Subject_T is [SUBJECT_W]char
+type Correspondent_T is [CORRESPONDENT_W]char
+type UserId_T is [USER_ID_W]char
+type WorkstationId_T is [WORKSTATION_ID_W]char
+type IfpsId_T is [IFPS_ID_W]char
+# YYYYMMDDHHMMSS
+type TimeStamp_T is [TIME_STAMP_W]char where t: all(48 <= ord(c) <= 57 for c in t)
+# decimal numbers of as many digits as their field is wide
+type TactId_T is int where n: 0 <= n < 10 ** TACT_ID_W
+type SequenceNumber_T is int where n: 0 <= n < 10 ** SEQUENCE_NUMBER_W
+# the length of Msg, in bytes
+type MessageLength_T is int where n: 0 <= n < 10 ** MESSAGE_LENGTH_W
+
+type Decode_Failure_T is record:
+    reason: str
+
+
+const BLANK: char = ' '
+
+# the first len(dst) characters of text, space-padded like the file's fields
+def fill(dst: [*]char, text: str):
+    for i in 0 ..< len(dst):
+        dst[i] = text[i] if i < len(text) else BLANK
+
+
+# the characters of a field as text, without the padding
+# ---------------------------------------------------------------------------
+# Hex_Text.ASCII_Image / ASCII_Value reverse (control-visible 2-char/byte codec)
+# ---------------------------------------------------------------------------
+
+# one byte
+type Octet_T is 0 .. 255
+type Octets_T is []Octet_T
+
+# the value of a hexadecimal digit, -1 for any other character
+def hex_value(ch: char) -> ?Octet_T:
+    let code: int = ord(ch)
+    if 48 <= code <= 57:
+        return Octet_T(code - 48)
+    if 65 <= code <= 70:
+        return Octet_T(code - 55)
+    if 97 <= code <= 102:
+        return Octet_T(code - 87)
+    return None
+
+
+def ascii_image_decode(s: str) -> Octets_T | !Decode_Failure_T:
+    """Inverse of Hex_Text.ASCII_Image (NM/TOOL/ADA_PRIM/sources/hex_text.adb)."""
+    if len(s) % 2 != 0:
+        return Decode_Failure_T(f"odd-length control-visible string ({len(s)} chars)")
+    var out: Octets_T = []
+    for i in range(0, len(s), 2):
+        let c1: char = s[i]
+        let c2: char = s[i + 1]
+        if c1 == '^':
+            out.append(Octet_T(ord(c2) ^ 0x40))
+        elif c1 == ' ':
+            out.append(Octet_T(ord(c2)))
+        else:
+            let hi: ?Octet_T = hex_value(c1)
+            let lo: ?Octet_T = hex_value(c2)
+            if hi is None:
+                return Decode_Failure_T(f"'{c1}{c2}' is not a hexadecimal octet")
+            if lo is None:
+                return Decode_Failure_T(f"'{c1}{c2}' is not a hexadecimal octet")
+            out.append(Octet_T(hi * 16 + lo))
+    return out
+
+
+# the decoded bytes of a CPM/CPF message, None when the message is neither
+def extract_cpm_payload(msg: str) -> ?Octets_T | !Decode_Failure_T:
+    """msg is e.g. 'CPM: [<control-visible bytes>]' or 'CPF: [...]'. Returns raw decoded bytes."""
+    for prefix in ["CPM: [", "CPF: ["]:
+        if msg.startswith(prefix) and msg.endswith("]"):
+            return ascii_image_decode(msg[len(prefix) ..< len(msg) - 1])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# What a position report holds
+# ---------------------------------------------------------------------------
+
+# seconds since midnight
+type Seconds_T is second_T
+# a flight level is hundreds of feet
+type FlightLevel_T is 30.48 * metre_T
+# a Mode-S address: six hexadecimal digits
+type Address_T is [6]char where a: all(48 <= ord(c) <= 57 or 65 <= ord(c) <= 70 for c in a)
+# a Mode 3/A code: four octal digits
+type Squawk_T is [4]char where q: all(48 <= ord(c) <= 55 for c in q)
+
+type DataSource_T is tuple:
+    sac: Octet_T    # system area code
+    sic: Octet_T    # system identification code
+
+type Mode3A_T is record:
+    valid: bool         # V: code not validated
+    garbled: bool       # G
+    local: bool         # L: code not extracted from the last scan
+    code: Squawk_T
+
+type Day_T is enum TODAY, YESTERDAY, TOMORROW, UNKNOWN_DAY
+
+class DepartureTime:
+    var kind: int
+    var day: Day_T
+    var hour: int
+    var minute: int
+    var second: int
+    var avs: bool
+
+    def __init__(self, kind: int, day: Day_T, hour: int, minute: int, second: int, avs: bool):
+        self.kind = kind
+        self.day = day
+        self.hour = hour
+        self.minute = minute
+        self.second = second
+        self.avs = avs
+
+    def __str__(self) -> str:
+        return f"{self.day} {self.hour:02d}:{self.minute:02d}:{self.second:02d} type={self.kind}" + (" avs" if self.avs else "")
+
+
+class FlightPlan:
+    var callsign: ?str
+    var ifps_id: ?str
+    var adep: ?str
+    var ades: ?str
+    var departure_times: []DepartureTime
+
+    def __str__(self) -> str:
+        var parts: []str = []
+        if self.callsign is not None:
+            parts.append(f"callsign={self.callsign}")
+        if self.ifps_id is not None:
+            parts.append(f"ifps={self.ifps_id}")
+        if self.adep is not None:
+            parts.append(f"adep={self.adep}")
+        if self.ades is not None:
+            parts.append(f"ades={self.ades}")
+        if len(self.departure_times) > 0:
+            parts.append("departs=[" + ", ".join([str(d) for d in self.departure_times]) + "]")
+        return " ".join(parts)
+
+# One decoded position report. The two categories carry different fields: what a
+# report does not have stays None.
+class Report:
+    var source: ?DataSource_T
+    var track_number: ?int
+    var time_of_track: ?Seconds_T
+    var position: ?LatLong_T
+    var mode_3a: ?Mode3A_T
+    var flight_level: ?FlightLevel_T
+    var measured_flight_level: ?FlightLevel_T
+    var track_status: ?Octets_T
+    var target_report_descriptor: ?Octets_T
+    var quality_indicators: ?Octets_T
+    var aircraft_address: ?Address_T
+    var callsign: ?str
+    var flight_plan: ?FlightPlan
+    var expansion_field_fault: ?str
+
+    def __str__(self) -> str:
+        var parts: []str = []
+        if self.source is not None:
+            parts.append(f"source={self.source.sac}/{self.source.sic}")
+        if self.track_number is not None:
+            parts.append(f"track={self.track_number}")
+        if self.time_of_track is not None:
+            parts.append(f"time={float(self.time_of_track):.3f}s")
+        if self.position is not None:
+            parts.append(f"lat={self.position.latitude:.5f} lon={self.position.longitude:.5f}")
+        if self.mode_3a is not None:
+            parts.append(f"squawk={self.mode_3a.code}")
+            if self.mode_3a.valid:
+                parts.append("squawk-not-validated")
+            if self.mode_3a.garbled:
+                parts.append("squawk-garbled")
+            if self.mode_3a.local:
+                parts.append("squawk-not-from-last-scan")
+        if self.flight_level is not None:
+            parts.append(f"fl={float(self.flight_level):.2f}")
+        if self.measured_flight_level is not None:
+            parts.append(f"measured_fl={float(self.measured_flight_level):.2f}")
+        if self.aircraft_address is not None:
+            parts.append(f"address={self.aircraft_address}")
+        if self.callsign is not None:
+            parts.append(f"callsign={self.callsign}")
+        if self.track_status is not None:
+            parts.append(f"status={hex_lower(self.track_status)}")
+        if self.target_report_descriptor is not None:
+            parts.append(f"descriptor={hex_lower(self.target_report_descriptor)}")
+        if self.quality_indicators is not None:
+            parts.append(f"quality={hex_lower(self.quality_indicators)}")
+        if self.flight_plan is not None:
+            parts.append("plan(" + str(self.flight_plan) + ")")
+        if self.expansion_field_fault is not None:
+            parts.append(f"expansion-field-fault: {self.expansion_field_fault}")
+        return " ".join(parts)
+
+
+
+# ---------------------------------------------------------------------------
+# Position-report decoders. Category 62 is TACT's own variant -- NOT byte-identical
+# to the official EUROCONTROL ASTERIX CAT062 spec: e.g. position uses 2x3-byte
+# "cycles" fields here, not the official 2x4-byte WGS-84 fields.
+# ---------------------------------------------------------------------------
+
+# n octets of zero: what a read that failed gives
+def zeros(n: int) -> Octets_T:
+    var out: Octets_T = []
+    for _ in 0 ..< n:
+        out.append(0)
+    return out
+
+
+# octets as a big-endian unsigned number
+def to_uint(octets: Octets_T) -> int:
+    var v: int = 0
+    for b in octets:
+        v = v * 256 + b
+    return v
+
+
+# octets as a big-endian two's complement number
+def to_int(octets: Octets_T) -> int:
+    let v: int = to_uint(octets)
+    let top: int = 1 << (8 * len(octets) - 1)
+    return v - 2 * top if v >= top else v
+
+
+def hex_upper(octets: Octets_T) -> str:
+    return "".join([f"{b:02X}" for b in octets])
+
+
+def hex_lower(octets: Octets_T) -> str:
+    return "".join([f"{b:02x}" for b in octets])
+
+
+# the 8 bits of an octet, MSB first, matching 'for T use record FIELD at 0 range 0..0 ...
+# Bit_Order High_Order_First': the FSPEC flags are named in the order they come
+type Bits_T is (bool, bool, bool, bool, bool, bool, bool, bool)
+
+
+const NO_BITS: Bits_T = (False, False, False, False, False, False, False, False)
+
+
+def bit_at(octet: Octet_T, i: int) -> bool:
+    return ((octet >> (7 - i)) & 1) == 1
+
+
+def bits_msb_first(octet: Octet_T) -> Bits_T:
+    return (bit_at(octet, 0), bit_at(octet, 1), bit_at(octet, 2), bit_at(octet, 3),
+            bit_at(octet, 4), bit_at(octet, 5), bit_at(octet, 6), bit_at(octet, 7))
+
+
+# 3-byte signed 'cycles' position component -> degrees. 1.0 cycle == 180 degrees.
+# See NM/ELD/GEO_ENV/sources/track_position.adb (Cycles_Size = 3 octets).
+def decode_cycles3(b3: Octets_T) -> Degree_T:
+    return Degree_T(float(to_int(b3)) / 8388608.0 * 180.0)
+
+
+# I021/131: 4-byte signed lat + 4-byte signed lon, LSB = 180/2**30 deg.
+# See NM/ELD/GEO_ENV/sources/track_position.adb (Transfer_Asterix_High_Precision).
+def decode_high_precision_position(b8: Octets_T) -> LatLong_T:
+    let scale: float = 180.0 / 1073741824.0
+    return LatLong_T(Latitude_T(Degree_T(float(to_int(b8[0 ..< 4])) * scale)),
+                     Longitude_T(Degree_T(float(to_int(b8[4 ..< 8])) * scale)))
+
+
+# I021/170: 6 bytes packed as up to 8 six-bit characters; this codebase only decodes the
+# first 7 (track_flight_plan_related_data.adb Transfer_Asterix_Cat21).
+const A6_TO_ASCII: str = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?"
+
+
+def decode_target_identification_cat21(b6: Octets_T) -> str:
+    let v: int = to_uint(b6)
+    let chars: str = "".join([A6_TO_ASCII[idx ..< idx + 1]
+                               for idx in [(v >> (48 - i * 6)) & 0x3F for i in 1 ..< 8]])
+    return chars.rstrip()
+
+
+type IfpsUnit_T is 0 .. 3
+
+
+const IFPS_UNIT: [IfpsUnit_T]str = ["??", "AA", "BB", "??"]
+
+
+# track_flight_plan_related_data.adb IFPS_Id_T: 2-bit Unit, 3 unused bits, 27-bit Nbr.
+def decode_ifps_id(b4: Octets_T) -> str:
+    let v: int = to_uint(b4)
+    let unit: IfpsUnit_T = (v >> 30) & 0x3
+    let nbr: int = v & 0x07FFFFFF
+    return f"{IFPS_UNIT[unit]}{nbr:08d}"
+
+
+# Asterix_Departure_Time_T: Typ(5b) Day(2b) _ | _ _ _ Hor(5b) | _ _ Min(6b) | Avs(1b) _ Sec(6b).
+def decode_departure_time(b4: Octets_T) -> DepartureTime:
+    let v: int = to_uint(b4)
+    let day: int = (v >> 25) & 0x3
+    return DepartureTime(kind=(v >> 27) & 0x1F, day=Day_T(day),
+                           hour=(v >> 16) & 0x1F, minute=(v >> 8) & 0x3F,
+                           second=v & 0x3F, avs=((v >> 7) & 0x1) == 1)
+
+
+# the bytes as the text they spell, one character per byte
+def latin1(octets: Octets_T) -> str:
+    return "".join([chr(b) for b in octets])
+
+
+# an address from its three octets; anything else is a corrupt report
+def address_of(octets: Octets_T) -> Address_T:
+    let a: Address_T | !ParseFailure_T = Address_T(hex_upper(octets))
+    if a is ParseFailure_T:
+        die(f"bad {a.what}: '{a.text}'")
+    return a
+
+
+class Cursor:
+    var data: Octets_T
+    var pos: int
+    # hard ceiling (e.g. a data block's declared end): reading past it is exactly the
+    # condition CPM.adb's Record_Extraction loop treats as Exhausted_Error
+    var limit: int
+    # the first read that failed, "" while all went well. A failed read gives zeros and
+    # moves nothing, so the decoders carry on harmlessly to the end of the report and
+    # the caller drops it.
+    var fault: str
+
+    def __init__(self, data: Octets_T):
+        self.data = data
+        self.pos = 0
+        self.limit = len(data)
+        self.fault = ""
+
+    def fail(self, reason: str):
+        if self.fault == "":
+            self.fault = reason
+
+    def take(self, n: int) -> Octets_T:
+        if self.fault != "":
+            return zeros(n)
+        if self.pos + n > self.limit:
+            self.fail(f"read would cross block boundary: wanted {n} bytes at "
+                      f"{self.pos}, block limit is {self.limit}")
+            return zeros(n)
+        if self.pos + n > len(self.data):
+            let got: int = max(0, len(self.data) - self.pos)
+            self.fail(f"truncated data: wanted {n} bytes at {self.pos}, got {got}")
+            return zeros(n)
+        let b: Octets_T = self.data[self.pos ..< self.pos + n]
+        self.pos += n
+        return b
+
+    def octet(self) -> Octet_T:
+        return self.take(1)[0]
+
+    def uint(self, n: int) -> int:
+        return to_uint(self.take(n))
+
+    # an FSPEC octet, or NO_BITS when the previous octet's Fx bit says there is none
+    def next_fspec(self, present: bool) -> Bits_T:
+        if present:
+            return bits_msb_first(self.octet())
+        return NO_BITS
+
+    def fx_chain(self, max_octets: int = 4) -> Octets_T:
+        """Read octets while bit7 (last bit, Fx) is set. Returns list of bytes.
+
+        Capped at max_octets: the real implementations (Track_Status, Track_Quality_Indicators,
+        Track_Target_Report_Descriptor) all hard-stop after a fixed small number of extension
+        octets regardless of whether the last one's Fx bit is still set -- they do not chain
+        indefinitely. Default of 4 matches all current callers; this is NOT a documented general
+        ASTERIX rule, just what this codebase happens to implement everywhere it's used so far."""
+        var out: Octets_T = []
+        while True:
+            let b: Octet_T = self.octet()
+            out.append(b)
+            if b % 2 == 0 or len(out) >= max_octets:  # Fx is the LSB -> stop when 0
+                break
+        return out
+
+    # I062/105 and I021/130: latitude and longitude, 3 octets each
+    def decode_position(self) -> LatLong_T:
+        let lat: Latitude_T = Latitude_T(decode_cycles3(self.take(3)))
+        let lon: Longitude_T = Longitude_T(decode_cycles3(self.take(3)))
+        return LatLong_T(lat, lon)
+
+    # I062/390. See track_flight_plan_related_data.adb Transfer_Asterix (read mode).
+    def decode_flight_plan_related_data(self) -> FlightPlan:
+        var plan: FlightPlan
+        let (tag, csn, ifi, fct, tac, wtc, dep, fx1) = bits_msb_first(self.octet())
+        let (dst, rds, cfl, ctl, tod, ast, sts, _fx2) = self.next_fspec(fx1)
+
+        if tag:
+            self.take(2)
+        if csn:
+            plan.callsign = latin1(self.take(7)).rstrip()
+        if ifi:
+            plan.ifps_id = decode_ifps_id(self.take(4))
+        if fct:
+            self.take(1)
+        if tac:
+            self.take(4)
+        if wtc:
+            self.take(1)
+        if dep:
+            plan.adep = latin1(self.take(4))
+        if dst:
+            plan.ades = latin1(self.take(4))
+        if rds:
+            self.take(3)
+        if cfl:
+            self.take(2)
+        if ctl:
+            self.take(2)
+        if tod:
+            let reps: int = self.octet()
+            plan.departure_times = [decode_departure_time(self.take(4)) for _ in 0 ..< reps]
+        if ast:
+            self.take(6)
+        if sts:
+            self.take(1)
+        return plan
+
+    # I062/380, simplified (no Fx-extension handling, matching this codebase): the aircraft
+    # address, when the report has one.
+    def decode_mode_s(self) -> ?Address_T:
+        var address: ?Address_T = None
+        let (mb, arcaddr, id_, com, acs, _u6, _u7, _fx) = bits_msb_first(self.octet())
+        if mb:
+            self.take(9)
+        if arcaddr:
+            address = address_of(self.take(3))
+        if id_:
+            self.take(6)
+        if com:
+            self.take(2)
+        if acs:
+            self.take(7)
+        return address
+
+    # Mode 3/A code: V, G, L flags and four octal digits
+    def decode_mode_3a(self) -> Mode3A_T:
+        let raw: int = self.uint(2)
+        let code: int = raw & 0x0FFF
+        let digits: str = f"{(code >> 9) & 7}{(code >> 6) & 7}{(code >> 3) & 7}{code & 7}"
+        let squawk: Squawk_T | !ParseFailure_T = Squawk_T(digits)
+        if squawk is ParseFailure_T:
+            die(f"bad {squawk.what}: '{squawk.text}'")
+        return Mode3A_T(valid=((raw >> 15) & 1) == 1, garbled=((raw >> 14) & 1) == 1,
+                        local=((raw >> 13) & 1) == 1, code=squawk)
+
+    # a flight level: 16 bits, signed, in quarters
+    def decode_flight_level(self) -> FlightLevel_T:
+        return FlightLevel_T(float(to_int(self.take(2))) / 4.0)
+
+    # Generic helper for the System_Track_Update_Ages (I062/290) / Estimated_Accuracies
+    # (I062/500) style fields: one or two FSPEC octets (2nd read only if Bit8/Fx of the 1st
+    # is set), then for every set bit (in order) skip the given number of bytes.
+    #
+    # Asterix_Basic_Types.Generic_Field_Specification_T declares Bit1..Bit8 in that order,
+    # High_Order_First -> Bit1 is the MSB (index 0), Bit8 (the Fx/extension bit) is the LSB
+    # (index 7). So the 7 data bits are indices 0..6, and the continuation flag is index 7.
+    def skip_fx_chain_with_bits(self, per_bit_sizes: []int):
+        let first: Octet_T = self.octet()
+        let second: Octet_T = self.octet() if bit_at(first, 7) else 0
+        let flags: []bool = [bit_at(first, i) for i in 0 ..< 7] + [bit_at(second, i) for i in 0 ..< 7]
+        for i in 0 ..< min(len(flags), len(per_bit_sizes)):
+            if flags[i] and per_bit_sizes[i] != 0:
+                self.take(per_bit_sizes[i])
+
+    def decode_position_report(self) -> Report:
+        var report: Report
+
+        let (data_source, service_id, time_of_track, track_number,
+             pos_wgs84, pos_cartesian, mode_3a, fx1) = bits_msb_first(self.octet())
+        let (geo_alt, baro_alt, meas_fl, velocity, mode_of_flight,
+             climb_rate, turn_rate, fx2) = self.next_fspec(fx1)
+        let (long_accel, track_status, sys_update_ages, meas_info,
+             mode_s, est_acc, fp_related, fx3) = self.next_fspec(fx2)
+        let (mode1, mode2, composed_tn, _u4, _u5, reserved_exp, spi, _fx4) = self.next_fspec(fx3)
+
+        if data_source:
+            let sac: Octet_T = self.octet()
+            let sic: Octet_T = self.octet()
+            report.source = DataSource_T(sac, sic)
+        if service_id:
+            self.take(1)
+        if time_of_track:
+            report.time_of_track = Seconds_T(float(self.uint(3)) / 128.0)
+        if track_number:
+            report.track_number = self.uint(2)
+        if pos_wgs84:
+            report.position = self.decode_position()
+        if pos_cartesian:
+            self.take(4)
+        if mode_3a:
+            report.mode_3a = self.decode_mode_3a()
+        if geo_alt:
+            self.take(2)
+        if baro_alt:
+            report.flight_level = self.decode_flight_level()
+        if meas_fl:
+            report.measured_flight_level = self.decode_flight_level()
+        if velocity:
+            self.take(4)  # I062/180: speed(2)+heading(2); scale not verified against this codebase
+        if mode_of_flight:
+            self.take(1)
+        if climb_rate:
+            self.take(2)
+        if turn_rate:
+            self.take(1)
+        if long_accel:
+            self.take(2)
+        if track_status:
+            report.track_status = self.fx_chain()
+        if sys_update_ages:
+            self.skip_fx_chain_with_bits([1, 1, 1, 1, 1, 2, 1, 1, 1])
+        if meas_info:
+            # I062/340: Fspec.Bit1=SID(2) Bit2=POS(4) Bit3=HEI(2) Bit4=MDC(2) Bit5=MDA(2) Bit6=TYP(1);
+            # Bit1 is the MSB (index 0).
+            let fspec: Octet_T = self.octet()
+            let sizes: []int = [2, 4, 2, 2, 2, 1]
+            for i in 0 ..< 6:
+                if bit_at(fspec, i):
+                    self.take(sizes[i])
+        if mode_s:
+            report.aircraft_address = self.decode_mode_s()
+        if est_acc:
+            self.skip_fx_chain_with_bits([2, 4, 2, 1, 3, 1, 2, 1])
+        if fp_related:
+            report.flight_plan = self.decode_flight_plan_related_data()
+        if mode1:
+            self.take(1)
+        if mode2:
+            self.take(2)
+        if composed_tn:
+            var ext: bool = True
+            while ext and self.fault == "":
+                self.take(2)
+                ext = bit_at(self.octet(), 7)  # Bit8/Fx is the LSB (index 7), see skip_fx_chain_with_bits
+        if reserved_exp:
+            pass  # not expected to be set; no documented size available here
+        if spi:
+            let length: int = self.octet()
+            let total: int = 5 if length == 4 else length  # legacy NM<=26 layout quirk, see track_special_purpose_field.adb
+            self.take(total - 1)
+
+        return report
+
+    # ASTERIX category 21 (ADS-B Target Reports, 'Aireon'). See
+    # NM/ELD/GEO_ENV/sources/position_report-transfer_asterix_cat21.adb.
+    def decode_position_report_cat21(self) -> Report:
+        var report: Report
+
+        let (data_source, target_report_descr, track_number, service_id,
+             time_appl_pos, position, position_hi_res, fx1) = bits_msb_first(self.octet())
+        let (time_appl_vel, air_speed, true_air_speed, target_address,
+             time_msg_rcv_pos, time_msg_rcv_pos_hp, time_msg_rcv_vel, fx2) = self.next_fspec(fx1)
+        let (time_msg_rcv_vel_hp, geo_height, quality_ind, mops_version,
+             mode_3a, roll_angle, flight_level, fx3) = self.next_fspec(fx2)
+        let (mag_heading, target_status, baro_vrate, geo_vrate,
+             air_ground_vector, track_angle_rate, time_report_tx, fx4) = self.next_fspec(fx3)
+        let (target_id, emitter_cat, met_info, sel_alt,
+             final_sel_alt, trajectory_intent, service_mgmt, fx5) = self.next_fspec(fx4)
+        let (ac_op_status, surface_cap, msg_amplitude, mode_s_mb,
+             acas_res, receiver_id, data_ages, fx6) = self.next_fspec(fx5)
+        let (_u1, _u2, _u3, _u4, _u5, reserved_exp, spi, _fx7) = self.next_fspec(fx6)
+
+        if data_source:
+            let sac: Octet_T = self.octet()
+            let sic: Octet_T = self.octet()
+            report.source = DataSource_T(sac, sic)
+        if target_report_descr:
+            report.target_report_descriptor = self.fx_chain()
+        if track_number:
+            self.take(2)
+        if service_id:
+            self.take(1)
+        if time_appl_pos:
+            report.time_of_track = Seconds_T(float(self.uint(3)) / 128.0)
+        if position:
+            report.position = self.decode_position()
+        if position_hi_res:
+            report.position = decode_high_precision_position(self.take(8))
+        if time_appl_vel:
+            self.take(3)
+        if air_speed:
+            self.take(2)
+        if true_air_speed:
+            self.take(2)
+        if target_address:
+            report.aircraft_address = address_of(self.take(3))
+        if time_msg_rcv_pos:
+            self.take(3)
+        if time_msg_rcv_pos_hp:
+            self.take(4)
+        if time_msg_rcv_vel:
+            self.take(3)
+        if time_msg_rcv_vel_hp:
+            self.take(4)
+        if geo_height:
+            self.take(2)
+        if quality_ind:
+            report.quality_indicators = self.fx_chain()
+        if mops_version:
+            self.take(1)
+        if mode_3a:
+            report.mode_3a = self.decode_mode_3a()
+        if roll_angle:
+            self.take(2)
+        if flight_level:
+            report.measured_flight_level = self.decode_flight_level()
+        if mag_heading:
+            self.take(2)
+        if target_status:
+            self.take(1)
+        if baro_vrate:
+            self.take(2)
+        if geo_vrate:
+            self.take(2)
+        if air_ground_vector:
+            self.take(4)
+        if track_angle_rate:
+            self.take(2)
+        if time_report_tx:
+            self.take(3)
+        if target_id:
+            report.callsign = decode_target_identification_cat21(self.take(6))
+        if emitter_cat:
+            self.take(1)
+        if met_info:
+            # I021/220: Bit1=wind speed(2) Bit2=wind direction(2) Bit3=temperature(2) Bit4=turbulence(1);
+            # Bit1 is the MSB (index 0), see position_report-transfer_asterix_cat21.adb.
+            let primary: Octet_T = self.octet()
+            let sizes: []int = [2, 2, 2, 1]
+            for i in 0 ..< 4:
+                if bit_at(primary, i):
+                    self.take(sizes[i])
+        if sel_alt:
+            self.take(2)
+        if final_sel_alt:
+            self.take(2)
+        if trajectory_intent:
+            self.fail("I021/110 Trajectory_Intent: not implemented by TACT either")
+        if service_mgmt:
+            self.take(1)
+        if ac_op_status:
+            self.take(1)
+        if surface_cap:
+            # I021/271: position_report.adb Skip_Generic -- pure Fx-chained FSPEC octets, no payload
+            # bytes beyond the chain itself (this codebase does not interpret the capability bits).
+            while self.fault == "" and bit_at(self.octet(), 7):
+                pass
+        if msg_amplitude:
+            self.take(1)
+        if mode_s_mb:
+            self.fail("I021/250 Mode_S_Mb_Data: not implemented by TACT either")
+        if acas_res:
+            self.take(7)
+        if receiver_id:
+            self.take(1)
+        if data_ages:
+            # I021/295: reads up to 5 FSPEC octets BACK TO BACK first (Bit1..Bit7 = indices 0..6
+            # each contribute one age byte, Bit8 = index 7 continues to the next octet), and only
+            # after that loop ends does it skip the accumulated total of age bytes in one go --
+            # NOT interleaved fspec/data per octet. See position_report-transfer_asterix_cat21.adb.
+            var skip: int = 0
+            for _ in 0 ..< 5:
+                let primary: Octet_T = self.octet()
+                skip += sum([1 for i in 0 ..< 7 if bit_at(primary, i)])
+                if not bit_at(primary, 7):
+                    break
+            self.take(skip)
+        if reserved_exp:
+            let length: int = self.octet()
+            if length == 0:
+                # position_report-transfer_asterix_cat21.adb would raise Constraint_Error here
+                # (Unsigned1_T is range 0..255, "Length - 1" underflows); treat as a corrupt/empty
+                # expansion field rather than aborting the whole report.
+                report.expansion_field_fault = "length byte was 0"
+            else:
+                self.take(length - 1)
+        if spi:
+            self.take(5)
+
+        return report
+
+
+    # ---------------------------------------------------------------------------
+    # Data blocks
+    # ---------------------------------------------------------------------------
+
+
+type Category_T is enum CAT21, CAT62, OTHER_CATEGORY
+
+def category_of(number: int) -> Category_T:
+    case number:
+        when 21: CAT21
+        when 62: CAT62
+        when others: OTHER_CATEGORY
+
+
+type DataBlock is record:
+    category: int
+    length: int
+    reports: []Report
+    problem: ?str
+    # bytes of the block left unread; unset for a category that is not decoded
+    trailing_bytes: ?int
+
+
+type Decoded is record:
+    blocks: []DataBlock
+    reports: []Report
+    trailing_bytes: int
+
+
+# A CPM/CPF payload is a sequence of back-to-back "data blocks" (CPM.adb
+# Data_Block_Extraction loop): each starts with its own 1-byte category + 2-byte
+# big-endian length (length counts itself, i.e. header included), followed by
+# FSPEC-driven records packed with no per-record length prefix.
+def decode_cat_block(payload: Octets_T) -> Decoded | !Decode_Failure_T:
+    var cur: Cursor = Cursor(payload)
+    var blocks: []DataBlock = []
+    while cur.pos < len(payload):
+        let block_start: int = cur.pos
+        let category: int = cur.octet()
+        let length: int = cur.uint(2)
+        if cur.fault != "":
+            return Decode_Failure_T(cur.fault)
+        let block_end: int = block_start + length
+        let kind: Category_T = category_of(category)
+        if kind == OTHER_CATEGORY:
+            blocks.append(DataBlock(category, length, [], "unsupported category (only 21 and 62 decoded)", None))
+            break
+        var reports: []Report = []
+        cur.limit = block_end  # a report must never read into the next block (Exhausted_Error)
+        var failed: bool = False
+        while cur.pos < block_end:
+            let report: Report = cur.decode_position_report_cat21() if kind == CAT21 else cur.decode_position_report()
+            if cur.fault != "":
+                failed = True
+                break
+            reports.append(report)
+        var problem: ?str = None
+        if failed:
+            problem = cur.fault
+        cur.limit = len(payload)
+        blocks.append(DataBlock(category, length, reports, problem, block_end - cur.pos))
+        if failed:
+            break
+        cur.pos = block_end  # resync to the declared block boundary even on mismatch
+    return Decoded(blocks, [r for b in blocks for r in b.reports], len(payload) - cur.pos)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+# one line of the file: a fixed-width header, then the message. A line that does not
+# have that shape fails with the field that is wrong.
+class OplogRecord:
+    var classification: Classification_T
+    var kind: Kind_T
+    var subject: Subject_T
+    var correspondent: Correspondent_T
+    var user_id: UserId_T
+    var workstation_id: WorkstationId_T
+    var ifps_id: IfpsId_T
+    var tact_id: TactId_T
+    var time_stamp: TimeStamp_T
+    var sequence_number: SequenceNumber_T
+    var message_length: MessageLength_T
+    var msg: str
+
+    def __init__(self, line: str) -> None | !ParseFailure_T:
+        var pos: int = 0
+
+        def take(width: int) -> str:
+            let s: str = line[pos:pos + width]
+            pos += width
+            return s
+
+        fill(self.classification, take(CLASSIFICATION_W))
+        fill(self.kind, take(KIND_W))
+        fill(self.subject, take(SUBJECT_W))
+        fill(self.correspondent, take(CORRESPONDENT_W))
+        fill(self.user_id, take(USER_ID_W))
+        fill(self.workstation_id, take(WORKSTATION_ID_W))
+        fill(self.ifps_id, take(IFPS_ID_W))
+
+        do:
+            tact_number <- parse_int(take(TACT_ID_W).strip())
+            tact_id <- TactId_T(tact_number)
+            time_stamp <- TimeStamp_T(take(TIME_STAMP_W))
+            sequence <- parse_int(take(SEQUENCE_NUMBER_W).strip())
+            sequence_number <- SequenceNumber_T(sequence)
+            length <- parse_int(take(MESSAGE_LENGTH_W).strip())
+            message_length <- MessageLength_T(length)
+        self.tact_id = tact_id
+        self.time_stamp = time_stamp
+        self.sequence_number = sequence_number
+        self.message_length = message_length
+        self.msg = line[pos:pos + self.message_length]
+
+    # the record as a line, then the reports of its CPM/CPF message
+    def show(self, i: int):
+        print(f"[{i}] {self.time_stamp} {str(self.classification).strip()} {str(self.kind).strip():<10} "
+              f"subject={str(self.subject).strip()} seq={self.sequence_number} tact_id={self.tact_id}")
+        let extracted: ?Octets_T | !Decode_Failure_T = extract_cpm_payload(self.msg)
+        if extracted is Decode_Failure_T:
+            die(extracted.reason)
+        if extracted is None:
+            print(f"    msg={self.msg[0 ..< min(80, len(self.msg))]}")
+            return
+        let decoded: Decoded | !Decode_Failure_T = decode_cat_block(extracted)
+        if decoded is Decode_Failure_T:
+            print(f"    !! failed to decode CPM/CPF payload: {decoded.reason}")
+            return
+        print(f"    blocks={len(decoded.blocks)} "
+              f"reports={len(decoded.reports)} "
+              f"trailing_bytes={decoded.trailing_bytes}")
+        for b in decoded.blocks:
+            if b.problem is not None:
+                print(f"     !! block cat={b.category} len={b.length}: {b.problem}")
+        for r in decoded.reports:
+            print("     -", r)
+
+
+# an ARCHIVED_OPLOG file: a version line, then one record per line
+class OplogFile:
+    var records: []OplogRecord
+
+    def __init__(self, path: Path) -> None | !Decode_Failure_T:
+        let res: str | !PathFailure_T = path.read_text()
+        if res is PathFailure_T:
+            return Decode_Failure_T(f"cannot read {path}: {res.reason}")
+        let lines: []str = res.split("\r\n")
+        if not lines[0].startswith("CFMU_FILE_VERSION="):
+            return Decode_Failure_T(f"not an ARCHIVED_OPLOG file: {lines[0]}")
+        self.records = []
+        for raw in lines[1:]:
+            continue if raw == ""
+            let rec: OplogRecord | !ParseFailure_T = OplogRecord(raw)
+            if rec is ParseFailure_T:
+                return Decode_Failure_T(f"record {len(self.records)}: bad {rec.what} field: '{rec.text}'")
+            self.records.append(rec)
+
+
+def main() -> int:
+    if $# != 1:
+        stderr.writeLine(f"usage: {$0} <ARCHIVED_OPLOG_file>")
+        return 1
+    let file: OplogFile | !Decode_Failure_T = OplogFile(Path($1))
+    if file is Decode_Failure_T:
+        die(file.reason)
+    for i, rec in enumerate(file.records):
+        rec.show(i)
+    return 0
+
+
+quit(main())

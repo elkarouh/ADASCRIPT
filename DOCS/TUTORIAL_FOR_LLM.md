@@ -784,7 +784,7 @@ class TrieNode:
 
 **Inline field defaults** are injected into the constructor automatically:
 ```adascript
-class AwkProcessor(AwkBase):
+class SeverityProcessor(AwkProcessor):
     var NR     : int = 0
     var counts : [Severity_T]int = [INFO: 0, WARN: 0, ERROR: 0, OTHER: 0]
 
@@ -1086,7 +1086,7 @@ def matches(text: str, pattern: str) -> bool:     # a pattern you cannot
 ```adascript
 nimport strutils, sequtils, algorithm
 nimport stdlib          # PriorityQueue, FifoQueue, LifoQueue, ANY
-from awk import AwkBase                          # record-processor base class
+from awk import AwkProcessor                          # record-processor base class
 from shortest_path import Minimizer, Maximizer   # another .ady file as a library (auto-transpiled)
 ```
 

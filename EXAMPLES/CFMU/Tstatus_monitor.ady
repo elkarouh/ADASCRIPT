@@ -8,7 +8,7 @@ Usage:
     tacot_corico ... | ./Tstatus_monitor
 """
 nimport time
-from awk import AwkBase
+from awk import AwkProcessor
 
 
 # A row is filled in over several records, and it is in the table from the
@@ -31,7 +31,7 @@ class Build:
     var nr_success: str = ""
 
 
-class ShowBuilds(AwkBase):
+class ShowBuilds(AwkProcessor):
     # The table, one row per build, in the order the builds were seen, and
     # the row every record fills in.  current_build is already in builds, so
     # opening the next one is all it takes to finish the current one -- except

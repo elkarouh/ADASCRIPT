@@ -1,12 +1,12 @@
 #!/usr/bin/env ady2nim
-"""Test: AwkBase failures -- a file it cannot read, a record the subclass gives up on.
+"""Test: AwkProcessor failures -- a file it cannot read, a record the subclass gives up on.
 
 `try_run_file(path)` is a `None | !AwkFailure_T`; `run_file` is the same and ends the
 program with the reason. `self.stop(reason)` in `process_record` ends the run there.
 """
-from awk import AwkBase, AwkFailure_T
+from awk import AwkProcessor, AwkFailure_T
 
-class Counter(AwkBase):
+class Counter(AwkProcessor):
     var seen: int = 0
 
     def process_record(self):

@@ -36,11 +36,11 @@ generated constructor. `__init__` then only sets what varies per instance —
 or disappears entirely. `EXAMPLES/test_awk.ady`:
 
 ```python
-from awk import AwkBase
+from awk import AwkProcessor
 
-class AwkProcessor(AwkBase):
+class SeverityProcessor(AwkProcessor):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
-    # no __init__ at all — a forwarding constructor calling AwkBase's
+    # no __init__ at all — a forwarding constructor calling AwkProcessor's
     # initialiser is generated automatically
 ```
 
@@ -130,12 +130,12 @@ one purpose: **cross-module dispatch**. It makes the Nim backend emit
 `ref object of RootObj` so subclasses in *other* files dispatch dynamically.
 
 The `awk` stdlib base class is the working illustration. `TO_NIM/awk.ady`
-ships a `@virtual class AwkBase` implementing the AWK machinery (`FS`,
+ships a `@virtual class AwkProcessor` implementing the AWK machinery (`FS`,
 `OFS`, `NR`, `NF`, `read_record`, `run`); user programs `import awk` and
 override the hooks. `EXAMPLES/test_awk.ady`:
 
 ```python
-class AwkProcessor(AwkBase):
+class SeverityProcessor(AwkProcessor):
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
     def classify_record(self) -> Severity_T:

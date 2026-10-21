@@ -310,7 +310,7 @@ d.add("truck-1", (x: 12.0, y: 5.0), 4.0)
 **Inheritance across files.** A base class declared `@virtual` in one module
 and subclassed in another still emits `ref object` on both sides, and a
 subclass inherits the base's constructor parameters. `EXAMPLES/test_awk.ady`
-is exactly this: its class subclasses `AwkBase` from the bundled `awk.ady`.
+is exactly this: its class subclasses `AwkProcessor` from the bundled `awk.ady`.
 
 **Generics.** A generic proc or class instantiates per call site in the
 importer, the same as within a file — `graphs.ady` defines `dijkstra[Node_T]`

@@ -31,7 +31,7 @@ A translation of EXAMPLES/process_html.awk, kept next to this file so the
 two can be read side by side. The awk needs gawk: `gensub` is a GNU
 extension and the mawk that is /usr/bin/awk on many machines refuses it.
 """
-from awk import AwkBase, AwkFailure_T
+from awk import AwkProcessor, AwkFailure_T
 
 
 # Where in the page we are. The record on its own does not say: </div>
@@ -66,7 +66,7 @@ def anchor(arg: str) -> Anchor_T:
     Anchor_T(dir=full.parent, stem=stem)
 
 
-class HtmlBody(AwkBase):
+class HtmlBody(AwkProcessor):
     var state   : Scan_State_T = HEAD
     var at      : Anchor_T     = Anchor_T()
     # A latch, not a state: set once when the id is placed, never cleared,

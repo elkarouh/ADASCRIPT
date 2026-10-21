@@ -2,7 +2,7 @@
 """
 awk_base — generic stdin record-processor framework.
 
-Subclass AwkBase and override:
+Subclass AwkProcessor and override:
     process_record()   — called once per record after read_record()
     start()            — called before the main loop  (default: no-op)
     finish()           — called after the main loop   (default: no-op)
@@ -26,7 +26,7 @@ type AwkFailure_T is record:
 
 
 @virtual
-class AwkBase:
+class AwkProcessor:
     var FS        : str
     var OFS       : str
     var RS        : str = "\n"

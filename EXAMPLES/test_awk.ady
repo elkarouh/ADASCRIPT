@@ -7,11 +7,11 @@ Usage:
     cat FILE | ./awk_OO ,             # FS = comma
     cat FILE | ./awk_OO '\t'          # FS = tab
 """
-from awk import AwkBase
+from awk import AwkProcessor
 
 type Severity_T is enum INFO, WARN, ERROR, OTHER
 
-class AwkProcessor(AwkBase): 
+class SeverityProcessor(AwkProcessor): 
     var counts : [Severity_T]int = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 
     def classify_record(self) -> Severity_T:
@@ -60,7 +60,7 @@ class AwkProcessor(AwkBase):
 
 def main():
     let fs: str = ($1 if $# > 0 else " ")
-    var processor: AwkProcessor = AwkProcessor(fs)
+    var processor: SeverityProcessor = SeverityProcessor(fs)
     processor.run()
 
 
