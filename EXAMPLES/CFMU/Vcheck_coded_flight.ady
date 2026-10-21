@@ -13,7 +13,7 @@ the test-report directory.
 E.g.:
     Vcheck_coded_flight 30.0.0.6 VVL.TACT_PHASERND2
 """
-from awk import AwkBase
+from awk import AwkBase, AwkFailure_T
 
 
 type State_T is enum OUT_OF_HIST, IN_HIST
@@ -90,7 +90,9 @@ def resolve_log(label: str) -> str:
 
 def extract_histogram(log: str):
     var p: HistogramExtractor = HistogramExtractor()
-    p.run_file(log)
+    let done: None | !AwkFailure_T = p.try_run_file(log)
+    if done is AwkFailure_T:
+        print f"{done.reason}"
 
 
 def report_for(label: str) -> None:

@@ -31,7 +31,7 @@ A translation of EXAMPLES/process_html.awk, kept next to this file so the
 two can be read side by side. The awk needs gawk: `gensub` is a GNU
 extension and the mawk that is /usr/bin/awk on many machines refuses it.
 """
-from awk import AwkBase
+from awk import AwkBase, AwkFailure_T
 
 
 # Where in the page we are. The record on its own does not say: </div>
@@ -147,7 +147,10 @@ def main():
 
     var p: HtmlBody = HtmlBody()
     p.at = anchor($1)
-    p.run_file($1)
+    let done: None | !AwkFailure_T = p.try_run_file($1)
+    if done is AwkFailure_T:
+        print f"html_body: {done.reason}"
+        quit(1)
 
 
 main()
