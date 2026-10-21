@@ -283,6 +283,11 @@ def to_host(message: str):
     if not isUndefined(globalThis.host_log):
         globalThis.host_log(cstring(message))
 
+# Whether the page was opened as a file from the disk (file:///...) and not served by a web server.
+# Such a page sends no referrer to the sites it loads from, and some of them refuse it for that.
+def opened_from_file() -> bool:
+    return str(globalThis.location.protocol.to(cstring)) == "file:"
+
 # Call HANDLER once the page and its scripts have loaded.
 def when_loaded(handler: Listener_T):
     addEventListener(window, cstring("load"), handler)

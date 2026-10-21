@@ -22,4 +22,5 @@ about it in a list beside it; clicking an entry zooms to the reports it holds. T
 script is `oplog_map.ady`, a browser script (`ady2nim js`) that reads the data from the page
 and draws it with the stdlib's `browser` and `leaflet_utils`. `make page CALLSIGN=...` builds
 both and writes `flight.html`; `make run` serves it. It loads Leaflet and the map tiles from
-the internet.
+the internet, and the tile server refuses a page opened straight from the disk (it wants a
+referrer), so serve it with `make run` rather than opening `flight.html`.

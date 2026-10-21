@@ -11,7 +11,7 @@ script draws it: the track as a line with a dot at every report (the tooltip say
 level), and the entries in the list beside the map. Click an entry to see the reports it holds:
 the map zooms to them.
 """
-from browser import Element_T, Event_T, Click_T, page, element, text, set_html, number, listen, click_of, on
+from browser import opened_from_file, Element_T, Event_T, Click_T, page, element, text, set_html, number, listen, click_of, on
 from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag
 from leaflet_utils import Map_T, Point_T, style, new_map, fit, polyline, dot, pin, popup_at
 
@@ -35,6 +35,11 @@ def main():
     let track: []Json_T = log.json_list("track")
     let entries: []Json_T = log.json_list("entries")
     page.element("#summary").set_html(f"{len(track)} position reports, {len(entries)} entries")
+
+    if opened_from_file():
+        page.element("#notice").set_html("This page was opened as a file, so the map tiles are refused "
+                                         "(OpenStreetMap wants to know the page's address). Serve it "
+                                         "instead: <code>make run</code> in the OPLOG directory.")
 
     let map: Map_T = new_map("map")
     var points: []Point_T = []
