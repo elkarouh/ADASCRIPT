@@ -113,7 +113,7 @@ alike: `a & b` intersection, `a | b` union, `a ^ b` symmetric difference,
 `a - b` difference, and `seen |= more` and its kin. Nim spells them `*`,
 `+`, `-+-` and `-` and has no `and` on a set; the emitter chooses from the
 operand types, and on integers the same signs stay bitwise. See
-`EXAMPLES/TESTS/test_set_operators.ady`.
+`TESTS/test_set_operators.ady`.
 
 `spell.ady` (Norvig's corrector) is set-driven end to end. Set
 comprehensions filter candidate corrections against the corpus:
@@ -368,7 +368,7 @@ differently:
 
 ## 6.6 The iterator library: `import iters`
 
-`EXAMPLES/TESTS/test_iters.ady` exercises a bundled itertools-alike, generic over
+`TESTS/test_iters.ady` exercises a bundled itertools-alike, generic over
 element type, usable directly in `for` loops. It is a bundled library, so it is
 Nim-only by construction (§12.2): on the Python backend the line becomes a
 comment and the names are simply undefined. Reaching for it pins the
@@ -411,7 +411,7 @@ instantiations — a reminder that these are true generics in the Nim build.
 
 `§1.4`'s Dijkstra is written out in full because it reads well; the same
 algorithm generalised over the node type is in the bundled library, and
-`EXAMPLES/TESTS/test_graphs.ady` exercises it:
+`TESTS/test_graphs.ady` exercises it:
 
 ```python
 from graphs import dijkstra, shortest_path

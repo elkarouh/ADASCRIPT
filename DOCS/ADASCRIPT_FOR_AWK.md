@@ -187,7 +187,7 @@ rather than streaming it, so it is for files that fit in memory. The default
 the reason when a file cannot be read, or when `process_record` calls
 `self.stop(reason)` on a record it cannot accept (the records after it are not
 read). `p.try_run_file(path)` and `p.try_run()` do the same but give the reason
-back as a `None | !AwkFailure_T`, to take like any failure. `EXAMPLES/TESTS/test_awk_stop.ady`.
+back as a `None | !AwkFailure_T`, to take like any failure. `TESTS/test_awk_stop.ady`.
 
 A path ending in `.gz` is read as what it holds (through `gzip -dc`), by `run_file` and
 `try_run_file` alike.
@@ -1407,7 +1407,7 @@ record *is* a request, and the groups it hands back are the parts of one.
 ## 12. Where to go next
 
 - `EXAMPLES/AWK/awk_example.ady` — the flat form, in full in §10.1, runs on both backends
-- `EXAMPLES/TESTS/test_awk.ady` — the same program as an `AwkProcessor` subclass
+- `TESTS/test_awk.ady` — the same program as an `AwkProcessor` subclass
 - `EXAMPLES/AWK/config_check.ady` — the variant-record schema, walked through in §10.2
 - `EXAMPLES/AWK/config_check.awk` — the same checker in POSIX awk, to read against it
 - `EXAMPLES/AWK/awk_logscan.ady` — the state-machine example, in full in §10.3, all of §1 at once

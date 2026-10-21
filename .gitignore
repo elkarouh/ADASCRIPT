@@ -10,7 +10,8 @@ NIM_VERSION/
 *.exe
 *.png
 EXAMPLES/**/*.nim
-!EXAMPLES/TESTS/hand_speeds.nim
+TESTS/**/*.nim
+!TESTS/hand_speeds.nim
 TOOLS/ADA_INDENT/ada_indent
 TOOLS/ADA_INDENT/test_ada_indent
 TOOLS/ADA_INDENT/ada_indent_gen.py

@@ -309,7 +309,7 @@ d.add("truck-1", (x: 12.0, y: 5.0), 4.0)
 
 **Inheritance across files.** A base class declared `@virtual` in one module
 and subclassed in another still emits `ref object` on both sides, and a
-subclass inherits the base's constructor parameters. `EXAMPLES/TESTS/test_awk.ady`
+subclass inherits the base's constructor parameters. `TESTS/test_awk.ady`
 is exactly this: its class subclasses `AwkProcessor` from the bundled `awk.ady`.
 
 **Generics.** A generic proc or class instantiates per call site in the
@@ -411,7 +411,7 @@ print(dist(ORIGIN, p))
 
 Because the parser sees the module's declarations, the types work across the
 boundary: an enum from a module in a `case`, a failure type in an `is`, a
-record built positionally, a class. `EXAMPLES/TESTS/test_nimport_modules.ady` does all
+record built positionally, a class. `TESTS/test_nimport_modules.ady` does all
 of that and `make test` compares its output between the backends.
 
 What the merge costs:
@@ -440,7 +440,7 @@ The multi-module projects (`CFMU/`, `TIMETABLE/`, `ROI_JOINTJS/`, `PROJECT/`)
 were written for Nim and use what Nim gives them -- `PROJECT/` calls `sqrt`
 unqualified after `nimport math`, which is Nim's `math` and not Python's -- so
 not every one of them runs on Python. A module written to be shared says what
-it needs: `EXAMPLES/TESTS/NIMPORT_TEST/` is two modules that do.
+it needs: `TESTS/NIMPORT_TEST/` is two modules that do.
 
 ---
 

@@ -3,7 +3,7 @@
 Perl and AWK made text processing pleasant by making regexes *syntax*, not a
 library. Adascript does the same: `/pattern/flags` is a literal, matching is
 an operator, and captures are variables. There is never an `import re`.
-`EXAMPLES/TESTS/test_regex.ady` is the systematic tour; `awk_example.ady` and
+`TESTS/test_regex.ady` is the systematic tour; `awk_example.ady` and
 `spell.ady` show the idioms in context.
 
 ## 7.1 Match tests: `==` and `!=`

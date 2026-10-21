@@ -1,4 +1,4 @@
-# EXAMPLES/TESTS
+# TESTS
 
 Pure regression tests: `test_*.ady` programs that pin one language or transpiler
 behaviour, with the small modules they import (`mr_*.ady`, `NIMPORT_TEST/`,

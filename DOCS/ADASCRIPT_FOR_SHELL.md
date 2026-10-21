@@ -168,7 +168,7 @@ command can instead *return* its failure. Give the target a
 succeeds, and the built-in failure record — the command, its status, its
 stderr — when it does not; `is` asks which:
 
-<!-- from: EXAMPLES/TESTS/test_result.ady -->
+<!-- from: TESTS/test_result.ady -->
 ```python
 let oops: str | !ShellFailure_T = shell: echo oops >&2; exit 3
 if oops is ShellFailure_T:
@@ -809,7 +809,7 @@ as "the environment variable `x`", and finds nothing.
 - `EXAMPLES/sh_janitor.sh` — the Bash version of it, to run side by side
 - `TOOLS/GIT1/git1.ady` — a real tool: `cwd`, `env`, `shellExec`, `Path`, file tests
 - `EXAMPLES/CFMU/` — a directory of ksh scripts translated line by line
-- `EXAMPLES/TESTS/test_shell_block.ady` — every block and join form
+- `TESTS/test_shell_block.ady` — every block and join form
 - `DOCS/ADASCRIPT_FOR_AWK.md` — the text-processing half of the same argument
 - `DOCS/BOOK/11-shell-and-scripting.md` — the shell forms in full
 - `README.md`, *Shell Statements* — the complete reference for the options

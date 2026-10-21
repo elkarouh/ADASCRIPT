@@ -8,12 +8,12 @@ reasoning behind one of them is ever wanted.
 ### `T | !F` (value or failure) -- what is left
 
 `T | !F`, F an ordinary record marked `!` in the union, is built in
-(book 10.12, `EXAMPLES/TESTS/test_result.ady`, `rsync_time_machine.ady`): a
+(book 10.12, `TESTS/test_result.ady`, `rsync_time_machine.ady`): a
 routine returns either a T or an F, in either order; `r is F` asks which
 and narrows, as does `case r:` with a `when` per side; `None | !F`;
 `do:` over them with bare steps, shell steps and `else`; the built-in
 `ShellFailure_T` of a typed `shell:`; a dropped failure is refused. Plain
-unions (`int | float`, book 4.4, `EXAMPLES/TESTS/test_union.ady`) share all of
+unions (`int | float`, book 4.4, `TESTS/test_union.ady`) share all of
 it but do:. Not yet:
 
 - [ ] an adapter from exceptions at the boundary: a `T | !F` from a call
@@ -80,14 +80,14 @@ it, all but test_htmx, whose `html:` block is refused as Nim only.
 
 ### Distinct types and units: known limits
 
-The feature is done (book 2.7, EXAMPLES/TESTS/test_distinct.ady, test_units.ady,
+The feature is done (book 2.7, TESTS/test_distinct.ady, test_units.ady,
 test_money.ady). What it leaves, on purpose or because it cannot see more:
 
 - A literal passed to a method of an object that is not the program's own
   needs `V(x)` written: the transpiler cannot see that method's parameter
   types. A known routine's argument, a function value's, `xs.append(5.0)` to
   a []Speed_T, a table literal and an argument to a hand-written Nim module
-  beside the program (EXAMPLES/TESTS/test_nim_module.ady) are converted.
+  beside the program (TESTS/test_nim_module.ady) are converted.
 - Units relate by dimension only through the units declared (book 2.7). A
   derived unit is float, or int for a product; `x ** n` is the unit of that
   dimension when one is declared. Nim's `unchained` does full dimensional

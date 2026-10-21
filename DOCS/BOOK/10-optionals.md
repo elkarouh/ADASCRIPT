@@ -18,7 +18,7 @@ difference is that absence is part of the type: a plain `T` can never be
 `?T` is shorthand for `T | None` — "a `T`, or nothing", said the way Python
 says it. The two spellings are one type, and `None | T` is the same type
 again: everything in this chapter holds for all three.
-`EXAMPLES/TESTS/test_optional_spelling.ady` runs them side by side:
+`TESTS/test_optional_spelling.ady` runs them side by side:
 
 ```python
 def half(n: int) -> int | None:
@@ -508,7 +508,7 @@ guard has a body of its own:
 
 When there is nothing to say about the individual failures, the `do:` block
 is do-notation: `x <- expr` unwraps an optional, or **short-circuits the
-whole enclosing function to `None`**. `EXAMPLES/TESTS/test_do_block.ady` is the
+whole enclosing function to `None`**. `TESTS/test_do_block.ady` is the
 spec:
 
 ```python
@@ -672,7 +672,7 @@ int | !Failure_T   ──▶  Python:  int | Failure_T    (the int or the Failur
 
 A failure is an ordinary record. An enum says *which* failure; the
 fields say what the report needs. One failure type is usually enough for a
-whole program. `EXAMPLES/TESTS/test_result.ady`:
+whole program. `TESTS/test_result.ady`:
 
 ```python
 type ErrKind_T is enum BAD_NUMBER, DIVIDE_BY_ZERO, NOT_POSITIVE

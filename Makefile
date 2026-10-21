@@ -73,189 +73,189 @@ STANDALONE := \
     MAP_UTILS/route_check.ady \
     MAP_UTILS/test_regions.ady \
     openarray_demo.ady \
-    TESTS/test_inline_suite.ady \
+    ../TESTS/test_inline_suite.ady \
     test_state_search.ady \
     test_shortest_path.ady \
     primes.ady \
-    TESTS/test_ownership.ady \
-    TESTS/test_nimport.ady \
+    ../TESTS/test_ownership.ady \
+    ../TESTS/test_nimport.ady \
     ownership_tour.ady \
-    TESTS/test_iters.ady \
-    TESTS/test_graphs.ady \
-    TESTS/test_svg_path.ady \
-    TESTS/test_ansi.ady \
-    TESTS/test_queues.ady \
-    TESTS/test_regex.ady \
-    TESTS/test_regex_g.ady \
-    TESTS/test_env_default.ady \
-    TESTS/test_env_optional.ady \
-    TESTS/test_optional_truthy.ady \
-    TESTS/test_self_ref.ady \
-    TESTS/test_record_eq_cycle.ady \
-    TESTS/test_record_one_line.ady \
-    TESTS/test_char_slice.ady \
+    ../TESTS/test_iters.ady \
+    ../TESTS/test_graphs.ady \
+    ../TESTS/test_svg_path.ady \
+    ../TESTS/test_ansi.ady \
+    ../TESTS/test_queues.ady \
+    ../TESTS/test_regex.ady \
+    ../TESTS/test_regex_g.ady \
+    ../TESTS/test_env_default.ady \
+    ../TESTS/test_env_optional.ady \
+    ../TESTS/test_optional_truthy.ady \
+    ../TESTS/test_self_ref.ady \
+    ../TESTS/test_record_eq_cycle.ady \
+    ../TESTS/test_record_one_line.ady \
+    ../TESTS/test_char_slice.ady \
     pyimport_similar.ady \
-    TESTS/test_pyobject_calls.ady \
+    ../TESTS/test_pyobject_calls.ady \
     td_learning/sarsa.ady \
     td_learning/qlearning.ady \
     DB_REMEDIATION/db_remediation.ady \
     DB_REMEDIATION/atc_cluster.ady \
     PROJECT/dispatch.ady \
     PROJECT/test_geometry.ady \
-    TESTS/test_do_block.ady \
-    TESTS/test_do_discard.ady \
-    TESTS/test_init_failure.ady \
-    TESTS/test_where_type.ady \
-    TESTS/test_unit_alias.ady \
+    ../TESTS/test_do_block.ady \
+    ../TESTS/test_do_discard.ady \
+    ../TESTS/test_init_failure.ady \
+    ../TESTS/test_where_type.ady \
+    ../TESTS/test_unit_alias.ady \
     DOC/why_ladder_snippets.ady \
-    TESTS/test_fstring_width.ady \
-    TESTS/test_pure_conversion.ady \
-    TESTS/test_result.ady \
-    TESTS/test_optional_spelling.ady \
-    TESTS/test_union.ady \
-    TESTS/test_case_ranges.ady \
-    TESTS/test_contextmanager_fstring.ady \
-    TESTS/test_stmt_modifier.ady \
-    TESTS/test_str_join.ady \
-    TESTS/test_which.ady \
-    TESTS/test_shell_stdin_status.ady \
-    TESTS/test_strip_chars.ady \
-    TESTS/test_path_call.ady \
-    TESTS/test_path_relative_to.ady \
-    TESTS/test_path_io.ady \
-    TESTS/test_parse.ady \
+    ../TESTS/test_fstring_width.ady \
+    ../TESTS/test_pure_conversion.ady \
+    ../TESTS/test_result.ady \
+    ../TESTS/test_optional_spelling.ady \
+    ../TESTS/test_union.ady \
+    ../TESTS/test_case_ranges.ady \
+    ../TESTS/test_contextmanager_fstring.ady \
+    ../TESTS/test_stmt_modifier.ady \
+    ../TESTS/test_str_join.ady \
+    ../TESTS/test_which.ady \
+    ../TESTS/test_shell_stdin_status.ady \
+    ../TESTS/test_strip_chars.ady \
+    ../TESTS/test_path_call.ady \
+    ../TESTS/test_path_relative_to.ady \
+    ../TESTS/test_path_io.ady \
+    ../TESTS/test_parse.ady \
     trcks_example.ady \
-    TESTS/test_nimport_modules.ady \
-    TESTS/test_nimport_qualified.ady \
-    TESTS/test_nim_module.ady \
-    TESTS/test_nim_quirks.ady \
-    TESTS/test_small_fixes.ady \
-    TESTS/test_decoder_gaps.ady \
-    TESTS/test_decoder_gaps2.ady \
-    TESTS/test_char_string.ady \
-    TESTS/test_awk_stop.ady \
-    TESTS/test_union_optional.ady \
-    TESTS/test_decorators.ady \
-    TESTS/test_str_case.ady \
-    TESTS/test_portable_gaps4.ady \
-    TESTS/test_portable_gaps5.ady \
-    TESTS/test_portable_gaps6.ady \
-    TESTS/test_portable_gaps7.ady \
-    TESTS/test_module_rename.ady \
-    TESTS/test_portable_gaps8.ady \
-    TESTS/test_json_value.ady \
-    TESTS/test_value_cycle.ady \
-    TESTS/test_element_field.ady \
-    TESTS/test_optional_tails.ady \
-    TESTS/test_generic_methods.ady \
-    TESTS/test_round_splitlines.ady \
-    TESTS/test_portable_gaps.ady \
-    TESTS/test_union_slips.ady \
-    TESTS/test_portable_gaps2.ady \
-    TESTS/test_portable_gaps3.ady \
-    TESTS/test_units_dims.ady \
-    TESTS/test_optional_union_written.ady \
-    TESTS/test_format_zero_decimals.ady \
-    TESTS/test_region_operators.ady \
-    TESTS/test_str_partition.ady \
-    TESTS/test_and_or_mix.ady \
-    TESTS/test_enum_values.ady \
-    TESTS/test_str_repeat.ady \
+    ../TESTS/test_nimport_modules.ady \
+    ../TESTS/test_nimport_qualified.ady \
+    ../TESTS/test_nim_module.ady \
+    ../TESTS/test_nim_quirks.ady \
+    ../TESTS/test_small_fixes.ady \
+    ../TESTS/test_decoder_gaps.ady \
+    ../TESTS/test_decoder_gaps2.ady \
+    ../TESTS/test_char_string.ady \
+    ../TESTS/test_awk_stop.ady \
+    ../TESTS/test_union_optional.ady \
+    ../TESTS/test_decorators.ady \
+    ../TESTS/test_str_case.ady \
+    ../TESTS/test_portable_gaps4.ady \
+    ../TESTS/test_portable_gaps5.ady \
+    ../TESTS/test_portable_gaps6.ady \
+    ../TESTS/test_portable_gaps7.ady \
+    ../TESTS/test_module_rename.ady \
+    ../TESTS/test_portable_gaps8.ady \
+    ../TESTS/test_json_value.ady \
+    ../TESTS/test_value_cycle.ady \
+    ../TESTS/test_element_field.ady \
+    ../TESTS/test_optional_tails.ady \
+    ../TESTS/test_generic_methods.ady \
+    ../TESTS/test_round_splitlines.ady \
+    ../TESTS/test_portable_gaps.ady \
+    ../TESTS/test_union_slips.ady \
+    ../TESTS/test_portable_gaps2.ady \
+    ../TESTS/test_portable_gaps3.ady \
+    ../TESTS/test_units_dims.ady \
+    ../TESTS/test_optional_union_written.ady \
+    ../TESTS/test_format_zero_decimals.ady \
+    ../TESTS/test_region_operators.ady \
+    ../TESTS/test_str_partition.ady \
+    ../TESTS/test_and_or_mix.ady \
+    ../TESTS/test_enum_values.ady \
+    ../TESTS/test_str_repeat.ady \
     physics_calc.ady \
-    TESTS/test_case_narrowed.ady \
-    TESTS/test_not_operand.ady \
-    TESTS/test_shell_throughput.ady \
-    TESTS/test_shell_braces.ady \
-    TESTS/test_param_mutation.ady \
-    TESTS/test_fstring_replace_sugar.ady \
-    TESTS/test_char_default.ady \
-    TESTS/test_any_all.ady \
-    TESTS/test_option_guard_modifier.ady \
-    TESTS/test_init_calls_method.ady \
-    TESTS/test_enum_array_enumerate.ady \
-    TESTS/test_enum_array_zero_fill.ady \
-    TESTS/test_ordered_map.ady \
-    TESTS/test_function_type.ady \
-    TESTS/test_distinct.ady \
-    TESTS/test_units.ady \
-    TESTS/test_units_fields.ady \
-    TESTS/test_tuple_assign_block.ady \
-    TESTS/test_self_tuple_assign.ady \
-    TESTS/test_math_names.ady \
-    TESTS/test_min3_notimpl.ady \
-    TESTS/test_option_literals.ady \
-    TESTS/test_fstring_flags.ady \
-    TESTS/test_fstring_leading_newline.ady \
-    TESTS/test_call_field_literal.ady \
-    TESTS/test_local_named_like_field.ady \
-    TESTS/test_narrowed_value.ady \
-    TESTS/test_seq_field_concat.ady \
-    TESTS/test_distinct_float_range.ady \
-    TESTS/test_narrowed_type.ady \
-    TESTS/test_mod_type.ady \
-    TESTS/test_ring_buffer.ady \
-    TESTS/test_negative_int_range.ady \
-    TESTS/test_overload_types.ady \
-    TESTS/test_slice_semantics.ady \
-    TESTS/test_money.ady \
+    ../TESTS/test_case_narrowed.ady \
+    ../TESTS/test_not_operand.ady \
+    ../TESTS/test_shell_throughput.ady \
+    ../TESTS/test_shell_braces.ady \
+    ../TESTS/test_param_mutation.ady \
+    ../TESTS/test_fstring_replace_sugar.ady \
+    ../TESTS/test_char_default.ady \
+    ../TESTS/test_any_all.ady \
+    ../TESTS/test_option_guard_modifier.ady \
+    ../TESTS/test_init_calls_method.ady \
+    ../TESTS/test_enum_array_enumerate.ady \
+    ../TESTS/test_enum_array_zero_fill.ady \
+    ../TESTS/test_ordered_map.ady \
+    ../TESTS/test_function_type.ady \
+    ../TESTS/test_distinct.ady \
+    ../TESTS/test_units.ady \
+    ../TESTS/test_units_fields.ady \
+    ../TESTS/test_tuple_assign_block.ady \
+    ../TESTS/test_self_tuple_assign.ady \
+    ../TESTS/test_math_names.ady \
+    ../TESTS/test_min3_notimpl.ady \
+    ../TESTS/test_option_literals.ady \
+    ../TESTS/test_fstring_flags.ady \
+    ../TESTS/test_fstring_leading_newline.ady \
+    ../TESTS/test_call_field_literal.ady \
+    ../TESTS/test_local_named_like_field.ady \
+    ../TESTS/test_narrowed_value.ady \
+    ../TESTS/test_seq_field_concat.ady \
+    ../TESTS/test_distinct_float_range.ady \
+    ../TESTS/test_narrowed_type.ady \
+    ../TESTS/test_mod_type.ady \
+    ../TESTS/test_ring_buffer.ady \
+    ../TESTS/test_negative_int_range.ady \
+    ../TESTS/test_overload_types.ady \
+    ../TESTS/test_slice_semantics.ady \
+    ../TESTS/test_money.ady \
     accounting.ady \
-    TESTS/test_scaled_units.ady \
-    TESTS/test_units_offset.ady \
-    TESTS/test_units_stdlib.ady \
-    TESTS/test_cents.ady \
-    TESTS/test_class_type.ady \
-    TESTS/test_units_more.ady \
+    ../TESTS/test_scaled_units.ady \
+    ../TESTS/test_units_offset.ady \
+    ../TESTS/test_units_stdlib.ady \
+    ../TESTS/test_cents.ady \
+    ../TESTS/test_class_type.ady \
+    ../TESTS/test_units_more.ady \
     mars_climate_orbiter.ady \
     distance_units.ady \
-    TESTS/test_union_args.ady \
-    TESTS/test_union_wide.ady \
-    TESTS/test_union_shared.ady \
-    TESTS/test_subrange_array.ady \
-    TESTS/test_variant_literal.ady \
-    TESTS/test_foreign_field_unit.ady \
-    TESTS/test_set_operators.ady \
-    TESTS/test_case_guard_or.ady \
-    TESTS/test_method_param_names.ady \
-    TESTS/test_pure_method_self.ady \
-    TESTS/test_class_name_prefix_field.ady \
-    TESTS/test_record_name_prefix_field.ady \
-    TESTS/test_file_test_access.ady \
-    TESTS/test_enumerate_start.ady \
-    TESTS/test_field_subscript_empty_dict.ady \
-    TESTS/test_die_warn_own.ady \
-    TESTS/test_subscript_call_target.ady \
-    TESTS/test_method_shell_field.ady \
-    TESTS/test_method_result_concat.ady \
-    TESTS/test_str_removeprefix.ady \
-    TESTS/test_shell_revision_braces.ady \
-    TESTS/test_exit_modifier.ady \
-    TESTS/test_regex_quote.ady \
-    TESTS/test_shell_backslash.ady \
-    TESTS/test_shell_keyword_target.ady \
-    TESTS/test_char_table_literal.ady \
-    TESTS/test_param_nested_mutation.ady \
-    TESTS/test_method_named_field.ady \
-    TESTS/test_seq_field_concat.ady \
-    TESTS/test_image_method.ady \
-    TESTS/test_run_discard.ady \
-    TESTS/test_split_unpack.ady \
-    TESTS/test_path_lines.ady \
-    TESTS/test_in_loop_var.ady \
-    TESTS/test_docstring_oneline.ady \
-    TESTS/test_class_fields_per_instance.ady \
-    TESTS/test_pure_method_calls.ady \
-    TESTS/test_definition_order.ady \
-    TESTS/test_ctor_trailing_underscore.ady \
-    TESTS/test_indexed_table_items.ady \
-    TESTS/test_case_trailing_comment.ady \
-    TESTS/test_call_result_type.ady
+    ../TESTS/test_union_args.ady \
+    ../TESTS/test_union_wide.ady \
+    ../TESTS/test_union_shared.ady \
+    ../TESTS/test_subrange_array.ady \
+    ../TESTS/test_variant_literal.ady \
+    ../TESTS/test_foreign_field_unit.ady \
+    ../TESTS/test_set_operators.ady \
+    ../TESTS/test_case_guard_or.ady \
+    ../TESTS/test_method_param_names.ady \
+    ../TESTS/test_pure_method_self.ady \
+    ../TESTS/test_class_name_prefix_field.ady \
+    ../TESTS/test_record_name_prefix_field.ady \
+    ../TESTS/test_file_test_access.ady \
+    ../TESTS/test_enumerate_start.ady \
+    ../TESTS/test_field_subscript_empty_dict.ady \
+    ../TESTS/test_die_warn_own.ady \
+    ../TESTS/test_subscript_call_target.ady \
+    ../TESTS/test_method_shell_field.ady \
+    ../TESTS/test_method_result_concat.ady \
+    ../TESTS/test_str_removeprefix.ady \
+    ../TESTS/test_shell_revision_braces.ady \
+    ../TESTS/test_exit_modifier.ady \
+    ../TESTS/test_regex_quote.ady \
+    ../TESTS/test_shell_backslash.ady \
+    ../TESTS/test_shell_keyword_target.ady \
+    ../TESTS/test_char_table_literal.ady \
+    ../TESTS/test_param_nested_mutation.ady \
+    ../TESTS/test_method_named_field.ady \
+    ../TESTS/test_seq_field_concat.ady \
+    ../TESTS/test_image_method.ady \
+    ../TESTS/test_run_discard.ady \
+    ../TESTS/test_split_unpack.ady \
+    ../TESTS/test_path_lines.ady \
+    ../TESTS/test_in_loop_var.ady \
+    ../TESTS/test_docstring_oneline.ady \
+    ../TESTS/test_class_fields_per_instance.ady \
+    ../TESTS/test_pure_method_calls.ady \
+    ../TESTS/test_definition_order.ady \
+    ../TESTS/test_ctor_trailing_underscore.ady \
+    ../TESTS/test_indexed_table_items.ady \
+    ../TESTS/test_case_trailing_comment.ady \
+    ../TESTS/test_call_result_type.ady
 
 # -----------------------------------------------------------------------
 # Stdin tests — piped from a sample file
 # -----------------------------------------------------------------------
 STDIN_EXAMPLES := \
     AWK/awk_example.ady \
-    TESTS/test_awk.ady \
+    ../TESTS/test_awk.ady \
     AWK/average_line.ady
 
 # -----------------------------------------------------------------------
@@ -271,8 +271,8 @@ ARG_EXAMPLES := \
 # Expect tests — require bc to be installed
 # -----------------------------------------------------------------------
 EXPECT_EXAMPLES := \
-    TESTS/test_expect.ady \
-    TESTS/test_shell_block.ady
+    ../TESTS/test_expect.ady \
+    ../TESTS/test_shell_block.ady
 
 # -----------------------------------------------------------------------
 # Timetable tests — require db_connector (nimble) + a populated SQLite DB
@@ -340,7 +340,7 @@ COMPILE_ONLY := \
     KALMAN_WIENER/kalman_wiener.ady \
     MOON/moon_sim.ady \
     MAP_UTILS/route_map.ady \
-    TESTS/test_input.ady \
+    ../TESTS/test_input.ady \
     dp/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     AWK/awk_logscan.ady \
@@ -354,44 +354,44 @@ COMPILE_ONLY := \
     DOC/string_snippets.ady \
     DOC/type_snippets.ady \
     DOC/awk_paragraph.ady \
-    TESTS/test_die_warn.ady \
-    TESTS/test_print_bare.ady
+    ../TESTS/test_die_warn.ady \
+    ../TESTS/test_print_bare.ady
 
 # Run on both backends and their output compared, below: the Nim run there
 # is the one they get, so the self-contained loop leaves them out.
-BOTH_BACKENDS_COMPARED := TESTS/test_do_block TESTS/test_do_discard TESTS/test_fstring_width TESTS/test_result TESTS/test_optional_spelling \
-    TESTS/test_union TESTS/test_case_ranges TESTS/test_contextmanager_fstring \
-    TESTS/test_ordered_map TESTS/test_function_type TESTS/test_distinct TESTS/test_units TESTS/test_units_fields TESTS/test_tuple_assign_block TESTS/test_self_tuple_assign TESTS/test_math_names TESTS/test_min3_notimpl TESTS/test_option_literals TESTS/test_fstring_flags TESTS/test_fstring_leading_newline TESTS/test_call_field_literal TESTS/test_local_named_like_field TESTS/test_narrowed_value TESTS/test_seq_field_concat TESTS/test_distinct_float_range TESTS/test_narrowed_type TESTS/test_mod_type TESTS/test_ring_buffer TESTS/test_negative_int_range TESTS/test_overload_types TESTS/test_slice_semantics TESTS/test_money accounting \
-    TESTS/test_subrange_array TESTS/test_variant_literal TESTS/test_set_operators \
-    TESTS/test_path_relative_to TESTS/test_path_io TESTS/test_parse trcks_example \
-    TESTS/test_nimport_modules TESTS/test_nimport_qualified TESTS/test_format_zero_decimals TESTS/test_region_operators TESTS/test_str_partition TESTS/test_and_or_mix TESTS/test_enum_values TESTS/test_case_narrowed TESTS/test_not_operand TESTS/test_str_repeat TESTS/test_small_fixes TESTS/test_union_optional TESTS/test_decorators TESTS/test_str_case TESTS/test_optional_tails TESTS/test_generic_methods TESTS/test_round_splitlines TESTS/test_portable_gaps TESTS/test_union_slips TESTS/test_portable_gaps2 TESTS/test_optional_union_written TESTS/test_portable_gaps3 TESTS/test_portable_gaps4 TESTS/test_portable_gaps5 TESTS/test_portable_gaps6 TESTS/test_portable_gaps7 TESTS/test_module_rename TESTS/test_portable_gaps8 TESTS/test_json_value TESTS/test_value_cycle TESTS/test_union_wide TESTS/test_union_shared TESTS/test_element_field \
+BOTH_BACKENDS_COMPARED := ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_fstring_width ../TESTS/test_result ../TESTS/test_optional_spelling \
+    ../TESTS/test_union ../TESTS/test_case_ranges ../TESTS/test_contextmanager_fstring \
+    ../TESTS/test_ordered_map ../TESTS/test_function_type ../TESTS/test_distinct ../TESTS/test_units ../TESTS/test_units_fields ../TESTS/test_tuple_assign_block ../TESTS/test_self_tuple_assign ../TESTS/test_math_names ../TESTS/test_min3_notimpl ../TESTS/test_option_literals ../TESTS/test_fstring_flags ../TESTS/test_fstring_leading_newline ../TESTS/test_call_field_literal ../TESTS/test_local_named_like_field ../TESTS/test_narrowed_value ../TESTS/test_seq_field_concat ../TESTS/test_distinct_float_range ../TESTS/test_narrowed_type ../TESTS/test_mod_type ../TESTS/test_ring_buffer ../TESTS/test_negative_int_range ../TESTS/test_overload_types ../TESTS/test_slice_semantics ../TESTS/test_money accounting \
+    ../TESTS/test_subrange_array ../TESTS/test_variant_literal ../TESTS/test_set_operators \
+    ../TESTS/test_path_relative_to ../TESTS/test_path_io ../TESTS/test_parse trcks_example \
+    ../TESTS/test_nimport_modules ../TESTS/test_nimport_qualified ../TESTS/test_format_zero_decimals ../TESTS/test_region_operators ../TESTS/test_str_partition ../TESTS/test_and_or_mix ../TESTS/test_enum_values ../TESTS/test_case_narrowed ../TESTS/test_not_operand ../TESTS/test_str_repeat ../TESTS/test_small_fixes ../TESTS/test_union_optional ../TESTS/test_decorators ../TESTS/test_str_case ../TESTS/test_optional_tails ../TESTS/test_generic_methods ../TESTS/test_round_splitlines ../TESTS/test_portable_gaps ../TESTS/test_union_slips ../TESTS/test_portable_gaps2 ../TESTS/test_optional_union_written ../TESTS/test_portable_gaps3 ../TESTS/test_portable_gaps4 ../TESTS/test_portable_gaps5 ../TESTS/test_portable_gaps6 ../TESTS/test_portable_gaps7 ../TESTS/test_module_rename ../TESTS/test_portable_gaps8 ../TESTS/test_json_value ../TESTS/test_value_cycle ../TESTS/test_union_wide ../TESTS/test_union_shared ../TESTS/test_element_field \
     MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
-    MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry TESTS/test_units_dims \
-    distance_units mars_climate_orbiter physics_calc TESTS/test_scaled_units TESTS/test_units_offset TESTS/test_units_stdlib TESTS/test_cents TESTS/test_class_type
+    MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry ../TESTS/test_units_dims \
+    distance_units mars_climate_orbiter physics_calc ../TESTS/test_scaled_units ../TESTS/test_units_offset ../TESTS/test_units_stdlib ../TESTS/test_cents ../TESTS/test_class_type
 
 # The compared examples that `ady2nim js` builds: their output under node is
-# compared with the native build's too. TESTS/test_parse is left out on purpose: an
+# compared with the native build's too. ../TESTS/test_parse is left out on purpose: an
 # int on JS is a double, so the 64-bit bounds it reads do not fit. The others
 # left out run commands, use files or use regular expressions, which ady2nim
 # js refuses, naming which.
-JS_COMPARED := TESTS/test_do_block TESTS/test_do_discard TESTS/test_case_ranges TESTS/test_ordered_map accounting \
-    TESTS/test_portable_gaps2 TESTS/test_fstring_width TESTS/test_optional_spelling TESTS/test_contextmanager_fstring \
-    TESTS/test_function_type TESTS/test_distinct TESTS/test_units TESTS/test_units_fields TESTS/test_tuple_assign_block \
-    TESTS/test_self_tuple_assign TESTS/test_math_names TESTS/test_min3_notimpl TESTS/test_option_literals TESTS/test_fstring_flags \
-    TESTS/test_fstring_leading_newline TESTS/test_call_field_literal TESTS/test_local_named_like_field \
-    TESTS/test_narrowed_value TESTS/test_seq_field_concat TESTS/test_distinct_float_range TESTS/test_narrowed_type \
-    TESTS/test_mod_type TESTS/test_ring_buffer TESTS/test_negative_int_range TESTS/test_overload_types TESTS/test_slice_semantics \
-    TESTS/test_money TESTS/test_subrange_array TESTS/test_variant_literal TESTS/test_set_operators trcks_example \
-    TESTS/test_nimport_modules TESTS/test_nimport_qualified TESTS/test_format_zero_decimals TESTS/test_region_operators \
-    TESTS/test_str_partition TESTS/test_and_or_mix TESTS/test_enum_values TESTS/test_case_narrowed TESTS/test_not_operand \
-    TESTS/test_str_repeat TESTS/test_union_optional TESTS/test_decorators TESTS/test_str_case TESTS/test_optional_tails \
-    TESTS/test_generic_methods TESTS/test_round_splitlines TESTS/test_portable_gaps TESTS/test_optional_union_written \
-    TESTS/test_portable_gaps3 TESTS/test_portable_gaps4 TESTS/test_portable_gaps7 TESTS/test_module_rename \
-    TESTS/test_portable_gaps8 TESTS/test_json_value TESTS/test_value_cycle TESTS/test_union_wide TESTS/test_union_shared TESTS/test_element_field \
+JS_COMPARED := ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_case_ranges ../TESTS/test_ordered_map accounting \
+    ../TESTS/test_portable_gaps2 ../TESTS/test_fstring_width ../TESTS/test_optional_spelling ../TESTS/test_contextmanager_fstring \
+    ../TESTS/test_function_type ../TESTS/test_distinct ../TESTS/test_units ../TESTS/test_units_fields ../TESTS/test_tuple_assign_block \
+    ../TESTS/test_self_tuple_assign ../TESTS/test_math_names ../TESTS/test_min3_notimpl ../TESTS/test_option_literals ../TESTS/test_fstring_flags \
+    ../TESTS/test_fstring_leading_newline ../TESTS/test_call_field_literal ../TESTS/test_local_named_like_field \
+    ../TESTS/test_narrowed_value ../TESTS/test_seq_field_concat ../TESTS/test_distinct_float_range ../TESTS/test_narrowed_type \
+    ../TESTS/test_mod_type ../TESTS/test_ring_buffer ../TESTS/test_negative_int_range ../TESTS/test_overload_types ../TESTS/test_slice_semantics \
+    ../TESTS/test_money ../TESTS/test_subrange_array ../TESTS/test_variant_literal ../TESTS/test_set_operators trcks_example \
+    ../TESTS/test_nimport_modules ../TESTS/test_nimport_qualified ../TESTS/test_format_zero_decimals ../TESTS/test_region_operators \
+    ../TESTS/test_str_partition ../TESTS/test_and_or_mix ../TESTS/test_enum_values ../TESTS/test_case_narrowed ../TESTS/test_not_operand \
+    ../TESTS/test_str_repeat ../TESTS/test_union_optional ../TESTS/test_decorators ../TESTS/test_str_case ../TESTS/test_optional_tails \
+    ../TESTS/test_generic_methods ../TESTS/test_round_splitlines ../TESTS/test_portable_gaps ../TESTS/test_optional_union_written \
+    ../TESTS/test_portable_gaps3 ../TESTS/test_portable_gaps4 ../TESTS/test_portable_gaps7 ../TESTS/test_module_rename \
+    ../TESTS/test_portable_gaps8 ../TESTS/test_json_value ../TESTS/test_value_cycle ../TESTS/test_union_wide ../TESTS/test_union_shared ../TESTS/test_element_field \
     MAP_UTILS/map_flat MAP_UTILS/map_geo MAP_UTILS/route_check MAP_UTILS/test_map_utils \
     MAP_UTILS/test_hek_map_utils MAP_UTILS/test_regions PROJECT/dispatch PROJECT/test_geometry \
-    TESTS/test_units_dims distance_units mars_climate_orbiter physics_calc TESTS/test_scaled_units TESTS/test_units_offset \
-    TESTS/test_units_stdlib TESTS/test_cents TESTS/test_class_type
+    ../TESTS/test_units_dims distance_units mars_climate_orbiter physics_calc ../TESTS/test_scaled_units ../TESTS/test_units_offset \
+    ../TESTS/test_units_stdlib ../TESTS/test_cents ../TESTS/test_class_type
 
 # -----------------------------------------------------------------------
 # Skipped when this machine cannot build them -- a Nim package that is not
@@ -408,7 +408,7 @@ JS_COMPARED := TESTS/test_do_block TESTS/test_do_discard TESTS/test_case_ranges 
 # skipped, quietly.
 nim_has = $(shell PATH="$(PATH)"; d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
-NEEDS_NIMPY := pyimport_similar.ady TESTS/test_pyobject_calls.ady TSP/tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
+NEEDS_NIMPY := pyimport_similar.ady ../TESTS/test_pyobject_calls.ady TSP/tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
 NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
 SKIPPED :=
 ifeq ($(call nim_has,nimpy),)
@@ -712,17 +712,17 @@ test-part-02:
 	@printf 'test_die_warn: a warning, and on we go\ntest_die_warn: n must be positive, got -1\n' \
 	    > $(TMPDIR)/ady_die_warn.want
 	@printf '  %-42s' "TESTS/test_die_warn.ady (nim)"; \
-	    $(EXDIR)/TESTS/test_die_warn > $(TMPDIR)/ady_die_warn.out 2> $(TMPDIR)/ady_die_warn.err; \
+	    $(CURDIR)/TESTS/test_die_warn > $(TMPDIR)/ady_die_warn.out 2> $(TMPDIR)/ady_die_warn.err; \
 	    rc=$$?; [ $$rc -eq 3 ] && [ ! -s $(TMPDIR)/ady_die_warn.out ] \
 	        && cmp -s $(TMPDIR)/ady_die_warn.err $(TMPDIR)/ady_die_warn.want \
 	        && echo OK || { echo "FAIL (rc=$$rc)"; cat $(TMPDIR)/ady_die_warn.err; exit 1; }
-	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/TESTS/test_die_warn.ady > $(TMPDIR)/test_die_warn.py
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_die_warn.ady > $(TMPDIR)/test_die_warn.py
 	@printf '  %-42s' "TESTS/test_die_warn.ady (python)"; \
 	    $(PYTHON) $(TMPDIR)/test_die_warn.py > $(TMPDIR)/ady_die_warn.out 2> $(TMPDIR)/ady_die_warn.err; \
 	    rc=$$?; [ $$rc -eq 3 ] && [ ! -s $(TMPDIR)/ady_die_warn.out ] \
 	        && cmp -s $(TMPDIR)/ady_die_warn.err $(TMPDIR)/ady_die_warn.want \
 	        && echo OK || { echo "FAIL (rc=$$rc)"; cat $(TMPDIR)/ady_die_warn.err; exit 1; }
-	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/TESTS/test_die_warn_own.ady > $(TMPDIR)/test_die_warn_own.py
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_die_warn_own.ady > $(TMPDIR)/test_die_warn_own.py
 	@printf '  %-42s' "TESTS/test_die_warn_own.ady (python)"; \
 	    $(PYTHON) $(TMPDIR)/test_die_warn_own.py >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_die_warn.* $(TMPDIR)/test_die_warn.py $(TMPDIR)/test_die_warn_own.py
@@ -899,10 +899,10 @@ test-part-14:
 	@echo "=== bare print, both backends ==="
 	@printf 'a\n\nb\n\n\nc\n' > $(TMPDIR)/ady_print_bare.want
 	@printf '  %-42s' "TESTS/test_print_bare.ady (nim)"; \
-	    $(EXDIR)/TESTS/test_print_bare | cmp -s - $(TMPDIR)/ady_print_bare.want \
+	    $(CURDIR)/TESTS/test_print_bare | cmp -s - $(TMPDIR)/ady_print_bare.want \
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "TESTS/test_print_bare.ady (python)"; \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/TESTS/test_print_bare.ady | $(PYTHON) - \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_print_bare.ady | $(PYTHON) - \
 	        | cmp -s - $(TMPDIR)/ady_print_bare.want && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/ady_print_bare.want
 
@@ -910,7 +910,7 @@ test-part-15:
 	@# Each instance has fields of its own on Python too, set once: a field
 	@# its __init__ sets first thing is not set to its zero before.
 	@echo "=== class fields per instance (python) ==="
-	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/TESTS/test_class_fields_per_instance.ady \
+	@$(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_class_fields_per_instance.ady \
 	    > $(TMPDIR)/test_class_fields_per_instance.py
 	@printf '  %-42s' "TESTS/test_class_fields_per_instance.ady (python)"; \
 	    $(PYTHON) $(TMPDIR)/test_class_fields_per_instance.py | grep -qx ok && echo OK || { echo FAIL; exit 1; }
@@ -925,7 +925,7 @@ test-part-16:
 	@# a comment after it, rather than landing in that branch's head.
 	@echo "=== a comment after a one-line case branch (python) ==="
 	@printf '  %-42s' "TESTS/test_case_trailing_comment.ady (python)"; \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/TESTS/test_case_trailing_comment.ady | $(PYTHON) - \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_case_trailing_comment.ady | $(PYTHON) - \
 	    | grep -qx 'test_case_trailing_comment: ok' && echo OK || { echo FAIL; exit 1; }
 
 test-part-17:
@@ -1286,8 +1286,8 @@ test-part-23:
 test-part-24:
 	@echo "=== input() is a failure-typed result (two lines piped in, on both backends) ==="
 	@printf '  %-42s' "TESTS/test_input.ady (python = nim)"; \
-	    printf 'ann\nlee\n' | $(EXDIR)/TESTS/test_input > $(TMPDIR)/ady_input_nim.out 2>&1; \
-	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(EXDIR)/TESTS/test_input.ady > $(TMPDIR)/ady_input.py; \
+	    printf 'ann\nlee\n' | $(CURDIR)/TESTS/test_input > $(TMPDIR)/ady_input_nim.out 2>&1; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_input.ady > $(TMPDIR)/ady_input.py; \
 	    printf 'ann\nlee\n' | $(PYTHON) $(TMPDIR)/ady_input.py > $(TMPDIR)/ady_input_py.out 2>&1; \
 	    if grep -q 'test_input OK' $(TMPDIR)/ady_input_nim.out && cmp -s $(TMPDIR)/ady_input_nim.out $(TMPDIR)/ady_input_py.out; then \
 	        echo OK; else echo FAIL; diff $(TMPDIR)/ady_input_nim.out $(TMPDIR)/ady_input_py.out; exit 1; fi
@@ -1377,7 +1377,7 @@ test-part-26:
 	    out=$$($(EXDIR)/AWK/html_body $(EXDIR)/AWK/html_body_sample.html 2>&1); \
 	    echo "$$out" | grep -q 'id="html_body_sample"' \
 	        && ! echo "$$out" | grep -q 'test_ignored' \
-	        && echo "$$out" | grep -q "href=\"$(EXDIR)/test_alpha.html\"" \
+	        && echo "$$out" | grep -q "href=\"$(EXDIR)/AWK/test_alpha.html\"" \
 	        && echo OK || { echo FAIL; exit 1; }
 	@# The same checker in awk, kept next to it: same schema, same findings,
 	@# same bytes. Runs after AWK/config_check, which is what writes the fixture.
@@ -1740,23 +1740,23 @@ test-part-52:
 	    fi
 
 test-part-53:
-	@# TESTS/test_env_default.ady and TESTS/test_env_optional.ady pass standalone, but
+	@# ../TESTS/test_env_default.ady and ../TESTS/test_env_optional.ady pass standalone, but
 	@# the cases that give each its point -- `:-` rather than plain `-`,
 	@# and presence rather than truthiness -- need a variable that is *set*
 	@# and empty, and Adascript can read the environment but not write it.
 	@echo "=== Env default (set-but-empty case) ==="
 	@printf '  %-42s' "TESTS/test_env_default.ady (ADY_TEST_EMPTY=)"; \
-	    ADY_TEST_EMPTY= $(EXDIR)/TESTS/test_env_default >/dev/null 2>&1 \
+	    ADY_TEST_EMPTY= $(CURDIR)/TESTS/test_env_default >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "TESTS/test_env_optional.ady (ADY_TEST_EMPTY=)"; \
-	    ADY_TEST_EMPTY= $(EXDIR)/TESTS/test_env_optional >/dev/null 2>&1 \
+	    ADY_TEST_EMPTY= $(CURDIR)/TESTS/test_env_optional >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 
 test-part-54:
 	@# -t has to resolve nimport'd dependencies, not just translate the one
 	@# file: it writes to the very path a later build reads, so a .nim
 	@# emitted without the imported module's declarations poisons the cache.
-	@# TESTS/test_awk.ady is the case -- its class inherits its constructor from
+	@# ../TESTS/test_awk.ady is the case -- its class inherits its constructor from
 	@# awk.ady -- and the check is that a build straight after a -t works.
 	@# A throwaway XDG_CACHE_HOME gives it a cache of its own, so the check
 	@# starts cold and leaves the real cache alone either way.  Not a
@@ -1767,8 +1767,8 @@ test-part-54:
 	@echo "=== Transpile-only, then build (ady2nim -t) ==="
 	@printf '  %-42s' "TESTS/test_awk.ady (-t then -r)"; \
 	    tmp=$$(mktemp -d); \
-	    XDG_CACHE_HOME=$$tmp $(ADY2NIM) -t $(EXDIR)/TESTS/test_awk.ady >/dev/null 2>&1 \
-	      && XDG_CACHE_HOME=$$tmp $(ADY2NIM) $(EXDIR)/TESTS/test_awk.ady -r </dev/null >/dev/null 2>&1 \
+	    XDG_CACHE_HOME=$$tmp $(ADY2NIM) -t $(CURDIR)/TESTS/test_awk.ady >/dev/null 2>&1 \
+	      && XDG_CACHE_HOME=$$tmp $(ADY2NIM) $(CURDIR)/TESTS/test_awk.ady -r </dev/null >/dev/null 2>&1 \
 	      && { echo OK; rm -rf $$tmp; } \
 	      || { echo FAIL; rm -rf $$tmp; exit 1; }
 
@@ -1799,17 +1799,17 @@ test-part-55:
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "TESTS/test_json_value.ady (ady2nim js, node)"; \
 	if ! command -v node >/dev/null; then echo "SKIPPED, no node"; else \
-	    $(ADY2NIM) js $(EXDIR)/TESTS/test_json_value.ady >/dev/null 2>&1 \
-	        && node $(EXDIR)/TESTS/test_json_value.js | grep -q "all checks passed" \
+	    $(ADY2NIM) js $(CURDIR)/TESTS/test_json_value.ady >/dev/null 2>&1 \
+	        && node $(CURDIR)/TESTS/test_json_value.js | grep -q "all checks passed" \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    rm -f $(EXDIR)/TESTS/test_json_value.js; \
+	    rm -f $(CURDIR)/TESTS/test_json_value.js; \
 	fi
 	@# the same script in a real browser, whose strings are UTF-16: a character
 	@# past FFFF is a surrogate pair there
 	@printf '  %-42s' "TESTS/test_json_value.ady (ady2nim js, chromium)"; \
 	if ! python3 -c 'import playwright' 2>/dev/null; then echo "SKIPPED, no playwright"; else \
 	    exe=$${CHROMIUM:-$$( [ -x /opt/pw-browsers/chromium ] && echo /opt/pw-browsers/chromium )}; \
-	    o=$(TMPDIR)/ady_json_browser; mkdir -p $$o && cp $(EXDIR)/TESTS/test_json_value.ady $$o/ && \
+	    o=$(TMPDIR)/ady_json_browser; mkdir -p $$o && cp $(CURDIR)/TESTS/test_json_value.ady $$o/ && \
 	    (cd $$o && $(ADY2NIM) js test_json_value.ady >/dev/null 2>&1) \
 	        && CHROMIUM=$$exe python3 $(EXDIR)/browser_run.py $$o/test_json_value.js | grep -q "all checks passed" \
 	        && echo OK || { echo FAIL; exit 1; }; \

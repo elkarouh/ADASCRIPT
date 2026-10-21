@@ -617,7 +617,7 @@ its `.code`.
 
 If the block contains `send(...)`/`expect(...)`, the first line is spawned
 under a **PTY** and the rest drives it — a built-in `expect(1)`. From
-`EXAMPLES/TESTS/test_shell_block.ady`:
+`TESTS/test_shell_block.ady`:
 
 ```python
 shell:
@@ -630,7 +630,7 @@ shell:
 ```
 
 For finer control — capturing what matched, multiple concurrent spawns —
-use the bundled library directly (`EXAMPLES/TESTS/test_expect.ady`):
+use the bundled library directly (`TESTS/test_expect.ady`):
 
 ```python
 nimport expect
