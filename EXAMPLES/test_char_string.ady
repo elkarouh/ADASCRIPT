@@ -1,0 +1,20 @@
+# [N]char is a finite-length string: it prints as its text, and a str of exactly
+# N characters converts to a checked type over it.
+const W: int = 4
+type Stamp_T is [W]char where t: all(48 <= ord(t_c) <= 57 for t_c in t)
+
+def make(s: str) -> Stamp_T | !ParseFailure_T:
+    do:
+        t <- Stamp_T(s)
+    return t
+
+def main() -> int:
+    let good: Stamp_T | !ParseFailure_T = make("1234")
+    assert not (good is ParseFailure_T)
+    assert f"{good}" == "1234"
+    assert make("12x4") is ParseFailure_T
+    assert make("123") is ParseFailure_T
+    print("test_char_string: ok")
+    return 0
+
+quit(main())

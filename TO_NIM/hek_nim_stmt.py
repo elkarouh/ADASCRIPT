@@ -2853,7 +2853,7 @@ def _where_type_nim(name, params, rhs, indent):
             zero = "0.0" if kind == "float" else "0"
             lines.append(f"{ind}proc sum{_exp}(x: openArray[{name}]): {base} = "
                          f"x.foldl(a + {base}(b), {zero})")
-    shown = "$value" if scalar else "repr(value)"
+    shown = "$value" if scalar or (base.startswith("array[") and base.endswith(", char]")) else "repr(value)"
     lines += [
         f"{ind}converter up_{name}{_exp}(x: {name}): {base} = {base}(x)",
         f"{ind}proc valid_{name}({var}: {base}): bool = ({pred})",
@@ -2862,6 +2862,14 @@ def _where_type_nim(name, params, rhs, indent):
         f"{fail}.err(ParseFailure_T(what: \"{name}\", text: {shown})))"]
     if kind == "float" and not unit_parent:
         lines.append(f"{ind}proc to_{name}{_exp}(value: int): {fail} = to_{name}(float(value))")
+    if base.startswith("array[") and base.endswith(", char]") and not params:
+        # a finite-length string: a str of exactly its length converts, any
+        # other is a failure
+        ParserState.nim_imports.add("options")
+        lines.append(
+            f"{ind}proc to_{name}{_exp}(text: string): {fail} = "
+            f"(let raw = adaCharsOf[{base}](text); if raw.isSome: to_{name}(raw.get) else: "
+            f"{fail}.err(ParseFailure_T(what: \"{name}\", text: text)))")
     lines.append(f"{ind}proc to_{name}{_exp}(x: {name}): {name} = x")
     ParserState.proc_return_types[f"to_{name}"] = fail
     return "\n".join(lines)

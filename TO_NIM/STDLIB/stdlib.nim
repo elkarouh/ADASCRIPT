@@ -160,6 +160,13 @@ proc adaLiftOption*[T, E](r: Result[T, E]): Result[Option[T], E] =
   if r.adaIsErr: Result[Option[T], E](adaIsErr: true, adaErr: r.adaErr)
   else: Result[Option[T], E](adaIsErr: false, adaVal: some(r.adaVal))
 
+proc adaCharsOf*[A: array](text: string): Option[A] =
+  ## A finite-length string, [N]char, from a str of exactly N characters.
+  var raw: A
+  if text.len != raw.len: return none(A)
+  for i in 0 ..< raw.len: raw[i] = text[i]
+  some(raw)
+
 proc is_ok*[T, E](r: Result[T, E]): bool = not r.adaIsErr
 proc is_err*[T, E](r: Result[T, E]): bool = r.adaIsErr
 

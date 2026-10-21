@@ -133,6 +133,7 @@ STANDALONE := \
     test_nim_quirks.ady \
     test_small_fixes.ady \
     test_decoder_gaps.ady \
+    test_char_string.ady \
     test_union_optional.ady \
     test_decorators.ady \
     test_str_case.ady \
