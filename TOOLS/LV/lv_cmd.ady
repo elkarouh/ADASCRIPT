@@ -96,13 +96,9 @@ class ViewLister(AwkProcessor):
         super().__init__()
         self.view_lines = []
 
-    # The lines Clsworkspace prints, one a record. The command is run when the first is asked for.
+    # The lines Clsworkspace prints, one a record, as it prints them.
     def get_record(self) -> AwkRecord_T:
-        let out: str | !ShellFailure_T = shell: Clsworkspace -user $USER
-        if out is ShellFailure_T:
-            self.stop(f"Clsworkspace failed: {out.stderr.strip()}")
-            return
-        for line in out.splitlines():
+        for line in shellIter(check = true): Clsworkspace -user $USER
             yield self.record(line)
 
     def start(self):
@@ -159,9 +155,12 @@ class ViewLister(AwkProcessor):
 
 
 def main():
-    let done: None | !AwkFailure_T = ViewLister().run()
-    if done is AwkFailure_T:
-        die(done.reason)
+    try:
+        let done: None | !AwkFailure_T = ViewLister().run()
+        if done is AwkFailure_T:
+            die(done.reason)
+    except:
+        die("Clsworkspace failed")
 
 
 main()
