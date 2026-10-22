@@ -335,6 +335,67 @@ still needs an `if` chain: `picked` in `dijkstra_gui.ady` is one.
 
 ---
 
+## The blackboard: who hears of a change
+
+Step 4 sends every change through a channel, and nobody calls `keep` or `tell` by name.
+That is the *blackboard* pattern, an old one from AI systems, where independent experts
+work on one shared problem without talking to each other. It has three parts:
+
+| Part | What it is | Here |
+|---|---|---|
+| The blackboard | the shared state everyone works from | the `Network` |
+| The control | decides what is written on it, and when | `Session.answer`: checks a command, applies it, says what changed |
+| The knowledge sources | each reacts to a change, knowing nothing of the others | `keep` writes `graph.txt`; `tell` writes to every open page |
+
+What ties them together is a channel per kind of change, from the standard library's
+`blackboard.ady`:
+
+```adascript
+from blackboard import PublishChannel
+
+type Change_Kind_T is enum CREATE, UPDATE, DELETE, RELOAD
+type Change is record:
+    kind: Change_Kind_T
+    key:  str                           # the node's name, or the edge's two ends
+
+class Session:
+    var nodes: PublishChannel[Change]   # what happened to a node
+    var edges: PublishChannel[Change]   # what happened to an edge
+    ...
+        if problem is None:             # only what went through is told
+            for c in node_changes:
+                self.nodes.publish(c)
+```
+
+and the server says who listens, once, at start:
+
+```adascript
+session.nodes.subscribe(keep)           # kept first, so a page that reads again sees it saved
+session.nodes.subscribe(tell)
+```
+
+Four rules follow from it:
+
+1. **The control knows no listener.** `answer` publishes `Change(CREATE, "H")`; whether
+   that is saved, sent to three tabs or logged is decided elsewhere.
+2. **A new capability is a new subscriber**, not an edit of `answer`. Undo is a
+   subscriber that keeps the changes in order (a `Change` is already a history entry,
+   and `keep_history` keeps the last ones); a log is one that writes them out.
+3. **Only what went through is told.** A refused command publishes nothing, so no
+   knowledge source ever sees a change that did not happen.
+4. **Everything happens at once.** `publish` calls each subscriber in turn, in the order
+   they subscribed, and returns when all have run: there is no queue and no thread.
+   That is why `keep` goes before `tell`.
+
+The test is a knowledge source too: it subscribes a function that writes down what it
+hears, and checks the list (`tests/test_dijkstra.ady`).
+
+A subscriber is a plain function, `(channel: str, change: Change) -> None`, so what it
+needs (the session, the open pages) it finds at module level, as `keep` and `tell` do in
+`server.ady`.
+
+---
+
 ## Step 5: a drag, from the mouse to the page
 
 ![Dragging a node: the browser moves it, then the server keeps it](drag_sequence.svg)

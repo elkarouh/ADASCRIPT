@@ -73,6 +73,9 @@ The routes are a small REST interface on two collections. Commands in, events ou
   in and press, and each route is named where the gesture that uses it is.
 * A mistake (a name taken, an edge that is there already) comes back as a line
   in red on the page that made it; nothing is changed, and no other page hears of it.
+* Who hears of a change is decided by subscribing, not in `answer`: the `Network` is the
+  blackboard, `Session.answer` the control, and `keep` (the file) and `tell` (every open page)
+  knowledge sources that know nothing of each other. See "The blackboard" in `docs/TUTORIAL.md`.
 * So testing the GUI is calling `session.answer(method, path, fields)`, reading the
   page, and subscribing to hear what changed: see `tests/test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command
