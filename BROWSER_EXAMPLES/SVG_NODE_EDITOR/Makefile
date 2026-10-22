@@ -1,4 +1,4 @@
-# EXAMPLES/SVG_NODE_EDITOR: a node editor drawn as SVG, in the browser. Needs karax >= 1.5.0
+# BROWSER_EXAMPLES/SVG_NODE_EDITOR: a node editor drawn as SVG, in the browser. Needs karax >= 1.5.0
 # (nimble install karax@1.5.0).
 #
 #   make app      build the page and the script, serve them, open the page

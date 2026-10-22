@@ -1,4 +1,4 @@
-# EXAMPLES/HTML -- pages written as Adascript objects, with `html:` blocks
+# BROWSER_EXAMPLES/HTML -- pages written as Adascript objects, with `html:` blocks
 
 Two small programs that show how a page is built from objects. Each class has a
 `to_html` method that says what it looks like, and the page is the objects' output
@@ -37,7 +37,7 @@ These two show the pattern and nothing else. The worked web apps are in:
 
 - `TOOLS/ACCOUNTING`: Kleppmann's accounting, with the model, a ledger, a static page
   (`make gui`) and a page the server draws and htmx keeps up to date.
-- `EXAMPLES/DIJKSTRA_HTMX`: a shortest-path demo in the same shape, with a small browser
+- `BROWSER_EXAMPLES/DIJKSTRA_HTMX`: a shortest-path demo in the same shape, with a small browser
   script built on the stdlib's `browser` and `svg_drag` modules.
 
 The accounting example that used to be here is now the tool in `TOOLS/ACCOUNTING`.

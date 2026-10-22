@@ -440,7 +440,7 @@ class Panel(Widget):
 ```
 
 A `Panel` can hold a `Label`, a `Button` or another `Panel`: the call
-dispatches on the object. `EXAMPLES/HTML/html_app.ady` is the whole
+dispatches on the object. `BROWSER_EXAMPLES/HTML/html_app.ady` is the whole
 program, with an `App` that renders `html`, `head` and `body` around a
 panel.
 
@@ -479,7 +479,7 @@ The page is redrawn after every handler. A class whose handlers change its
 own fields is `@virtual`, so the handler and the page share one object.
 A page with a handler builds only under `ady2nim js` (`#ady2nim-args js` on
 the second line); it needs a `<div id="ROOT">` and the compiled script in an
-HTML file. `EXAMPLES/HTML/html_app.ady` and its `index.html` are the whole
+HTML file. `BROWSER_EXAMPLES/HTML/html_app.ady` and its `index.html` are the whole
 program, and `make app` there serves it. Handlers that take the event object
 are not built.
 

@@ -1,4 +1,4 @@
-# EXAMPLES/HTML: pages written with html: blocks. Needs karax >= 1.5.0
+# BROWSER_EXAMPLES/HTML: pages written with html: blocks. Needs karax >= 1.5.0
 # (nimble install karax@1.5.0).
 #
 #   make card       one widget, drawn as SVG, no server      (html_card.ady)
@@ -6,7 +6,7 @@
 #   make all        build every page into build/, open none
 #
 # The worked web apps are elsewhere: TOOLS/ACCOUNTING (Kleppmann's accounting,
-# which started here) and EXAMPLES/DIJKSTRA_HTMX, both drawn on the server and
+# which started here) and BROWSER_EXAMPLES/DIJKSTRA_HTMX, both drawn on the server and
 # kept up to date by htmx.
 #
 # `card` builds its SVG into build/ and opens the file in the browser; `app`

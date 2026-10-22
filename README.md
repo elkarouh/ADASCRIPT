@@ -205,7 +205,7 @@ which earlier versions do not emit). Nothing beyond the standard library.
 | Package | Install | Required for |
 |---------|---------|--------------|
 | `nimpy` | `nimble install nimpy` | Any `.ady` file that uses `pyimport` to call Python libraries from Nim |
-| `karax` >= 1.5.0 | `nimble install karax@1.5.0` (1.2.1 does not compile on Nim 2.2) | Any `.ady` file with an `html:` block (`EXAMPLES/HTML/`) |
+| `karax` >= 1.5.0 | `nimble install karax@1.5.0` (1.2.1 does not compile on Nim 2.2) | Any `.ady` file with an `html:` block (`BROWSER_EXAMPLES/HTML/`) |
 | `db_connector` | `nimble install db_connector` | Any `.ady` file that uses `import db` (SQLite support; removed from Nim 2.x stdlib) |
 | `zig` / `zigcc` | *optional* — download from [ziglang.org](https://ziglang.org/download/), then `printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc` | Preferred by files pinning `#ady2nim-args c --cc:clang --clang.exe:zigcc` — `state_search.ady`, `shortest_path.ady`, their tests, and the timetable examples |
 
@@ -3493,7 +3493,7 @@ class Panel(Widget):
 ```
 
 A `Panel` can hold a `Label`, a `Button` or another `Panel`: the call
-dispatches on the object. `EXAMPLES/HTML/html_app.ady` is the whole
+dispatches on the object. `BROWSER_EXAMPLES/HTML/html_app.ady` is the whole
 program, with an `App` that renders `html`, `head` and `body` around a
 panel.
 
@@ -3532,7 +3532,7 @@ The page is redrawn after every handler. A class whose handlers change its
 own fields is `@virtual`, so the handler and the page share one object.
 A page with a handler builds only under `ady2nim js` (`#ady2nim-args js` on
 the second line); it needs a `<div id="ROOT">` and the compiled script in an
-HTML file. `EXAMPLES/HTML/html_app.ady` and its `index.html` are the whole
+HTML file. `BROWSER_EXAMPLES/HTML/html_app.ady` and its `index.html` are the whole
 program, and `make app` there serves it. Handlers that take the event object
 are not built.
 
@@ -3563,7 +3563,7 @@ current, the browser script holds only what must follow the mouse. `import
 svg_drag` (`TO_NIM/STDLIB/svg_drag.ady`, built on `browser`) drags the shapes of such an SVG:
 `draggable(shapes, svg, width, moved, dropped, clicked)`, where the three
 functions say what a drag means to the app. Pixels and drawing units are
-distinct types in it, with a scale between them. `EXAMPLES/DIJKSTRA_HTMX` and
+distinct types in it, with a scale between them. `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and
 `TOOLS/ACCOUNTING` are whole programs built this way.
 
 **Data the server hands the script.** `import json_value`
@@ -3801,8 +3801,8 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import db`       | thin SQLite wrapper                                        |
 | `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
 | `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, `request(method, url, fields, target, include)`, a `Click` |
-| `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
-| `import svg_path` | paths for an SVG drawing, as the `d` of a `<path>`; plain arithmetic, so it compiles both to C and to JavaScript: `connector_d(x1, y1, x2, y2, leave, stop_short)`, an S-shaped curve between two boxes; `EXAMPLES/ROI_HTMX` uses it |
+| `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
+| `import svg_path` | paths for an SVG drawing, as the `d` of a `<path>`; plain arithmetic, so it compiles both to C and to JavaScript: `connector_d(x1, y1, x2, y2, leave, stop_short)`, an S-shaped curve between two boxes; `BROWSER_EXAMPLES/ROI_HTMX` uses it |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EDITORS/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
 

@@ -1,4 +1,4 @@
-# EXAMPLES/LITTLE_PAGES: a filtered list as one small page per filter.
+# BROWSER_EXAMPLES/LITTLE_PAGES: a filtered list as one small page per filter.
 #
 #   make pages      write build/recent.html, popular.html, all.html
 #   make open       the same, then open build/recent.html in the browser

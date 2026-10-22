@@ -1,8 +1,8 @@
 # ROI_HTMX -- the ROI_JOINTJS page, without JointJS
 
-`EXAMPLES/ROI_JOINTJS` draws a return-on-investment diagram with the JointJS
+`BROWSER_EXAMPLES/ROI_JOINTJS` draws a return-on-investment diagram with the JointJS
 library: boxes with fields in them, joined by arrows. This is the same page in
-the architecture of `TOOLS/ACCOUNTING` and `EXAMPLES/DIJKSTRA_HTMX`: the program
+the architecture of `TOOLS/ACCOUNTING` and `BROWSER_EXAMPLES/DIJKSTRA_HTMX`: the program
 is native, the diagram is an SVG that the server draws, and htmx carries each
 change. There is no diagram library; the one script of our own is the drag.
 

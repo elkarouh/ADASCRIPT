@@ -19,8 +19,8 @@ well and wants to know what changes when they write the page in Adascript.
 
 Every Adascript example quoted here is a real file in the repository, and
 `make test` checks that the quotes still match. The browser examples come
-from `EXAMPLES/DIJKSTRA_HTMX` and `TO_NIM/STDLIB/svg_drag.ady`; the model
-examples come from `EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady`. JavaScript
+from `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and `TO_NIM/STDLIB/svg_drag.ady`; the model
+examples come from `BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady`. JavaScript
 blocks in this document are comparisons, not Adascript, and are not checked.
 
 ---
@@ -74,7 +74,7 @@ file are never reassigned, and the ones that are should say so. Here is the
 rule the examples follow. Use `let` by default, `var` when the value changes,
 and a module-level `var` only for state that really lives across events.
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
+<!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
 def names(self) -> []str:
     var names: []str = []
@@ -137,7 +137,7 @@ absent has a type that says so, and a value that is not optional cannot be
 A JavaScript object is a bag of properties. Adascript's closest thing is a
 record, which is declared with its fields and their types:
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
+<!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
 type Node_T is record:
     name: str
@@ -148,7 +148,7 @@ not the model, so the model stays the same whatever the layout does.
 
 A record is built by calling its type with the fields in order, or by name:
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
+<!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
 self.edges.append(Edge_T(a, b, cost))
 ```
@@ -253,7 +253,7 @@ the caller must look at, as it must look at an optional. The model does this
 for every change it accepts. `None` means it was done; a `Refusal_T` says why
 it was not:
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
+<!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
 def add_node(self, name: str) -> None | !Refusal_T:
     if len(name) == 0 or len(name) > 8:
@@ -263,7 +263,7 @@ def add_node(self, name: str) -> None | !Refusal_T:
 The caller asks which it got with `is`, and the tests in `test_dijkstra.ady`
 do the same:
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady -->
+<!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady -->
 ```python
 assert net.add_node("G") is None
 assert net.add_node("G") is Refusal_T
@@ -363,7 +363,7 @@ from browser import Element_T, page, set_attr, number, Click_T, click_of, on
 ```
 
 The model is kept apart from the page. `dijkstra_model.ady` does no file I/O
-and no HTML, and `EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady` runs it with
+and no HTML, and `BROWSER_EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady` runs it with
 `ady2nim c -r`, with no server and no browser.
 
 ---
@@ -395,7 +395,7 @@ and no HTML, and `EXAMPLES/DIJKSTRA_HTMX/tests/test_dijkstra.ady` runs it with
 - `DOCS/BOOK/` covers each part of the language in a chapter: types in 02,
   enums in 03, records and variants in 04, optionals in 10, and the
   two backends in 12.
-- `EXAMPLES/DIJKSTRA_HTMX/` is the whole thing in one small program: a model,
+- `BROWSER_EXAMPLES/DIJKSTRA_HTMX/` is the whole thing in one small program: a model,
   a server that draws the page with htmx, and a browser script that handles
   the clicks and drags.
 - `TO_NIM/STDLIB/svg_drag.ady` is the drag module in full, with its own

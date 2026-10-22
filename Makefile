@@ -11,6 +11,7 @@
 PYTHON := $(shell command -v python3.12 2>/dev/null || command -v python3.14)
 ADY2NIM := $(PYTHON) $(CURDIR)/TO_NIM/ady2nim.py
 EXDIR  := $(CURDIR)/EXAMPLES
+BEXDIR := $(CURDIR)/BROWSER_EXAMPLES
 # Scratch space: each user's own. Two people running the tests on one
 # machine must not meet in /tmp, where the other's files are not theirs to
 # overwrite -- a test found the first one's and failed. Exported, so the
@@ -418,10 +419,10 @@ ifeq ($(call nim_has,db_connector/db_sqlite),)
 SKIPPED += $(NEEDS_DB_CONNECTOR)
 SKIP_NOTES += "db_connector (nimble install db_connector): $(NEEDS_DB_CONNECTOR)"
 endif
-# html: blocks need karax; without it EXAMPLES/HTML is not built.
+# html: blocks need karax; without it BROWSER_EXAMPLES/HTML is not built.
 ifeq ($(call nim_has,karax/karaxdsl),)
 HTML_SKIPPED := yes
-SKIP_NOTES += "karax (nimble install karax): EXAMPLES/HTML/"
+SKIP_NOTES += "karax (nimble install karax): BROWSER_EXAMPLES/HTML/"
 endif
 LIBS := $(filter-out $(SKIPPED),$(LIBS))
 STANDALONE := $(filter-out $(SKIPPED),$(STANDALONE))
@@ -1825,20 +1826,20 @@ test-part-56:
 	    for t in 'html_card:>Counter</text>' 'test_html_block:html_block ok'; do \
 	        n=$${t%%:*}; want=$${t#*:}; \
 	        printf '  %-42s' "HTML/$$n.ady"; \
-	        $(ADY2NIM) c -r $(EXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \
+	        $(ADY2NIM) c -r $(BEXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
 	    printf '  %-42s' "HTML/html_app.ady (ady2nim js)"; \
-	    $(ADY2NIM) js $(EXDIR)/HTML/html_app.ady >/dev/null 2>&1 \
+	    $(ADY2NIM) js $(BEXDIR)/HTML/html_app.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    rm -f $(EXDIR)/HTML/html_app.js; \
+	    rm -f $(BEXDIR)/HTML/html_app.js; \
 	    printf '  %-42s' "SVG_NODE_EDITOR/backend/node_editor_gui.ady"; \
-	    $(ADY2NIM) c -r $(EXDIR)/SVG_NODE_EDITOR/backend/node_editor_gui.ady 2>/dev/null | grep -qF '>Process 4</text>' \
+	    $(ADY2NIM) c -r $(BEXDIR)/SVG_NODE_EDITOR/backend/node_editor_gui.ady 2>/dev/null | grep -qF '>Process 4</text>' \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    printf '  %-42s' "SVG_NODE_EDITOR/frontend/node_editor_js_events.ady (ady2nim js)"; \
-	    $(ADY2NIM) js $(EXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.ady >/dev/null 2>&1 \
+	    $(ADY2NIM) js $(BEXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    rm -f $(EXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.js; \
+	    rm -f $(BEXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.js; \
 	fi
 
 test-part-57:
@@ -1863,17 +1864,17 @@ test-part-57:
 	fi
 
 test-part-58:
-	@# EXAMPLES/LITTLE_PAGES: one page per filter, each marking its own tab.
-	@echo "=== EXAMPLES/LITTLE_PAGES (lots of little HTML pages) ==="
+	@# BROWSER_EXAMPLES/LITTLE_PAGES: one page per filter, each marking its own tab.
+	@echo "=== BROWSER_EXAMPLES/LITTLE_PAGES (lots of little HTML pages) ==="
 	@printf '  %-42s' "LITTLE_PAGES/little_pages.ady"; \
 	    o=$(TMPDIR)/ady_little_pages; rm -rf $$o; \
-	    $(ADY2NIM) c -r $(EXDIR)/LITTLE_PAGES/little_pages.ady $$o >/dev/null 2>&1 \
+	    $(ADY2NIM) c -r $(BEXDIR)/LITTLE_PAGES/little_pages.ady $$o >/dev/null 2>&1 \
 	        && grep -q 'class="here">popular' $$o/popular.html \
 	        && grep -q 'view-transition' $$o/all.html \
 	        && ! grep -q 'A first blog' $$o/recent.html \
 	        && grep -q 'A first blog' $$o/all.html \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    rm -rf $$o $(EXDIR)/LITTLE_PAGES/little_pages
+	    rm -rf $$o $(BEXDIR)/LITTLE_PAGES/little_pages
 
 # -----------------------------------------------------------------------
 # clean — remove caches and binary symlinks produced by ady2nim

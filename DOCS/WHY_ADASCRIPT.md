@@ -1329,7 +1329,7 @@ variant objects need the field spelled out in every branch.
 
 Adascript narrows on the test, and the test reads as the sentence:
 
-<!-- from: EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady -->
+<!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/frontend/dijkstra_js_events.ady -->
 ```python
 class Selection:
     var what: NodeView | EdgeView | None

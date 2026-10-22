@@ -1,4 +1,4 @@
-# EXAMPLES/SVG_NODE_EDITOR -- a node editor in SVG
+# BROWSER_EXAMPLES/SVG_NODE_EDITOR -- a node editor in SVG
 
 Four process nodes, each with three inputs on its left and three outputs on its right, and orange
 bezier connectors between them. It is the editor of https://codepen.io/osublake/embed/OxWjgq
@@ -26,7 +26,7 @@ You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
 | `backend/node_editor_gui.ady` | the page: an `html:` block draws the SVG, and the program prints it | native, `ady2nim c -r` |
 | `frontend/node_editor_js_events.ady` | what the reader does: the editor keeps where the nodes are and which ports are joined, and draws the connectors from that | browser, `ady2nim js` |
 
-`backend/` is native and `frontend/` is what the browser runs, as in `EXAMPLES/DIJKSTRA_HTMX`; the model is compiled
+`backend/` is native and `frontend/` is what the browser runs, as in `BROWSER_EXAMPLES/DIJKSTRA_HTMX`; the model is compiled
 both ways, so the page and the script agree on where every port is.
 
 The drag of a node is the stdlib's `svg_drag`, the page (finding elements, reading `data_*`

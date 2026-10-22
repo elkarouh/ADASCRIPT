@@ -1,4 +1,4 @@
-# EXAMPLES/DIJKSTRA_HTMX: an algorithm with a GUI the server draws, for htmx.
+# BROWSER_EXAMPLES/DIJKSTRA_HTMX: an algorithm with a GUI the server draws, for htmx.
 # Needs karax >= 1.5.0 (nimble install karax@1.5.0).
 #
 #   make app      build dijkstra_js_events.js and the server, start it, open the page

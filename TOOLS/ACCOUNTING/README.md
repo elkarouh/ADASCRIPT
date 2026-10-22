@@ -4,7 +4,7 @@ A tool to learn accounting with, after Martin Kleppmann's
 [Accounting for Computer Scientists](https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html):
 an account is a node, a transaction moves money along an edge, and the
 statements are read off the balances. It started as an example in
-`EXAMPLES/HTML`, and replaced it.
+`BROWSER_EXAMPLES/HTML`, and replaced it.
 
 ![The files of this app and what each imports](docs/dependencies.png)
 

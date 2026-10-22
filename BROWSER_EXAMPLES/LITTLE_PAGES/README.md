@@ -1,4 +1,4 @@
-# EXAMPLES/LITTLE_PAGES -- lots of little HTML pages
+# BROWSER_EXAMPLES/LITTLE_PAGES -- lots of little HTML pages
 
 A list of posts that can be shown as *recent*, *popular* or *all* is the kind of
 thing that gets a script in the page: a button per filter, and code that hides

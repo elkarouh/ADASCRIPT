@@ -10,6 +10,7 @@ NIM_VERSION/
 *.exe
 *.png
 EXAMPLES/**/*.nim
+BROWSER_EXAMPLES/**/*.nim
 TESTS/**/*.nim
 !TESTS/hand_speeds.nim
 TOOLS/ADA_INDENT/ada_indent
@@ -118,7 +119,7 @@ sublime-claude/
 TOOLS/PGREP/test/Pgrep_py.py
 TOOLS/PGREP/test/pgrep_py
 node_modules/
-EXAMPLES/HTML/build/
+BROWSER_EXAMPLES/HTML/build/
 
 # The accounting tool: its program, tests and pages, and the database it keeps.
 TOOLS/ACCOUNTING/backend/ledger
