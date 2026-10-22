@@ -5072,6 +5072,10 @@ def _wrap_option_args(expr):
             _tbl = _js_table_literal(arg, ptype)
             new_args.append(kw_prefix + _tbl)
             changed = changed or _tbl != arg
+        elif arg.strip() == "initTable()" and ptype.strip().startswith("Table["):
+            # `f({:})`: the empty dict is of the parameter's type
+            new_args.append(kw_prefix + f"initTable[{ptype.strip()[6:-1]}]()")
+            changed = True
         elif (ptype.strip().startswith(("seq[Option[", "seq[OneOf")) and arg.strip().startswith("@[")):
             _lifted = _lift_option_seq(arg, ptype)
             new_args.append(kw_prefix + _lifted)

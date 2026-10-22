@@ -392,6 +392,12 @@ def to_nim(self):
                 _vm = _re_tb.match(r"(?:Ordered)?Table\[[^,]+,\s*(.+)\]$", _btype)
                 if _vm:
                     sym = {"type": _vm.group(1).strip()}
+        # ...and a whole field's: self.places = {:}, which is of the field's type.
+        if not sym and "." in lhs and "[" not in lhs:
+            from hek_nim_expr import _nim_expr_type
+            _ftype = _nim_expr_type(lhs) or ""
+            if _re_tb.match(r"Table\[", _ftype):
+                sym = {"type": _ftype}
         if sym:
             stype = sym.get("type") or ""
             m = _re_tb.match(r"Table\[([^,]+),\s*(.+)\]$", stype)

@@ -2847,6 +2847,9 @@ def to_nim(self):
     # declaration, an assignment, a return and a call argument -- a string
     # where Nim wants a char is always an error, so this can only turn a
     # failure into what was written.
+    # `places: {str}int = {:}`: the empty dict is of the parameter's type
+    if default == " = initTable()" and nim_type.startswith("Table["):
+        default = f" = initTable[{nim_type[6:-1]}]()"
     if nim_type == "char" and default.startswith(" = "):
         from hek_nim_expr import _char_literal_arg
         char_default = _char_literal_arg(default[3:])
@@ -5956,6 +5959,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
                                 # narrows it: this path builds a method's
                                 # parameters itself rather than going through
                                 # that one, so it needs the same rewrite.
+                                if pdefault == " = initTable()" and ptype.startswith("Table["):
+                                    pdefault = f" = initTable[{ptype[6:-1]}]()"
                                 if ptype == "char" and pdefault.startswith(" = "):
                                     from hek_nim_expr import _char_literal_arg
                                     _cd = _char_literal_arg(pdefault[3:])

@@ -35,7 +35,7 @@ class Network:
     var edges: []Edge_T                 # each edge once
     var places: {str}Spot_T            # where the reader put a node, by name; the others are laid out
 
-    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Spot_T):
+    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Spot_T = {:}):
         self.nodes = nodes
         self.edges = edges
         self.places = places
@@ -44,8 +44,7 @@ class Network:
     def __init__(self, text: str):
         self.nodes = []
         self.edges = []
-        let none: {str}Spot_T = {:}
-        self.places = none
+        self.places = {:}
         for line in text.split("\n"):
             let w: []str = line.split()
             if len(w) == 0:
@@ -76,8 +75,7 @@ class Network:
 
     # Every node goes back to the layout: no node keeps a place of its own.
     def forget_places(self):
-        let none: {str}Spot_T = {:}
-        self.places = none
+        self.places = {:}
 
     # The names of the nodes, in order.
     def names(self) -> []str:
@@ -184,8 +182,7 @@ def sample() -> Network:
     let edges: []Edge_T = [Edge_T("A", "B", 7), Edge_T("A", "C", 9), Edge_T("A", "F", 14), Edge_T("B", "C", 10),
                          Edge_T("B", "D", 15), Edge_T("C", "D", 11), Edge_T("C", "F", 2), Edge_T("D", "E", 6),
                          Edge_T("E", "F", 9)]
-    let none: {str}Spot_T = {:}
-    var net: Network = Network(nodes, edges, none)
+    var net: Network = Network(nodes, edges)
     net.put("A", Spot_T(60.0, 190.0))
     net.put("B", Spot_T(200.0, 60.0))
     net.put("C", Spot_T(200.0, 190.0))

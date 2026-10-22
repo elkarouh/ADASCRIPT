@@ -1,0 +1,46 @@
+"""Test: `self.places = {:}` empties a dict field, and `f({:})` passes an empty one, and `= {:}` is a parameter's default. The
+empty dict has no type of its own; the field's or the parameter's type gives it one, as a
+variable's does (found in
+BROWSER_EXAMPLES/DIJKSTRA_HTMX's Network, which went through a typed variable)."""
+
+class Network:
+    var places: {str}int
+    var names: []str
+
+    def __init__(self):
+        self.places = {:}
+        self.names = []
+
+    def put(self, name: str, at: int):
+        self.places[name] = at
+
+    def forget(self):
+        self.places = {:}
+
+class Holder:
+    var places: {str}int
+
+    def __init__(self, places: {str}int):
+        self.places = places
+
+class Kept:
+    var places: {str}int
+
+    def __init__(self, n: int, places: {str}int = {:}):
+        self.places = places
+
+def size_of(d: {str}int = {:}) -> int:
+    return len(d)
+
+var net: Network = Network()
+net.put("A", 1)
+assert len(net.places) == 1 and net.places["A"] == 1
+net.forget()
+assert len(net.places) == 0
+let held: Holder = Holder({:})
+assert len(held.places) == 0
+assert size_of({:}) == 0
+assert size_of() == 0
+let kept: Kept = Kept(1)
+assert len(kept.places) == 0
+print("test_field_empty_dict: all checks passed")
