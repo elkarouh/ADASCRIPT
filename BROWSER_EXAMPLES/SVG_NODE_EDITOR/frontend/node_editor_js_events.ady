@@ -179,7 +179,7 @@ var view: View = View()                 # the page is read again each time htmx 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and the
 # connectors at its ports follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = Spot_T(x=clamp(wanted.x, 0.0, WIDTH - NODE_W), y=clamp(wanted.y, 0.0, HEIGHT - NODE_H))
+    let now: Spot_T = Spot_T(x=clamp(wanted.x, 0.0, WIDTH - Unit_in_pixel_T(NODE_W)), y=clamp(wanted.y, 0.0, HEIGHT - Unit_in_pixel_T(NODE_H)))
     shift(node, centre, now)
     let moved: None | !Refusal_T = view.diagram.move(node_id_of(node), now)
     view.redraw()
@@ -252,8 +252,8 @@ def double_click(e: Event_T):
     if title == "":
         return
     let at: Spot_T = spot_at(e)
-    let x: Unit_in_pixel_T = clamp(at.x - NODE_W / 2.0, 0.0, WIDTH - NODE_W)       # the node's middle goes where the mouse is
-    let y: Unit_in_pixel_T = clamp(at.y - NODE_H / 2.0, 0.0, HEIGHT - NODE_H)
+    let x: Unit_in_pixel_T = clamp(at.x - Unit_in_pixel_T(NODE_W) / 2.0, 0.0, WIDTH - Unit_in_pixel_T(NODE_W))       # the node's middle goes where the mouse is
+    let y: Unit_in_pixel_T = clamp(at.y - Unit_in_pixel_T(NODE_H) / 2.0, 0.0, HEIGHT - Unit_in_pixel_T(NODE_H))
     send("POST", "/nodes", {"title": title, "x": f"{x:.0f}", "y": f"{y:.0f}"})
 
 # Delete and Backspace remove what is selected; Escape clears the selection.

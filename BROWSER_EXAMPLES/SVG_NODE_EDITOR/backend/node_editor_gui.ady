@@ -69,8 +69,8 @@ def to_html(p: Port_T, node: int) -> Html:
 def to_html(n: Node_T) -> Html:
     let x: str = f"{n.at.x:.0f}"
     let y: str = f"{n.at.y:.0f}"
-    let w: str = str(float(NODE_W))
-    let h: str = str(float(NODE_H))
+    let w: str = f"{Unit_in_pixel_T(NODE_W):.1f}"
+    let h: str = f"{Unit_in_pixel_T(NODE_H):.1f}"
     let place: str = f"translate({x},{y})"
     html:
         g class="node" data_node=str(n.id) data_x=x data_y=y:

@@ -19,10 +19,10 @@ it, and the browser's View is built from the same text with the same Diagram(tex
 is is worked out from the model, never read off the drawing. No HTML, no HTTP. Every length is a Unit_in_pixel_T, a
 unit of the drawing (its viewBox).
 """
-from drawing import Unit_in_pixel_T, Spot_T, Area_T
+from drawing import Unit_in_pixel_T, Unit_in_cm_T, Spot_T, Area_T
 
-const NODE_W: Unit_in_pixel_T = 204.0
-const NODE_H: Unit_in_pixel_T = 128.0
+const NODE_W: Unit_in_cm_T = 5.3975     # 204 pixels
+const NODE_H: Unit_in_cm_T = 3.38667    # 128 pixels
 const PORTS: int = 3                    # inputs, and outputs, on each node
 const PORT_R: Unit_in_pixel_T = 7.5               # a port's radius
 const GRAB: Unit_in_pixel_T = 12.0                # how near a released connector must be to a port to snap to it
