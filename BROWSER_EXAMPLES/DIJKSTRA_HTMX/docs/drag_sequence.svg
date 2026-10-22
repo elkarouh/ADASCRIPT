@@ -28,9 +28,9 @@
 <line x1="300" y1="292" x2="490" y2="292" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
 <text x="395.0" y="284" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >PUT /nodes?name=A&amp;x=…&amp;y=…</text>
 <line x1="490" y1="322" x2="680" y2="322" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
-<text x="585.0" y="314" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >hands it to answer()</text>
+<text x="585.0" y="314" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >command_of: UPDATE NODE A</text>
 <line x1="680" y1="352" x2="850" y2="352" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
-<text x="765.0" y="344" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >put(name, Spot_T(x, y))</text>
+<text x="765.0" y="344" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >carry_out: put(A, Spot_T(x, y))</text>
 <path d="M 680 382 h 60 v 14 h -60" fill="none" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
 <text x="750" y="394" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="start" >publish UPDATE A</text>
 <path d="M 680 422 h 60 v 14 h -60" fill="none" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
@@ -40,7 +40,7 @@
 <line x1="680" y1="502" x2="300" y2="502" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
 <text x="490.0" y="494" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >data: nodes UPDATE A (to every page)</text>
 <line x1="300" y1="532" x2="490" y2="532" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
-<text x="395.0" y="524" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >news: GET /all, with #state</text>
+<text x="395.0" y="524" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >news: send(read_network()), GET /all</text>
 <line x1="490" y1="562" x2="680" y2="562" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
 <text x="585.0" y="554" font-size="12.5" fill="#3e4c59" font-weight="400" text-anchor="middle" >GET /all</text>
 <line x1="680" y1="592" x2="490" y2="592" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
