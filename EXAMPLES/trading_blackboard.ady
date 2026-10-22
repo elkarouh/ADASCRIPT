@@ -1,0 +1,69 @@
+#!/usr/bin/env ady2nim
+"""trading_blackboard.ady -- one channel per kind of event, over stdlib's blackboard.ady
+
+A Blackboard for one symbol holds a PublishChannel for every EventType, indexed by the enum.
+`board.publish(kind, ...)` builds the Event (symbol, source, sequence number) and sends it down
+the channel of its kind; `board.subscribe(kind, callback)` listens to one kind. A subscriber
+that fails stops the publisher (raise_errors), so a driving loop fails loudly. Every channel
+keeps its history except PRICE_UPDATE, which fires on every bar and is never read back.
+
+The event's payload is a table of strings, which is what every backend can carry; a fixed
+payload (a buy signal with entry_price, stop_loss, ...) is better as a record of its own on
+a PublishChannel[Signal_T] of its own. A GlobalBlackboard is such a channel shared by tickers.
+"""
+
+from blackboard import PublishChannel
+
+type EventType is enum PRICE_UPDATE, BUY_SIGNAL, SELL_SIGNAL, STOP_ADJUST, ORDER_FILLED, COMPLETED_TRADE, BAR_RECOMMENDATION
+
+type Event is record:
+    kind: EventType
+    symbol: str
+    source: str
+    seq: int
+    data: {str}str
+
+class Blackboard:
+    var symbol: str
+    var channels: [EventType]PublishChannel[Event]
+    var published: int
+    var subscriptions: int          # live subscriptions across all channels
+
+    def __init__(self, symbol: str, keep_history: bool):
+        self.symbol = symbol
+        self.published = 0
+        self.subscriptions = 0
+        for kind in EventType:
+            self.channels[kind] = PublishChannel[Event](f"{kind}")
+            self.channels[kind].raise_errors = True
+            self.channels[kind].keep_history = keep_history and kind != PRICE_UPDATE
+
+    def subscribe(self, kind: EventType, callback: (str, Event) -> None) -> int:
+        self.subscriptions += 1
+        return self.channels[kind].subscribe(callback)
+
+    def unsubscribe(self, kind: EventType, id: int) -> bool:
+        let removed: bool = self.channels[kind].unsubscribe(id)
+        if removed:
+            self.subscriptions -= 1
+        return removed
+
+    def publish(self, kind: EventType, source: str, data: {str}str) -> Event:
+        self.published += 1
+        let event: Event = Event(kind, self.symbol, source, self.published, data)
+        let notified: int = self.channels[kind].publish(event)
+        return event
+
+    def subscriber_count(self, kind: EventType) -> int:
+        return self.channels[kind].subscriber_count()
+
+def on_buy_signal(channel: str, event: Event):
+    print f"buy signal on {channel}: {event.symbol} from {event.source} at {event.data['entry_price']}"
+
+var board: Blackboard = Blackboard("AAPL", True)
+board.subscribe(BUY_SIGNAL, on_buy_signal)
+board.publish(BUY_SIGNAL, "RSI", {"entry_price": "150.0", "confidence": "0.75"})
+board.publish(PRICE_UPDATE, "feed", {"close": "151.2"})        # nobody listens: fine
+print board.subscriber_count(BUY_SIGNAL), board.subscriber_count(SELL_SIGNAL)
+print board.subscriptions
+print len(board.channels[BUY_SIGNAL].history), len(board.channels[PRICE_UPDATE].history)

@@ -1,0 +1,83 @@
+#!/usr/bin/env ady2nim
+# test_blackboard.ady -- stdlib's blackboard.ady: a synchronous publish/subscribe channel
+#
+#   ady2nim TESTS/test_blackboard.ady -r
+#   ady2py  TESTS/test_blackboard.ady -c
+
+from blackboard import PublishChannel
+
+type Change is record:
+    kind: str
+    key: str
+
+# What the subscribers saw, in order
+var log: []str = []
+
+def first(channel: str, event: Change):
+    log.append(f"first {channel} {event.kind} {event.key}")
+
+def second(channel: str, event: Change):
+    log.append(f"second {channel} {event.kind} {event.key}")
+
+def broken(channel: str, event: Change):
+    assert False
+
+var nodes: PublishChannel[Change] = PublishChannel[Change]("nodes")
+assert nodes.subscriber_count() == 0
+assert nodes.publish(Change("create", "A")) == 0     # nobody listening
+
+let id1: int = nodes.subscribe(first)
+let id2: int = nodes.subscribe(second)
+assert id1 != id2
+assert nodes.subscriber_count() == 2
+assert nodes.publish(Change("create", "A")) == 2
+assert log == ["first nodes create A", "second nodes create A"]     # subscription order
+
+# unsubscribe by id; a second try, or an unknown id, is False
+assert nodes.unsubscribe(id1)
+assert not nodes.unsubscribe(id1)
+assert not nodes.unsubscribe(99)
+log = []
+assert nodes.publish(Change("delete", "A")) == 1
+assert log == ["second nodes delete A"]
+
+# a callback that fails is skipped; the others still run and only the ones that returned count
+nodes.clear_subscribers()
+assert nodes.subscriber_count() == 0
+log = []
+nodes.subscribe(first)
+nodes.subscribe(broken)
+nodes.subscribe(second)
+assert nodes.publish(Change("update", "B")) == 2
+assert log == ["first nodes update B", "second nodes update B"]
+
+# raise_errors: the failure of a subscriber reaches the publisher
+nodes.raise_errors = True
+var raised: bool = False
+try:
+    nodes.publish(Change("update", "B"))
+except Exception:
+    raised = True
+assert raised
+nodes.raise_errors = False
+
+# history: off by default, then bounded, oldest dropped first
+assert len(nodes.history) == 0
+nodes.keep_history = True
+nodes.max_history = 2
+nodes.publish(Change("create", "C"))
+nodes.publish(Change("create", "D"))
+nodes.publish(Change("create", "E"))
+assert len(nodes.history) == 2
+assert nodes.history[0].key == "D"
+assert nodes.history[1].key == "E"
+
+# an event need not be a record: a channel of plain strings
+var seen: []str = []
+def note(channel: str, event: str):
+    seen.append(channel + ":" + event)
+var alarms: PublishChannel[str] = PublishChannel[str]("alarm")
+alarms.subscribe(note)
+alarms.publish("fire")
+assert seen == ["alarm:fire"]
+print "ok"
