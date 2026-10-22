@@ -1,24 +1,40 @@
 #!/usr/bin/env ady2nim
-"""node_editor_model -- the nodes of the editor and the connectors between their ports, and where each is.
+"""node_editor_model -- the model: a diagram of nodes and the connectors between their ports, what may
+be done to it, and where it is kept.
 
-Plain arithmetic and lists, no page: the page (backend/node_editor_gui.ady) is drawn from it on the server side,
-and the script that runs in the browser (frontend/node_editor_js_events.ady) keeps it up to date while the reader
-drags. Every unit is a pixel of the drawing.
+A node has a title, a place, and three input ports on its left and three output ports on its right. A
+connector joins an output port of one node to an input port of another. The diagram is a Diagram, a
+class: it is changed only through its methods (create, move, delete), each of which says what was wrong,
+or None when it was done. It is kept in a text file, one line a node or a connector (Diagram.text, and
+Diagram(text) to read it back; the file itself is read and written by node_editor_events_gui.ady).
 
-A node has three input ports on its left and three output ports on its right. A connector joins
-an output port to an input port of another node.
+    node 0 50 50 Process 1       node ID, its top left corner X Y, and its title (the rest of the line)
+    link 0 2 1 0                 from output 2 of node 0 to input 0 of node 1
+
+A node keeps its id for good: deleting another node does not renumber it, so a connector, and the
+number a port is labelled with, stay what they were.
+
+Compiled both ways, as DIJKSTRA_HTMX's model is: the server draws the page and keeps the file with
+it, and the browser's View is built from the same text with the same Diagram(text), so where a port
+is is worked out from the model, never read off the drawing. No HTML, no HTTP. Every unit is a pixel
+of the drawing.
 """
 const NODE_W: float = 204.0
 const NODE_H: float = 128.0
 const PORTS: int = 3                    # inputs, and outputs, on each node
 const PORT_R: float = 7.5               # a port's radius
 const GRAB: float = 12.0                # how near a released connector must be to a port to snap to it
+const MAX_TITLE: int = 24
 
-# Where a port is, from its node's top left corner (the page draws it there, see backend/node_editor_gui.ady).
+# Where a port is, from its node's top left corner (the page draws it there, see node_editor_gui.ady).
 const INPUT_DX: float = 15.0
 const OUTPUT_DX: float = 189.0
 const FIRST_PORT_DY: float = 60.0
 const PORT_PITCH: float = 25.0
+
+# Why a change to the diagram is refused: the message the page shows the reader.
+type Refusal_T is record:
+    message: str
 
 type Side_T is enum INPUT, OUTPUT
 
@@ -27,23 +43,25 @@ type Place_T is record:
     x: float
     y: float
 
-# A port: its node, which side it is on, and its row from the top.
+# A port: its node's id, which side it is on, and its row from the top.
 type Port_T is record:
     node: int
     side: Side_T
     row:  int
+
+# A node: its id, its title, and the place of its top left corner.
+type Node_T is record:
+    id:    int
+    title: str
+    at:    Place_T
 
 # A connector: the output port it leaves and the input port it arrives at.
 type Link_T is record:
     out_port: Port_T
     in_port:  Port_T
 
-# Where node I is drawn first: the original's row, 250 apart.
-def start_of(i: int) -> Place_T:
-    Place_T(50.0 + 250.0 * float(i), 50.0)
-
-# The name a port is shown with: Input 1 .. Input 12 down the nodes in turn, so Output n is
-# the same number.
+# The name a port is shown with: Input 1 .. Input 3 on the node with id 0, Input 4 .. 6 on id 1,
+# and so on; Output n is numbered the same way.
 def label_of(p: Port_T) -> str:
     let n: int = p.node * PORTS + p.row + 1
     return ("Input " if p.side == INPUT else "Output ") + str(n)
@@ -61,3 +79,161 @@ def same_port(a: Port_T, b: Port_T) -> bool:
 def on_port(at: Place_T, p: Port_T, spot: Place_T) -> bool:
     let c: Place_T = port_spot(at, p)
     return (spot.x - c.x) ** 2 + (spot.y - c.y) ** 2 <= GRAB ** 2
+
+class Diagram:
+    var nodes: []Node_T                 # in the order they were made
+    var links: []Link_T                 # each connector once
+
+    def __init__(self, nodes: []Node_T, links: []Link_T):
+        self.nodes = nodes
+        self.links = links
+
+    # The diagram kept in TEXT, as text() writes it: its node and link lines, in order.
+    def __init__(self, text: str):
+        self.nodes = []
+        self.links = []
+        for line in text.split("\n"):
+            let w: []str = line.split()
+            if len(w) == 0:
+                continue
+            case w[0]:
+                when "node":
+                    if len(w) >= 5:
+                        let id: int | !ParseFailure_T = parse_int(w[1])
+                        let x: float | !ParseFailure_T = parse_float(w[2])
+                        let y: float | !ParseFailure_T = parse_float(w[3])
+                        if id is ParseFailure_T:
+                            continue
+                        if x is ParseFailure_T:
+                            continue
+                        if y is ParseFailure_T:
+                            continue
+                        self.nodes.append(Node_T(id, " ".join(w[4:]), Place_T(x, y)))
+                when "link":
+                    if len(w) == 5:
+                        let a: int | !ParseFailure_T = parse_int(w[1])
+                        let r: int | !ParseFailure_T = parse_int(w[2])
+                        let b: int | !ParseFailure_T = parse_int(w[3])
+                        let s: int | !ParseFailure_T = parse_int(w[4])
+                        if a is ParseFailure_T:
+                            continue
+                        if r is ParseFailure_T:
+                            continue
+                        if b is ParseFailure_T:
+                            continue
+                        if s is ParseFailure_T:
+                            continue
+                        let joined: None | !Refusal_T = self.add_link(Port_T(a, OUTPUT, r), Port_T(b, INPUT, s))
+
+    # The index of the node with id ID, or -1.
+    def index_of(self, id: int) -> int:
+        for i in range(len(self.nodes)):
+            if self.nodes[i].id == id:
+                return i
+        return -1
+
+    # The id a new node gets: one more than the greatest there is.
+    def next_id(self) -> int:
+        var top: int = -1
+        for n in self.nodes:
+            top = max(top, n.id)
+        return top + 1
+
+    # The index of the connector from OUT to IN, or -1.
+    def link_index(self, out_port: Port_T, in_port: Port_T) -> int:
+        for i in range(len(self.links)):
+            if same_port(self.links[i].out_port, out_port) and same_port(self.links[i].in_port, in_port):
+                return i
+        return -1
+
+    # Where the node ID has its top left corner.
+    def corner_of(self, id: int) -> Place_T:
+        return self.nodes[self.index_of(id)].at
+
+    # Where PORT is, with the nodes where they are now.
+    def spot_of(self, p: Port_T) -> Place_T:
+        return port_spot(self.corner_of(p.node), p)
+
+    # The port of side SIDE, on a node other than SKIP, that SPOT is on; None when there is none.
+    def port_at(self, spot: Place_T, side: Side_T, skip: int) -> ?Port_T:
+        for n in self.nodes:
+            if n.id == skip:
+                continue
+            for row in range(PORTS):
+                let p: Port_T = Port_T(n.id, side, row)
+                if on_port(n.at, p, spot):
+                    return p
+        return None
+
+    # ---- create, move, delete: each refuses with a Refusal_T, or is done (None) ----
+
+    # A node with TITLE (1 to 24 characters) whose top left corner is AT.
+    def add_node(self, title: str, at: Place_T) -> None | !Refusal_T:
+        let t: str = title.strip()
+        if len(t) == 0 or len(t) > MAX_TITLE:
+            return Refusal_T(message=f"A title is 1 to {MAX_TITLE} characters.")
+        self.nodes.append(Node_T(self.next_id(), t, at))
+
+    def move(self, id: int, at: Place_T) -> None | !Refusal_T:
+        let i: int = self.index_of(id)
+        if i < 0:
+            return Refusal_T(message=f"There is no node {id}.")
+        self.nodes[i].at = at
+
+    # The node goes, and every connector at its ports.
+    def remove_node(self, id: int) -> None | !Refusal_T:
+        if self.index_of(id) < 0:
+            return Refusal_T(message=f"There is no node {id}.")
+        var left: []Node_T = []
+        for n in self.nodes:
+            if n.id != id:
+                left.append(n)
+        self.nodes = left
+        var kept: []Link_T = []
+        for l in self.links:
+            if l.out_port.node != id and l.in_port.node != id:
+                kept.append(l)
+        self.links = kept
+
+    # A connector from the output port OUT to the input port IN, of two different nodes.
+    def add_link(self, out_port: Port_T, in_port: Port_T) -> None | !Refusal_T:
+        if out_port.side != OUTPUT or in_port.side != INPUT:
+            return Refusal_T(message="A connector goes from an output to an input.")
+        if self.index_of(out_port.node) < 0 or self.index_of(in_port.node) < 0:
+            return Refusal_T(message="There is no such node.")
+        if out_port.row < 0 or out_port.row >= PORTS or in_port.row < 0 or in_port.row >= PORTS:
+            return Refusal_T(message="There is no such port.")
+        if out_port.node == in_port.node:
+            return Refusal_T(message="A connector joins two different nodes.")
+        if self.link_index(out_port, in_port) >= 0:
+            return Refusal_T(message=f"{label_of(out_port)} is joined to {label_of(in_port)} already.")
+        self.links.append(Link_T(out_port, in_port))
+
+    def remove_link(self, out_port: Port_T, in_port: Port_T) -> None | !Refusal_T:
+        let i: int = self.link_index(out_port, in_port)
+        if i < 0:
+            return Refusal_T(message="There is no such connector.")
+        var kept: []Link_T = []
+        for k in range(len(self.links)):
+            if k != i:
+                kept.append(self.links[k])
+        self.links = kept
+
+    # ---- kept in a text file ----
+
+    def text(self) -> str:
+        var lines: []str = []
+        for n in self.nodes:
+            lines.append(f"node {n.id} {n.at.x:.0f} {n.at.y:.0f} {n.title}")
+        for l in self.links:
+            lines.append(f"link {l.out_port.node} {l.out_port.row} {l.in_port.node} {l.in_port.row}")
+        return "\n".join(lines) + "\n"
+
+# What there is to start with, and after Reset: the original's four nodes in a row.
+def sample() -> Diagram:
+    var d: Diagram = Diagram([], [])
+    for i in range(4):
+        let added: None | !Refusal_T = d.add_node(f"Process {i + 1}", Place_T(50.0 + 250.0 * float(i), 50.0))
+    let a: None | !Refusal_T = d.add_link(Port_T(0, OUTPUT, 0), Port_T(2, INPUT, 1))
+    let b: None | !Refusal_T = d.add_link(Port_T(0, OUTPUT, 2), Port_T(3, INPUT, 2))
+    return d

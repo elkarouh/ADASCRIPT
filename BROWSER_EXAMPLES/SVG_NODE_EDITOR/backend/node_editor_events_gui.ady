@@ -1,0 +1,74 @@
+#!/usr/bin/env ady2nim
+"""node_editor_events_gui -- what each event the page sends does, and the diagram it does it to; no HTTP.
+
+server.ady hands every request to a Session, as a method, a path and its fields, and sends back
+the page that comes out. The tests make a Session of their own and call answer() the same way, with
+no server running. A Session keeps the diagram in a text file (its store), written after every change.
+"""
+from backend/node_editor_model import Diagram, Place_T, Port_T, Refusal_T, Side_T, sample
+from backend/node_editor_gui import all_text
+from backend/node_editor_request import field_of, number_of, port_of
+
+# The diagram, and the file it is kept in. The server makes one that keeps it in diagram.txt; the tests
+# make one that keeps it nowhere.
+class Session:
+    var diagram: Diagram
+    var store: str                      # the file the diagram is kept in; "" keeps it nowhere
+
+    def __init__(self, store: str):
+        self.store = store
+        self.diagram = sample()
+        if store != "":
+            let text: str | !PathFailure_T = Path(store).read_text()
+            if text is PathFailure_T:
+                pass                    # no file yet: the sample
+            else:
+                self.diagram = Diagram(text)
+
+    # The diagram written to the store: refused with why, when it was not.
+    def save(self) -> None | !Refusal_T:
+        if self.store != "":
+            let done: None | !PathFailure_T = Path(self.store).write_text(self.diagram.text())
+            if done is PathFailure_T:
+                return Refusal_T(message=f"Could not write {self.store}.")
+
+    # The routes, all answered by answer below: each is a whole page, sent back to htmx to swap in.
+    #
+    #     GET    /all          the page again
+    #     POST   /nodes        create a node                       (title, x, y: its top left corner)
+    #     PUT    /nodes        move a node, after a drag           (id, x, y)
+    #     DELETE /nodes        delete a node and its connectors    (id)
+    #     POST   /links        join an output port to an input     (out_node, out_row, in_node, in_row)
+    #     DELETE /links        delete a connector                  (out_node, out_row, in_node, in_row)
+    #     POST   /reset        put the sample diagram back
+
+    # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): the page to
+    # send back, or "" when there is no such thing.
+    def answer(self, method: str, path: str, fields: str) -> str:
+        var problem: None | !Refusal_T = None
+        let id: int = int(number_of(field_of(fields, "id")))
+        let at: Place_T = Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
+        let out_port: Port_T = port_of(fields, "out", OUTPUT)
+        let in_port: Port_T = port_of(fields, "in", INPUT)
+        case method + " " + path:
+            when "GET /all":
+                pass
+            when "POST /nodes":
+                problem = self.diagram.add_node(field_of(fields, "title"), at)
+            when "PUT /nodes":
+                problem = self.diagram.move(id, at)
+            when "DELETE /nodes":
+                problem = self.diagram.remove_node(id)
+            when "POST /links":
+                problem = self.diagram.add_link(out_port, in_port)
+            when "DELETE /links":
+                problem = self.diagram.remove_link(out_port, in_port)
+            when "POST /reset":
+                self.diagram = sample()
+            when others:
+                return ""
+        if method != "GET" and problem is None:
+            let saved: None | !Refusal_T = self.save()
+            if saved is Refusal_T:
+                return all_text(self.diagram, saved)
+        return all_text(self.diagram, problem)

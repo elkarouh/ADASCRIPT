@@ -1,0 +1,64 @@
+#!/usr/bin/env ady2nim
+"""server -- the one place that knows about HTTP; what a request does is node_editor_events_gui.ady.
+
+    make app [PORT=n]  (or: ady2nim js frontend/node_editor_js_events.ady; ady2nim c -r backend/server.ady [PORT])   then open http://127.0.0.1:8802/
+
+    GET    /            the page: a script tag and a div that loads /all
+    GET    /htmx.min.js htmx itself
+    GET    /node_editor_js_events.js     node_editor_js_events.ady, compiled to JavaScript
+
+Every other request (GET /all, and the routes for nodes, links and reset) is answered
+by Session.answer in node_editor_events_gui.ady, which lists them.
+
+Every answer but the scripts is the whole page, which htmx swaps in. The diagram is kept
+in diagram.txt, in the directory the server runs in; it is written after every change.
+"""
+from asyncdispatch nimport complete, newFuture, Port, waitFor
+from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from backend/node_editor_gui import shell_text
+from backend/node_editor_events_gui import Session
+
+# The session the requests are answered from: main makes it the one that keeps the diagram in diagram.txt.
+var session: Session = Session("")
+
+# A script the page loads, from the frontend directory.
+async def send_script(req: Request, path: str):
+    let script: str | !PathFailure_T = (Path("frontend") / path[1:]).read_text()
+    if script is PathFailure_T:
+        await req.respond(Http404, f"frontend{path} is not here: run from the example's directory, after make")
+    else:
+        await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
+
+async def handler(req: Request):
+    let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
+    let path: str = req.url.path
+    case path:
+        when "/":
+            await req.respond(Http200, shell_text(), html_type)
+        when "/htmx.min.js":
+            await send_script(req, path)
+        when "/node_editor_js_events.js":
+            await send_script(req, path)
+        when others:
+            let page: str = session.answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
+            if page == "":
+                await req.respond(Http404, "not found")
+            else:
+                await req.respond(Http200, page, html_type)
+
+def main():
+    var port: int = 8802
+    let args: []str = $@
+    if len(args) > 0:
+        let n: int | !ParseFailure_T = parse_int(args[0])
+        if n is ParseFailure_T:
+            pass
+        else:
+            port = n
+    session = Session("diagram.txt")
+    print f"http://127.0.0.1:{port}/ (Ctrl-C to stop); the diagram is kept in diagram.txt"
+    var server: AsyncHttpServer = newAsyncHttpServer()
+    waitFor(server.serve(Port(port), handler))
+
+if __name__ == "__main__":
+    main()

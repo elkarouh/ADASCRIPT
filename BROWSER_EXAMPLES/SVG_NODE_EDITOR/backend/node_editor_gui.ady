@@ -1,22 +1,28 @@
 #!/usr/bin/env ady2nim
-"""node_editor_gui -- the page of the node editor, as HTML the program prints (ady2nim c -r).
+"""node_editor_gui -- the page as HTML the server draws, for htmx to swap in.
 
-Four process nodes, each with three input ports on its left and three output ports on its
-right. The page has the drawing's look and nothing that moves: what the reader does with it
-(drag a node, drag from a port to a port) is frontend/node_editor_js_events.ady, which runs in the browser and
-is loaded by the page as node_editor_js_events.js.
+What the page shows is a function of the diagram (the model, which the server keeps): the nodes,
+with their ports, and the diagram as text, which the browser's script builds its View from. The
+connectors are not drawn here: the script draws them from that text, so the one place that knows
+how a connector looks is node_editor_js_events.ady. Every request the script sends gets the whole
+#all back, which htmx swaps in.
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
-from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Side_T, Port_T, Place_T, start_of, label_of
+from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Diagram, Node_T, Port_T, Refusal_T, Side_T, label_of
 
-const NODES: int = 4
+const WIDTH: float = 1100.0             # the drawing's size, in its own units
+const HEIGHT: float = 520.0
 
 const STYLE: str = """
-body { margin: 0; background: #1a1a1a; font-family: Arial, sans-serif; }
-svg#editor { display: block; margin: 0 auto; user-select: none; }
+body { margin: 0; background: #1a1a1a; color: #ddd; font-family: Arial, sans-serif; }
+header, #all { max-width: 1100px; margin: 0 auto; padding: 0 12px; }
+header h1 { font-size: 1.3em; margin: 0.8em 0 0.1em; }
+header p { color: #999; margin: 0 0 0.8em; }
+svg#editor { display: block; width: 100%; height: auto; user-select: none; background: #1a1a1a; border: 1px solid #333; }
 .node { cursor: move; }
 .node-background { fill: #1a1c1d; }
+.node.selected .node-background { stroke: #E88802; stroke-width: 2; }
 .node-header { fill: #426D92; }
 .node-content { fill: #3C3C3C; }
 .header-title { font-size: 20px; fill: #fff; text-anchor: middle; }
@@ -27,9 +33,17 @@ svg#editor { display: block; margin: 0 auto; user-select: none; }
 .input-field .port-label { text-anchor: start; }
 .output-field .port-label { text-anchor: end; }
 #connections-layer { pointer-events: none; }
+.connector-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
 .connector-outline { stroke: #333; stroke-width: 6; fill: none; }
 .connector-path { stroke: #E88802; stroke-width: 4; fill: none; }
+.link.selected .connector-path { stroke: #ffd479; }
 .connector-handle { fill: #E88802; }
+p.problem { color: #ffb4a8; background: #4a2420; border-radius: 6px; padding: 0.4em 0.7em; margin: 0.5em 0; }
+p.hint { color: #999; font-size: 0.85em; margin: 0.5em 0 1em; }
+div.toolbar { margin: 0.5em 0; }
+button { font: inherit; font-size: 0.9em; border: 1px solid #555; border-radius: 6px; padding: 0.3em 0.8em; background: #2a2a2a; color: #ddd; cursor: pointer; }
+button:hover { background: #333; }
+pre#diagram { display: none; }
 """
 
 # One port of a node: its dot, over which the reader presses to start a connector, and its label.
@@ -49,42 +63,63 @@ def port_html(p: Port_T) -> Html:
             circle class="port-scrim" cx=cx cy=cy r=r data_node=str(p.node) data_side=side data_row=str(p.row)
             stext class="port-label" x=lx y=ly: label_of(p)
 
-# A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node was
-# drawn (data_x, data_y: its top left corner), which frontend/node_editor_js_events.ady drags from.
-def node_html(i: int) -> Html:
-    let at: Place_T = start_of(i)
-    let x: str = str(at.x)
-    let y: str = str(at.y)
+# A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node is
+# (data_x, data_y: its top left corner), which the script's drag starts from.
+def node_html(n: Node_T) -> Html:
+    let x: str = f"{n.at.x:.0f}"
+    let y: str = f"{n.at.y:.0f}"
     let w: str = str(NODE_W)
     let h: str = str(NODE_H)
-    let place: str = f"translate({at.x},{at.y})"
-    let title: str = f"Process {i + 1}"
+    let place: str = f"translate({x},{y})"
     html:
-        g class="node" data_node=str(i) data_x=x data_y=y:
+        g class="node" data_node=str(n.id) data_x=x data_y=y:
             g transform=place:
                 rect class="node-background" x="0" y="0" width=w height=h rx="6" ry="6"
                 g class="node-header":
                     rect x="2" y="2" width="200" height="40" rx="4" ry="4"
                     rect x="2" y="6" width="200" height="36"
-                    stext class="header-title" x="102" y="30": title
+                    stext class="header-title" x="102" y="30": n.title
                 g class="node-content":
                     rect x="2" y="44" width="200" height="82" rx="4" ry="4"
                     rect x="2" y="44" width="200" height="77"
                 for row in range(PORTS):
-                    + port_html(Port_T(i, INPUT, row))
-                    + port_html(Port_T(i, OUTPUT, row))
+                    + port_html(Port_T(n.id, INPUT, row))
+                    + port_html(Port_T(n.id, OUTPUT, row))
 
-def editor_html() -> Html:
+def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
+    let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     html:
-        svg id="editor" width="1100" height="520" viewBox="0 0 1100 520":
-            style: STYLE
-            g id="nodes":
-                for i in range(NODES):
-                    + node_html(i)
-            g id="connections-layer"
+        div id="all":
+            div class="toolbar":
+                button type="button" data_hx_post="/reset" data_hx_confirm="Put the sample diagram back? What you made is lost." data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
+            if problem is Refusal_T:
+                p class="problem": problem.message
+            svg id="editor" viewBox=box:
+                g id="nodes":
+                    for n in d.nodes:
+                        + node_html(n)
+                g id="connections-layer"
+            # the diagram as the server keeps it: for the browser's View to draw the connectors from
+            pre id="diagram": d.text()
+            p class="hint": "Double-click the space for a new node. Drag a node to move it, or from a port to a port of another node to join them. Click a node or a connector to select it, then Delete removes it."
 
-print "<!doctype html>"
-print "<html lang=\"en\"><head><meta charset=\"utf-8\"><title>SVG node editor</title></head><body>"
-print editor_html()
-print "<script src=\"node_editor_js_events.js\"></script>"
-print "</body></html>"
+def shell() -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: "SVG node editor"
+                style: STYLE
+                script src="/htmx.min.js"
+                script src="/node_editor_js_events.js"
+            body:
+                header:
+                    h1: "SVG node editor"
+                    p: "Nodes and connectors, kept in diagram.txt by the server."
+                div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
+
+def shell_text() -> str:
+    return "<!doctype html>" + str(shell())
+
+def all_text(d: Diagram, problem: None | !Refusal_T) -> str:
+    return str(all_html(d, problem))

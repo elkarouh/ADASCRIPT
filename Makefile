@@ -1833,8 +1833,11 @@ test-part-56:
 	    $(ADY2NIM) js $(BEXDIR)/HTML/html_app.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    rm -f $(BEXDIR)/HTML/html_app.js; \
-	    printf '  %-42s' "SVG_NODE_EDITOR/backend/node_editor_gui.ady"; \
-	    $(ADY2NIM) c -r $(BEXDIR)/SVG_NODE_EDITOR/backend/node_editor_gui.ady 2>/dev/null | grep -qF '>Process 4</text>' \
+	    printf '  %-42s' "SVG_NODE_EDITOR/tests/test_node_editor.ady"; \
+	    (cd $(BEXDIR)/SVG_NODE_EDITOR && $(ADY2NIM) c -r tests/test_node_editor.ady 2>/dev/null) | grep -qF "node_editor: all checks passed" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    printf '  %-42s' "SVG_NODE_EDITOR/backend/server.ady (nim)"; \
+	    $(ADY2NIM) c $(BEXDIR)/SVG_NODE_EDITOR/backend/server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    printf '  %-42s' "SVG_NODE_EDITOR/frontend/node_editor_js_events.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(BEXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.ady >/dev/null 2>&1 \
