@@ -8,6 +8,7 @@
 | `ROI_JOINTJS/` | the same diagram drawn in the browser with JointJS |
 | `LITTLE_PAGES/` | lots of little HTML pages, one per filter |
 | `SVG_NODE_EDITOR/` | a node editor: drag nodes, and connect ports with bezier connectors |
+| `ACCOUNTING/` | learning accounting as graph theory: a model, a ledger kept in SQLite, and a page the server draws, with draggable accounts |
 
 Each is built with `make` in its own directory (see its README); `make test` at the top of the
 repository checks the ones that have a test. The scripts are written in Adascript and compiled

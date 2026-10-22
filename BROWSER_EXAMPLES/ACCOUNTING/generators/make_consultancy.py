@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_consultancy -- writes scenarios/12_consultancy.books: a year of a small IT consultancy.
 
-Made up, not real: about seventy entries. Run (from TOOLS/ACCOUNTING): python3 generators/make_consultancy.py [FILE]
+Made up, not real: about seventy entries. Run (from BROWSER_EXAMPLES/ACCOUNTING): python3 generators/make_consultancy.py [FILE]
 """
 import sys
 from pathlib import Path

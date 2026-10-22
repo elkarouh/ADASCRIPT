@@ -122,20 +122,20 @@ node_modules/
 BROWSER_EXAMPLES/HTML/build/
 
 # The accounting tool: its program, tests and pages, and the database it keeps.
-TOOLS/ACCOUNTING/backend/ledger
-TOOLS/ACCOUNTING/backend/server
-TOOLS/ACCOUNTING/tests/test_ledger
-TOOLS/ACCOUNTING/tests/test_gnucash
-TOOLS/ACCOUNTING/tests/test_beancount
-TOOLS/ACCOUNTING/tests/test_journal
-TOOLS/ACCOUNTING/tests/test_erp
-TOOLS/ACCOUNTING/tests/test_htmx
-TOOLS/ACCOUNTING/tests/test_accounting_model
-TOOLS/ACCOUNTING/*.js
-TOOLS/ACCOUNTING/backend/accounting_gui
-TOOLS/ACCOUNTING/accounting.db
-TOOLS/ACCOUNTING/build/
-TOOLS/ACCOUNTING/scenarios/*.db
+BROWSER_EXAMPLES/ACCOUNTING/backend/ledger
+BROWSER_EXAMPLES/ACCOUNTING/backend/server
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_ledger
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_gnucash
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_beancount
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_journal
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_erp
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_htmx
+BROWSER_EXAMPLES/ACCOUNTING/tests/test_accounting_model
+BROWSER_EXAMPLES/ACCOUNTING/*.js
+BROWSER_EXAMPLES/ACCOUNTING/backend/accounting_gui
+BROWSER_EXAMPLES/ACCOUNTING/accounting.db
+BROWSER_EXAMPLES/ACCOUNTING/build/
+BROWSER_EXAMPLES/ACCOUNTING/scenarios/*.db
 
 # Built test and editor binaries
 EDITORS/KILO/kilo

@@ -3564,7 +3564,7 @@ svg_drag` (`TO_NIM/STDLIB/svg_drag.ady`, built on `browser`) drags the shapes of
 `draggable(shapes, svg, width, moved, dropped, clicked)`, where the three
 functions say what a drag means to the app. Pixels and drawing units are
 distinct types in it, with a scale between them. `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and
-`TOOLS/ACCOUNTING` are whole programs built this way.
+`BROWSER_EXAMPLES/ACCOUNTING` are whole programs built this way.
 
 **Data the server hands the script.** `import json_value`
 (`TO_NIM/STDLIB/json_value.ady`) is the same code on the server and in the
@@ -3572,7 +3572,7 @@ browser: the server writes its records as JSON with `json_string` and plain
 numbers, into a `<script type="application/json">` element, and the script
 reads them back with `read_json(text)` (a `?Json_T`, None when it is not JSON)
 and, by name, `json_list`, `json_text`, `json_number` and `json_flag`.
-`TOOLS/ACCOUNTING` hands its accounts and arrows over this way.
+`BROWSER_EXAMPLES/ACCOUNTING` hands its accounts and arrows over this way.
 
 ---
 
@@ -3801,7 +3801,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import db`       | thin SQLite wrapper                                        |
 | `import jointjs`  | `JsElem` base class and helpers for JointJS applications   |
 | `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, `request(method, url, fields, target, include)`, a `Click` |
-| `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and `TOOLS/ACCOUNTING` use it |
+| `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and `BROWSER_EXAMPLES/ACCOUNTING` use it |
 | `import svg_path` | paths for an SVG drawing, as the `d` of a `<path>`; plain arithmetic, so it compiles both to C and to JavaScript: `connector_d(x1, y1, x2, y2, leave, stop_short)`, an S-shaped curve between two boxes; `BROWSER_EXAMPLES/ROI_HTMX` uses it |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EDITORS/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |

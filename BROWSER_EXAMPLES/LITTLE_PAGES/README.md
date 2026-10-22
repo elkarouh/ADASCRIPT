@@ -23,7 +23,7 @@ the browser, so there is no `ady2nim js` build and no karax.
 
 Use this shape when each view is a different list or document (a filter, a tab of
 read-only text, a menu of links). Keep a script for a view that holds state the
-reader built up, such as `TOOLS/ACCOUNTING`, where the graph and its dragged
+reader built up, such as `BROWSER_EXAMPLES/ACCOUNTING`, where the graph and its dragged
 accounts stay put while the tab below changes.
 
 After Jim Nielsen, [Building Websites With LLMS](https://blog.jim-nielsen.com/2025/lots-of-little-html-pages/).

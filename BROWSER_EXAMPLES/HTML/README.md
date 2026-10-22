@@ -35,9 +35,9 @@ You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
 
 These two show the pattern and nothing else. The worked web apps are in:
 
-- `TOOLS/ACCOUNTING`: Kleppmann's accounting, with the model, a ledger, a static page
+- `BROWSER_EXAMPLES/ACCOUNTING`: Kleppmann's accounting, with the model, a ledger, a static page
   (`make gui`) and a page the server draws and htmx keeps up to date.
 - `BROWSER_EXAMPLES/DIJKSTRA_HTMX`: a shortest-path demo in the same shape, with a small browser
   script built on the stdlib's `browser` and `svg_drag` modules.
 
-The accounting example that used to be here is now the tool in `TOOLS/ACCOUNTING`.
+The accounting example that used to be here is now `BROWSER_EXAMPLES/ACCOUNTING`.

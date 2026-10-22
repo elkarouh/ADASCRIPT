@@ -1,4 +1,4 @@
-# TOOLS/ACCOUNTING: a tool to learn accounting with, after Martin Kleppmann's
+# BROWSER_EXAMPLES/ACCOUNTING: an app to learn accounting with, after Martin Kleppmann's
 # "Accounting for Computer Scientists". Needs karax >= 1.5.0 for the pages
 # (nimble install karax@1.5.0) and db_connector for the ledger
 # (nimble install db_connector).

@@ -2,7 +2,7 @@
 """make_bakery -- writes scenarios/11_bakery.books: a year of a small bakery-cafe.
 
 Made up, not real: about sixty entries, so that the whole year can be followed.
-Run (from TOOLS/ACCOUNTING): python3 generators/make_bakery.py [scenarios/11_bakery.books]
+Run (from BROWSER_EXAMPLES/ACCOUNTING): python3 generators/make_bakery.py [scenarios/11_bakery.books]
 """
 import sys
 from pathlib import Path

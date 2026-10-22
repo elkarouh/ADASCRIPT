@@ -1846,23 +1846,23 @@ test-part-56:
 	fi
 
 test-part-57:
-	@# TOOLS/ACCOUNTING: the model and the ledger it keeps in SQLite, run from
+	@# BROWSER_EXAMPLES/ACCOUNTING: the model and the ledger it keeps in SQLite, run from
 	@# their directory, where test_ledger.ady reads accounting.conf.
-	@echo "=== TOOLS/ACCOUNTING (model, ledger, server, page) ==="
+	@echo "=== BROWSER_EXAMPLES/ACCOUNTING (model, ledger, server, page) ==="
 	@if [ -z "$(call nim_has,db_connector/db_sqlite)" ]; then echo "  SKIPPED, db_connector not installed"; else \
 	    for t in test_accounting_model test_ledger test_gnucash test_beancount test_journal test_erp test_htmx; do \
 	        printf '  %-42s' "ACCOUNTING/$$t.ady (nim)"; \
-	        (cd $(TOOLDIR)/ACCOUNTING && $(ADY2NIM) c -r tests/$$t.ady >/dev/null 2>&1) \
+	        (cd $(BEXDIR)/ACCOUNTING && $(ADY2NIM) c -r tests/$$t.ady >/dev/null 2>&1) \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
 	    printf '  %-42s' "ACCOUNTING/backend/server.ady (nim)"; \
-	    $(ADY2NIM) c $(TOOLDIR)/ACCOUNTING/backend/server.ady >/dev/null 2>&1 \
+	    $(ADY2NIM) c $(BEXDIR)/ACCOUNTING/backend/server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    if [ -z "$(HTML_SKIPPED)" ]; then \
 	        printf '  %-42s' "ACCOUNTING/frontend/accounting_js_events.ady (ady2nim js)"; \
-	        $(ADY2NIM) js $(TOOLDIR)/ACCOUNTING/frontend/accounting_js_events.ady >/dev/null 2>&1 \
+	        $(ADY2NIM) js $(BEXDIR)/ACCOUNTING/frontend/accounting_js_events.ady >/dev/null 2>&1 \
 	            && echo OK || { echo FAIL; exit 1; }; \
-	        rm -f $(TOOLDIR)/ACCOUNTING/frontend/accounting_js_events.js; \
+	        rm -f $(BEXDIR)/ACCOUNTING/frontend/accounting_js_events.js; \
 	    fi; \
 	fi
 

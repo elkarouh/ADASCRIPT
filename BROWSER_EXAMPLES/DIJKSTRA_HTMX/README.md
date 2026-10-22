@@ -1,6 +1,6 @@
 # DIJKSTRA_HTMX -- an algorithm with a GUI drawn by the server
 
-The smallest version of the architecture of `TOOLS/ACCOUNTING`: the program is
+The smallest version of the architecture of `BROWSER_EXAMPLES/ACCOUNTING`: the program is
 native, the browser only shows what the server draws, and htmx carries the
 clicks.
 
@@ -84,5 +84,5 @@ It does not fit what must follow the mouse every frame. That is what
 `dijkstra_js_events.ady` is for: the same language, compiled to JavaScript, doing only the
 moving; the page and the answer are still the server's. A drag is the one place
 where the drawing exists twice (here the straight line of an edge, in
-`../../TOOLS/ACCOUNTING/frontend/accounting_js_events.ady` the same `routes_of` the server
+`../ACCOUNTING/frontend/accounting_js_events.ady` the same `routes_of` the server
 uses), so keep that part small.

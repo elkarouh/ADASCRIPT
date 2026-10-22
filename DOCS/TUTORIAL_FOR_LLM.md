@@ -1794,7 +1794,7 @@ svg_drag` (`TO_NIM/STDLIB/svg_drag.ady`, built on `browser`) drags the shapes of
 `draggable(shapes, svg, width, moved, dropped, clicked)`, where the three
 functions say what a drag means to the app. Pixels and drawing units are
 distinct types in it, with a scale between them. `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and
-`TOOLS/ACCOUNTING` are whole programs built this way.
+`BROWSER_EXAMPLES/ACCOUNTING` are whole programs built this way.
 
 **Rules for writing one:** the method returns `Html`; the block has one root
 tag; a child's HTML is `+ child.to_html()`; do not use it in a program that

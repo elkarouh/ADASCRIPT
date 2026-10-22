@@ -26,7 +26,7 @@ it but do:. Not yet:
 
 `ady2py` replaces `import X` by X.ady's text (see `include_ady_modules`). The
 libraries bundled with ady2nim build with it too; `db.ady` through its Python
-version, TO_PYTHON/STDLIB/db.ady (sqlite3). TOOLS/ACCOUNTING's tests pass on
+version, TO_PYTHON/STDLIB/db.ady (sqlite3). BROWSER_EXAMPLES/ACCOUNTING's tests pass on
 it, all but test_htmx, whose `html:` block is refused as Nim only.
 
 - [ ] EXAMPLES/TIMETABLE/timetable_sa and timetable_backtrack stop at Nim's json

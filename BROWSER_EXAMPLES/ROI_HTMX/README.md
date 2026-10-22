@@ -2,7 +2,7 @@
 
 `BROWSER_EXAMPLES/ROI_JOINTJS` draws a return-on-investment diagram with the JointJS
 library: boxes with fields in them, joined by arrows. This is the same page in
-the architecture of `TOOLS/ACCOUNTING` and `BROWSER_EXAMPLES/DIJKSTRA_HTMX`: the program
+the architecture of `BROWSER_EXAMPLES/ACCOUNTING` and `BROWSER_EXAMPLES/DIJKSTRA_HTMX`: the program
 is native, the diagram is an SVG that the server draws, and htmx carries each
 change. There is no diagram library; the one script of our own is the drag.
 
@@ -23,7 +23,7 @@ How a box and an arrow are drawn, without JointJS:
 - an arrow is two `<path>`s, a black one underneath and the colour on it, with a
   marker for the head;
 - a box that is dragged moves in the browser, with its arrows (`frontend/roi_js_events.ady`,
-  built on the library's `svg_drag`, as in `TOOLS/ACCOUNTING`); letting go sends `PUT /move`;
+  built on the library's `svg_drag`, as in `BROWSER_EXAMPLES/ACCOUNTING`); letting go sends `PUT /move`;
 - a field that is changed asks `GET /all` with its value and what it is
   (`changed=gold&value=40`); the server changes the portfolio, works out the values and
   sends the whole diagram, which htmx puts in place of the old one.

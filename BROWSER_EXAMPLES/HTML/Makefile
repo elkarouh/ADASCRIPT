@@ -5,7 +5,7 @@
 #   make app        a page as a tree of widgets, served      (html_app.ady)
 #   make all        build every page into build/, open none
 #
-# The worked web apps are elsewhere: TOOLS/ACCOUNTING (Kleppmann's accounting,
+# The worked web apps are elsewhere: BROWSER_EXAMPLES/ACCOUNTING (Kleppmann's accounting,
 # which started here) and BROWSER_EXAMPLES/DIJKSTRA_HTMX, both drawn on the server and
 # kept up to date by htmx.
 #
