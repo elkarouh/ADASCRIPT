@@ -1,0 +1,90 @@
+#!/usr/bin/env ady2nim
+"""node_page -- the page of the node editor, as HTML the program prints (ady2nim c -r).
+
+Four process nodes, each with three input ports on its left and three output ports on its
+right. The page has the drawing's look and nothing that moves: what the reader does with it
+(drag a node, drag from a port to a port) is node_editor.ady, which runs in the browser and
+is loaded by the page as node_editor.js.
+
+The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
+"""
+from node_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Side_T, Port_T, Place_T, start_of, label_of
+
+const NODES: int = 4
+
+const STYLE: str = """
+body { margin: 0; background: #1a1a1a; font-family: Arial, sans-serif; }
+svg#editor { display: block; margin: 0 auto; user-select: none; }
+.node { cursor: move; }
+.node-background { fill: #1a1c1d; }
+.node-header { fill: #426D92; }
+.node-content { fill: #3C3C3C; }
+.header-title { font-size: 20px; fill: #fff; text-anchor: middle; }
+.port-outer { fill: #777777; }
+.port-inner { fill: #202020; }
+.port-scrim { fill: transparent; cursor: pointer; }
+.port-label { font-size: 12px; fill: #fff; }
+.input-field .port-label { text-anchor: start; }
+.output-field .port-label { text-anchor: end; }
+#connections-layer { pointer-events: none; }
+.connector-outline { stroke: #333; stroke-width: 6; fill: none; }
+.connector-path { stroke: #E88802; stroke-width: 4; fill: none; }
+.connector-handle { fill: #E88802; }
+"""
+
+# One port of a node: its dot, over which the reader presses to start a connector, and its label.
+def port_html(p: Port_T) -> Html:
+    let cx: str = str(INPUT_DX if p.side == INPUT else OUTPUT_DX)
+    let cy: str = str(FIRST_PORT_DY + PORT_PITCH * float(p.row))
+    let lx: str = str(INPUT_DX + 13.0 if p.side == INPUT else OUTPUT_DX - 13.0)
+    let ly: str = str(FIRST_PORT_DY + PORT_PITCH * float(p.row) + 4.0)
+    let r: str = str(PORT_R)
+    let r_inner: str = str(PORT_R - 2.5)
+    let field: str = ("input-field" if p.side == INPUT else "output-field")
+    let side: str = ("input" if p.side == INPUT else "output")
+    html:
+        g class=field:
+            circle class="port-outer" cx=cx cy=cy r=r
+            circle class="port-inner" cx=cx cy=cy r=r_inner
+            circle class="port-scrim" cx=cx cy=cy r=r data_node=str(p.node) data_side=side data_row=str(p.row)
+            stext class="port-label" x=lx y=ly: label_of(p)
+
+# A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node was
+# drawn (data_x, data_y: its top left corner), which node_editor.ady drags from.
+def node_html(i: int) -> Html:
+    let at: Place_T = start_of(i)
+    let x: str = str(at.x)
+    let y: str = str(at.y)
+    let w: str = str(NODE_W)
+    let h: str = str(NODE_H)
+    let place: str = f"translate({at.x},{at.y})"
+    let title: str = f"Process {i + 1}"
+    html:
+        g class="node" data_node=str(i) data_x=x data_y=y:
+            g transform=place:
+                rect class="node-background" x="0" y="0" width=w height=h rx="6" ry="6"
+                g class="node-header":
+                    rect x="2" y="2" width="200" height="40" rx="4" ry="4"
+                    rect x="2" y="6" width="200" height="36"
+                    stext class="header-title" x="102" y="30": title
+                g class="node-content":
+                    rect x="2" y="44" width="200" height="82" rx="4" ry="4"
+                    rect x="2" y="44" width="200" height="77"
+                for row in range(PORTS):
+                    + port_html(Port_T(i, INPUT, row))
+                    + port_html(Port_T(i, OUTPUT, row))
+
+def editor_html() -> Html:
+    html:
+        svg id="editor" width="1100" height="520" viewBox="0 0 1100 520":
+            style: STYLE
+            g id="nodes":
+                for i in range(NODES):
+                    + node_html(i)
+            g id="connections-layer"
+
+print "<!doctype html>"
+print "<html lang=\"en\"><head><meta charset=\"utf-8\"><title>SVG node editor</title></head><body>"
+print editor_html()
+print "<script src=\"node_editor.js\"></script>"
+print "</body></html>"

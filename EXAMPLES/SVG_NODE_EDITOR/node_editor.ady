@@ -1,0 +1,169 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""node_editor -- what the reader does with the node editor's page, in the browser.
+
+The page (node_page.ady) draws four nodes with three input ports on the left and three
+output ports on the right. Here:
+
+    drag a node                 moves it; the connectors at its ports follow
+    press on a port, then drag  draws a connector from that port
+    let go on a port of the     the connector snaps to it and stays
+    other kind, of another node
+    let go anywhere else        the connector is removed
+
+The drag of a node is the standard library's svg_drag, the page (finding elements, reading what
+the page says on them) its browser module, and a connector's curve svg_path's. Where each node is,
+and which ports are joined, is kept in the model of node_model.ady; the connectors drawn are made
+from it each time something changes.
+"""
+from browser import Element_T, Event_T, Click_T, page, all, element, data, number, click_of, on, left, stop, listen, listen_first, set_html
+from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, no_click_cb, draggable
+from svg_path import connector_d
+from node_model import NODE_W, NODE_H, Side_T, Place_T, Port_T, Link_T, same_port, port_spot, on_port
+
+const WIDTH: float = 1100.0             # the drawing's size, as node_page.ady draws it
+const HEIGHT: float = 520.0
+
+# ---- The model's values, read off the drawing, and the drawing's values as the model's ----
+
+def place_of_spot(s: Spot_T) -> Place_T:
+    return Place_T(float(s.x), float(s.y))
+
+def spot_of_place(p: Place_T) -> Spot_T:
+    return Spot_T(x=Unit_T(p.x), y=Unit_T(p.y))
+
+# The port a <circle class="port-scrim"> draws.
+def port_of(el: Element_T) -> Port_T:
+    let side: Side_T = (INPUT if el.data("side") == "input" else OUTPUT)
+    return Port_T(int(el.number("data_node")), side, int(el.number("data_row")))
+
+# ---- The editor: where the nodes are, which ports are joined, and the connector being drawn ----
+
+class Editor:
+    var corners: []Place_T              # where each node's top left corner is now, by node
+    var links: []Link_T                 # the connectors that join two ports
+    var drawing: bool                   # a connector is being dragged from a port
+    var fixed: Port_T                   # the port it leaves
+    var free: Place_T                   # and where its other end is, under the mouse
+
+    def __init__(self):
+        self.corners = []
+        for el in page.all("g.node"):
+            self.corners.append(Place_T(el.number("data_x"), el.number("data_y")))
+        self.links = []
+        self.drawing = false
+        self.fixed = Port_T(0, INPUT, 0)
+        self.free = Place_T(0.0, 0.0)
+
+    # Where PORT is, with the nodes where they are now.
+    def spot_of(self, p: Port_T) -> Place_T:
+        return port_spot(self.corners[p.node], p)
+
+    # Node I has been moved to AT.
+    def move(self, i: int, at: Place_T):
+        self.corners[i] = at
+
+    # The connector from output O to input I, as a path, drawn with its two ends marked.
+    def link_html(self, a: Place_T, b: Place_T) -> str:
+        let d: str = connector_d(a.x, a.y, b.x, b.y)
+        return f"<path class='connector-outline' d='{d}'/><path class='connector-path' d='{d}'/><circle class='connector-handle' cx='{a.x:.1f}' cy='{a.y:.1f}' r='4'/><circle class='connector-handle' cx='{b.x:.1f}' cy='{b.y:.1f}' r='4'/>"
+
+    # Draw every connector again: the joined ones, and the one being dragged.
+    def redraw(self):
+        var markup: str = ""
+        for l in self.links:
+            markup = markup + self.link_html(self.spot_of(l.out_port), self.spot_of(l.in_port))
+        if self.drawing:
+            if self.fixed.side == OUTPUT:
+                markup = markup + self.link_html(self.spot_of(self.fixed), self.free)
+            else:
+                markup = markup + self.link_html(self.free, self.spot_of(self.fixed))
+        page.element("#connections-layer").set_html(markup)
+
+    # The port, of a node other than the one the connector leaves and of the other side, that SPOT is on.
+    # The index is -1 when there is none.
+    def port_at(self, spot: Place_T) -> int:
+        let other: Side_T = (INPUT if self.fixed.side == OUTPUT else OUTPUT)
+        for i in range(len(self.corners)):
+            if i == self.fixed.node:
+                continue
+            for row in range(3):
+                if on_port(self.corners[i], Port_T(i, other, row), spot):
+                    return i * 3 + row
+        return -1
+
+    # The press on PORT: a connector starts from it, its free end at SPOT.
+    def start(self, p: Port_T, spot: Place_T):
+        self.drawing = true
+        self.fixed = p
+        self.free = spot
+        self.redraw()
+
+    # The mouse has taken the free end to SPOT.
+    def drag_to(self, spot: Place_T):
+        self.free = spot
+        self.redraw()
+
+    # The release at SPOT: on a port that fits, the connector stays, joined to it; anywhere else it is removed.
+    def finish(self, spot: Place_T):
+        self.drawing = false
+        let found: int = self.port_at(spot)
+        if found >= 0:
+            let other: Side_T = (INPUT if self.fixed.side == OUTPUT else OUTPUT)
+            let hit: Port_T = Port_T(found // 3, other, found % 3)
+            let link: Link_T = (Link_T(self.fixed, hit) if self.fixed.side == OUTPUT else Link_T(hit, self.fixed))
+            if not self.has(link):
+                self.links.append(link)
+        self.redraw()
+
+    # Whether LINK is among the connectors already.
+    def has(self, link: Link_T) -> bool:
+        for l in self.links:
+            if same_port(l.out_port, link.out_port) and same_port(l.in_port, link.in_port):
+                return true
+        return false
+
+var editor: Editor = Editor()
+
+# ---- Moving a node: svg_drag's hooks ----
+
+# While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and the
+# connectors at its ports follow.
+def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+    let now: Spot_T = Spot_T(x=clamp(wanted.x, Unit_T(0.0), Unit_T(WIDTH - NODE_W)), y=clamp(wanted.y, Unit_T(0.0), Unit_T(HEIGHT - NODE_H)))
+    shift(node, centre, now)
+    editor.move(int(node.number("data_node")), place_of_spot(now))
+    editor.redraw()
+    return now
+
+# Where a node is let go is not kept by anyone else: the model has it already.
+def dropped_cb(node: Element_T, at: Spot_T):
+    pass
+
+# ---- A drag from a port: a connector ----
+#
+# Pressing on a port's dot holds it for a connector, not for a move of the node: the press is
+# stopped before svg_drag sees it.
+
+def press(e: Event_T):
+    let c: Click_T = click_of(e)
+    if not left(c):
+        return
+    let dot: ?Element_T = on(c, "circle.port-scrim")
+    if dot is None:
+        return
+    stop(c)
+    editor.start(port_of(dot), place_of_spot(spot_at(e)))
+
+def move(e: Event_T):
+    if editor.drawing:
+        editor.drag_to(place_of_spot(spot_at(e)))
+
+def release(e: Event_T):
+    if editor.drawing:
+        editor.finish(place_of_spot(spot_at(e)))
+
+listen_first("mousedown", press)
+listen("mousemove", move)
+listen("mouseup", release)
+draggable("g.node", "svg#editor", Unit_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=no_click_cb))

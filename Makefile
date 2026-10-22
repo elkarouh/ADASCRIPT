@@ -1832,6 +1832,13 @@ test-part-56:
 	    $(ADY2NIM) js $(EXDIR)/HTML/html_app.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    rm -f $(EXDIR)/HTML/html_app.js; \
+	    printf '  %-42s' "SVG_NODE_EDITOR/node_page.ady"; \
+	    $(ADY2NIM) c -r $(EXDIR)/SVG_NODE_EDITOR/node_page.ady 2>/dev/null | grep -qF '>Process 4</text>' \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    printf '  %-42s' "SVG_NODE_EDITOR/node_editor.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(EXDIR)/SVG_NODE_EDITOR/node_editor.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(EXDIR)/SVG_NODE_EDITOR/node_editor.js; \
 	fi
 
 test-part-57:

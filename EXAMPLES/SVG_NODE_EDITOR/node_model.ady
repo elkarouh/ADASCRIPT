@@ -1,0 +1,63 @@
+#!/usr/bin/env ady2nim
+"""node_model -- the nodes of the editor and the connectors between their ports, and where each is.
+
+Plain arithmetic and lists, no page: the page (node_page.ady) is drawn from it on the server side,
+and the script that runs in the browser (node_editor.ady) keeps it up to date while the reader
+drags. Every unit is a pixel of the drawing.
+
+A node has three input ports on its left and three output ports on its right. A connector joins
+an output port to an input port of another node.
+"""
+const NODE_W: float = 204.0
+const NODE_H: float = 128.0
+const PORTS: int = 3                    # inputs, and outputs, on each node
+const PORT_R: float = 7.5               # a port's radius
+const GRAB: float = 12.0                # how near a released connector must be to a port to snap to it
+
+# Where a port is, from its node's top left corner (the page draws it there, see node_page.ady).
+const INPUT_DX: float = 15.0
+const OUTPUT_DX: float = 189.0
+const FIRST_PORT_DY: float = 60.0
+const PORT_PITCH: float = 25.0
+
+type Side_T is enum INPUT, OUTPUT
+
+# A place in the drawing.
+type Place_T is record:
+    x: float
+    y: float
+
+# A port: its node, which side it is on, and its row from the top.
+type Port_T is record:
+    node: int
+    side: Side_T
+    row:  int
+
+# A connector: the output port it leaves and the input port it arrives at.
+type Link_T is record:
+    out_port: Port_T
+    in_port:  Port_T
+
+# Where node I is drawn first: the original's row, 250 apart.
+def start_of(i: int) -> Place_T:
+    Place_T(50.0 + 250.0 * float(i), 50.0)
+
+# The name a port is shown with: Input 1 .. Input 12 down the nodes in turn, so Output n is
+# the same number.
+def label_of(p: Port_T) -> str:
+    let n: int = p.node * PORTS + p.row + 1
+    return ("Input " if p.side == INPUT else "Output ") + str(n)
+
+# Where the middle of port P is, for a node whose top left corner is AT.
+def port_spot(at: Place_T, p: Port_T) -> Place_T:
+    let dx: float = (INPUT_DX if p.side == INPUT else OUTPUT_DX)
+    Place_T(at.x + dx, at.y + FIRST_PORT_DY + PORT_PITCH * float(p.row))
+
+# Whether two ports are the same one.
+def same_port(a: Port_T, b: Port_T) -> bool:
+    return a.node == b.node and a.side == b.side and a.row == b.row
+
+# Whether SPOT is on the port P of a node whose top left corner is AT: close enough to snap to it.
+def on_port(at: Place_T, p: Port_T, spot: Place_T) -> bool:
+    let c: Place_T = port_spot(at, p)
+    return (spot.x - c.x) ** 2 + (spot.y - c.y) ** 2 <= GRAB ** 2
