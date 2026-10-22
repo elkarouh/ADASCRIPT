@@ -22,7 +22,7 @@ A press that does not move is a click, and goes on to htmx. The click the browse
 after a drag is swallowed, so a shape is not clicked by being moved. Other clicks go to
 `clicked_cb` first, as a Click_T (browser.ady): a shift-click, say, which it may stop.
 
-Used by BROWSER_EXAMPLES/DIJKSTRA_HTMX and BROWSER_EXAMPLES/ACCOUNTING.
+Used by BROWSER_EXAMPLES/DIJKSTRA_HTMX and TOOLS/ACCOUNTING.
 
 The page itself (finding elements, reading what the server wrote, forms, clicks) is the
 browser module's, in plain words; this one adds the drawing: its units, a drag, and moving
