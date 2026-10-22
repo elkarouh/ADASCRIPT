@@ -71,18 +71,22 @@ def to_html(n: Node_T) -> Html:
     let y: str = f"{n.at.y:.0f}"
     let w: str = f"{Unit_in_pixel_T(NODE_W):.1f}"
     let h: str = f"{Unit_in_pixel_T(NODE_H):.1f}"
+    let inner_w: str = f"{Unit_in_pixel_T(NODE_W) - 4.0:.1f}"                # inside the 2 pixels of margin
+    let title_x: str = f"{Unit_in_pixel_T(NODE_W) / 2.0:.1f}"
+    let body_h: str = f"{Unit_in_pixel_T(NODE_H) - 46.0:.1f}"                # under the header
+    let body_h_square: str = f"{Unit_in_pixel_T(NODE_H) - 51.0:.1f}"        # the same without the rounded bottom
     let place: str = f"translate({x},{y})"
     html:
         g class="node" data_node=str(n.id) data_x=x data_y=y:
             g transform=place:
                 rect class="node-background" x="0" y="0" width=w height=h rx="6" ry="6"
                 g class="node-header":
-                    rect x="2" y="2" width="200" height="40" rx="4" ry="4"
-                    rect x="2" y="6" width="200" height="36"
-                    stext class="header-title" x="102" y="30": n.title
+                    rect x="2" y="2" width=inner_w height="40" rx="4" ry="4"
+                    rect x="2" y="6" width=inner_w height="36"
+                    stext class="header-title" x=title_x y="30": n.title
                 g class="node-content":
-                    rect x="2" y="44" width="200" height="82" rx="4" ry="4"
-                    rect x="2" y="44" width="200" height="77"
+                    rect x="2" y="44" width=inner_w height=body_h rx="4" ry="4"
+                    rect x="2" y="44" width=inner_w height=body_h_square
                 for p in n.ports:
                     + p.to_html(n.id)
 

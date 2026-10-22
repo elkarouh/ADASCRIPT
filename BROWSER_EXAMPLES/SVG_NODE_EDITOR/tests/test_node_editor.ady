@@ -9,7 +9,7 @@ var d: Diagram = sample()
 assert len(d.nodes) == 4 and len(d.links) == 2
 assert label_of(Pin_T(0, Port_T(INPUT, 0))) == "Input 1" and label_of(Pin_T(3, Port_T(OUTPUT, 2))) == "Output 12"
 let spot: Spot_T = port_spot(Spot_T(50.0, 50.0), Port_T(OUTPUT, 0))
-assert abs(float(spot.x) - 239.0) < 0.001 and abs(float(spot.y) - 110.0) < 0.001
+assert abs(float(spot.x) - 223.976) < 0.001 and abs(float(spot.y) - 106.693) < 0.001
 
 assert d.add_node("Mixer", Spot_T(300.0, 300.0)) is None
 assert d.nodes[4].id == 4 and d.nodes[4].title == "Mixer"
@@ -30,10 +30,10 @@ assert d.remove_node(2) is Refusal_T
 assert d.add_node("Again", Spot_T(0.0, 0.0)) is None and d.nodes[len(d.nodes) - 1].id == 5   # ids are not reused
 assert Diagram(d.text()).text() == d.text()                                 # kept and read back, the same
 assert "node 4 10 20 Mixer\n" in d.text() and "link 0 2 3 2\n" in d.text()
-let hit: ?Pin_T = d.port_at(Spot_T(239.0 + 3.0, 110.0), OUTPUT, 1)
+let hit: ?Pin_T = d.port_at(Spot_T(224.0 + 3.0, 110.0), OUTPUT, 1)
 assert hit is not None and hit.node == 0 and hit.port.row == 0
-assert d.port_at(Spot_T(239.0, 110.0), OUTPUT, 0) is None                  # not on the node it leaves
-assert d.port_at(Spot_T(239.0, 122.5), OUTPUT, 1) is None                  # nor between ports
+assert d.port_at(Spot_T(224.0, 110.0), OUTPUT, 0) is None                  # not on the node it leaves
+assert d.port_at(Spot_T(224.0, 119.19), OUTPUT, 1) is None                  # nor between ports
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
 var session: Session = Session("")

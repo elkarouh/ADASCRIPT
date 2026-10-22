@@ -21,10 +21,10 @@ unit of the drawing (its viewBox).
 """
 from drawing import Unit_in_pixel_T, Unit_in_cm_T, Spot_T, Area_T
 
-const NODE_W: Unit_in_cm_T = 5.3975     # 204 pixels
-const NODE_H: Unit_in_cm_T = 3.38667    # 128 pixels
-const WIDTH: Unit_in_cm_T = 29.10417    # the drawing's size: 1100 pixels
-const HEIGHT: Unit_in_cm_T = 13.75833   # 520 pixels
+const NODE_W: Unit_in_cm_T = 5.0
+const NODE_H: Unit_in_cm_T = 3.5
+const WIDTH: Unit_in_cm_T = 30.0        # the drawing's size
+const HEIGHT: Unit_in_cm_T = 15.0
 const PORTS: int = 3                    # inputs, and outputs, on each node
 const PORT_R: Unit_in_pixel_T = 7.5               # a port's radius
 const GRAB: Unit_in_pixel_T = 12.0                # how near a released connector must be to a port to snap to it
@@ -32,8 +32,7 @@ const MAX_TITLE: int = 24
 
 # Where a port is, from its node's top left corner (the page draws it there, see node_editor_gui.ady).
 const INPUT_DX: Unit_in_pixel_T = 15.0
-const OUTPUT_DX: Unit_in_cm_T = 5.00063          # 189 pixels
-const FIRST_PORT_DY: Unit_in_cm_T = 1.5875       # 60 pixels
+const FIRST_PORT_DY: Unit_in_cm_T = 1.5          # the first row; the output ports are as far in from the right edge as the inputs from the left
 const PORT_PITCH: Unit_in_pixel_T = 25.0
 
 # Why a change to the diagram is refused: the message the page shows the reader.
@@ -80,7 +79,7 @@ def label_of(p: Pin_T) -> str:
 
 # Where the middle of port P is, for a node whose top left corner is AT.
 def port_spot(at: Spot_T, p: Port_T) -> Spot_T:
-    let dx: Unit_in_pixel_T = (INPUT_DX if p.side == INPUT else Unit_in_pixel_T(OUTPUT_DX))
+    let dx: Unit_in_pixel_T = (INPUT_DX if p.side == INPUT else Unit_in_pixel_T(NODE_W) - INPUT_DX)
     Spot_T(at.x + dx, at.y + Unit_in_pixel_T(FIRST_PORT_DY) + PORT_PITCH * float(p.row))
 
 # Whether two pins are the same port of the same node.
