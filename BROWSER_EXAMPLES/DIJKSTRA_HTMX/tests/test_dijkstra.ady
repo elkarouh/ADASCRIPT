@@ -1,8 +1,9 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
+from blackboard import PublishChannel      # its subscribe, for session.nodes.subscribe below
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
-from backend/dijkstra_events_gui import Session
+from backend/dijkstra_events_gui import Change, Session
 
 # ---- the model ----
 var net: Network = sample()
@@ -58,4 +59,22 @@ assert "There is a node K already." in session.answer("POST", "/nodes", "name=K&
 assert "id=\"gesture\"" not in session.answer("GET", "/all", "") and "id=\"wire\"" in session.answer("GET", "/all", "")
 assert "id=\"menu-node\"" in session.answer("GET", "/all", "") and "data-tool=\"delete\"" in session.answer("GET", "/all", "")
 assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "at A 60 190\n" in session.answer("GET", "/all", "")   # what the browser builds its NetworkView from
+
+# ---- what changed, as a subscriber hears it: published only when the request went through ----
+var heard: []str = []
+def hear(channel: str, change: Change):
+    heard.append(f"{channel} {change.kind} {change.key}")
+var told: Session = Session("")
+told.nodes.subscribe(hear)
+told.edges.subscribe(hear)
+told.answer("GET", "/all", "")
+told.answer("POST", "/nodes", "name=H")
+told.answer("POST", "/nodes", "name=H")                  # refused: nothing is told
+told.answer("POST", "/edges", "a=A&b=H&cost=1")
+told.answer("PUT", "/edges", "a=A&b=H&cost=2")
+told.answer("PUT", "/nodes", "name=H&x=300&y=100")
+told.answer("DELETE", "/nodes", "name=H")                # its edge first, then the node
+told.answer("POST", "/reset", "")
+assert heard == ["nodes CREATE H", "edges CREATE A H", "edges UPDATE A H", "nodes UPDATE H",
+                 "edges DELETE A H", "nodes DELETE H", "edges RELOAD ", "nodes RELOAD "]
 print "dijkstra: all checks passed"

@@ -4,21 +4,43 @@
 server.ady hands every request to a Session, as a method, a path and its fields, and sends back
 the page that comes out. The tests make a Session of their own and call answer() the same way, with
 no server running. A Session keeps the network in a text file (its store), written after every change.
+
+Every change that went through is then published, one channel per collection: `nodes` and `edges`
+carry a Change (CREATE, UPDATE or DELETE, and which one). The page asks (C, U and D are requests);
+whoever wants to hear what changed subscribes, and the Session knows none of them:
+
+    def heard(channel: str, change: Change):
+        print channel, change.kind, change.key          # "nodes CREATE H", "edges DELETE A H"
+    session.nodes.subscribe(heard)
+
+A request that changes everything at once (reset, relayout) is one RELOAD: read it all again.
 """
 from drawing import Drawing_Pixel_T, Spot_T
-from backend/dijkstra_model import Network, Refusal_T, sample
+from blackboard import PublishChannel
+from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
 from backend/dijkstra_layout import place_of
 from backend/dijkstra_gui import all_text
 from backend/dijkstra_request import field_of, number_of, params_of
+
+# What a request changed, as the channels carry it: the node's name, or the edge's two ends ("A B");
+# "" for a RELOAD, where everything may have changed.
+type Change_Kind_T is enum CREATE, UPDATE, DELETE, RELOAD
+type Change is record:
+    kind: Change_Kind_T
+    key:  str
 
 # The network, and the file it is kept in. The server makes one that keeps it in graph.txt; the tests
 # make one that keeps it nowhere.
 class Session:
     var net: Network
     var store: str                      # the file the network is kept in; "" keeps it nowhere
+    var nodes: PublishChannel[Change]   # what happened to a node
+    var edges: PublishChannel[Change]   # what happened to an edge
 
     def __init__(self, store: str):
         self.store = store
+        self.nodes = PublishChannel[Change]("nodes")
+        self.edges = PublishChannel[Change]("edges")
         self.net = sample()
         if store != "":
             let text: str | !PathFailure_T = Path(store).read_text()
@@ -53,6 +75,8 @@ class Session:
         let name: str = field_of(fields, "name")
         let a: str = field_of(fields, "a")
         let b: str = field_of(fields, "b")
+        var node_changes: []Change = []             # published once the request went through
+        var edge_changes: []Change = []
         case method + " " + path:
             when "GET /all":
                 pass
@@ -65,30 +89,51 @@ class Session:
                         self.net.put(name, place_of(self.net, name))
                     else:
                         self.net.put(name, Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
+                node_changes.append(Change(CREATE, name))
             when "PUT /nodes":
                 if name in self.net.names():
                     self.net.put(name, Spot_T(Drawing_Pixel_T(number_of(field_of(fields, "x"))), Drawing_Pixel_T(number_of(field_of(fields, "y")))))
                 else:
                     problem = Refusal_T(message=f"There is no node {name}.")
+                node_changes.append(Change(UPDATE, name))
             when "DELETE /nodes":
+                for e in self.net.edges:                # its edges go with it, and are told first
+                    if e.a == name or e.b == name:
+                        edge_changes.append(Change(DELETE, edge_key(e)))
                 problem = self.net.remove_node(name)
+                node_changes.append(Change(DELETE, name))
             when "POST /edges":
                 problem = self.net.add_edge(a, b, cost_of(fields))
+                edge_changes.append(Change(CREATE, f"{a} {b}"))
             when "PUT /edges":
                 problem = self.net.set_cost(a, b, cost_of(fields))
+                edge_changes.append(Change(UPDATE, f"{a} {b}"))
             when "DELETE /edges":
                 problem = self.net.remove_edge(a, b)
+                edge_changes.append(Change(DELETE, f"{a} {b}"))
             when "POST /relayout":
                 self.net.forget_places()        # no node keeps a place of its own: the layout gives each one
+                node_changes.append(Change(RELOAD, ""))
             when "POST /reset":
                 self.net = sample()
+                node_changes.append(Change(RELOAD, ""))
+                edge_changes.append(Change(RELOAD, ""))
             when others:
                 return ""
+        if problem is None:
+            for c in edge_changes:
+                self.edges.publish(c)
+            for c in node_changes:
+                self.nodes.publish(c)
         if method != "GET" and problem is None:
             let saved: None | !Refusal_T = self.save()
             if saved is Refusal_T:
                 return all_text(self.net, params_of(fields), saved)
         return all_text(self.net, params_of(fields), problem)
+
+# An edge as a Change names it: its two ends, as the model keeps them.
+def edge_key(e: Edge_T) -> str:
+    return f"{e.a} {e.b}"
 
 # The cost in FIELDS: -1 when there is none, which the model refuses.
 def cost_of(fields: str) -> int:
