@@ -1,8 +1,8 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""node_editor -- what the reader does with the node editor's page, in the browser.
+"""node_editor_js_events -- what the reader does with the node editor's page, in the browser.
 
-The page (node_page.ady) draws four nodes with three input ports on the left and three
+The page (backend/node_editor_gui.ady) draws four nodes with three input ports on the left and three
 output ports on the right. Here:
 
     drag a node                 moves it; the connectors at its ports follow
@@ -13,15 +13,15 @@ output ports on the right. Here:
 
 The drag of a node is the standard library's svg_drag, the page (finding elements, reading what
 the page says on them) its browser module, and a connector's curve svg_path's. Where each node is,
-and which ports are joined, is kept in the model of node_model.ady; the connectors drawn are made
+and which ports are joined, is kept in the model of backend/node_editor_model.ady; the connectors drawn are made
 from it each time something changes.
 """
 from browser import Element_T, Event_T, Click_T, page, all, element, data, number, click_of, on, left, stop, listen, listen_first, set_html
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, no_click_cb, draggable
 from svg_path import SIDEWAYS, connector_d
-from node_model import NODE_W, NODE_H, Side_T, Place_T, Port_T, Link_T, same_port, port_spot, on_port
+from backend/node_editor_model import NODE_W, NODE_H, Side_T, Place_T, Port_T, Link_T, same_port, port_spot, on_port
 
-const WIDTH: float = 1100.0             # the drawing's size, as node_page.ady draws it
+const WIDTH: float = 1100.0             # the drawing's size, as backend/node_editor_gui.ady draws it
 const HEIGHT: float = 520.0
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 

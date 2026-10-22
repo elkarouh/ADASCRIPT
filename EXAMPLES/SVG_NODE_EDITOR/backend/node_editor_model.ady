@@ -1,8 +1,8 @@
 #!/usr/bin/env ady2nim
-"""node_model -- the nodes of the editor and the connectors between their ports, and where each is.
+"""node_editor_model -- the nodes of the editor and the connectors between their ports, and where each is.
 
-Plain arithmetic and lists, no page: the page (node_page.ady) is drawn from it on the server side,
-and the script that runs in the browser (node_editor.ady) keeps it up to date while the reader
+Plain arithmetic and lists, no page: the page (backend/node_editor_gui.ady) is drawn from it on the server side,
+and the script that runs in the browser (frontend/node_editor_js_events.ady) keeps it up to date while the reader
 drags. Every unit is a pixel of the drawing.
 
 A node has three input ports on its left and three output ports on its right. A connector joins
@@ -14,7 +14,7 @@ const PORTS: int = 3                    # inputs, and outputs, on each node
 const PORT_R: float = 7.5               # a port's radius
 const GRAB: float = 12.0                # how near a released connector must be to a port to snap to it
 
-# Where a port is, from its node's top left corner (the page draws it there, see node_page.ady).
+# Where a port is, from its node's top left corner (the page draws it there, see backend/node_editor_gui.ady).
 const INPUT_DX: float = 15.0
 const OUTPUT_DX: float = 189.0
 const FIRST_PORT_DY: float = 60.0

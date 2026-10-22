@@ -1,14 +1,14 @@
 #!/usr/bin/env ady2nim
-"""node_page -- the page of the node editor, as HTML the program prints (ady2nim c -r).
+"""node_editor_gui -- the page of the node editor, as HTML the program prints (ady2nim c -r).
 
 Four process nodes, each with three input ports on its left and three output ports on its
 right. The page has the drawing's look and nothing that moves: what the reader does with it
-(drag a node, drag from a port to a port) is node_editor.ady, which runs in the browser and
-is loaded by the page as node_editor.js.
+(drag a node, drag from a port to a port) is frontend/node_editor_js_events.ady, which runs in the browser and
+is loaded by the page as node_editor_js_events.js.
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
-from node_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Side_T, Port_T, Place_T, start_of, label_of
+from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Side_T, Port_T, Place_T, start_of, label_of
 
 const NODES: int = 4
 
@@ -50,7 +50,7 @@ def port_html(p: Port_T) -> Html:
             stext class="port-label" x=lx y=ly: label_of(p)
 
 # A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node was
-# drawn (data_x, data_y: its top left corner), which node_editor.ady drags from.
+# drawn (data_x, data_y: its top left corner), which frontend/node_editor_js_events.ady drags from.
 def node_html(i: int) -> Html:
     let at: Place_T = start_of(i)
     let x: str = str(at.x)
@@ -86,5 +86,5 @@ def editor_html() -> Html:
 print "<!doctype html>"
 print "<html lang=\"en\"><head><meta charset=\"utf-8\"><title>SVG node editor</title></head><body>"
 print editor_html()
-print "<script src=\"node_editor.js\"></script>"
+print "<script src=\"node_editor_js_events.js\"></script>"
 print "</body></html>"

@@ -6,7 +6,7 @@ written in Adascript, with no JavaScript and no DOM calls in the source.
 
 ```
 make app        # build the page and the script, serve them, open the page
-make all        # build build/index.html and build/node_editor.js, open none
+make all        # build build/index.html and build/node_editor_js_events.js, open none
 ```
 
 You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
@@ -22,9 +22,12 @@ You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
 
 | File | What it is | Runs as |
 |---|---|---|
-| `node_model.ady` | the geometry: sizes, where each port is, the `Port_T` and `Link_T` values | imported by both |
-| `node_page.ady` | the page: an `html:` block draws the SVG, and the program prints it | native, `ady2nim c -r` |
-| `node_editor.ady` | what the reader does: the editor keeps where the nodes are and which ports are joined, and draws the connectors from that | browser, `ady2nim js` |
+| `backend/node_editor_model.ady` | the geometry: sizes, where each port is, the `Port_T` and `Link_T` values | imported by both |
+| `backend/node_editor_gui.ady` | the page: an `html:` block draws the SVG, and the program prints it | native, `ady2nim c -r` |
+| `frontend/node_editor_js_events.ady` | what the reader does: the editor keeps where the nodes are and which ports are joined, and draws the connectors from that | browser, `ady2nim js` |
+
+`backend/` is native and `frontend/` is what the browser runs, as in `EXAMPLES/DIJKSTRA_HTMX`; the model is compiled
+both ways, so the page and the script agree on where every port is.
 
 The drag of a node is the stdlib's `svg_drag`, the page (finding elements, reading `data_*`
 attributes, replacing the connectors' layer) its `browser` module, and a connector's curve
