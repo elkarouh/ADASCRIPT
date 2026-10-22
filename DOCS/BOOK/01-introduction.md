@@ -336,7 +336,7 @@ this book:
 |------|----------|
 | Classic algorithms | `primes.ady`, `graph.ady`, `dijkstra.ady`, `floyd.ady`, `sudoku.ady`, `spell.ady`, `phonecode.ady`, `tsp.ady` |
 | Simulations | `monty_hall.ady`, `prisoners.ady` |
-| Frameworks | `shortest_path.ady` (+ `test_shortest_path.ady`), `state_search.ady` (+ tests) |
+| Frameworks | `shortest_path.ady` (+ `shortest_path_demo.ady`), `state_search.ady` (+ tests) |
 | Operations research / RL | `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady`, `timetable_*.ady` |
 | An interpreter | `TOOLS/LISPY/lispy.ady` — a full Scheme interpreter |
 | Text processing | `awk_example.ady`, `test_awk.ady`, `test_regex.ady`, `average_line.ady` |

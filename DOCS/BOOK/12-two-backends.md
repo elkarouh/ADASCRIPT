@@ -40,7 +40,7 @@ dependency into the same build cache. That is how the optimiser framework
 splits library from tests:
 
 ```python
-# test_shortest_path.ady
+# shortest_path_demo.ady
 nimport stdlib
 from shortest_path import Maximizer, Minimizer   # auto-transpiled
 ```

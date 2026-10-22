@@ -163,7 +163,7 @@ def clean_number(num: str) -> []Digit_T:
     return [CHAR_TO_DIGIT[c] for c in num if c in CHAR_TO_DIGIT]
 ```
 
-and from the knapsack/rod-cutting models in `test_shortest_path.ady`,
+and from the knapsack/rod-cutting models in `shortest_path_demo.ady`,
 filtering feasible decisions:
 
 ```python

@@ -312,7 +312,7 @@ def make_boxes() -> [Prisoner_T]Box_T:
 ```
 
 and `average_line.ady` uses `line'Length` on a plain string. Stepping
-through an enum uses `'Next` — here from `EXAMPLES/test_shortest_path.ady`,
+through an enum uses `'Next` — here from `EXAMPLES/shortest_path_demo.ady`,
 advancing a knapsack solver to its next stage:
 
 ```python
@@ -350,7 +350,7 @@ declaration buys all of this at once:
 
 The examples keep proving the point: doors (`monty_hall`), digits
 (`phonecode`), severities (`awk_example`), workflow states (`lv`), decisions
-(`test_shortest_path`: `BUY, SELL, KEEP, TRADE`), compass actions
+(`shortest_path_demo`: `BUY, SELL, KEEP, TRADE`), compass actions
 (`td_learning/qlearning.ady`: `UP, RIGHT, DOWN, LEFT`).
 
 ---

@@ -38,7 +38,7 @@ while queue:
 ```
 
 Named-tuple literals work anywhere an expression does — inside collections,
-as arguments, in queue pushes. `EXAMPLES/test_shortest_path.ady` initialises
+as arguments, in queue pushes. `EXAMPLES/shortest_path_demo.ady` initialises
 a capital-budgeting search with one:
 
 ```python
@@ -342,7 +342,7 @@ nest of raw braces.
 
 A practical note from the examples: search/DP state must be **hashable and
 comparable** (it goes into `visited` sets and priority queues), which is why
-`test_shortest_path.ady` and `state_search.ady` use tuples for state
+`shortest_path_demo.ady` and `state_search.ady` use tuples for state
 throughout, and records only for bulkier data that stays put.
 
 ---

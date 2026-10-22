@@ -184,7 +184,7 @@ def shortest_path(self, start_state: S, allsolutions: bool = True, end_state: au
 Consumption reads like Python because it is Python:
 
 ```python
-# test_shortest_path.ady
+# shortest_path_demo.ady
 op2s: ShortestGraph = ShortestGraph()
 for solution in op2s.shortest_path(start_state=a, end_state=j):
     print(solution)
