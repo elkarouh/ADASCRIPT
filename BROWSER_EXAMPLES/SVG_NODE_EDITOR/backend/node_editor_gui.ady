@@ -9,7 +9,7 @@ how a connector looks is node_editor_js_events.ady. Every request the script sen
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
-from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Diagram, Node_T, Port_T, Refusal_T, Side_T, label_of
+from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of
 
 const WIDTH: float = 1100.0             # the drawing's size, in its own units
 const HEIGHT: float = 520.0
@@ -46,8 +46,8 @@ button:hover { background: #333; }
 pre#diagram { display: none; }
 """
 
-# One port of a node: its dot, over which the reader presses to start a connector, and its label.
-def to_html(p: Port_T) -> Html:
+# One port of the node NODE: its dot, over which the reader presses to start a connector, and its label.
+def to_html(p: Port_T, node: int) -> Html:
     let cx: str = str(INPUT_DX if p.side == INPUT else OUTPUT_DX)
     let cy: str = str(FIRST_PORT_DY + PORT_PITCH * float(p.row))
     let lx: str = str(INPUT_DX + 13.0 if p.side == INPUT else OUTPUT_DX - 13.0)
@@ -60,16 +60,8 @@ def to_html(p: Port_T) -> Html:
         g class=field:
             circle class="port-outer" cx=cx cy=cy r=r
             circle class="port-inner" cx=cx cy=cy r=r_inner
-            circle class="port-scrim" cx=cx cy=cy r=r data_node=str(p.node) data_side=side data_row=str(p.row)
-            stext class="port-label" x=lx y=ly: label_of(p)
-
-# The ports of a node, an input and an output on each row.
-def ports_of(n: Node_T) -> []Port_T:
-    var ports: []Port_T = []
-    for row in range(PORTS):
-        ports.append(Port_T(n.id, INPUT, row))
-        ports.append(Port_T(n.id, OUTPUT, row))
-    return ports
+            circle class="port-scrim" cx=cx cy=cy r=r data_node=str(node) data_side=side data_row=str(p.row)
+            stext class="port-label" x=lx y=ly: label_of(Pin_T(node, p))
 
 # A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node is
 # (data_x, data_y: its top left corner), which the script's drag starts from.
@@ -90,8 +82,8 @@ def to_html(n: Node_T) -> Html:
                 g class="node-content":
                     rect x="2" y="44" width="200" height="82" rx="4" ry="4"
                     rect x="2" y="44" width="200" height="77"
-                for p in ports_of(n):
-                    + p.to_html()
+                for p in n.ports:
+                    + p.to_html(n.id)
 
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"

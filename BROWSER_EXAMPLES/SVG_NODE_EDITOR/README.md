@@ -37,7 +37,7 @@ A node keeps its id for good, so deleting one does not renumber the ports of the
 
 | File | What it knows |
 |---|---|
-| `backend/node_editor_model.ady` | the model: a class `Diagram` of `Node_T`s and `Link_T`s with its methods (`add_node`, `move`, `remove_node`, `add_link`, `remove_link`, each refusing with a `Refusal_T` or done), the geometry (where each port is), `text` and `Diagram(text)`, which write the file and read it back. Compiled both ways. No HTML, no HTTP. |
+| `backend/node_editor_model.ady` | the model: a class `Diagram` of `Node_T`s (each with its `Port_T`s) and `Link_T`s (each joining two `Pin_T`s, a node id and a port) with its methods (`add_node`, `move`, `remove_node`, `add_link`, `remove_link`, each refusing with a `Refusal_T` or done), the geometry (where each port is), `text` and `Diagram(text)`, which write the file and read it back. Compiled both ways. No HTML, no HTTP. |
 | `backend/node_editor_request.ady` | the fields of a request: `field_of`, `number_of`, `port_of`. |
 | `backend/node_editor_gui.ady` | how to draw it: the nodes as SVG with `html:` blocks, the page, the diagram as text for the script. The connectors are not drawn here; the script draws them. |
 | `backend/node_editor_events_gui.ady` | what each request does: `Session.answer(method, path, fields)` calls the model, saves the file, and returns the page. No HTTP, so the tests call it. |

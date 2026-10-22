@@ -43,37 +43,50 @@ type Place_T is record:
     x: float
     y: float
 
-# A port: its node's id, which side it is on, and its row from the top.
+# A port of a node: which side it is on, and its row from the top.
 type Port_T is record:
-    node: int
     side: Side_T
     row:  int
 
-# A node: its id, its title, and the place of its top left corner.
+# A node: its id, its title, the place of its top left corner, and its ports.
 type Node_T is record:
     id:    int
     title: str
     at:    Place_T
+    ports: []Port_T
+
+# A port told apart from the others in the diagram: the id of its node, and the port.
+type Pin_T is record:
+    node: int
+    port: Port_T
 
 # A connector: the output port it leaves and the input port it arrives at.
 type Link_T is record:
-    out_port: Port_T
-    in_port:  Port_T
+    out_port: Pin_T
+    in_port:  Pin_T
+
+# The ports a new node has: PORTS inputs and PORTS outputs.
+def ports_made() -> []Port_T:
+    var ports: []Port_T = []
+    for row in range(PORTS):
+        ports.append(Port_T(INPUT, row))
+        ports.append(Port_T(OUTPUT, row))
+    return ports
 
 # The name a port is shown with: Input 1 .. Input 3 on the node with id 0, Input 4 .. 6 on id 1,
 # and so on; Output n is numbered the same way.
-def label_of(p: Port_T) -> str:
-    let n: int = p.node * PORTS + p.row + 1
-    return ("Input " if p.side == INPUT else "Output ") + str(n)
+def label_of(p: Pin_T) -> str:
+    let n: int = p.node * PORTS + p.port.row + 1
+    return ("Input " if p.port.side == INPUT else "Output ") + str(n)
 
 # Where the middle of port P is, for a node whose top left corner is AT.
 def port_spot(at: Place_T, p: Port_T) -> Place_T:
     let dx: float = (INPUT_DX if p.side == INPUT else OUTPUT_DX)
     Place_T(at.x + dx, at.y + FIRST_PORT_DY + PORT_PITCH * float(p.row))
 
-# Whether two ports are the same one.
-def same_port(a: Port_T, b: Port_T) -> bool:
-    return a.node == b.node and a.side == b.side and a.row == b.row
+# Whether two pins are the same port of the same node.
+def same_pin(a: Pin_T, b: Pin_T) -> bool:
+    return a.node == b.node and a.port.side == b.port.side and a.port.row == b.port.row
 
 # Whether SPOT is on the port P of a node whose top left corner is AT: close enough to snap to it.
 def on_port(at: Place_T, p: Port_T, spot: Place_T) -> bool:
@@ -108,7 +121,7 @@ class Diagram:
                             continue
                         if y is ParseFailure_T:
                             continue
-                        self.nodes.append(Node_T(id, " ".join(w[4:]), Place_T(x, y)))
+                        self.nodes.append(Node_T(id, " ".join(w[4:]), Place_T(x, y), ports_made()))
                 when "link":
                     if len(w) == 5:
                         let a: int | !ParseFailure_T = parse_int(w[1])
@@ -123,7 +136,7 @@ class Diagram:
                             continue
                         if s is ParseFailure_T:
                             continue
-                        let joined: None | !Refusal_T = self.add_link(Port_T(a, OUTPUT, r), Port_T(b, INPUT, s))
+                        let joined: None | !Refusal_T = self.add_link(Pin_T(a, Port_T(OUTPUT, r)), Pin_T(b, Port_T(INPUT, s)))
 
     # The index of the node with id ID, or -1.
     def index_of(self, id: int) -> int:
@@ -140,9 +153,9 @@ class Diagram:
         return top + 1
 
     # The index of the connector from OUT to IN, or -1.
-    def link_index(self, out_port: Port_T, in_port: Port_T) -> int:
+    def link_index(self, out_port: Pin_T, in_port: Pin_T) -> int:
         for i in range(len(self.links)):
-            if same_port(self.links[i].out_port, out_port) and same_port(self.links[i].in_port, in_port):
+            if same_pin(self.links[i].out_port, out_port) and same_pin(self.links[i].in_port, in_port):
                 return i
         return -1
 
@@ -151,18 +164,17 @@ class Diagram:
         return self.nodes[self.index_of(id)].at
 
     # Where PORT is, with the nodes where they are now.
-    def spot_of(self, p: Port_T) -> Place_T:
-        return port_spot(self.corner_of(p.node), p)
+    def spot_of(self, p: Pin_T) -> Place_T:
+        return port_spot(self.corner_of(p.node), p.port)
 
     # The port of side SIDE, on a node other than SKIP, that SPOT is on; None when there is none.
-    def port_at(self, spot: Place_T, side: Side_T, skip: int) -> ?Port_T:
+    def port_at(self, spot: Place_T, side: Side_T, skip: int) -> ?Pin_T:
         for n in self.nodes:
             if n.id == skip:
                 continue
-            for row in range(PORTS):
-                let p: Port_T = Port_T(n.id, side, row)
-                if on_port(n.at, p, spot):
-                    return p
+            for p in n.ports:
+                if p.side == side and on_port(n.at, p, spot):
+                    return Pin_T(n.id, p)
         return None
 
     # ---- create, move, delete: each refuses with a Refusal_T, or is done (None) ----
@@ -172,7 +184,7 @@ class Diagram:
         let t: str = title.strip()
         if len(t) == 0 or len(t) > MAX_TITLE:
             return Refusal_T(message=f"A title is 1 to {MAX_TITLE} characters.")
-        self.nodes.append(Node_T(self.next_id(), t, at))
+        self.nodes.append(Node_T(self.next_id(), t, at, ports_made()))
 
     def move(self, id: int, at: Place_T) -> None | !Refusal_T:
         let i: int = self.index_of(id)
@@ -196,12 +208,12 @@ class Diagram:
         self.links = kept
 
     # A connector from the output port OUT to the input port IN, of two different nodes.
-    def add_link(self, out_port: Port_T, in_port: Port_T) -> None | !Refusal_T:
-        if out_port.side != OUTPUT or in_port.side != INPUT:
+    def add_link(self, out_port: Pin_T, in_port: Pin_T) -> None | !Refusal_T:
+        if out_port.port.side != OUTPUT or in_port.port.side != INPUT:
             return Refusal_T(message="A connector goes from an output to an input.")
         if self.index_of(out_port.node) < 0 or self.index_of(in_port.node) < 0:
             return Refusal_T(message="There is no such node.")
-        if out_port.row < 0 or out_port.row >= PORTS or in_port.row < 0 or in_port.row >= PORTS:
+        if out_port.port.row < 0 or out_port.port.row >= PORTS or in_port.port.row < 0 or in_port.port.row >= PORTS:
             return Refusal_T(message="There is no such port.")
         if out_port.node == in_port.node:
             return Refusal_T(message="A connector joins two different nodes.")
@@ -209,7 +221,7 @@ class Diagram:
             return Refusal_T(message=f"{label_of(out_port)} is joined to {label_of(in_port)} already.")
         self.links.append(Link_T(out_port, in_port))
 
-    def remove_link(self, out_port: Port_T, in_port: Port_T) -> None | !Refusal_T:
+    def remove_link(self, out_port: Pin_T, in_port: Pin_T) -> None | !Refusal_T:
         let i: int = self.link_index(out_port, in_port)
         if i < 0:
             return Refusal_T(message="There is no such connector.")
@@ -226,7 +238,7 @@ class Diagram:
         for n in self.nodes:
             lines.append(f"node {n.id} {n.at.x:.0f} {n.at.y:.0f} {n.title}")
         for l in self.links:
-            lines.append(f"link {l.out_port.node} {l.out_port.row} {l.in_port.node} {l.in_port.row}")
+            lines.append(f"link {l.out_port.node} {l.out_port.port.row} {l.in_port.node} {l.in_port.port.row}")
         return "\n".join(lines) + "\n"
 
 # What there is to start with, and after Reset: the original's four nodes in a row.
@@ -234,6 +246,6 @@ def sample() -> Diagram:
     var d: Diagram = Diagram([], [])
     for i in range(4):
         let added: None | !Refusal_T = d.add_node(f"Process {i + 1}", Place_T(50.0 + 250.0 * float(i), 50.0))
-    let a: None | !Refusal_T = d.add_link(Port_T(0, OUTPUT, 0), Port_T(2, INPUT, 1))
-    let b: None | !Refusal_T = d.add_link(Port_T(0, OUTPUT, 2), Port_T(3, INPUT, 2))
+    let a: None | !Refusal_T = d.add_link(Pin_T(0, Port_T(OUTPUT, 0)), Pin_T(2, Port_T(INPUT, 1)))
+    let b: None | !Refusal_T = d.add_link(Pin_T(0, Port_T(OUTPUT, 2)), Pin_T(3, Port_T(INPUT, 2)))
     return d

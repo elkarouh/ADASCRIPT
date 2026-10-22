@@ -28,7 +28,7 @@ page says on them, questions, keys) its browser module, and a connector's curve 
 from browser import Element_T, Event_T, Click_T, request, page, find, all, data, number, text, attr, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, no_click_cb, draggable
 from svg_path import SIDEWAYS, connector_d
-from backend/node_editor_model import NODE_W, NODE_H, Side_T, Place_T, Port_T, Link_T, Refusal_T, Diagram
+from backend/node_editor_model import NODE_W, NODE_H, Side_T, Place_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
 
 const WIDTH: float = 1100.0             # the drawing's size, as backend/node_editor_gui.ady draws it
 const HEIGHT: float = 520.0
@@ -49,10 +49,10 @@ def send(method: str, url: str, fields: {str}str):
     request(method, url, fields, "#all")
 
 # The fields that name a port, by PREFIX ("out" or "in").
-def port_fields(prefix: str, p: Port_T) -> {str}str:
+def port_fields(prefix: str, p: Pin_T) -> {str}str:
     var fields: {str}str = {:}
     fields[prefix + "_node"] = str(p.node)
-    fields[prefix + "_row"] = str(p.row)
+    fields[prefix + "_row"] = str(p.port.row)
     return fields
 
 # Send the connector from OUT to IN, or ask for it to be deleted.
@@ -75,7 +75,7 @@ def kept_text() -> str:
 class View:
     var diagram: Diagram                # the model, as the server keeps it, with the nodes where they are now
     var drawing: bool                   # a connector is being dragged from a port
-    var fixed: Port_T                   # the port it leaves
+    var fixed: Pin_T                   # the port it leaves
     var free: Place_T                   # and where its other end is, under the mouse
     var node: int                       # the node selected: its id, -1 for none
     var link: int                       # the connector selected: its index, -1 for none
@@ -84,7 +84,7 @@ class View:
     def __init__(self):
         self.diagram = Diagram(kept_text())
         self.drawing = false
-        self.fixed = Port_T(0, INPUT, 0)
+        self.fixed = Pin_T(0, Port_T(INPUT, 0))
         self.free = Place_T(0.0, 0.0)
         self.node = -1
         self.link = -1
@@ -105,7 +105,7 @@ class View:
             let l: Link_T = self.diagram.links[i]
             markup = markup + self.link_html(self.diagram.spot_of(l.out_port), self.diagram.spot_of(l.in_port), i, i == self.link)
         if self.drawing:
-            if self.fixed.side == OUTPUT:
+            if self.fixed.port.side == OUTPUT:
                 markup = markup + self.link_html(self.diagram.spot_of(self.fixed), self.free, -1, false)
             else:
                 markup = markup + self.link_html(self.free, self.diagram.spot_of(self.fixed), -1, false)
@@ -116,7 +116,7 @@ class View:
     # ---- a drag from a port ----
 
     # The press on PORT: a connector starts from it, its free end at SPOT.
-    def start(self, p: Port_T, spot: Place_T):
+    def start(self, p: Pin_T, spot: Place_T):
         self.drawing = true
         self.fixed = p
         self.free = spot
@@ -133,12 +133,12 @@ class View:
     def finish(self, spot: Place_T):
         self.drawing = false
         self.swallow = true
-        let other: Side_T = (INPUT if self.fixed.side == OUTPUT else OUTPUT)
-        let hit: ?Port_T = self.diagram.port_at(spot, other, self.fixed.node)
+        let other: Side_T = (INPUT if self.fixed.port.side == OUTPUT else OUTPUT)
+        let hit: ?Pin_T = self.diagram.port_at(spot, other, self.fixed.node)
         if hit is None:
             self.redraw()
             return
-        if self.fixed.side == OUTPUT:
+        if self.fixed.port.side == OUTPUT:
             send_link("POST", Link_T(self.fixed, hit))
         else:
             send_link("POST", Link_T(hit, self.fixed))
@@ -221,7 +221,7 @@ def press(e: Event_T):
     if not left(c):
         return
     let spot: Place_T = place_of_spot(spot_at(e))
-    var port: ?Port_T = view.diagram.port_at(spot, OUTPUT, -1)
+    var port: ?Pin_T = view.diagram.port_at(spot, OUTPUT, -1)
     if port is None:
         port = view.diagram.port_at(spot, INPUT, -1)
     if port is None:
