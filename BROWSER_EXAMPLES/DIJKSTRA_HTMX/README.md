@@ -30,12 +30,12 @@ the other.
 |---|---|
 | `backend/dijkstra_model.ady` | the model, a placeholder: a class `Network` of `Node_T`s (a name each), `Edge_T`s and the places the reader put the nodes, with its methods (`add_node`, `remove_node`, `add_edge`, `set_cost`, `remove_edge`, `put`, `forget_places`, each `add`, `remove` or `set` refusing with a `Refusal_T` (its `message` is what the page shows), or done; `names`, `edge_at`, `text`, `build_graph`, which makes of it the graph the library's `shortest_route` wants, `TO_NIM/STDLIB/graphs.ady`); `Network(text)`, a second constructor, reads it back from text. Replace it with your own; no HTML, no HTTP. |
 | `backend/dijkstra_layout.ady` | where each node is drawn when the reader has not put it somewhere: `place_of` (the places the model keeps, else `new_spot`, the layout algorithm: evenly spaced round an ellipse, in the model's order), and `inside`, which keeps a node within the drawing's margin. Compiled both ways, like the model: the server draws the page with it, and the browser's `NetworkView` moves nodes with it. |
-| `backend/dijkstra_gui.ady` | how to draw it: the SVG, the buttons, the form `#state`, the menus, the text. A function from the network and what is picked to HTML: `all_html` for the page, `to_html` for the drawing and for each node and edge in it. |
+| `backend/dijkstra_gui.ady` | how to draw it: the SVG, the buttons, the form `#state`, the menus, the text. A function from the network and what is picked to HTML: `all_html` for the page, `problem_html` for the answer to a command, `to_html` for the drawing and for each node and edge in it. |
 | `backend/dijkstra_request.ady` | the fields of a request: `field_of` and `number_of` read them, `params_of` reads the reader's choice (`Params_T`: the start, the goal, the node clicked). No HTML, no HTTP. |
 | `backend/dijkstra_events_gui.ady` | what each request does: `Session.answer(method, path, fields)`: a read returns the page; a command calls the model, answers only whether it went through (`#problem`), and publishes the `Change` on its channel (`nodes`, `edges`). A `Session` holds the network and the file it is kept in (`keep` writes it). No HTTP, so the tests call it. |
-| `backend/server.ady` | HTTP, and nothing else: hands each request to `session.answer`, and serves the two scripts. |
+| `backend/server.ady` | HTTP, and who hears of a change: hands each request to `session.answer`, serves the two scripts, keeps `GET /events` open for every page, and subscribes `keep` (writes `graph.txt`) and `tell` (writes the change to every open page) to the session's channels. |
 | `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes). Every change it sends goes through `request` (in the stdlib's `browser.ady`): the method, the path and the fields by name, with the form `#state`; htmx sends it and swaps the answer into `#problem`, as for a button. It follows `GET /events` and reads the page again (`GET /all`, into `#all`) on each change, whichever page made it. |
-| `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask; nothing is started. |
+| `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask (a command, then the page read again), and of what a subscriber hears; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
 `backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). The model and the layout are compiled both ways: the page carries the network, its places included, as the server keeps it (a hidden `pre#network`), and `dijkstra_js_events.ady` builds its `NetworkView` from that with the same `Network(text)`, so where a node is drawn is computed from the model, never read off the drawing.
@@ -60,11 +60,10 @@ The routes are a small REST interface on two collections. Commands in, events ou
 * The **network** is the server's (the model, kept in `graph.txt` by a subscriber, after every change). **What the
   reader has picked** (the start and the goal) is the page's: the fields of the
   form `#state`, sent with every request, so the server keeps no session.
-* Each button, field and form names its request in htmx attributes
-  (`hx-post`, `hx-put`, `hx-delete`, `hx-get`; `hx-vals` for which node or edge;
-  `hx-include="#state"`; `hx-target="#problem"`, `hx-swap="outerHTML"`), all in
-  `backend/dijkstra_gui.ady`. htmx sends it and swaps in the answer; the page is drawn
-  again on the news of the change.
+* The toolbar's buttons (Relayout, Reset) name their request in htmx attributes
+  (`hx-post`, `hx-confirm`; `hx-target="#problem"`, `hx-swap="outerHTML"`), and the
+  first page loads itself with `hx-get="/all"`, all in `backend/dijkstra_gui.ady`. htmx
+  sends it and swaps in the answer; the page is drawn again on the news of the change.
 * A gesture on the drawing (a click on a node, a drag, a wire, a double-click, a
   menu, the Delete key) has no button: `frontend/dijkstra_js_events.ady` names
   its request in one line, `send_gesture("DELETE", "/nodes", {"name": n})`, and
@@ -83,7 +82,8 @@ The routes are a small REST interface on two collections. Commands in, events ou
 
 ## When it fits, and when it does not
 
-It fits when an answer is cheap to compute and a round trip per click is fine:
+It fits when an answer is cheap to compute and a round trip or two per click is fine
+(a change is a command, then the page read again):
 algorithms, forms, tables, dashboards, a graph that is re-drawn. Everything
 stays in one language, and what the browser runs is almost nothing.
 
