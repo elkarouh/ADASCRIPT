@@ -13,17 +13,18 @@ make test                 # the model and the page, tested without a server
 
 ## The whole picture
 
-![A request, from a click to the new page](request_flow.svg)
+![A change, from a click to every open page](request_flow.svg)
 
-The program is split by what each part knows:
+A change goes in as a command, and comes out as an event that every open page hears;
+each page then reads itself again. The program is split by what each part knows:
 
 | Layer | Files | Knows about |
 |---|---|---|
 | The model | `backend/dijkstra_model.ady` | the data and its rules; nothing else |
 | The layout | `backend/dijkstra_layout.ady` | where each node is drawn when nobody has put it |
 | The page | `backend/dijkstra_gui.ady` | how the data looks as HTML |
-| The requests | `backend/dijkstra_events_gui.ady` | what each request does to the data |
-| The server | `backend/server.ady` | HTTP, and nothing else |
+| The requests | `backend/dijkstra_events_gui.ady` | what each request does to the data, and the change it publishes |
+| The server | `backend/server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
 | The browser | `frontend/dijkstra_js_events.ady` | the gestures that must follow the mouse |
 
 Each layer only calls the one below it. The model never imports HTML,
@@ -293,7 +294,7 @@ server-sent events), which reads itself again. So every page, the one that made 
 change too, is drawn the same way: from the news. A request with an unknown path returns
 `""`, and the server answers 404.
 
-![A request, from a click to the new page](request_flow.svg)
+![A change, from a click to every open page](request_flow.svg)
 
 **Some events stay in the browser.** A drag must follow the mouse many
 times a second, and a server round trip for each move would be too slow.
@@ -405,11 +406,12 @@ Each of these changes one layer, so you can see the others not change.
 2. **Draw the field.** In `to_html(n: Node_T, …)`, use `n.colour` for the
    circle's `fill`, and add its rule to `NODE_STYLE`.
 3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
-   with `field_of`, and call a new method. Put a button for it in
-   `node_buttons_html`, with `data_hx_post="/relabel"`.
+   with `field_of`, call a new method, and publish `Change(UPDATE, name)` when it went
+   through. Put a button for it in `node_buttons_html`, with `data_hx_post="/relabel"`
+   and `data_hx_target="#problem"`.
 4. **Test it without a server.** In `tests/test_dijkstra.ady`, call
-   `session.answer("POST", "/relabel", "name=A&colour=red")` and check the page
-   contains `red`.
+   `after("POST", "/relabel", "name=A&colour=red")` (the command, then the page read
+   again) and check the page contains `red`.
 
 Run `make test` after each step. The model and the page are checked
 without a browser; the drag is checked in the browser only.
