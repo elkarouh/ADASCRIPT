@@ -10,9 +10,9 @@ truth.  Invalid states -- an even number of votes, no healthy majority of
 voters, a priority on a non-voting node -- are pruned, so every path the
 search returns keeps quorum at every intermediate step.
 
-    V1  BreadthPlanner   BFS over the generic EXAMPLES/state_search.ady:
+    V1  BreadthPlanner   BFS over the generic TO_NIM/STDLIB/state_search.ady:
                          fewest operations to the source of truth.
-    V2  WeightedPlanner  Dijkstra over EXAMPLES/shortest_path.ady:
+    V2  WeightedPlanner  Dijkstra over TO_NIM/STDLIB/shortest_path.ady:
                          edge weight = misconfiguration(state) * time(op),
                          so quick fixes that cut exposure come first.  When
                          the goal cannot be reached (a node whose hardware
