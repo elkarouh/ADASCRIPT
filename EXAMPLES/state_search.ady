@@ -181,7 +181,7 @@ class StateSearcher[S, A]:
         """A* — optimal when heuristic is admissible."""
         return self._search_pq(initial, use_heuristic=True, use_cost=True)
 
-    def search_dfs_all(self, initial: S, path: []Step_T[S, A] = [], on_path: {}S = {}):
+    def search_dfs_all(self, initial: S, path: []Step_T[S, A] = [], on_path: {}S = {}) -> []Step_T[S, A]:
         """Yield every solution path in DFS order using path-local cycle
         detection via recursion.  Finds ALL distinct solution paths even
         when two paths share intermediate states."""
@@ -197,7 +197,7 @@ class StateSearcher[S, A]:
             for sol in self.search_dfs_all(step.next_state, new_path, new_on_path):
                 yield sol
 
-    def search_all(self, initial: S):
+    def search_all(self, initial: S) -> []Step_T[S, A]:
         """Yield every solution in BFS order (shortest first). Break to stop early."""
         var parents: []int = []
         var steps: []Step_T[S, A] = []

@@ -90,7 +90,7 @@ class Minimizer[S, D, C]:
             j = j - 1
         return path
 
-    def shortest_path(self, start_state: S, allsolutions: bool = True, end_state: auto = ANY):
+    def shortest_path(self, start_state: S, allsolutions: bool = True, end_state: auto = ANY) -> (C, []D):
         self.start_state = start_state
         var parents:   []int = [-1]
         var decisions: []D   = []
@@ -165,7 +165,7 @@ class Maximizer[S, D, R]:
             j = j - 1
         return path
 
-    def longest_path(self, start_state: S, max_path_length: int = 1000, end_state: auto = ANY):
+    def longest_path(self, start_state: S, max_path_length: int = 1000, end_state: auto = ANY) -> (float, []D):
         """
         Yield every simple path from start_state to end_state in decreasing order
         of total revenue (sum of step revenues from get_next_decisions).
