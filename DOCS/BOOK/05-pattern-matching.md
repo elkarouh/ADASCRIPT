@@ -510,7 +510,7 @@ Every non-`_` element of a tuple pattern is a **value test**, not a capture —
 including lowercase names, which are compared against whatever they hold. To
 take a tuple apart, destructure it first and then match on the parts.
 
-The equipment-replacement model in `EXAMPLES/test_shortest_path.ady`
+The equipment-replacement model in `EXAMPLES/shortest_path_demo.ady`
 (example 6) decides what to do with a machine given the year and the
 machine's age:
 

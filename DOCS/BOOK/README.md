@@ -44,7 +44,7 @@ the missing type system are what change.
 | 2 | [Types, Declarations, and Annotations](02-types-and-declarations.md) | `graph.ady`, `prisoners.ady`, `openarray_demo.ady`, `DOC/string_snippets.ady` |
 | 3 | [Enums, Sets, and Tick Attributes](03-enums-sets-and-tick-attributes.md) | `monty_hall.ady`, `floyd.ady`, `prisoners.ady` |
 | 4 | [Tuples, Records, and Variant Records](04-tuples-records-and-variants.md) | `dijkstra.ady`, `argparse.ady`, `lispy.ady` |
-| 5 | [Pattern Matching](05-pattern-matching.md) | `argparse.ady`, `awk_example.ady`, `lispy.ady`, `test_shortest_path.ady` |
+| 5 | [Pattern Matching](05-pattern-matching.md) | `argparse.ady`, `awk_example.ady`, `lispy.ady`, `shortest_path_demo.ady` |
 | 6 | [Collections and Iteration](06-collections-and-iteration.md) | `sudoku.ady`, `spell.ady`, `test_iters.ady` |
 | 7 | [Regular Expressions as a Language Feature](07-regex.md) | `test_regex.ady`, `awk_example.ady`, `spell.ady` |
 | 8 | [Functions, Closures, and Generators](08-functions-and-generators.md) | `phonecode.ady`, `shortest_path.ady`, `spell.ady` |

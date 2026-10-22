@@ -194,7 +194,7 @@ class Minimizer[S, D, C]:
 ```
 
 A subclass instantiates the parameters and overrides the hooks — Dijkstra on
-a ten-node graph is a dozen lines in `test_shortest_path.ady`:
+a ten-node graph is a dozen lines in `shortest_path_demo.ady`:
 
 ```python
 type State_T is enum a,b,c,d,e,f,g,h,i,j
@@ -238,7 +238,7 @@ def longest_path(self: Optimizer[S, D, C], start_state: S, end_state: S,
 
 ## 9.6 Classes inside functions, and ALL_CAPS globals
 
-`test_shortest_path.ady` defines each example's types and classes *inside* a
+`shortest_path_demo.ady` defines each example's types and classes *inside* a
 function (`def example5(): ...`) to keep the file modular. The Nim backend
 must hoist those class bodies to module scope — which means enclosing-function
 locals are invisible to methods. The convention that bridges the gap:

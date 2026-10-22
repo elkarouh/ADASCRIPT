@@ -72,8 +72,8 @@ STANDALONE := \
     MAP_UTILS/test_regions.ady \
     openarray_demo.ady \
     ../TESTS/test_inline_suite.ady \
-    test_state_search.ady \
-    test_shortest_path.ady \
+    state_search_demo.ady \
+    shortest_path_demo.ady \
     primes.ady \
     ../TESTS/test_ownership.ady \
     ../TESTS/test_nimport.ady \

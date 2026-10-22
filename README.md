@@ -1869,7 +1869,7 @@ Use `_` as a wildcard that matches anything. The `others` catch-all works as
 usual.
 
 ```python
-# from test_shortest_path.ady, example 6 (Equipment Replacement)
+# from shortest_path_demo.ady, example 6 (Equipment Replacement)
 type Decision_T is enum BUY, SELL, KEEP, TRADE
 type Cost_T is float
 var maintenance_cost: {int}Cost_T = {0: 60.0, 1: 80.0, 2: 120.0}
@@ -3846,7 +3846,7 @@ class Optimizer[S, D, C]:
     ...
 ```
 
-**test_shortest_path.ady** (the test file):
+**shortest_path_demo.ady** (the test file):
 
 ```python
 #!/usr/bin/env ady2nim
@@ -5578,7 +5578,7 @@ def main():
 A 200-line framework demonstrating: generic classes `[S, D, C]`, nested
 type declarations, `yield` (generator methods), discriminated tuples,
 tick-attribute iteration, and ten complete algorithm examples in
-`test_shortest_path.ady`, including Dijkstra, A*, dynamic programming, knapsack, rod cutting, HMM Viterbi,
+`shortest_path_demo.ady`, including Dijkstra, A*, dynamic programming, knapsack, rod cutting, HMM Viterbi,
 equipment replacement, and capital budgeting.
 
 The key architectural pattern is **generic
@@ -5607,7 +5607,7 @@ def longest_path(self: Optimizer[S, D, C], start_state: S, end_state: S,
 ```
 
 ```python
-# test_shortest_path.ady — consumer
+# shortest_path_demo.ady — consumer
 from shortest_path import Optimizer
 
 def example7():   # Romania map, A* with heuristic

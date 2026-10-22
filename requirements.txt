@@ -106,8 +106,8 @@ libpcre3
 # pin the compiler via '#ady2nim-args c --cc:clang --clang.exe:zigcc', but not
 # required — ady2nim drops a pin whose binary is missing (noting it on stderr)
 # and falls back to nim's default C compiler, so these files build without zig:
-#   state_search.ady, shortest_path.ady, test_shortest_path.ady,
-#   test_state_search.ady, timetable_engine.ady, timetable_sa.ady,
+#   state_search.ady, shortest_path.ady, shortest_path_demo.ady,
+#   state_search_demo.ady, timetable_engine.ady, timetable_sa.ady,
 #   timetable_backtrack.ady, TIMETABLE/timetable_server.ady
 # 'zigcc' is a thin wrapper around 'zig cc' (a clang frontend); put it on PATH:
 #   printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zigcc && chmod +x /usr/local/bin/zigcc

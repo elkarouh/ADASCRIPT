@@ -52,7 +52,7 @@ lambdas, `apply` and `map`. The language features it stresses:
 If you want to internalise Adascript's pattern matching, reimplementing one
 special form of lispy is the exercise.
 
-## 13.3 `shortest_path.ady` + `test_shortest_path.ady` — a generic framework and its zoo
+## 13.3 `shortest_path.ady` + `shortest_path_demo.ady` — a generic framework and its zoo
 
 The framework file (Chapters 8–9) defines `Minimizer[S, D, C]` and
 `Maximizer[S, D, R]` — Dijkstra/A* and best-first longest-path over a
