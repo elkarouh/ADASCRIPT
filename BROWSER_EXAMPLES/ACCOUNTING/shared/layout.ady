@@ -11,15 +11,16 @@ The page keeps the accounts and arrows as JSON in a script element (books_text b
 browser reads them back by name with slots_of and arrows_of; where the reader dragged an account is kept
 in the form field pos ("id@x,y|id@x,y", see with_position).
 """
-from shared/routes import Point_T, boxes
+from drawing import Unit_in_pixel_T, Unit_in_cm_T, Spot_T
+from shared/routes import boxes
 from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag, json_string
 
-const WIDTH: float = 980.0      # the drawing's width (the svg's viewBox); its height varies
-const GAP: float = 10.0         # between two accounts stacked in a quarter
-const TOP: float = 60.0         # the upper quarters start this far down the drawing
-const SPLIT_GAP: float = 20.0   # the split line lies this far below the upper quarters
-const BELOW: float = 50.0       # the lower quarters start this far below the split line
-const MARGIN: float = 20.0      # the drawing ends this far below its last account
+const WIDTH: Unit_in_cm_T = 26.0       # the drawing's width (the svg's viewBox); its height varies
+const GAP: Unit_in_pixel_T = 10.0         # between two accounts stacked in a quarter
+const TOP: Unit_in_pixel_T = 60.0         # the upper quarters start this far down the drawing
+const SPLIT_GAP: Unit_in_pixel_T = 20.0   # the split line lies this far below the upper quarters
+const BELOW: Unit_in_pixel_T = 50.0       # the lower quarters start this far below the split line
+const MARGIN: Unit_in_pixel_T = 20.0      # the drawing ends this far below its last account
 
 # An account as the layout needs it: its id in the page, the quarter of the balance sheet it
 # sits in (0 assets, 1 liabilities and equity, 2 expenses, 3 revenue), its number (which orders
@@ -29,7 +30,7 @@ type Slot_T is record:
     name:   str
     quarter: int
     number: str
-    tall:   float
+    tall:   Unit_in_pixel_T
     group:  bool
 
 # An arrow: the names of the two accounts it joins, and the amount written on it.
@@ -41,15 +42,15 @@ type Arrow_T is record:
 # Where every account is drawn (in the order of the slots), the drawing's height, and the line
 # that splits the balance sheet from the profit and loss.
 type Layout_T is record:
-    points:  []Point_T
-    height:  float
-    split_y: float
+    points:  []Spot_T
+    height:  Unit_in_pixel_T
+    split_y: Unit_in_pixel_T
 
 def number_before(a: str, b: str) -> bool:
     return len(a) < len(b) or (len(a) == len(b) and a < b)
 
 # Where "id@x,y|..." puts account ID: its centre, or (-1, -1) when it does not say.
-def dragged_to(pos: str, id: str) -> Point_T:
+def dragged_to(pos: str, id: str) -> Spot_T:
     for entry in pos.split("|"):
         if entry.startswith(id + "@"):
             let xy: []str = entry[len(id) + 1:].split(",")
@@ -62,12 +63,12 @@ def dragged_to(pos: str, id: str) -> Point_T:
                     if y is ParseFailure_T:
                         pass
                     else:
-                        return Point_T(x, y)
-    return Point_T(-1.0, -1.0)
+                        return Spot_T(Unit_in_pixel_T(x), Unit_in_pixel_T(y))
+    return Spot_T(-1.0, -1.0)
 
 # The position of account ID in pos, put to AT: its entry replaced, or added. Written when the
 # reader lets an account go, and while it is dragged.
-def with_position(pos: str, id: str, at: Point_T) -> str:
+def with_position(pos: str, id: str, at: Spot_T) -> str:
     var kept: []str = []
     for entry in pos.split("|"):
         if entry != "" and not entry.startswith(id + "@"):
@@ -78,28 +79,29 @@ def with_position(pos: str, id: str, at: Point_T) -> str:
 # Where the account SLOT, drawn at AT, may go: inside its own quarter of a drawing SPLIT_Y down the
 # middle split and HEIGHT tall. The assets on the left and the liabilities and equity on the right,
 # above the split; the costs and the revenue below it.
-def within_quarter(slot: Slot_T, at: Point_T, split_y: float, height: float) -> Point_T:
-    let half_w: float = boxes().half_w
-    var x0: float = half_w
-    var x1: float = WIDTH / 2.0 - half_w
+def within_quarter(slot: Slot_T, at: Spot_T, split_y: Unit_in_pixel_T, height: Unit_in_pixel_T) -> Spot_T:
+    let width: Unit_in_pixel_T = Unit_in_pixel_T(WIDTH)
+    let half_w: Unit_in_pixel_T = boxes().half_w
+    var x0: Unit_in_pixel_T = half_w
+    var x1: Unit_in_pixel_T = width / 2.0 - half_w
     if slot.quarter % 2 == 1:
-        x0 = WIDTH / 2.0 + half_w
-        x1 = WIDTH - half_w
-    var y0: float = TOP
-    var y1: float = split_y - SPLIT_GAP
+        x0 = width / 2.0 + half_w
+        x1 = width - half_w
+    var y0: Unit_in_pixel_T = TOP
+    var y1: Unit_in_pixel_T = split_y - SPLIT_GAP
     if slot.quarter >= 2:
         y0 = split_y + BELOW
         y1 = height - slot.tall - MARGIN
-    return Point_T(max(x0, min(x1, at.x)), max(y0, min(y1, at.y)))
+    return Spot_T(max(x0, min(x1, at.x)), max(y0, min(y1, at.y)))
 
 # Where every account is drawn: the four quarters of the balance sheet, stacked and in two columns
 # when there are many; then each account the reader dragged somewhere, where it was let go.
 def layout_of_slots(slots: []Slot_T, pos: str) -> Layout_T:
-    var points: []Point_T = []
+    let width: Unit_in_pixel_T = Unit_in_pixel_T(WIDTH)
+    var points: []Spot_T = []
     for s in slots:
-        points.append(Point_T(0.0, 0.0))
-    var tops: []float = [TOP, TOP, 0.0, 0.0]
-    var heights: []float = [0.0, 0.0, 0.0, 0.0]
+        points.append(Spot_T(0.0, 0.0))
+    var heights: []Unit_in_pixel_T = [0.0, 0.0, 0.0, 0.0]
     for q in range(4):
         var mine: []int = []
         for i in range(len(slots)):
@@ -113,30 +115,30 @@ def layout_of_slots(slots: []Slot_T, pos: str) -> Layout_T:
                 mine[j - 1] = t
                 j -= 1
         let cols: int = (2 if len(mine) > 12 else 1)
-        var used: []float = []
+        var used: []Unit_in_pixel_T = []
         for c in range(cols):
-            used.append(0.0)
+            used.append(Unit_in_pixel_T(0.0))
         for k in range(len(mine)):
             let c: int = k % cols
-            let x0: float = (10.0 if q % 2 == 0 else WIDTH / 2.0 + 10.0)
-            let col_w: float = (WIDTH / 2.0 - 20.0) / float(cols)
-            points[mine[k]] = Point_T(x0 + col_w * (float(c) + 0.5), used[c] + slots[mine[k]].tall)
-            used[c] += 2.0 * slots[mine[k]].tall + GAP
-        var most: float = 0.0
+            let x0: Unit_in_pixel_T = (Unit_in_pixel_T(10.0) if q % 2 == 0 else width / 2.0 + 10.0)
+            let col_w: Unit_in_pixel_T = (width / 2.0 - 20.0) / float(cols)
+            points[mine[k]] = Spot_T(x0 + col_w * (float(c) + 0.5), used[c] + slots[mine[k]].tall)
+            used[c] += slots[mine[k]].tall * 2.0 + GAP
+        var most: Unit_in_pixel_T = 0.0
         for u in used:
             most = max(most, u)
         heights[q] = most
-    let top_h: float = max(heights[0], heights[1])
-    let split_y: float = TOP + top_h + SPLIT_GAP
+    let top_h: Unit_in_pixel_T = max(heights[0], heights[1])
+    let split_y: Unit_in_pixel_T = TOP + top_h + SPLIT_GAP
     for i in range(len(slots)):
         let q: int = slots[i].quarter
-        let base: float = (TOP if q < 2 else split_y + BELOW)
-        points[i] = Point_T(points[i].x, points[i].y + base)
-    let bottom_h: float = max(heights[2], heights[3])
-    var height: float = split_y + BELOW + bottom_h + MARGIN
+        let base: Unit_in_pixel_T = (TOP if q < 2 else split_y + BELOW)
+        points[i] = Spot_T(points[i].x, points[i].y + base)
+    let bottom_h: Unit_in_pixel_T = max(heights[2], heights[3])
+    var height: Unit_in_pixel_T = split_y + BELOW + bottom_h + MARGIN
     for i in range(len(slots)):                     # the ones dragged somewhere
-        let at: Point_T = dragged_to(pos, slots[i].id)
-        if at.x >= 0.0:
+        let at: Spot_T = dragged_to(pos, slots[i].id)
+        if float(at.x) >= 0.0:
             points[i] = at
             height = max(height, at.y + slots[i].tall + MARGIN)
     return Layout_T(points, height, split_y)
@@ -160,7 +162,7 @@ def slots_of(text: str) -> []Slot_T:
     if books is None:
         return slots
     for s in books.json_list("slots"):
-        slots.append(Slot_T(s.json_text("id"), s.json_text("name"), int(s.json_number("quarter")), s.json_text("number"), s.json_number("tall"), s.json_flag("group")))
+        slots.append(Slot_T(s.json_text("id"), s.json_text("name"), int(s.json_number("quarter")), s.json_text("number"), Unit_in_pixel_T(s.json_number("tall")), s.json_flag("group")))
     return slots
 
 # The arrows of books_text TEXT, in their order.

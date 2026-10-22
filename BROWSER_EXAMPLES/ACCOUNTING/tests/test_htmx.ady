@@ -3,6 +3,7 @@
 
     ady2nim c -r test_htmx.ady
 """
+from drawing import Unit_in_pixel_T
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from backend/books_text import AccountRow, Books
 from shared/layout import Arrow_T, Slot_T, arrows_of, books_text, layout_of_slots, slots_of
@@ -74,7 +75,7 @@ let odd_text: str = books_text(odd, no_arrows)
 assert "</script>" not in odd_text and len(slots_of(odd_text)) == 1
 assert slots_of(odd_text)[0].name == "Ban\tk\n50% \"</script>" and slots_of(odd_text)[0].id == "1/0"
 assert len(slots_of("not JSON")) == 0
-assert layout_of_slots(slots_of(kept), "100000/0@600.0,300.0").points[0].x == 600.0
+assert float(layout_of_slots(slots_of(kept), "100000/0@600.0,300.0").points[0].x) == 600.0
 assert "<script id=\"books\" type=\"application/json\">{\"slots\": [{\"id\": " in all_text(b, ["x"], ["X"], "x", params_of(""))
 assert "<script src=\"/accounting_js_events.js\"" in shell_text()
 # the popup's transaction

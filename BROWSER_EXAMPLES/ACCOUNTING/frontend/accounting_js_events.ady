@@ -22,20 +22,11 @@ library's svg_drag, and the page (finding elements, forms, clicks) its browser m
 in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`, `dropped_cb`, and
 `clicked_cb` for the shift-click.
 """
-from shared/routes import Point_T, Route_T, BOX_HALF_W, boxes, routes_of
-from shared/layout import Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
+from shared/routes import Route_T, boxes, routes_of
+from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
 from browser import Element_T, Event_T, Click_T, request, page, text, field, on, stop, listen
 from drawing import Unit_in_pixel_T, Spot_T
 from svg_drag import Hooks_T, shift, draggable
-
-const WIDTH: Unit_in_pixel_T = 980.0     # the drawing's width (the svg's viewBox); its height varies
-
-# shared/routes.ady and shared/layout.ady work in plain floats (Point_T): these convert.
-def point_of(s: Spot_T) -> Point_T:
-    return Point_T(float(s.x), float(s.y))
-
-def spot_at_point(p: Point_T) -> Spot_T:
-    return Spot_T(x=Unit_in_pixel_T(p.x), y=Unit_in_pixel_T(p.y))
 
 # The account the element EL draws: its id (number and kind, as the server names it), and its name.
 def data_id(el: Element_T) -> str:
@@ -55,7 +46,7 @@ class BooksView:
     var arrows: []Arrow_T               # the arrows, each from one account to another
     var pos: str                        # where the reader has dragged accounts: "id@x,y|..."
     var layout: Layout_T                # where everything is drawn
-    var height: float                   # the drawing's height, as the server drew it: a drag stays inside it
+    var height: Unit_in_pixel_T                   # the drawing's height, as the server drew it: a drag stays inside it
 
     def __init__(self):
         var kept: str = ""
@@ -78,17 +69,17 @@ class BooksView:
         return -1
 
     # The name of the account AT is over, other than FROM_NAME, or "".
-    def account_at(self, at: Point_T, from_name: str) -> str:
+    def account_at(self, at: Spot_T, from_name: str) -> str:
         for k in range(len(self.slots)):
             let s: Slot_T = self.slots[k]
-            let c: Point_T = self.layout.points[k]
+            let c: Spot_T = self.layout.points[k]
             if s.name != from_name and not s.group:
-                if abs(at.x - c.x) <= BOX_HALF_W and abs(at.y - c.y) <= s.tall:
+                if abs(at.x - c.x) <= boxes().half_w and abs(at.y - c.y) <= s.tall:
                     return s.name
         return ""
 
     # AT, kept inside the quarter of account ID (shared/layout.ady says where a quarter ends).
-    def within_quarter(self, id: str, at: Point_T) -> Point_T:
+    def within_quarter(self, id: str, at: Spot_T) -> Spot_T:
         let k: int = self.index_of(id)
         if k < 0:
             return at
@@ -96,11 +87,11 @@ class BooksView:
 
     # The account ID is dragged to AT: it is laid out there, and every arrow is routed again from the
     # layout, as the server will route them when the page is drawn again.
-    def move(self, id: str, at: Point_T):
+    def move(self, id: str, at: Spot_T):
         self.pos = with_position(self.pos, id, at)
         self.layout = layout_of_slots(self.slots, self.pos)
         var names: []str = []
-        var tall: []float = []
+        var tall: []Unit_in_pixel_T = []
         for s in self.slots:
             names.append(s.name)
             tall.append(s.tall)
@@ -111,7 +102,7 @@ class BooksView:
             sources.append(a.source)
             targets.append(a.target)
             labels.append(a.label)
-        let size: Point_T = Point_T(float(WIDTH), self.layout.height)
+        let size: Spot_T = Spot_T(Unit_in_pixel_T(WIDTH), self.layout.height)
         let routes: []Route_T = routes_of(sources, targets, labels, names, self.layout.points, tall, size, [], [], boxes())
         # routes[k] is the way for arrow k: its curve, and where its amount goes
         for k in range(len(self.arrows)):
@@ -121,7 +112,7 @@ class BooksView:
                     p.trace(routes[k].d)
                 let label: ?Element_T = el.find("text.amount")
                 if label is not None:
-                    label.place_at(spot_at_point(routes[k].label))
+                    label.place_at(routes[k].label)
 
 var books: BooksView = BooksView()       # the page is read again each time htmx draws it (page_drawn)
 
@@ -138,11 +129,10 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     if node.has_class("from"):
         rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
         return wanted                   # the arrow's tip
-    let now: Point_T = books.within_quarter(data_id(node), point_of(wanted))
-    let spot: Spot_T = spot_at_point(now)
-    shift(node, centre, spot)
+    let now: Spot_T = books.within_quarter(data_id(node), wanted)
+    shift(node, centre, now)
     books.move(data_id(node), now)
-    return spot
+    return now
 
 # Ask the server for the page again with the form #state, FIELDS taking the place of its own
 # fields of the same name; the page it answers with takes the place of #all.
@@ -156,12 +146,12 @@ def dropped_cb(node: Element_T, at: Spot_T):
         # and the server answers with the popup that asks when, what and how much. Let go over
         # nothing, the arrow is just dropped.
         rubber("")
-        let over: str = books.account_at(point_of(at), data_name(node))
+        let over: str = books.account_at(at, data_name(node))
         if over != "":
             redraw({"target": over})
         return
     # an account moved: its new place goes as the field pos
-    redraw({"pos": with_position(page.field("pos"), data_id(node), point_of(at))})
+    redraw({"pos": with_position(page.field("pos"), data_id(node), at)})
 
 # A click with shift held picks an account to merge with others, or lets it go: the page is
 # asked for again with its name as the field pick. Other clicks go on to htmx.
@@ -178,4 +168,4 @@ def page_drawn(e: Event_T):
     books = BooksView()
 
 listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg.graph", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+draggable("g.node", "svg.graph", Unit_in_pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
