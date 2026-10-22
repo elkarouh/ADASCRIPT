@@ -11,11 +11,11 @@ The page keeps the accounts and arrows as JSON in a script element (books_text b
 browser reads them back by name with slots_of and arrows_of; where the reader dragged an account is kept
 in the form field pos ("id@x,y|id@x,y", see with_position).
 """
-from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
 from shared/routes import boxes
 from json_value import Json_T, read_json, json_list, json_text, json_number, json_flag, json_string
 
-const WIDTH: Unit_in_cm_T = 26.0       # the drawing's width (the svg's viewBox); its height varies
+const WIDTH: Drawing_cm_T = 26.0       # the drawing's width (the svg's viewBox); its height varies
 const GAP: Drawing_Pixel_T = 10.0         # between two accounts stacked in a quarter
 const TOP: Drawing_Pixel_T = 60.0         # the upper quarters start this far down the drawing
 const SPLIT_GAP: Drawing_Pixel_T = 20.0   # the split line lies this far below the upper quarters

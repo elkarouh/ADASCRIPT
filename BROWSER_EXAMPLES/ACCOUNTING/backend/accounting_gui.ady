@@ -14,7 +14,7 @@ https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html)
 Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
-from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
 from shared/routes import NODE_RADIUS, Route_T, Shape, boxes, circles, covers, px, rim, routes_of, toward
 from backend/accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
 

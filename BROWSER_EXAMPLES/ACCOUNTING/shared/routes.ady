@@ -6,10 +6,10 @@ by frontend/accounting_js_events.ady, which routes the arrows again, in the brow
 dragged. The two must give the same curves, so they are the same code. No HTML in here.
 """
 from math nimport sqrt
-from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
 
 const NODE_RADIUS: Drawing_Pixel_T = 42.0
-const BOX_HALF_W: Unit_in_cm_T = 3.0      # half the width of an account drawn as a box (see boxes)
+const BOX_HALF_W: Drawing_cm_T = 3.0      # half the width of an account drawn as a box (see boxes)
 
 # How accounts are drawn: as circles, NODE_RADIUS round, or as boxes with
 # the name and the balance, stacked like the lines of a balance sheet.

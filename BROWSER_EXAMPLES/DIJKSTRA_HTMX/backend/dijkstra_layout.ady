@@ -8,15 +8,15 @@ server draws the page with it (dijkstra_gui.ady), and the browser moves nodes wi
 (frontend/dijkstra_js_events.ady), so both find the same places from the same network. Like the
 model, it is compiled both ways: no HTML, no HTTP, no DOM.
 """
-from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
 from backend/dijkstra_model import Network
 nimport math
 
-const WIDTH: Unit_in_cm_T = 15.0        # the drawing's width
-const HEIGHT: Unit_in_cm_T = 10.0       # the drawing's height
+const WIDTH: Drawing_cm_T = 15.0        # the drawing's width
+const HEIGHT: Drawing_cm_T = 10.0       # the drawing's height
 const MARGIN: Drawing_Pixel_T = 30.0    # how near its edge a node may go
-const ACROSS: Unit_in_cm_T = 6.0        # the ellipse the unplaced nodes sit on: its half width
-const UP: Unit_in_cm_T = 4.0            # and its half height
+const ACROSS: Drawing_cm_T = 6.0        # the ellipse the unplaced nodes sit on: its half width
+const UP: Drawing_cm_T = 4.0            # and its half height
 
 # The sizes of what is drawn at a node and an edge.
 const NODE_R: Drawing_Pixel_T = 24.0    # a node's radius

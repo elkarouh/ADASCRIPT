@@ -19,12 +19,12 @@ it, and the browser's View is built from the same text with the same Diagram(tex
 is is worked out from the model, never read off the drawing. No HTML, no HTTP. Every length is a Drawing_Pixel_T, a
 unit of the drawing (its viewBox).
 """
-from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T, Area_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T, Area_T
 
-const NODE_W: Unit_in_cm_T = 5.0
-const NODE_H: Unit_in_cm_T = 3.5
-const WIDTH: Unit_in_cm_T = 30.0        # the drawing's size
-const HEIGHT: Unit_in_cm_T = 15.0
+const NODE_W: Drawing_cm_T = 5.0
+const NODE_H: Drawing_cm_T = 3.5
+const WIDTH: Drawing_cm_T = 30.0        # the drawing's size
+const HEIGHT: Drawing_cm_T = 15.0
 const PORTS: int = 3                    # inputs, and outputs, on each node
 const PORT_R: Drawing_Pixel_T = 7.5               # a port's radius
 const GRAB: Drawing_Pixel_T = 12.0                # how near a released connector must be to a port to snap to it
@@ -32,7 +32,7 @@ const MAX_TITLE: int = 24
 
 # Where a port is, from its node's top left corner (the page draws it there, see node_editor_gui.ady).
 const INPUT_DX: Drawing_Pixel_T = 15.0
-const FIRST_PORT_DY: Unit_in_cm_T = 1.5          # the first row; the output ports are as far in from the right edge as the inputs from the left
+const FIRST_PORT_DY: Drawing_cm_T = 1.5          # the first row; the output ports are as far in from the right edge as the inputs from the left
 const PORT_PITCH: Drawing_Pixel_T = 25.0
 
 # Why a change to the diagram is refused: the message the page shows the reader.

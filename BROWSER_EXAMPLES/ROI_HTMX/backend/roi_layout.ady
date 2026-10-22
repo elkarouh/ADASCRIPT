@@ -7,14 +7,14 @@ carries the results of each product with it. A Layout is where their centres are
 drawing's units (its viewBox is WIDE by HIGH, large and shown one to one, so the page scrolls).
 The drawing and its blocks are measured in centimetres, the places of the blocks in pixels.
 """
-from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
 
-const WIDE: Unit_in_cm_T = 80.0
-const HIGH: Unit_in_cm_T = 54.0
+const WIDE: Drawing_cm_T = 80.0
+const HIGH: Drawing_cm_T = 54.0
 
 const BLOCKS: []str = ["investment", "gold", "bitcoin", "sp500", "overall"]
-const BLOCK_W: []Unit_in_cm_T = [4.0, 4.0, 4.0, 4.0, 7.0]
-const BLOCK_H: []Unit_in_cm_T = [6.0, 3.0, 3.0, 3.0, 14.0]
+const BLOCK_W: []Drawing_cm_T = [4.0, 4.0, 4.0, 4.0, 7.0]
+const BLOCK_H: []Drawing_cm_T = [6.0, 3.0, 3.0, 3.0, 14.0]
 
 type Layout is record:
     centres: []Spot_T               # the centre of each of the BLOCKS

@@ -18,10 +18,10 @@ type Spot_T is tuple:                     # a place in the drawing
     x: Drawing_Pixel_T
     y: Drawing_Pixel_T
 
-# A centimetre of the drawing, at the 96 pixels an inch that a browser draws it with. Unit_in_cm_T(x)
+# A centimetre of the drawing, at the 96 pixels an inch that a browser draws it with. Drawing_cm_T(x)
 # turns a pixel length into centimetres, and Drawing_Pixel_T(x) the other way.
 const PIXELS_PER_CM: float = 96.0 / 2.54
-type Unit_in_cm_T is PIXELS_PER_CM * Drawing_Pixel_T
+type Drawing_cm_T is PIXELS_PER_CM * Drawing_Pixel_T
 
 # The squared distance between two places has no name in the language's units until it is made one.
 type Area_T is Drawing_Pixel_T * Drawing_Pixel_T
