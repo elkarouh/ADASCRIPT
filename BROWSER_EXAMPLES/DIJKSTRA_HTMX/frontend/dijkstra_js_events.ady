@@ -18,9 +18,9 @@ reader a question is here. The gestures, the usual ones of a diagram:
     Escape                       closes the menu
 
 A gesture never talks to the server: it makes a Command, Create, Read, Update or Delete of a node or
-an edge (dijkstra_commands.ady), and `send` sends it. Many gestures may make one command: a Delete is
-the Delete key, Backspace, or the menu's "Delete node". The answer to C, U or D says only whether it
-went through (the paragraph #problem); the page is drawn again when the server tells it of a change,
+an edge (backend/dijkstra_commands.ady, the server's vocabulary too, which reads each request back
+into one), and `send` sends it. Many gestures may make one command: a Delete is the Delete key,
+Backspace, or the menu's "Delete node". The answer to C, U or D says only whether it went through (the paragraph #problem); the page is drawn again when the server tells it of a change,
 from any page: it reads itself (R), and that takes the place of #all.
 
     gesture                      command
@@ -52,12 +52,12 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
+from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T
 from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
-from frontend/dijkstra_commands import send, create_node, update_node, delete_node, create_edge, update_edge, delete_edge, read_network
+from backend/dijkstra_commands import Command, READ, method_of, url_of, create_node, update_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
@@ -81,6 +81,15 @@ def set_selected(el: Element_T, lit: bool):
         el.set_attr("class", cls + " selected")
     else:
         el.set_attr("class", cls.replace(" selected", ""))
+
+# ---- Sending a command: the one place the page talks to the server ----
+
+# Send COMMAND, with the reader's choice (the form #state): its verb is the method, its thing the URL.
+# A read's answer is the page, in place of #all; a change's is whether it went through, in place of
+# #problem (the page is drawn again on the news of the change, below).
+def send(c: Command):
+    let target: str = ("#all" if c.verb == READ else "#problem")
+    request(method_of(c.verb), url_of(c.thing), c.fields, target, "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #

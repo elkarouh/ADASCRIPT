@@ -5,10 +5,11 @@ server.ady hands every request to a Session, as a method, a path and its fields,
 what comes out. The tests make a Session of their own and call answer() the same way, with no server
 running.
 
-Commands in, events out. A read (GET /all) answers the whole page. A command (POST, PUT, DELETE)
-answers only whether it went through: the paragraph #problem, empty, or saying why not. When it went
-through, the change is published, one channel per collection: `nodes` and `edges` carry a Change
-(CREATE, UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which
+Commands in, events out. Every request is read back into a Command, the page's own vocabulary
+(dijkstra_commands.ady): Create, Read, Update or Delete, of a node or an edge. A read answers the whole
+page. A change answers only whether it went through: the paragraph #problem, empty, or saying why not.
+When it went through, what it changed is published with the same verbs, one channel per collection:
+`nodes` and `edges` carry a Change (CREATE, UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which
 keeps the network in its file (`keep`) and tells every open page, which then reads itself again --
 and the Session knows none of them:
 
@@ -16,20 +17,21 @@ and the Session knows none of them:
         print channel, change.kind, change.key          # "nodes CREATE H", "edges DELETE A H"
     session.nodes.subscribe(heard)
 
-A request that changes everything at once (reset, relayout) is one RELOAD: read it all again.
+Relayout and reset are no command on one node or edge: each is its own route, and what it changed is
+an UPDATE with no key: everything, read it all again.
 """
 from drawing import Drawing_Pixel_T, Spot_T
 from blackboard import PublishChannel
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
 from backend/dijkstra_layout import place_of
 from backend/dijkstra_gui import all_text, problem_text
-from backend/dijkstra_request import field_of, number_of, params_of
+from backend/dijkstra_request import fields_of, number_of, params_of
+from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value
 
-# What a request changed, as the channels carry it: the node's name, or the edge's two ends ("A B");
-# "" for a RELOAD, where everything may have changed.
-type Change_Kind_T is enum CREATE, UPDATE, DELETE, RELOAD
+# What a command changed, as the channels carry it, in the commands' verbs: the node's name, or the
+# edge's two ends ("A B"); "" for everything (relayout, reset), which is read again whole.
 type Change is record:
-    kind: Change_Kind_T
+    kind: Verb_T
     key:  str
 
 # The network, and the file it is kept in. The server makes one that keeps it in graph.txt; the tests
@@ -67,82 +69,98 @@ class Session:
     def keep(self):
         self.unsaved = self.save()
 
-    # The routes, all answered by answer below: the read, a whole page for htmx to swap in; the
-    # commands, the paragraph #problem (empty when the command went through).
+    # The routes, all answered by answer below. Each but the last two is a Command (on the wire, the
+    # verb is the method and the thing the URL); the read answers a whole page for htmx to swap in,
+    # the others the paragraph #problem (empty when the command went through).
     #
-    #     GET    /all          the page again                              (start, goal, pick, act)
-    #     POST   /nodes        create a node, at x, y if given             (name, x, y)
-    #     PUT    /nodes        move a node, after a drag                   (name, x, y)
-    #     DELETE /nodes        delete a node and its edges                 (name)
-    #     POST   /edges        create an edge                              (a, b, cost)
-    #     PUT    /edges        change an edge's cost                       (a, b, cost)
-    #     DELETE /edges        delete an edge                              (a, b)
+    #     GET    /all          R the page again                            (start, goal, pick, act)
+    #     POST   /nodes        C a node, at x, y if given                  (name, x, y)
+    #     PUT    /nodes        U a node moved, after a drag                (name, x, y)
+    #     DELETE /nodes        D a node and its edges                      (name)
+    #     POST   /edges        C an edge                                   (a, b, cost)
+    #     PUT    /edges        U an edge's cost                            (a, b, cost)
+    #     DELETE /edges        D an edge                                   (a, b)
     #     POST   /relayout     put every node where the layout puts it
     #     POST   /reset        put the sample network back
 
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
     # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
-        var problem: None | !Refusal_T = None
-        let name: str = field_of(fields, "name")
-        let a: str = field_of(fields, "a")
-        let b: str = field_of(fields, "b")
-        var node_changes: []Change = []             # published once the request went through
-        var edge_changes: []Change = []
+        let went: None | !Refusal_T = None         # what relayout and reset answer: they cannot be refused
         case method + " " + path:
-            when "GET /all":
-                return all_text(self.net, params_of(fields), self.unsaved)
-            when "POST /nodes":
-                let x: float = number_of(field_of(fields, "x"))      # where it was double-clicked, if it was
-                let y: float = number_of(field_of(fields, "y"))
-                problem = self.net.add_node(name)
-                if problem is None:
-                    if x < 0.0 or y < 0.0:                           # not given: the layout's place for it
-                        self.net.put(name, place_of(self.net, name))
-                    else:
-                        self.net.put(name, Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
-                node_changes.append(Change(CREATE, name))
-            when "PUT /nodes":
-                if name in self.net.names():
-                    self.net.put(name, Spot_T(Drawing_Pixel_T(number_of(field_of(fields, "x"))), Drawing_Pixel_T(number_of(field_of(fields, "y")))))
-                else:
-                    problem = Refusal_T(message=f"There is no node {name}.")
-                node_changes.append(Change(UPDATE, name))
-            when "DELETE /nodes":
-                for e in self.net.edges:                # its edges go with it, and are told first
-                    if e.a == name or e.b == name:
-                        edge_changes.append(Change(DELETE, edge_key(e)))
-                problem = self.net.remove_node(name)
-                node_changes.append(Change(DELETE, name))
-            when "POST /edges":
-                problem = self.net.add_edge(a, b, cost_of(fields))
-                edge_changes.append(Change(CREATE, f"{a} {b}"))
-            when "PUT /edges":
-                problem = self.net.set_cost(a, b, cost_of(fields))
-                edge_changes.append(Change(UPDATE, f"{a} {b}"))
-            when "DELETE /edges":
-                problem = self.net.remove_edge(a, b)
-                edge_changes.append(Change(DELETE, f"{a} {b}"))
             when "POST /relayout":
                 self.net.forget_places()        # no node keeps a place of its own: the layout gives each one
-                node_changes.append(Change(RELOAD, ""))
+                self.nodes.publish(Change(UPDATE, ""))
+                return problem_text(went)
             when "POST /reset":
                 self.net = sample()
-                node_changes.append(Change(RELOAD, ""))
-                edge_changes.append(Change(RELOAD, ""))
+                self.edges.publish(Change(UPDATE, ""))
+                self.nodes.publish(Change(UPDATE, ""))
+                return problem_text(went)
             when others:
-                return ""
+                pass
+        let c: ?Command = command_of(method, path, fields_of(fields))
+        if c is None:
+            return ""
+        if c.verb == READ:
+            return all_text(self.net, params_of(fields), self.unsaved)
+        return problem_text(self.carry_out(c))
+
+    # Carry out the change C, and when it went through publish what it changed: why not, when it did not.
+    def carry_out(self, c: Command) -> None | !Refusal_T:
+        var problem: None | !Refusal_T = None
+        let name: str = c.value("name")
+        let a: str = c.value("a")
+        let b: str = c.value("b")
+        let cost_given: float = number_of(c.value("cost"))      # -1 when there is none, which the model refuses
+        let cost: int = int(cost_given)
+        var node_changes: []Change = []             # published once the command went through
+        var edge_changes: []Change = []
+        case c.thing:
+            when NODE:
+                let x: float = number_of(c.value("x"))            # -1 when not given
+                let y: float = number_of(c.value("y"))
+                case c.verb:
+                    when CREATE:
+                        problem = self.net.add_node(name)
+                        if problem is None:
+                            if x < 0.0 or y < 0.0:                       # not given: the layout's place for it
+                                self.net.put(name, place_of(self.net, name))
+                            else:
+                                self.net.put(name, Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
+                    when UPDATE:
+                        if name in self.net.names():
+                            self.net.put(name, Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
+                        else:
+                            problem = Refusal_T(message=f"There is no node {name}.")
+                    when DELETE:
+                        for e in self.net.edges:        # its edges go with it, and are told first
+                            if e.a == name or e.b == name:
+                                edge_changes.append(Change(DELETE, edge_key(e)))
+                        problem = self.net.remove_node(name)
+                    when READ:
+                        pass                            # never: a read is of the network (command_of)
+                node_changes.append(Change(c.verb, name))
+            when EDGE:
+                case c.verb:
+                    when CREATE:
+                        problem = self.net.add_edge(a, b, cost)
+                    when UPDATE:
+                        problem = self.net.set_cost(a, b, cost)
+                    when DELETE:
+                        problem = self.net.remove_edge(a, b)
+                    when READ:
+                        pass
+                edge_changes.append(Change(c.verb, f"{a} {b}"))
+            when NETWORK:
+                pass                                    # only read (command_of)
         if problem is None:
-            for c in edge_changes:
-                self.edges.publish(c)
-            for c in node_changes:
-                self.nodes.publish(c)
-        return problem_text(problem)
+            for ch in edge_changes:
+                self.edges.publish(ch)
+            for ch in node_changes:
+                self.nodes.publish(ch)
+        return problem
 
 # An edge as a Change names it: its two ends, as the model keeps them.
 def edge_key(e: Edge_T) -> str:
     return f"{e.a} {e.b}"
-
-# The cost in FIELDS: -1 when there is none, which the model refuses.
-def cost_of(fields: str) -> int:
-    return int(number_of(field_of(fields, "cost")))

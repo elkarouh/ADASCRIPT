@@ -25,7 +25,7 @@ each page then reads itself again. The program is split by what each part knows:
 | The page | `backend/dijkstra_gui.ady` | how the data looks as HTML |
 | The requests | `backend/dijkstra_events_gui.ady` | what each request does to the data, and the change it publishes |
 | The server | `backend/server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
-| The commands | `frontend/dijkstra_commands.ady` | what the page can ask of the server: C, R, U or D of a node or an edge |
+| The commands | `backend/dijkstra_commands.ady` | what the page can ask of the server, in words both share: C, R, U or D of a node or an edge |
 | The browser | `frontend/dijkstra_js_events.ady` | the gestures, each making a command; what must follow the mouse |
 
 Each layer only calls the one below it. The model never imports HTML,
@@ -252,36 +252,45 @@ button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put th
 `data_hx_post` names the request, and `data_hx_confirm` asks first.
 `data_hx_target` and `data_hx_swap` say where the answer goes.
 
-**The server decides what a request does.** `server.ady` only matches
-the path and hands the request on. `Session.answer` does the work, one `case`
-per route:
+**The server reads each request back into a command.** `server.ady` only matches
+the path and hands the request on. `Session.answer` reads it back into the same
+`Command` the page sent (`command_of`, in `backend/dijkstra_commands.ady`, the
+vocabulary both sides share), and `carry_out` does it, one `case` on what it is done
+to and one on the verb:
 
 ```adascript
 class Session:
     ...
     def answer(self, method: str, path: str, fields: str) -> str:
+        ...                                     # relayout and reset: routes of their own
+        let c: ?Command = command_of(method, path, fields_of(fields))
+        if c is None:
+            return ""
+        if c.verb == READ:
+            return all_text(self.net, params_of(fields), self.unsaved)
+        return problem_text(self.carry_out(c))
+
+    def carry_out(self, c: Command) -> None | !Refusal_T:
         ...
-        case method + " " + path:
-            when "GET /all":
-                return all_text(self.net, params_of(fields), self.unsaved)
-            when "POST /nodes":
+        case c.thing:
+            when NODE:
+                case c.verb:
+                    when CREATE:
+                        problem = self.net.add_node(name)
+                        ...
+                    when DELETE:
+                        ...
+                        problem = self.net.remove_node(name)
+                    ...
+                node_changes.append(Change(c.verb, name))
+            when EDGE:
                 ...
-                problem = self.net.add_node(name)
-                ...
-                node_changes.append(Change(CREATE, name))
-            when "DELETE /nodes":
-                ...
-                problem = self.net.remove_node(name)
-                node_changes.append(Change(DELETE, name))
-            ...
-            when others:
-                return ""
         if problem is None:
-            for c in edge_changes:
-                self.edges.publish(c)
-            for c in node_changes:
-                self.nodes.publish(c)
-        return problem_text(problem)
+            for ch in edge_changes:
+                self.edges.publish(ch)
+            for ch in node_changes:
+                self.nodes.publish(ch)
+        return problem
 ```
 
 The routes are listed in a comment above `answer`, in the class. **Commands in, events
@@ -304,7 +313,8 @@ JavaScript with `ady2nim js`.
 
 **A gesture makes a command; one place sends it.** What the page can ask of the
 server is four verbs on two things, Create, Read, Update or Delete of a node or an
-edge, and each is a `Command`, in `frontend/dijkstra_commands.ady`:
+edge, and each is a `Command`, in `backend/dijkstra_commands.ady`, which is compiled
+both ways, like the model, so the server reads a request back into the same `Command`:
 
 ```adascript
 type Verb_T is enum CREATE, READ, UPDATE, DELETE
@@ -386,18 +396,17 @@ What ties them together is a channel per kind of change, from the standard libra
 ```adascript
 from blackboard import PublishChannel
 
-type Change_Kind_T is enum CREATE, UPDATE, DELETE, RELOAD
 type Change is record:
-    kind: Change_Kind_T
-    key:  str                           # the node's name, or the edge's two ends
+    kind: Verb_T                        # CREATE, UPDATE or DELETE: the commands' own verbs
+    key:  str                           # the node's name, or the edge's two ends; "" for everything
 
 class Session:
     var nodes: PublishChannel[Change]   # what happened to a node
     var edges: PublishChannel[Change]   # what happened to an edge
     ...
         if problem is None:             # only what went through is told
-            for c in node_changes:
-                self.nodes.publish(c)
+            for ch in node_changes:
+                self.nodes.publish(ch)
 ```
 
 and the server says who listens, once, at start:

@@ -1,25 +1,22 @@
 #!/usr/bin/env ady2nim
-#ady2nim-args js
-"""dijkstra_commands -- what the page asks of the server: Create, Read, Update or Delete, of a node or an edge.
-
-A gesture does not talk to the server. It makes a Command, and `send` sends it. Which gesture made it
-does not matter to anything after that: a Delete is the same command whether it came from the Delete
-key, Backspace, or the right-click menu's "Delete node".
-
-    send(delete_node("A"))                       # D: DELETE /nodes   name=A
-    send(create_edge("A", "B", "3"))             # C: POST   /edges   a=A b=B cost=3
-    send(update_node("A", at))                   # U: PUT    /nodes   name=A x=.. y=..
-    send(read_network("A", False))               # R: GET    /all     pick=A
+"""dijkstra_commands -- the one vocabulary of the page and the server: Create, Read, Update or Delete,
+of a node or an edge. Compiled both ways, like the model: the page makes commands, the server reads
+each request back into one, and both go by the same words.
 
 A Command is its verb (CREATE, READ, UPDATE, DELETE), what it is done to (a NODE, an EDGE, or the
-whole NETWORK, which is what is read), and its fields by name. The verb is the HTTP method, the thing
-is the URL, and the reader's choice (the form #state) goes with every command.
+whole NETWORK, which is what is read), and its fields by name:
 
-C, U and D are commands: the answer says only whether it went through (the paragraph #problem, empty,
-or why not); the page is drawn again when the server tells it of the change (see `news` in
-dijkstra_js_events.ady). R is the read: its answer is the page, in place of #all.
+    delete_node("A")                    # D: DELETE /nodes   name=A
+    create_edge("A", "B", "3")          # C: POST   /edges   a=A b=B cost=3
+    update_node("A", at)                # U: PUT    /nodes   name=A x=.. y=..
+    read_network("A", False)            # R: GET    /all     pick=A
+
+On the wire the verb is the HTTP method and the thing is the URL: `method_of` and `url_of` say which,
+and `command_of` reads them back, so the mapping is written once, here. The page sends a command
+(`send` in dijkstra_js_events.ady); the server reads it back (`Session.answer` in
+dijkstra_events_gui.ady) and carries it out; and what it changed goes out with the same verbs (a
+`Change`, also of this module's Verb_T). No HTML, no HTTP.
 """
-from browser import request
 from drawing import Spot_T
 
 type Verb_T is enum CREATE, READ, UPDATE, DELETE
@@ -34,7 +31,14 @@ type Command is record:
 def command(verb: Verb_T, thing: Thing_T, fields: {str}str) -> Command:
     return Command(verb, thing, fields)
 
-# The HTTP method a verb is sent as.
+# The field NAME of command C, or "" when it has none.
+def value(c: Command, name: str) -> str:
+    if name in c.fields:
+        return c.fields[name]
+    return ""
+
+# ---- On the wire: the verb is the HTTP method, the thing is the URL ----
+
 def method_of(verb: Verb_T) -> str:
     case verb:
         when CREATE:
@@ -46,7 +50,6 @@ def method_of(verb: Verb_T) -> str:
         when DELETE:
             return "DELETE"
 
-# The URL of what a command is done to.
 def url_of(thing: Thing_T) -> str:
     case thing:
         when NODE:
@@ -56,11 +59,16 @@ def url_of(thing: Thing_T) -> str:
         when NETWORK:
             return "/all"
 
-# Send COMMAND to the server, with the reader's choice (#state). A read's answer is the page, in
-# place of #all; a change's is whether it went through, in place of #problem.
-def send(command: Command):
-    let target: str = ("#all" if command.verb == READ else "#problem")
-    request(method_of(command.verb), url_of(command.thing), command.fields, target, "#state")
+# The command METHOD on URL is, with FIELDS; None when it is none of them. The network is only read,
+# and only the network is read.
+def command_of(method: str, url: str, fields: {str}str) -> ?Command:
+    for verb in Verb_T:
+        if method_of(verb) != method:
+            continue
+        for thing in Thing_T:
+            if url_of(thing) == url and (verb == READ) == (thing == NETWORK):
+                return command(verb, thing, fields)
+    return None
 
 # ---- The commands, by name: one each for what the page can ask ----
 

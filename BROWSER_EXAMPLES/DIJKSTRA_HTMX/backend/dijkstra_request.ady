@@ -1,8 +1,8 @@
 #!/usr/bin/env ady2nim
 """dijkstra_request -- the fields of a request, read as the page and the events need them.
 
-A request carries its fields in the query and the body ("a=1&b=2"). field_of takes one of
-them, params_of takes what the page keeps about the reader's choice (see dijkstra_gui.ady),
+A request carries its fields in the query and the body ("a=1&b=2"). fields_of takes them all, by
+name, field_of one of them, params_of takes what the page keeps about the reader's choice (see dijkstra_gui.ady),
 and number_of reads a number, -1 when there is none. No HTML, no HTTP, no network.
 """
 from uri nimport decodeUrl
@@ -23,6 +23,15 @@ def field_of(text: str, key: str) -> str:
         if at > 0 and pair[:at] == key:
             return decodeUrl(pair[at + 1:])
     return ""
+
+# Every field of a query or a form body ("a=1&b=2"), by name.
+def fields_of(text: str) -> {str}str:
+    var fields: {str}str = {:}
+    for pair in text.split("&"):
+        let at: int = pair.find("=")
+        if at > 0:
+            fields[pair[:at]] = decodeUrl(pair[at + 1:])
+    return fields
 
 def params_of(text: str) -> Params_T:
     return Params_T(field_of(text, "start"), field_of(text, "goal"), field_of(text, "pick"), field_of(text, "act"))
