@@ -2,6 +2,13 @@
 """
 blackboard.ady -- a small synchronous publish/subscribe layer
 
+It is meant for the blackboard pattern: one shared state (the blackboard), a control that
+decides what is written on it, and independent knowledge sources, each reacting to a change
+without knowing about the others. The control publishes what changed on a channel; each
+knowledge source subscribes to the channels it cares about. A new capability (saving, a
+log, undo, telling other pages) is then a new subscriber, and the control is not touched.
+BROWSER_EXAMPLES/DIJKSTRA_HTMX is built so (its docs/TUTORIAL.md, "The blackboard").
+
 A PublishChannel is a named channel. Subscribers register a callback; `publish` hands one
 event to every subscriber, in the order they subscribed, and returns how many took it
 without failing. Nothing is queued: when `publish` returns, every subscriber has run.
