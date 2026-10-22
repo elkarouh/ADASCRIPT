@@ -47,7 +47,7 @@ pre#diagram { display: none; }
 """
 
 # One port of a node: its dot, over which the reader presses to start a connector, and its label.
-def port_html(p: Port_T) -> Html:
+def to_html(p: Port_T) -> Html:
     let cx: str = str(INPUT_DX if p.side == INPUT else OUTPUT_DX)
     let cy: str = str(FIRST_PORT_DY + PORT_PITCH * float(p.row))
     let lx: str = str(INPUT_DX + 13.0 if p.side == INPUT else OUTPUT_DX - 13.0)
@@ -65,7 +65,7 @@ def port_html(p: Port_T) -> Html:
 
 # A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node is
 # (data_x, data_y: its top left corner), which the script's drag starts from.
-def node_html(n: Node_T) -> Html:
+def to_html(n: Node_T) -> Html:
     let x: str = f"{n.at.x:.0f}"
     let y: str = f"{n.at.y:.0f}"
     let w: str = str(NODE_W)
@@ -83,8 +83,8 @@ def node_html(n: Node_T) -> Html:
                     rect x="2" y="44" width="200" height="82" rx="4" ry="4"
                     rect x="2" y="44" width="200" height="77"
                 for row in range(PORTS):
-                    + port_html(Port_T(n.id, INPUT, row))
-                    + port_html(Port_T(n.id, OUTPUT, row))
+                    + to_html(Port_T(n.id, INPUT, row))
+                    + to_html(Port_T(n.id, OUTPUT, row))
 
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
@@ -97,7 +97,7 @@ def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
             svg id="editor" viewBox=box:
                 g id="nodes":
                     for n in d.nodes:
-                        + node_html(n)
+                        + to_html(n)
                 g id="connections-layer"
             # the diagram as the server keeps it: for the browser's View to draw the connectors from
             pre id="diagram": d.text()
