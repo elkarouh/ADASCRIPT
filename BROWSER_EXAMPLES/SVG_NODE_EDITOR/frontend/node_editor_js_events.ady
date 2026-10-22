@@ -29,10 +29,13 @@ from browser import Element_T, Event_T, Click_T, request, page, find, all, data,
 from drawing import Unit_in_pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_at, clamp, shift, no_click_cb, draggable
 from svg_path import SIDEWAYS, connector_d
-from backend/node_editor_model import NODE_W, NODE_H, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
+from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
 
-const WIDTH: Unit_in_pixel_T = 1100.0             # the drawing's size, as backend/node_editor_gui.ady draws it
-const HEIGHT: Unit_in_pixel_T = 520.0
+# The model's sizes are in cm; the mouse and the drawing's coordinates are in pixels.
+const DRAWING_W: Unit_in_pixel_T = Unit_in_pixel_T(WIDTH)
+const DRAWING_H: Unit_in_pixel_T = Unit_in_pixel_T(HEIGHT)
+const BOX_W: Unit_in_pixel_T = Unit_in_pixel_T(NODE_W)           # a node's
+const BOX_H: Unit_in_pixel_T = Unit_in_pixel_T(NODE_H)
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
 
@@ -179,7 +182,7 @@ var view: View = View()                 # the page is read again each time htmx 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and the
 # connectors at its ports follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = Spot_T(x=clamp(wanted.x, 0.0, WIDTH - Unit_in_pixel_T(NODE_W)), y=clamp(wanted.y, 0.0, HEIGHT - Unit_in_pixel_T(NODE_H)))
+    let now: Spot_T = Spot_T(x=clamp(wanted.x, 0.0, DRAWING_W - BOX_W), y=clamp(wanted.y, 0.0, DRAWING_H - BOX_H))
     shift(node, centre, now)
     let moved: None | !Refusal_T = view.diagram.move(node_id_of(node), now)
     view.redraw()
@@ -252,8 +255,8 @@ def double_click(e: Event_T):
     if title == "":
         return
     let at: Spot_T = spot_at(e)
-    let x: Unit_in_pixel_T = clamp(at.x - Unit_in_pixel_T(NODE_W) / 2.0, 0.0, WIDTH - Unit_in_pixel_T(NODE_W))       # the node's middle goes where the mouse is
-    let y: Unit_in_pixel_T = clamp(at.y - Unit_in_pixel_T(NODE_H) / 2.0, 0.0, HEIGHT - Unit_in_pixel_T(NODE_H))
+    let x: Unit_in_pixel_T = clamp(at.x - BOX_W / 2.0, 0.0, DRAWING_W - BOX_W)       # the node's middle goes where the mouse is
+    let y: Unit_in_pixel_T = clamp(at.y - BOX_H / 2.0, 0.0, DRAWING_H - BOX_H)
     send("POST", "/nodes", {"title": title, "x": f"{x:.0f}", "y": f"{y:.0f}"})
 
 # Delete and Backspace remove what is selected; Escape clears the selection.
@@ -276,4 +279,4 @@ listen_first("click", swallow_click)
 listen("dblclick", double_click)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg#editor", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+draggable("g.node", "svg#editor", DRAWING_W, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))

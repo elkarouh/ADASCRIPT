@@ -9,11 +9,9 @@ how a connector looks is node_editor_js_events.ady. Every request the script sen
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
-from drawing import Unit_in_pixel_T
-from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of
+from drawing import Unit_in_pixel_T, Spot_T
+from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, PORTS, PORT_R, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot
 
-const WIDTH: Unit_in_pixel_T = 1100.0             # the drawing's size, in its own units
-const HEIGHT: Unit_in_pixel_T = 520.0
 
 const STYLE: str = """
 body { margin: 0; background: #1a1a1a; color: #ddd; font-family: Arial, sans-serif; }
@@ -49,12 +47,14 @@ pre#diagram { display: none; }
 
 # One port of the node NODE: its dot, over which the reader presses to start a connector, and its label.
 def to_html(p: Port_T, node: int) -> Html:
-    let cx: str = str(float(INPUT_DX if p.side == INPUT else OUTPUT_DX))
-    let cy: str = str(float(FIRST_PORT_DY + PORT_PITCH * float(p.row)))
-    let lx: str = str(float(INPUT_DX + 13.0 if p.side == INPUT else OUTPUT_DX - 13.0))
-    let ly: str = str(float(FIRST_PORT_DY + PORT_PITCH * float(p.row) + 4.0))
-    let r: str = str(float(PORT_R))
-    let r_inner: str = str(float(PORT_R - 2.5))
+    let at: Spot_T = port_spot(Spot_T(0.0, 0.0), p)         # from the node's top left corner
+    let cx: str = f"{at.x:.1f}"
+    let cy: str = f"{at.y:.1f}"
+    let gap: Unit_in_pixel_T = (Unit_in_pixel_T(13.0) if p.side == INPUT else Unit_in_pixel_T(-13.0))       # the label's from the dot
+    let lx: str = f"{at.x + gap:.1f}"
+    let ly: str = f"{at.y + 4.0:.1f}"
+    let r: str = f"{PORT_R:.1f}"
+    let r_inner: str = f"{PORT_R - 2.5:.1f}"
     let field: str = ("input-field" if p.side == INPUT else "output-field")
     let side: str = ("input" if p.side == INPUT else "output")
     html:
@@ -87,7 +87,7 @@ def to_html(n: Node_T) -> Html:
                     + p.to_html(n.id)
 
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
-    let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
+    let box: str = f"0 0 {Unit_in_pixel_T(WIDTH):.0f} {Unit_in_pixel_T(HEIGHT):.0f}"
     html:
         div id="all":
             div class="toolbar":
