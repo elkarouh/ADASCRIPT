@@ -310,3 +310,5 @@ TESTS/test_virtual_generator
 TESTS/test_where_type
 TESTS/test_which
 BROWSER_EXAMPLES/SVG_NODE_EDITOR/diagram.txt
+BROWSER_EXAMPLES/SVG_NODE_EDITOR/backend/server
+BROWSER_EXAMPLES/SVG_NODE_EDITOR/tests/test_node_editor
