@@ -12,6 +12,7 @@ build_graph turns the network into the graph it wants.
 
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
+from drawing import Unit_in_pixel_T, Spot_T
 
 # Why a change to the network is refused: the message the page shows the reader.
 type Refusal_T is record:
@@ -29,18 +30,12 @@ type Edge_T is record:
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-# Where a node is drawn: its centre in the drawing. Each of x and y is a Unit_in_pixel_T in the browser (the
-# drawing's units, as svg_drag reads them); it is a float here, because the server cannot import svg_drag.
-type Place_T is record:
-    x: float
-    y: float
-
 class Network:
     var nodes: []Node_T                 # in the order they were made
     var edges: []Edge_T                 # each edge once
-    var places: {str}Place_T            # where the reader put a node, by name; the others are laid out
+    var places: {str}Spot_T            # where the reader put a node, by name; the others are laid out
 
-    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Place_T):
+    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Spot_T):
         self.nodes = nodes
         self.edges = edges
         self.places = places
@@ -49,7 +44,7 @@ class Network:
     def __init__(self, text: str):
         self.nodes = []
         self.edges = []
-        let none: {str}Place_T = {:}
+        let none: {str}Spot_T = {:}
         self.places = none
         for line in text.split("\n"):
             let w: []str = line.split()
@@ -73,15 +68,15 @@ class Network:
                             continue
                         if y is ParseFailure_T:
                             continue
-                        self.put(w[1], Place_T(x, y))
+                        self.put(w[1], Spot_T(Unit_in_pixel_T(x), Unit_in_pixel_T(y)))
 
     # The reader puts the node NAME at AT.
-    def put(self, name: str, at: Place_T):
+    def put(self, name: str, at: Spot_T):
         self.places[name] = at
 
     # Every node goes back to the layout: no node keeps a place of its own.
     def forget_places(self):
-        let none: {str}Place_T = {:}
+        let none: {str}Spot_T = {:}
         self.places = none
 
     # The names of the nodes, in order.
@@ -165,7 +160,7 @@ class Network:
             lines.append(f"edge {e.a} {e.b} {e.cost}")
         for n in self.nodes:
             if n.name in self.places:
-                let p: Place_T = self.places[n.name]
+                let p: Spot_T = self.places[n.name]
                 lines.append(f"at {n.name} {p.x:.0f} {p.y:.0f}")
         return "\n".join(lines) + "\n"
 
@@ -189,14 +184,14 @@ def sample() -> Network:
     let edges: []Edge_T = [Edge_T("A", "B", 7), Edge_T("A", "C", 9), Edge_T("A", "F", 14), Edge_T("B", "C", 10),
                          Edge_T("B", "D", 15), Edge_T("C", "D", 11), Edge_T("C", "F", 2), Edge_T("D", "E", 6),
                          Edge_T("E", "F", 9)]
-    let none: {str}Place_T = {:}
+    let none: {str}Spot_T = {:}
     var net: Network = Network(nodes, edges, none)
-    net.put("A", Place_T(60.0, 190.0))
-    net.put("B", Place_T(200.0, 60.0))
-    net.put("C", Place_T(200.0, 190.0))
-    net.put("D", Place_T(380.0, 60.0))
-    net.put("E", Place_T(520.0, 190.0))
-    net.put("F", Place_T(330.0, 320.0))
+    net.put("A", Spot_T(60.0, 190.0))
+    net.put("B", Spot_T(200.0, 60.0))
+    net.put("C", Spot_T(200.0, 190.0))
+    net.put("D", Spot_T(380.0, 60.0))
+    net.put("E", Spot_T(520.0, 190.0))
+    net.put("F", Spot_T(330.0, 320.0))
     return net
 
 # Whether ROUTE runs along the edge E, in either direction: dijkstra_gui.ady draws those edges in orange.

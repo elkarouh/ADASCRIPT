@@ -9,8 +9,9 @@ send POST, PUT or DELETE to /nodes or /edges themselves, with the form #state (s
 goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Node_T, Place_T, Refusal_T, uses
-from backend/dijkstra_layout import WIDTH, HEIGHT, place_of
+from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, uses
+from drawing import Unit_in_pixel_T, Spot_T
+from backend/dijkstra_layout import WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY, place_of
 from backend/dijkstra_request import Params_T
 
 # ---- the drawing ----
@@ -28,11 +29,11 @@ path.hit { stroke: transparent; stroke-width: 14px; fill: none; cursor: pointer;
 text.cost { font-size: 13px; fill: var(--soft); text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 4px; }
 """
 
-def to_html(e: Edge_T, on_way: bool, p1: Place_T, p2: Place_T) -> Html:
+def to_html(e: Edge_T, on_way: bool, p1: Spot_T, p2: Spot_T) -> Html:
     let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
     let css: str = ("edge way" if on_way else "edge")
     let lx: str = f"{(p1.x + p2.x) / 2.0:.0f}"
-    let ly: str = f"{(p1.y + p2.y) / 2.0 - 6.0:.0f}"
+    let ly: str = f"{(p1.y + p2.y) / 2.0 - COST_DY:.0f}"
     let label: str = str(e.cost)
     html:
         g data_from=e.a data_to=e.b data_cost=label:
@@ -59,17 +60,19 @@ text.name { font-size: 16px; font-weight: 700; text-anchor: middle; pointer-even
 """
 
 # A node: its circle and name, and a port (the dot on its right) from which a wire is drawn to another.
-def to_html(n: Node_T, at: Place_T, role: str) -> Html:
+def to_html(n: Node_T, at: Spot_T, role: str) -> Html:
     let cx: str = f"{at.x:.0f}"
     let cy: str = f"{at.y:.0f}"
-    let ty: str = f"{at.y + 5.0:.0f}"
-    let px: str = f"{at.x + 24.0:.0f}"
+    let ty: str = f"{at.y + NAME_DY:.0f}"
+    let px: str = f"{at.x + NODE_R:.0f}"
     let css: str = "node " + role
+    let nr: str = f"{NODE_R:.0f}"
+    let pr: str = f"{PORT_R:.0f}"
     html:
         g class=css data_name=n.name data_x=cx data_y=cy:
-            circle cx=cx cy=cy r="24"
+            circle cx=cx cy=cy r=nr
             stext class="name" x=cx y=ty: n.name
-            circle class="port" cx=px cy=cy r="6"
+            circle class="port" cx=px cy=cy r=pr
 
 # The menus' own look (see menus_html).
 const MENU_STYLE: str = """
@@ -127,7 +130,7 @@ def said_of(p: Params_T, way: []str, cost: float) -> str:
 # The drawing of the network: the svg with each edge (the way found in orange) and each node (the start,
 # the goal, the way), and the wire the browser draws while an edge is made (see dijkstra_js_events.ady).
 def to_html(net: Network, p: Params_T, way: []str) -> Html:
-    let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
+    let box: str = f"0 0 {Unit_in_pixel_T(WIDTH):.0f} {Unit_in_pixel_T(HEIGHT):.0f}"
     html:
         svg viewBox=box class="graph":
             for e in net.edges:

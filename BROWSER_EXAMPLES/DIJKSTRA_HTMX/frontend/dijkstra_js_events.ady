@@ -41,8 +41,8 @@ gesture means in this app.
 from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
 from drawing import Unit_in_pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
-from backend/dijkstra_model import Network, Node_T, Edge_T, Place_T
-from backend/dijkstra_layout import WIDTH, inside, place_of
+from backend/dijkstra_model import Network, Node_T, Edge_T
+from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
 
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
@@ -55,16 +55,9 @@ def node_of(el: Element_T) -> Node_T:
 def edge_of(el: Element_T) -> Edge_T:
     return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
-# Where a drawn spot is in the layout's terms (a Place_T, a float pair), and back.
-def place_of_spot(s: Spot_T) -> Place_T:
-    return Place_T(float(s.x), float(s.y))
-
-def spot_of_place(p: Place_T) -> Spot_T:
-    return Spot_T(x=Unit_in_pixel_T(p.x), y=Unit_in_pixel_T(p.y))
-
 # Where the node NAME of NETWORK is drawn, as a spot: where the reader put it, else the layout's place.
 def spot_of_network(network: Network, name: str) -> Spot_T:
-    return spot_of_place(place_of(network, name))
+    return place_of(network, name)
 
 # Outline the element EL, or take the outline off it.
 def set_selected(el: Element_T, lit: bool):
@@ -133,7 +126,7 @@ class EdgeView:
     def redraw(self, a: Spot_T, b: Spot_T):
         for line in self.el.all("path"):
             line.draw_line(a, b)
-        self.el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - 6.0))
+        self.el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - COST_DY))
 
 # The page's own objects, by name: the node and edge views the page draws, each found on the page.
 # A node or edge the model has but the page does not draw is left out, so no view is ever missing.
@@ -205,10 +198,10 @@ var network: NetworkView = NetworkView()     # the page is read again each time 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
 # edges follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = spot_of_place(inside(place_of_spot(wanted)))
+    let now: Spot_T = inside(wanted)
     shift(node, centre, now)
     let name: str = node_of(node).name
-    network.network.put(name, place_of_spot(now))        # the model keeps the place
+    network.network.put(name, now)        # the model keeps the place
     network.drawing.redraw_edges(name, network.network)  # and the edges that end at it are drawn again
     return now
 
@@ -324,7 +317,7 @@ def double_click(e: Event_T):
     if name == "":
         return
     let at: Spot_T = spot_at(e)
-    let kept: Place_T = inside(place_of_spot(at))
+    let kept: Spot_T = inside(at)
     send_node(name, f"{kept.x:.0f}", f"{kept.y:.0f}")
 
 # ---- Right-click: a menu of what can be done to what was clicked ----

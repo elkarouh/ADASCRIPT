@@ -34,8 +34,10 @@ testable on its own (see `tests/test_dijkstra.ady`).
 
 ## Step 1: define the objects in the model
 
-The model says what a network is. It has three records: a node, an edge,
-and the place where the reader has put a node on the drawing.
+The model says what a network is. It has two records: a node and an edge.
+The place where the reader has put a node on the drawing is a `Spot_T`
+from the library's `drawing` module: two lengths, each a `Unit_in_pixel_T`
+(a length in the drawing's own units, which a plain `float` is not).
 
 ```adascript
 # A node: its name.
@@ -47,11 +49,6 @@ type Edge_T is record:
     a:    str
     b:    str
     cost: int
-
-# Where a node is drawn: its centre in the drawing.
-type Place_T is record:
-    x: float
-    y: float
 ```
 
 The network is a class. It holds the three lists and is changed only
@@ -61,9 +58,9 @@ through its methods:
 class Network:
     var nodes: []Node_T                 # in the order they were made
     var edges: []Edge_T                 # each edge once
-    var places: {str}Place_T            # where the reader put a node, by name
+    var places: {str}Spot_T            # where the reader put a node, by name
 
-    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Place_T):
+    def __init__(self, nodes: []Node_T, edges: []Edge_T, places: {str}Spot_T):
         self.nodes = nodes
         self.edges = edges
         self.places = places
@@ -111,7 +108,7 @@ def text(self) -> str:
         lines.append(f"edge {e.a} {e.b} {e.cost}")
     for n in self.nodes:
         if n.name in self.places:
-            let p: Place_T = self.places[n.name]
+            let p: Spot_T = self.places[n.name]
             lines.append(f"at {n.name} {p.x:.0f} {p.y:.0f}")
     return "\n".join(lines) + "\n"
 ```
@@ -144,16 +141,19 @@ network, so the server and the browser agree on it without talking.
 
 ```adascript
 # Where the node NAME of NET is drawn: where the reader put it, else where the layout puts it.
-def place_of(net: Network, name: str) -> Place_T:
+def place_of(net: Network, name: str) -> Spot_T:
     if name in net.places:
         return net.places[name]
     for i in range(len(net.nodes)):
         if net.nodes[i].name == name:
             return new_spot(i, len(net.nodes))
-    return Place_T(0.0, 0.0)
+    return Spot_T(0.0, 0.0)
 ```
 
-`new_spot` spreads the nodes evenly round an ellipse. The layout is
+`new_spot` spreads the nodes evenly round an ellipse. The layout's sizes are
+lengths of their own: the drawing is `WIDTH = 15 cm` by `HEIGHT = 10 cm`, the
+ellipse `ACROSS` and `UP` centimetres, and what is small, a node's radius or
+its margin, is in pixels. The layout is
 imported by both the server (`dijkstra_gui.ady`) and the browser
 (`dijkstra_js_events.ady`), which is why it is kept in its own file, with
 no HTML in it.
@@ -168,17 +168,19 @@ writes markup as Adascript code, with indentation for nesting, and a
 
 ```adascript
 # A node: its circle and name, and a port (the dot on its right) from which a wire is drawn to another.
-def to_html(n: Node_T, at: Place_T, role: str) -> Html:
+def to_html(n: Node_T, at: Spot_T, role: str) -> Html:
     let cx: str = f"{at.x:.0f}"
     let cy: str = f"{at.y:.0f}"
-    let ty: str = f"{at.y + 5.0:.0f}"
-    let px: str = f"{at.x + 24.0:.0f}"
+    let ty: str = f"{at.y + NAME_DY:.0f}"
+    let px: str = f"{at.x + NODE_R:.0f}"
+    let nr: str = f"{NODE_R:.0f}"
+    let pr: str = f"{PORT_R:.0f}"
     let css: str = "node " + role
     html:
         g class=css data_name=n.name data_x=cx data_y=cy:
-            circle cx=cx cy=cy r="24"
+            circle cx=cx cy=cy r=nr
             stext class="name" x=cx y=ty: n.name
-            circle class="port" cx=px cy=cy r="6"
+            circle class="port" cx=px cy=cy r=pr
 ```
 
 Three things to note:
