@@ -21,7 +21,7 @@ saves it and deletes it. What changes the books is POSTed to /h/do and
 """
 from uri nimport decodeUrl
 from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from shared/routes import Shape, boxes, px, Route_T
 from shared/layout import WIDTH, GAP, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
 from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
@@ -340,7 +340,7 @@ def quarter_of(k: Kind_T) -> int:
         return 2
     return 3
 
-def tall_of(g: Graph, name: str) -> Unit_in_pixel_T:
+def tall_of(g: Graph, name: str) -> Drawing_Pixel_T:
     var ins: int = 0
     var outs: int = 0
     for f in g.flows:
@@ -348,7 +348,7 @@ def tall_of(g: Graph, name: str) -> Unit_in_pixel_T:
             ins += 1
         if f.source.name == name:
             outs += 1
-    return max(Unit_in_pixel_T(15.0), Unit_in_pixel_T(4.5 * float(max(ins, outs)) + 8.0))
+    return max(Drawing_Pixel_T(15.0), Drawing_Pixel_T(4.5 * float(max(ins, outs)) + 8.0))
 
 # An account's id in the page: its number and kind, which group rows have too.
 def id_of(r: AccountRow) -> str:
@@ -358,7 +358,7 @@ def id_of(r: AccountRow) -> str:
 def json_quote(s: str) -> str:
     return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-def node_html(a: Account, p: Spot_T, tall: Unit_in_pixel_T, id: str, key: str, tip: str, frozen: bool, now: bool, picked: bool) -> Html:
+def node_html(a: Account, p: Spot_T, tall: Drawing_Pixel_T, id: str, key: str, tip: str, frozen: bool, now: bool, picked: bool) -> Html:
     let shape: Shape = Shape(True, boxes().half_w, tall)
     let x: str = f"{p.x:.1f}"
     let y: str = f"{p.y:.1f}"
@@ -409,9 +409,9 @@ def arrow_html(g: Graph, f: Flow, route: Route_T, now: bool) -> Html:
 type Placed is record:
     names:  []str
     points: []Spot_T
-    tall:   []Unit_in_pixel_T
-    height: Unit_in_pixel_T
-    split_y: Unit_in_pixel_T
+    tall:   []Drawing_Pixel_T
+    height: Drawing_Pixel_T
+    split_y: Drawing_Pixel_T
     slots:  []Slot_T
 
 # Where the accounts of the books are drawn (shared/layout.ady lays them out, in the browser too):
@@ -419,10 +419,10 @@ type Placed is record:
 def placed(g: Graph, rows: []AccountRow, gr: Grouped, pos: str) -> Placed:
     var names: []str = []
     var slots: []Slot_T = []
-    var tall: []Unit_in_pixel_T = []
+    var tall: []Drawing_Pixel_T = []
     for r in rows:
         names.append(r.name)
-        let half: Unit_in_pixel_T = tall_of(g, r.name)
+        let half: Drawing_Pixel_T = tall_of(g, r.name)
         tall.append(half)
         slots.append(Slot_T(id_of(r), r.name, quarter_of(r.kind), r.number, half, group_key(gr, r.name) != ""))
     let at: Layout_T = layout_of_slots(slots, pos)
@@ -431,7 +431,7 @@ def placed(g: Graph, rows: []AccountRow, gr: Grouped, pos: str) -> Placed:
 def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str, picked: []str) -> Html:
     let rows: []AccountRow = gr.books.accounts
     let at: Placed = placed(whole, rows, gr, pos)
-    let width: Unit_in_pixel_T = Unit_in_pixel_T(WIDTH)
+    let width: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH)
     let size: Spot_T = Spot_T(width, at.height)
     let routes: []Route_T = routes_for(g, at.names, at.points, at.tall, size, boxes())
     var arrows: []Arrow_T = []

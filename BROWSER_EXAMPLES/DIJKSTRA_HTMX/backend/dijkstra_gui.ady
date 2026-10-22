@@ -10,7 +10,7 @@ goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, uses
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from backend/dijkstra_layout import WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY, place_of
 from backend/dijkstra_request import Params_T
 
@@ -130,7 +130,7 @@ def said_of(p: Params_T, way: []str, cost: float) -> str:
 # The drawing of the network: the svg with each edge (the way found in orange) and each node (the start,
 # the goal, the way), and the wire the browser draws while an edge is made (see dijkstra_js_events.ady).
 def to_html(net: Network, p: Params_T, way: []str) -> Html:
-    let box: str = f"0 0 {Unit_in_pixel_T(WIDTH):.0f} {Unit_in_pixel_T(HEIGHT):.0f}"
+    let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
     html:
         svg viewBox=box class="graph":
             for e in net.edges:

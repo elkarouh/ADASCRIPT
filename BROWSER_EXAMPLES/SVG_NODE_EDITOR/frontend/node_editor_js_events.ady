@@ -26,16 +26,16 @@ The drag of a node is the standard library's svg_drag, the page (finding element
 page says on them, questions, keys) its browser module, and a connector's curve svg_path's.
 """
 from browser import Element_T, Event_T, Click_T, request, page, find, all, data, number, text, attr, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_at, clamp, shift, no_click_cb, draggable
 from svg_path import SIDEWAYS, connector_d
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
 
 # The model's sizes are in cm; the mouse and the drawing's coordinates are in pixels.
-const DRAWING_W: Unit_in_pixel_T = Unit_in_pixel_T(WIDTH)
-const DRAWING_H: Unit_in_pixel_T = Unit_in_pixel_T(HEIGHT)
-const BOX_W: Unit_in_pixel_T = Unit_in_pixel_T(NODE_W)           # a node's
-const BOX_H: Unit_in_pixel_T = Unit_in_pixel_T(NODE_H)
+const DRAWING_W: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH)
+const DRAWING_H: Drawing_Pixel_T = Drawing_Pixel_T(HEIGHT)
+const BOX_W: Drawing_Pixel_T = Drawing_Pixel_T(NODE_W)           # a node's
+const BOX_H: Drawing_Pixel_T = Drawing_Pixel_T(NODE_H)
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
 
@@ -255,8 +255,8 @@ def double_click(e: Event_T):
     if title == "":
         return
     let at: Spot_T = spot_at(e)
-    let x: Unit_in_pixel_T = clamp(at.x - BOX_W / 2.0, 0.0, DRAWING_W - BOX_W)       # the node's middle goes where the mouse is
-    let y: Unit_in_pixel_T = clamp(at.y - BOX_H / 2.0, 0.0, DRAWING_H - BOX_H)
+    let x: Drawing_Pixel_T = clamp(at.x - BOX_W / 2.0, 0.0, DRAWING_W - BOX_W)       # the node's middle goes where the mouse is
+    let y: Drawing_Pixel_T = clamp(at.y - BOX_H / 2.0, 0.0, DRAWING_H - BOX_H)
     send("POST", "/nodes", {"title": title, "x": f"{x:.0f}", "y": f"{y:.0f}"})
 
 # Delete and Backspace remove what is selected; Escape clears the selection.

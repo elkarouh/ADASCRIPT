@@ -12,7 +12,7 @@ build_graph turns the network into the graph it wants.
 
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 
 # Why a change to the network is refused: the message the page shows the reader.
 type Refusal_T is record:
@@ -68,7 +68,7 @@ class Network:
                             continue
                         if y is ParseFailure_T:
                             continue
-                        self.put(w[1], Spot_T(Unit_in_pixel_T(x), Unit_in_pixel_T(y)))
+                        self.put(w[1], Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
 
     # The reader puts the node NAME at AT.
     def put(self, name: str, at: Spot_T):

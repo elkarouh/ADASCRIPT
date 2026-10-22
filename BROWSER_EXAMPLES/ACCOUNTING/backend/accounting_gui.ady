@@ -14,7 +14,7 @@ https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html)
 Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
-from drawing import Unit_in_pixel_T, Unit_in_cm_T, Spot_T
+from drawing import Drawing_Pixel_T, Unit_in_cm_T, Spot_T
 from shared/routes import NODE_RADIUS, Route_T, Shape, boxes, circles, covers, px, rim, routes_of, toward
 from backend/accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
 
@@ -23,7 +23,7 @@ def money(c: Cents_T) -> str:
     return f"{Dollars_T(c):,.2f}"
 
 # The arrows of G routed by shared/routes.ady, which knows only names, points and texts.
-def routes_for(g: Graph, names: []str, points: []Spot_T, tall: []Unit_in_pixel_T, size: Spot_T, shape: Shape) -> []Route_T:
+def routes_for(g: Graph, names: []str, points: []Spot_T, tall: []Drawing_Pixel_T, size: Spot_T, shape: Shape) -> []Route_T:
     var sources: []str = []
     var targets: []str = []
     var texts: []str = []
@@ -185,7 +185,7 @@ def to_html(a: Account, p: Spot_T, tip: str) -> Html:
 # right, as on a line of a balance sheet (without its sign: the colour, and
 # the side of the drawing, say whether it is owned or owed).
 # NAME cut to fit ROOM pixels of the box's 12px text, ending in "..." when it is cut.
-def fit_name(name: str, room: Unit_in_pixel_T) -> str:
+def fit_name(name: str, room: Drawing_Pixel_T) -> str:
     let chars: int = int(float(room) / 7.3)
     if len(name) <= chars or chars < 4:
         return name
@@ -201,7 +201,7 @@ def box_html(a: Account, p: Spot_T, shape: Shape) -> Html:
     let bx: str = px(p.x + shape.half_w - 8.0)
     let cy: str = px(p.y)
     let balance: str = money(a.balance if a.balance >= 0 else -a.balance)
-    let shown_name: str = fit_name(a.name, shape.half_w * 2.0 - 16.0 - 10.0 - Unit_in_pixel_T(6.7 * float(len(balance))))
+    let shown_name: str = fit_name(a.name, shape.half_w * 2.0 - 16.0 - 10.0 - Drawing_Pixel_T(6.7 * float(len(balance))))
     html:
         g:
             rect class=css x=left y=top width=w height=h rx="5"
@@ -248,7 +248,7 @@ def to_html(f: Flow, route: Route_T, tip: str) -> Html:
 def to_html(g: Graph) -> Html:
     var names: []str = []
     var points: []Spot_T = []
-    var tall: []Unit_in_pixel_T = []
+    var tall: []Drawing_Pixel_T = []
     for a in g.accounts:
         names.append(a.name)
         points.append(place(a))

@@ -332,15 +332,15 @@ two types. The drawing's is in `drawing.ady`, which the server can import too:
 
 <!-- from: TO_NIM/STDLIB/drawing.ady -->
 ```python
-type Unit_in_pixel_T is distinct float
+type Drawing_Pixel_T is distinct float
 ```
 
 and the mouse's is in `svg_drag.ady`, with the scale between them:
 
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
-type Pixel_T is distinct float
-type Scale_T is Unit_in_pixel_T / Pixel_T
+type Physical_Pixel_T is distinct float
+type Scale_T is Drawing_Pixel_T / Physical_Pixel_T
 ```
 
 The module's own comment says that adding a pixel to a drawing unit does not
@@ -349,11 +349,11 @@ is, and `spot_at` in `svg_drag.ady` uses it to turn a mouse position into a
 position in the drawing.
 
 A literal converts directly to a distinct type, so you write `4.0` where a
-`Pixel_T` is wanted, and no cast is needed:
+`Physical_Pixel_T` is wanted, and no cast is needed:
 
 <!-- from: TO_NIM/STDLIB/svg_drag.ady -->
 ```python
-const MOVED: Pixel_T = 4.0
+const MOVED: Physical_Pixel_T = 4.0
 ```
 
 ---

@@ -25,7 +25,7 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`,
 from shared/routes import Route_T, boxes, routes_of
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
 from browser import Element_T, Event_T, Click_T, request, page, text, field, on, stop, listen
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, shift, draggable
 
 # The account the element EL draws: its id (number and kind, as the server names it), and its name.
@@ -46,7 +46,7 @@ class BooksView:
     var arrows: []Arrow_T               # the arrows, each from one account to another
     var pos: str                        # where the reader has dragged accounts: "id@x,y|..."
     var layout: Layout_T                # where everything is drawn
-    var height: Unit_in_pixel_T                   # the drawing's height, as the server drew it: a drag stays inside it
+    var height: Drawing_Pixel_T                   # the drawing's height, as the server drew it: a drag stays inside it
 
     def __init__(self):
         var kept: str = ""
@@ -91,7 +91,7 @@ class BooksView:
         self.pos = with_position(self.pos, id, at)
         self.layout = layout_of_slots(self.slots, self.pos)
         var names: []str = []
-        var tall: []Unit_in_pixel_T = []
+        var tall: []Drawing_Pixel_T = []
         for s in self.slots:
             names.append(s.name)
             tall.append(s.tall)
@@ -102,7 +102,7 @@ class BooksView:
             sources.append(a.source)
             targets.append(a.target)
             labels.append(a.label)
-        let size: Spot_T = Spot_T(Unit_in_pixel_T(WIDTH), self.layout.height)
+        let size: Spot_T = Spot_T(Drawing_Pixel_T(WIDTH), self.layout.height)
         let routes: []Route_T = routes_of(sources, targets, labels, names, self.layout.points, tall, size, [], [], boxes())
         # routes[k] is the way for arrow k: its curve, and where its amount goes
         for k in range(len(self.arrows)):
@@ -168,4 +168,4 @@ def page_drawn(e: Event_T):
     books = BooksView()
 
 listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg.graph", Unit_in_pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))

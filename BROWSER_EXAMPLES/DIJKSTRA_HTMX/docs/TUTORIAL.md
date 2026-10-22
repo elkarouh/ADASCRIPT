@@ -36,7 +36,7 @@ testable on its own (see `tests/test_dijkstra.ady`).
 
 The model says what a network is. It has two records: a node and an edge.
 The place where the reader has put a node on the drawing is a `Spot_T`
-from the library's `drawing` module: two lengths, each a `Unit_in_pixel_T`
+from the library's `drawing` module: two lengths, each a `Drawing_Pixel_T`
 (a length in the drawing's own units, which a plain `float` is not).
 
 ```adascript

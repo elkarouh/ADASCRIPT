@@ -12,7 +12,7 @@ says what each looks like inside its box; where the boxes are is the Layout (roi
 """
 from uri nimport decodeUrl
 from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPercentage, Outcome, Portfolio, Product_T, ProductOutcome, evaluate
-from drawing import Unit_in_pixel_T
+from drawing import Drawing_Pixel_T
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
 
@@ -51,18 +51,18 @@ def color_of(kind: Product_T) -> str:
             return "#FFCCD6"
 
 # Where the results of each product are inside the box of the results, from its top left.
-const PERF_DX: Unit_in_pixel_T = 30.0
-const PERF_DY: []Unit_in_pixel_T = [50.0, 170.0, 290.0]
-const PERF_W: Unit_in_pixel_T = 200.0           # and how big each is
-const PERF_H: Unit_in_pixel_T = 100.0
+const PERF_DX: Drawing_Pixel_T = 30.0
+const PERF_DY: []Drawing_Pixel_T = [50.0, 170.0, 290.0]
+const PERF_W: Drawing_Pixel_T = 200.0           # and how big each is
+const PERF_H: Drawing_Pixel_T = 100.0
 
 # Where the arrows to the products leave the investment box, from its top left: out of the top
 # for gold, the right side for bitcoin, the bottom for the S&P 500; the middle of the side it leaves.
-def send_x(i: int) -> Unit_in_pixel_T:
+def send_x(i: int) -> Drawing_Pixel_T:
     return (width_of("investment") if i == 1 else width_of("investment") / 2.0)
 
-def send_y(i: int) -> Unit_in_pixel_T:
-    return (height_of("investment") if i == 2 else (height_of("investment") / 2.0 if i == 1 else Unit_in_pixel_T(0.0)))
+def send_y(i: int) -> Drawing_Pixel_T:
+    return (height_of("investment") if i == 2 else (height_of("investment") / 2.0 if i == 1 else Drawing_Pixel_T(0.0)))
 
 # A number as a person writes it: 25, not 25.0; 12.5 stays.
 def plain(v: float) -> str:
@@ -75,7 +75,7 @@ def money(v: float) -> str:
 
 # How much room an arrow's head takes: the arrow stops this short of its box, where the head
 # (head_html, below) begins, so that the tip of the head is at the box.
-const HEAD: Unit_in_pixel_T = 13.0
+const HEAD: Drawing_Pixel_T = 13.0
 
 # The name of the head (a <marker>) for arrows of COLOR, and how an arrow refers to it.
 def head_id(color: str) -> str:
@@ -88,7 +88,7 @@ def head_url(color: str) -> str:
 # and the head. It starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's.
 # The page writes those on it (data_*), and how it leaves and how short it stops, for the script
 # that redraws it while a block is dragged.
-def arrow_html(layout: Layout, from_block: str, fx: Unit_in_pixel_T, fy: Unit_in_pixel_T, to_block: str, tx: Unit_in_pixel_T, ty: Unit_in_pixel_T, color: str, leave: Leave_T) -> Html:
+def arrow_html(layout: Layout, from_block: str, fx: Drawing_Pixel_T, fy: Drawing_Pixel_T, to_block: str, tx: Drawing_Pixel_T, ty: Drawing_Pixel_T, color: str, leave: Leave_T) -> Html:
     let d: str = connector_d(float(left_of(layout, from_block) + fx), float(top_of(layout, from_block) + fy),
                              float(left_of(layout, to_block) + tx), float(top_of(layout, to_block) + ty), leave, float(HEAD))
     let leaves: str = ("vertical" if leave == VERTICAL else "sideways")
@@ -101,7 +101,7 @@ def arrow_html(layout: Layout, from_block: str, fx: Unit_in_pixel_T, fy: Unit_in
 # to the block called BLOCK, and moves with it. A box that is a block of its own, FOR_DRAG,
 # is the grip: the script lets the mouse take hold of its rectangle and nothing else, so the
 # fields in it can still be clicked.
-def box_html(block: str, x: Unit_in_pixel_T, y: Unit_in_pixel_T, w: Unit_in_pixel_T, h: Unit_in_pixel_T, color: str, inside: Html, grip: bool) -> Html:
+def box_html(block: str, x: Drawing_Pixel_T, y: Drawing_Pixel_T, w: Drawing_Pixel_T, h: Drawing_Pixel_T, color: str, inside: Html, grip: bool) -> Html:
     let css: str = ("node" if grip else "body")
     html:
         g class="box":
@@ -189,10 +189,10 @@ def head_html(color: str) -> Html:
 
 def all_html(portfolio: Portfolio, layout: Layout) -> Html:
     let outcome: Outcome = evaluate(portfolio)
-    let box: str = f"0 0 {Unit_in_pixel_T(WIDE):.0f} {Unit_in_pixel_T(HIGH):.0f}"
+    let box: str = f"0 0 {Drawing_Pixel_T(WIDE):.0f} {Drawing_Pixel_T(HIGH):.0f}"
     html:
         div id="all":
-            svg viewBox=box width=f"{Unit_in_pixel_T(WIDE):.0f}" height=f"{Unit_in_pixel_T(HIGH):.0f}" class="drawing":
+            svg viewBox=box width=f"{Drawing_Pixel_T(WIDE):.0f}" height=f"{Drawing_Pixel_T(HIGH):.0f}" class="drawing":
                 defs:
                     + head_html(INVEST_COLOR)
                     for share in portfolio.shares:
@@ -204,7 +204,7 @@ def all_html(portfolio: Portfolio, layout: Layout) -> Html:
                 for i in 0 ..< len(outcome.list_of_outcomes):
                     + box_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], PERF_W, PERF_H, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
                 for i in 0 ..< len(outcome.list_of_outcomes):
-                    + arrow_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Unit_in_pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
+                    + arrow_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Drawing_Pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
                     + arrow_html(layout, name_of(outcome.list_of_outcomes[i].kind), width_of(name_of(outcome.list_of_outcomes[i].kind)), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
 
 const STYLE: str = """

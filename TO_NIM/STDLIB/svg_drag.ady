@@ -28,7 +28,7 @@ The page itself (finding elements, reading what the server wrote, forms, clicks)
 browser module's, in plain words; this one adds the drawing: its units, a drag, and moving
 what is drawn.
 """
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from browser import Element_T, page, set_attr, number, Click_T, click_of, on
 from dom nimport Event, MouseEvent, BoundingRect, document, getBoundingClientRect, addEventListener, preventDefault, stopPropagation
 
@@ -37,14 +37,14 @@ from dom nimport Event, MouseEvent, BoundingRect, document, getBoundingClientRec
 # The mouse reports pixels, and the drawing is scaled to fit the page, so a pixel is not a unit of
 # the drawing. They are two types, and the only way across is the scale.
 
-type Pixel_T is distinct float          # on the screen, as the mouse reports it
-type Scale_T is Unit_in_pixel_T / Pixel_T        # drawing units a pixel: pixels * scale = units
+type Physical_Pixel_T is distinct float          # on the screen, as the mouse reports it
+type Scale_T is Drawing_Pixel_T / Physical_Pixel_T        # drawing units a pixel: pixels * scale = units
 
 type Screen_T is tuple:                   # a place on the screen
-    x: Pixel_T
-    y: Pixel_T
+    x: Physical_Pixel_T
+    y: Physical_Pixel_T
 
-const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
+const MOVED: Physical_Pixel_T = 4.0              # how far a press goes before it is a drag
 
 # What the app says a drag means (see the docstring).
 type Moved_CB_T is (Element_T, Spot_T, Spot_T) -> Spot_T   # the shape, its centre when pressed, where the mouse has taken it -> where it is
@@ -61,7 +61,7 @@ type Hooks_T is record:
 type Setup_T is record:
     shapes: str                         # the CSS selector of the shapes that can be dragged
     svg:    str                         # the CSS selector of the <svg>
-    width:  Unit_in_pixel_T                      # its width, in its own units
+    width:  Drawing_Pixel_T                      # its width, in its own units
     hooks:  Hooks_T
 
 # ---- The drag, as a small state machine ----
@@ -100,8 +100,8 @@ var setup: Setup_T                      # what draggable was given; set before a
 # ---- Reading the page ----
 
 # Attribute NAME of NODE ("data_x", "data_y") as drawing units; 0 if it is not a number.
-def unit_of(node: Element_T, name: str) -> Unit_in_pixel_T:
-    Unit_in_pixel_T(node.number(name))
+def unit_of(node: Element_T, name: str) -> Drawing_Pixel_T:
+    Drawing_Pixel_T(node.number(name))
 
 # Where a shape's centre is, as the server last drew it.
 def spot_of(node: Element_T) -> Spot_T:
@@ -109,7 +109,7 @@ def spot_of(node: Element_T) -> Spot_T:
 
 # Where the mouse was when event M happened, on the screen.
 def screen_of(m: MouseEvent) -> Screen_T:
-    Screen_T(x=Pixel_T(float(m.clientX)), y=Pixel_T(float(m.clientY)))
+    Screen_T(x=Physical_Pixel_T(float(m.clientX)), y=Physical_Pixel_T(float(m.clientY)))
 
 # The drawing's size and place on the screen, in pixels. It is asked each time: the window may
 # have been resized, and the drawing is scaled to fit the page.
@@ -118,15 +118,15 @@ def svg_box() -> BoundingRect:
 
 # How many drawing units a pixel is.
 def scale() -> Scale_T:
-    setup.width / Pixel_T(svg_box().width)   # units / pixels: a Scale_T
+    setup.width / Physical_Pixel_T(svg_box().width)   # units / pixels: a Scale_T
 
 # Where the mouse was when event E happened, in the drawing's units: the drawing's own place
 # on the screen is taken off first, so the top left of the drawing is 0, 0.
 def spot_at(e: Event) -> Spot_T:
     let m: MouseEvent = MouseEvent(e)
     let box: BoundingRect = svg_box()
-    let k: Scale_T = setup.width / Pixel_T(box.width)
-    Spot_T(x=Pixel_T(float(m.clientX) - box.left) * k, y=Pixel_T(float(m.clientY) - box.top) * k)
+    let k: Scale_T = setup.width / Physical_Pixel_T(box.width)
+    Spot_T(x=Physical_Pixel_T(float(m.clientX) - box.left) * k, y=Physical_Pixel_T(float(m.clientY) - box.top) * k)
 
 # ---- Changing the page ----
 
@@ -149,7 +149,7 @@ def place_at(label: Element_T, at: Spot_T):
     label.set_attr("y", f"{at.y:.1f}")
 
 # V kept between LO and HI.
-def clamp(v: Unit_in_pixel_T, lo: Unit_in_pixel_T, hi: Unit_in_pixel_T) -> Unit_in_pixel_T:
+def clamp(v: Drawing_Pixel_T, lo: Drawing_Pixel_T, hi: Drawing_Pixel_T) -> Drawing_Pixel_T:
     max(lo, min(hi, v))
 
 # For an app with nothing to do on a click.
@@ -172,8 +172,8 @@ def on_down(e: Event):
 def on_move(e: Event):
     if grip is Held_T:
         let at: Screen_T = screen_of(MouseEvent(e))
-        let dx: Pixel_T = at.x - grip.down.x   # how far from where it went down
-        let dy: Pixel_T = at.y - grip.down.y
+        let dx: Physical_Pixel_T = at.x - grip.down.x   # how far from where it went down
+        let dy: Physical_Pixel_T = at.y - grip.down.y
         # a small move is not yet a drag: a hand shakes, and it may still be a click
         return if not grip.moved and abs(dx) < MOVED and abs(dy) < MOVED
         let k: Scale_T = scale()    # pixels * scale = drawing units
@@ -208,7 +208,7 @@ def on_click(e: Event):
 # The listeners are on the whole document, so a drag goes on when the mouse leaves the
 # shape. The click listener gets True ("capture"): it is called on the way down the tree,
 # before htmx, which listens on the way up.
-def draggable(shapes: str, drawing: str, width: Unit_in_pixel_T, hooks: Hooks_T):
+def draggable(shapes: str, drawing: str, width: Drawing_Pixel_T, hooks: Hooks_T):
     setup = Setup_T(shapes=shapes, svg=drawing, width=width, hooks=hooks)
     document.addEventListener("mousedown", on_down)
     document.addEventListener("mousemove", on_move)

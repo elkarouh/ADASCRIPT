@@ -90,8 +90,8 @@ compiler checks each field access against the state the test proved.
 ```python
 def on_move(e: Event):
     if grip is Held_T:
-        let dx: Pixel_T = at.x - grip.down.x
-        let dy: Pixel_T = at.y - grip.down.y
+        let dx: Physical_Pixel_T = at.x - grip.down.x
+        let dy: Physical_Pixel_T = at.y - grip.down.y
         return if not grip.moved and abs(dx) < MOVED and abs(dy) < MOVED
         let now: Spot_T = setup.hooks.moved_cb(grip.node, grip.centre, wanted)
         grip = Held_T(node=grip.node, down=grip.down, centre=grip.centre, now=now, moved=true)

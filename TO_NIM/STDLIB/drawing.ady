@@ -1,7 +1,7 @@
 # drawing.ady -- the units of a drawing and a place in it, for the server and the browser alike.
 #
-#   from drawing import Unit_in_pixel_T, Spot_T
-#   const NODE_W: Unit_in_pixel_T = 204.0
+#   from drawing import Drawing_Pixel_T, Spot_T
+#   const NODE_W: Drawing_Pixel_T = 204.0
 #
 # A drawing (an SVG) has its own units, its viewBox, whatever size it has on the screen. A shape's
 # place is kept in them. This module has no page in it (no dom), so a model that is compiled both
@@ -12,16 +12,16 @@
 # whatever size the drawing has on the screen. `distinct` makes it a type of its own, so a length
 # in another unit (the mouse's pixels, see svg_drag.ady) cannot be added to it by mistake.
 
-type Unit_in_pixel_T is distinct float           # in the drawing, as the server keeps a shape's place
+type Drawing_Pixel_T is distinct float           # in the drawing, as the server keeps a shape's place
 
 type Spot_T is tuple:                     # a place in the drawing
-    x: Unit_in_pixel_T
-    y: Unit_in_pixel_T
+    x: Drawing_Pixel_T
+    y: Drawing_Pixel_T
 
 # A centimetre of the drawing, at the 96 pixels an inch that a browser draws it with. Unit_in_cm_T(x)
-# turns a pixel length into centimetres, and Unit_in_pixel_T(x) the other way.
+# turns a pixel length into centimetres, and Drawing_Pixel_T(x) the other way.
 const PIXELS_PER_CM: float = 96.0 / 2.54
-type Unit_in_cm_T is PIXELS_PER_CM * Unit_in_pixel_T
+type Unit_in_cm_T is PIXELS_PER_CM * Drawing_Pixel_T
 
 # The squared distance between two places has no name in the language's units until it is made one.
-type Area_T is Unit_in_pixel_T * Unit_in_pixel_T
+type Area_T is Drawing_Pixel_T * Drawing_Pixel_T

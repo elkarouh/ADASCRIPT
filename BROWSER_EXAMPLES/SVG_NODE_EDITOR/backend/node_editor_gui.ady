@@ -9,7 +9,7 @@ how a connector looks is node_editor_js_events.ady. Every request the script sen
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, PORTS, PORT_R, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot
 
 
@@ -50,7 +50,7 @@ def to_html(p: Port_T, node: int) -> Html:
     let at: Spot_T = port_spot(Spot_T(0.0, 0.0), p)         # from the node's top left corner
     let cx: str = f"{at.x:.1f}"
     let cy: str = f"{at.y:.1f}"
-    let gap: Unit_in_pixel_T = (Unit_in_pixel_T(13.0) if p.side == INPUT else Unit_in_pixel_T(-13.0))       # the label's from the dot
+    let gap: Drawing_Pixel_T = (Drawing_Pixel_T(13.0) if p.side == INPUT else Drawing_Pixel_T(-13.0))       # the label's from the dot
     let lx: str = f"{at.x + gap:.1f}"
     let ly: str = f"{at.y + 4.0:.1f}"
     let r: str = f"{PORT_R:.1f}"
@@ -69,12 +69,12 @@ def to_html(p: Port_T, node: int) -> Html:
 def to_html(n: Node_T) -> Html:
     let x: str = f"{n.at.x:.0f}"
     let y: str = f"{n.at.y:.0f}"
-    let w: str = f"{Unit_in_pixel_T(NODE_W):.1f}"
-    let h: str = f"{Unit_in_pixel_T(NODE_H):.1f}"
-    let inner_w: str = f"{Unit_in_pixel_T(NODE_W) - 4.0:.1f}"                # inside the 2 pixels of margin
-    let title_x: str = f"{Unit_in_pixel_T(NODE_W) / 2.0:.1f}"
-    let body_h: str = f"{Unit_in_pixel_T(NODE_H) - 46.0:.1f}"                # under the header
-    let body_h_square: str = f"{Unit_in_pixel_T(NODE_H) - 51.0:.1f}"        # the same without the rounded bottom
+    let w: str = f"{Drawing_Pixel_T(NODE_W):.1f}"
+    let h: str = f"{Drawing_Pixel_T(NODE_H):.1f}"
+    let inner_w: str = f"{Drawing_Pixel_T(NODE_W) - 4.0:.1f}"                # inside the 2 pixels of margin
+    let title_x: str = f"{Drawing_Pixel_T(NODE_W) / 2.0:.1f}"
+    let body_h: str = f"{Drawing_Pixel_T(NODE_H) - 46.0:.1f}"                # under the header
+    let body_h_square: str = f"{Drawing_Pixel_T(NODE_H) - 51.0:.1f}"        # the same without the rounded bottom
     let place: str = f"translate({x},{y})"
     html:
         g class="node" data_node=str(n.id) data_x=x data_y=y:
@@ -91,7 +91,7 @@ def to_html(n: Node_T) -> Html:
                     + p.to_html(n.id)
 
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
-    let box: str = f"0 0 {Unit_in_pixel_T(WIDTH):.0f} {Unit_in_pixel_T(HEIGHT):.0f}"
+    let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
     html:
         div id="all":
             div class="toolbar":

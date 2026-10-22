@@ -22,13 +22,13 @@ The drag itself is the standard library's svg_drag, and the page its browser mod
 """
 from browser import Element_T, page, find, all, data, number, request
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
-from drawing import Unit_in_pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_of, clamp, shift, trace, no_click_cb, draggable
 
 from backend/roi_layout import WIDE, HIGH
 
-const WIDTH: Unit_in_pixel_T = Unit_in_pixel_T(WIDE)    # the drawing's size (the svg's viewBox, and its size on the page)
-const HEIGHT: Unit_in_pixel_T = Unit_in_pixel_T(HIGH)
+const WIDTH: Drawing_Pixel_T = Drawing_Pixel_T(WIDE)    # the drawing's size (the svg's viewBox, and its size on the page)
+const HEIGHT: Drawing_Pixel_T = Drawing_Pixel_T(HIGH)
 
 # What the server wrote on an element, read as if it were a field: `rect.data_name`.
 def data_name(n: Element_T) -> str:
@@ -46,11 +46,11 @@ def block_named(name: str) -> Element_T:
 
 # Where a block's top left corner is, when its centre is AT.
 def corner_of(block: Element_T, at: Spot_T) -> Spot_T:
-    return Spot_T(x=at.x - Unit_in_pixel_T(block.number("width") / 2.0), y=at.y - Unit_in_pixel_T(block.number("height") / 2.0))
+    return Spot_T(x=at.x - Drawing_Pixel_T(block.number("width") / 2.0), y=at.y - Drawing_Pixel_T(block.number("height") / 2.0))
 
 # Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
 # being dragged (NODE), else where the server drew it; OFFSET_X and OFFSET_Y from its top left.
-def end_of(node: Element_T, at: Spot_T, name: str, dx: Unit_in_pixel_T, dy: Unit_in_pixel_T) -> Spot_T:
+def end_of(node: Element_T, at: Spot_T, name: str, dx: Drawing_Pixel_T, dy: Drawing_Pixel_T) -> Spot_T:
     let block: Element_T = block_named(name)
     let centre: Spot_T = (at if name == node.data_name else spot_of(block))
     let corner: Spot_T = corner_of(block, centre)
@@ -61,8 +61,8 @@ def redraw_arrows_of(node: Element_T, at: Spot_T):
     let name: str = node.data_name
     for arrow in page.all("g.arrow"):
         if name in [arrow.data_a, arrow.data_b]:
-            let a: Spot_T = end_of(node, at, arrow.data_a, Unit_in_pixel_T(arrow.number("data_ax")), Unit_in_pixel_T(arrow.number("data_ay")))
-            let b: Spot_T = end_of(node, at, arrow.data_b, Unit_in_pixel_T(arrow.number("data_bx")), Unit_in_pixel_T(arrow.number("data_by")))
+            let a: Spot_T = end_of(node, at, arrow.data_a, Drawing_Pixel_T(arrow.number("data_ax")), Drawing_Pixel_T(arrow.number("data_ay")))
+            let b: Spot_T = end_of(node, at, arrow.data_b, Drawing_Pixel_T(arrow.number("data_bx")), Drawing_Pixel_T(arrow.number("data_by")))
             let leave: Leave_T = (VERTICAL if arrow.data("leave") == "vertical" else SIDEWAYS)
             for path in arrow.all("path"):
                 path.trace(connector_d(float(a.x), float(a.y), float(b.x), float(b.y), leave, arrow.number("data_stop")))
@@ -70,8 +70,8 @@ def redraw_arrows_of(node: Element_T, at: Spot_T):
 # While NODE is dragged: its block goes where the mouse takes it, kept inside the drawing, and
 # the arrows follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let half_w: Unit_in_pixel_T = Unit_in_pixel_T(node.number("width") / 2.0)
-    let half_h: Unit_in_pixel_T = Unit_in_pixel_T(node.number("height") / 2.0)
+    let half_w: Drawing_Pixel_T = Drawing_Pixel_T(node.number("width") / 2.0)
+    let half_h: Drawing_Pixel_T = Drawing_Pixel_T(node.number("height") / 2.0)
     let now: Spot_T = Spot_T(x=clamp(wanted.x, half_w, WIDTH - half_w), y=clamp(wanted.y, half_h, HEIGHT - half_h))
     for part in page.all(f"[data_block=\"{node.data_name}\"]"):
         shift(part, centre, now)

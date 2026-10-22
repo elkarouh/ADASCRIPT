@@ -3,7 +3,7 @@
 
     ady2nim c -r test_htmx.ady
 """
-from drawing import Unit_in_pixel_T
+from drawing import Drawing_Pixel_T
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Kind_T, Posting, ASSET, EXPENSE, LIABILITY, REVENUE
 from backend/books_text import AccountRow, Books
 from shared/layout import Arrow_T, Slot_T, arrows_of, books_text, layout_of_slots, slots_of
