@@ -340,7 +340,7 @@ COMPILE_ONLY := \
     MOON/moon_sim.ady \
     MAP_UTILS/route_map.ady \
     ../TESTS/test_input.ady \
-    dp/jacks.ady \
+    jacks_car_rental/jacks.ady \
     BENCH_SEARCH/bench_search.ady \
     AWK/awk_logscan.ady \
     sh_janitor.ady \

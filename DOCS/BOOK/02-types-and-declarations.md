@@ -296,7 +296,7 @@ def make_boxes() -> [Prisoner_T]Box_T:
 
 Float subranges get Ada-style semantics: the constraint is checked after
 **every assignment** to a variable of the type. From
-`EXAMPLES/dp/jacks.ady` (Jack's Car Rental, policy iteration):
+`EXAMPLES/jacks_car_rental/jacks.ady` (Jack's Car Rental, policy iteration):
 
 ```python
 type Cars_T     is 0..20

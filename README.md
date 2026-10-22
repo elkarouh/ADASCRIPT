@@ -580,7 +580,7 @@ makes its result optional. Python gets `Callable[[int, int], int]`, Nim
 > so `{…}` would be the consistent spelling — but it is taken, and not by
 > accident: `{(int, str)}bool` is also a dict keyed by a tuple, a real type
 > with real uses (`var poisson_cache: {(int, int)}float = {:}` in
-> `EXAMPLES/dp/jacks.ady` is a memo table). The transpiler cannot pick one
+> `EXAMPLES/jacks_car_rental/jacks.ady` is a memo table). The transpiler cannot pick one
 > from context: a parameter, a field or a return type carries no value to
 > look at, and the two admit different operations — a table can be
 > iterated, counted, tested with `in` and written to; a function can only be

@@ -421,7 +421,7 @@ survivor — it is the whole of what is wanted.
 
 ---
 
-## 13.8 `dp/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady` — numeric kernels
+## 13.8 `jacks_car_rental/jacks.ady`, `td_learning/qlearning.ady`, `td_learning/sarsa.ady` — numeric kernels
 
 Sutton & Barto's Jack's Car Rental (policy iteration) and Cliff Walking
 (Q-learning vs SARSA). These show the numeric-modelling style:
