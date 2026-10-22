@@ -43,7 +43,7 @@ BINDIR ?= $(PREFIX)/bin
 # Libraries — no main block; compile only, never run
 # -----------------------------------------------------------------------
 LIBS := \
-    timetable_engine.ady
+    TIMETABLE/timetable_engine.ady
 
 # -----------------------------------------------------------------------
 # Self-contained — no stdin, no mandatory args
@@ -277,8 +277,8 @@ EXPECT_EXAMPLES := \
 # Timetable tests — require db_connector (nimble) + a populated SQLite DB
 # -----------------------------------------------------------------------
 TIMETABLE_EXAMPLES := \
-    timetable_backtrack.ady \
-    timetable_sa.ady
+    TIMETABLE/timetable_backtrack.ady \
+    TIMETABLE/timetable_sa.ady
 
 # -----------------------------------------------------------------------
 # CFMU — the build-status monitor, fed its own sample of tacot_corico output
@@ -408,7 +408,7 @@ JS_COMPARED := ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_cas
 nim_has = $(shell PATH="$(PATH)"; d=$$(mktemp -d) && echo 'import $(1)' > $$d/probe.nim \
     && nim check --hints:off $$d/probe.nim >/dev/null 2>&1 && echo yes; rm -rf $$d)
 NEEDS_NIMPY := pyimport_similar.ady ../TESTS/test_pyobject_calls.ady TSP/tsp.ady KALMAN_WIENER/kalman_wiener.ady MAP_UTILS/route_map.ady MOON/moon_sim.ady
-NEEDS_DB_CONNECTOR := timetable_engine.ady timetable_backtrack.ady timetable_sa.ady
+NEEDS_DB_CONNECTOR := TIMETABLE/timetable_engine.ady TIMETABLE/timetable_backtrack.ady TIMETABLE/timetable_sa.ady
 SKIPPED :=
 ifeq ($(call nim_has,nimpy),)
 SKIPPED += $(NEEDS_NIMPY)
