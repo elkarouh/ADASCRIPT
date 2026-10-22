@@ -10,7 +10,6 @@ No dependency on shortest_path.
 
 from stdlib import FifoQueue, LifoQueue, PriorityQueue
 
-nimport stdlib
 
 
 # ============================================================
