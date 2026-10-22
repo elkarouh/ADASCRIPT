@@ -1,38 +1,39 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_node_editor.ady)"""
-from backend/node_editor_model import Diagram, Place_T, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot, sample
+from drawing import Spot_T
+from backend/node_editor_model import Diagram, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot, sample
 from backend/node_editor_events_gui import Session
 
 # ---- the model ----
 var d: Diagram = sample()
 assert len(d.nodes) == 4 and len(d.links) == 2
 assert label_of(Pin_T(0, Port_T(INPUT, 0))) == "Input 1" and label_of(Pin_T(3, Port_T(OUTPUT, 2))) == "Output 12"
-let spot: Place_T = port_spot(Place_T(50.0, 50.0), Port_T(OUTPUT, 0))
+let spot: Spot_T = port_spot(Spot_T(50.0, 50.0), Port_T(OUTPUT, 0))
 assert spot.x == 239.0 and spot.y == 110.0
 
-assert d.add_node("Mixer", Place_T(300.0, 300.0)) is None
+assert d.add_node("Mixer", Spot_T(300.0, 300.0)) is None
 assert d.nodes[4].id == 4 and d.nodes[4].title == "Mixer"
-assert d.add_node("   ", Place_T(0.0, 0.0)) is Refusal_T                    # a title is needed
-assert d.add_node("x" * 25, Place_T(0.0, 0.0)) is Refusal_T
+assert d.add_node("   ", Spot_T(0.0, 0.0)) is Refusal_T                    # a title is needed
+assert d.add_node("x" * 25, Spot_T(0.0, 0.0)) is Refusal_T
 assert d.add_link(Pin_T(4, Port_T(OUTPUT, 1)), Pin_T(1, Port_T(INPUT, 0))) is None
 assert d.add_link(Pin_T(4, Port_T(OUTPUT, 1)), Pin_T(1, Port_T(INPUT, 0))) is Refusal_T    # once
 assert d.add_link(Pin_T(1, Port_T(INPUT, 0)), Pin_T(4, Port_T(OUTPUT, 1))) is Refusal_T    # an output to an input
 assert d.add_link(Pin_T(1, Port_T(OUTPUT, 0)), Pin_T(1, Port_T(INPUT, 0))) is Refusal_T    # of two nodes
 assert d.add_link(Pin_T(1, Port_T(OUTPUT, 0)), Pin_T(9, Port_T(INPUT, 0))) is Refusal_T    # that are there
 assert d.add_link(Pin_T(1, Port_T(OUTPUT, 3)), Pin_T(2, Port_T(INPUT, 0))) is Refusal_T    # with ports that are
-assert d.move(4, Place_T(10.0, 20.0)) is None and d.move(9, Place_T(0.0, 0.0)) is Refusal_T
+assert d.move(4, Spot_T(10.0, 20.0)) is None and d.move(9, Spot_T(0.0, 0.0)) is Refusal_T
 assert d.corner_of(4).x == 10.0
 assert d.remove_link(Pin_T(4, Port_T(OUTPUT, 1)), Pin_T(1, Port_T(INPUT, 0))) is None
 assert d.remove_link(Pin_T(4, Port_T(OUTPUT, 1)), Pin_T(1, Port_T(INPUT, 0))) is Refusal_T
 assert d.remove_node(2) is None and len(d.links) == 1                       # its connector went with it
 assert d.remove_node(2) is Refusal_T
-assert d.add_node("Again", Place_T(0.0, 0.0)) is None and d.nodes[len(d.nodes) - 1].id == 5   # ids are not reused
+assert d.add_node("Again", Spot_T(0.0, 0.0)) is None and d.nodes[len(d.nodes) - 1].id == 5   # ids are not reused
 assert Diagram(d.text()).text() == d.text()                                 # kept and read back, the same
 assert "node 4 10 20 Mixer\n" in d.text() and "link 0 2 3 2\n" in d.text()
-let hit: ?Pin_T = d.port_at(Place_T(239.0 + 3.0, 110.0), OUTPUT, 1)
+let hit: ?Pin_T = d.port_at(Spot_T(239.0 + 3.0, 110.0), OUTPUT, 1)
 assert hit is not None and hit.node == 0 and hit.port.row == 0
-assert d.port_at(Place_T(239.0, 110.0), OUTPUT, 0) is None                  # not on the node it leaves
-assert d.port_at(Place_T(239.0, 122.5), OUTPUT, 1) is None                  # nor between ports
+assert d.port_at(Spot_T(239.0, 110.0), OUTPUT, 0) is None                  # not on the node it leaves
+assert d.port_at(Spot_T(239.0, 122.5), OUTPUT, 1) is None                  # nor between ports
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
 var session: Session = Session("")

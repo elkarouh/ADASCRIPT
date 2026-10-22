@@ -39,7 +39,8 @@ questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only 
 gesture means in this app.
 """
 from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
-from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
+from drawing import Unit_in_pixel_T, Spot_T
+from svg_drag import Hooks_T, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, Place_T
 from backend/dijkstra_layout import WIDTH, inside, place_of
 
@@ -59,7 +60,7 @@ def place_of_spot(s: Spot_T) -> Place_T:
     return Place_T(float(s.x), float(s.y))
 
 def spot_of_place(p: Place_T) -> Spot_T:
-    return Spot_T(x=Unit_T(p.x), y=Unit_T(p.y))
+    return Spot_T(x=Unit_in_pixel_T(p.x), y=Unit_in_pixel_T(p.y))
 
 # Where the node NAME of NETWORK is drawn, as a spot: where the reader put it, else the layout's place.
 def spot_of_network(network: Network, name: str) -> Spot_T:
@@ -492,4 +493,4 @@ listen("dblclick", double_click)
 listen("contextmenu", context)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg.graph", Unit_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+draggable("g.node", "svg.graph", Unit_in_pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))

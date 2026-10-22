@@ -29,7 +29,7 @@ type Edge_T is record:
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-# Where a node is drawn: its centre in the drawing. Each of x and y is a Unit_T in the browser (the
+# Where a node is drawn: its centre in the drawing. Each of x and y is a Unit_in_pixel_T in the browser (the
 # drawing's units, as svg_drag reads them); it is a float here, because the server cannot import svg_drag.
 type Place_T is record:
     x: float

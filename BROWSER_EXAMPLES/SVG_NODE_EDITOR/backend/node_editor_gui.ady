@@ -9,10 +9,11 @@ how a connector looks is node_editor_js_events.ady. Every request the script sen
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
+from drawing import Unit_in_pixel_T
 from backend/node_editor_model import NODE_W, NODE_H, PORTS, PORT_R, INPUT_DX, OUTPUT_DX, FIRST_PORT_DY, PORT_PITCH, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of
 
-const WIDTH: float = 1100.0             # the drawing's size, in its own units
-const HEIGHT: float = 520.0
+const WIDTH: Unit_in_pixel_T = 1100.0             # the drawing's size, in its own units
+const HEIGHT: Unit_in_pixel_T = 520.0
 
 const STYLE: str = """
 body { margin: 0; background: #1a1a1a; color: #ddd; font-family: Arial, sans-serif; }
@@ -48,12 +49,12 @@ pre#diagram { display: none; }
 
 # One port of the node NODE: its dot, over which the reader presses to start a connector, and its label.
 def to_html(p: Port_T, node: int) -> Html:
-    let cx: str = str(INPUT_DX if p.side == INPUT else OUTPUT_DX)
-    let cy: str = str(FIRST_PORT_DY + PORT_PITCH * float(p.row))
-    let lx: str = str(INPUT_DX + 13.0 if p.side == INPUT else OUTPUT_DX - 13.0)
-    let ly: str = str(FIRST_PORT_DY + PORT_PITCH * float(p.row) + 4.0)
-    let r: str = str(PORT_R)
-    let r_inner: str = str(PORT_R - 2.5)
+    let cx: str = str(float(INPUT_DX if p.side == INPUT else OUTPUT_DX))
+    let cy: str = str(float(FIRST_PORT_DY + PORT_PITCH * float(p.row)))
+    let lx: str = str(float(INPUT_DX + 13.0 if p.side == INPUT else OUTPUT_DX - 13.0))
+    let ly: str = str(float(FIRST_PORT_DY + PORT_PITCH * float(p.row) + 4.0))
+    let r: str = str(float(PORT_R))
+    let r_inner: str = str(float(PORT_R - 2.5))
     let field: str = ("input-field" if p.side == INPUT else "output-field")
     let side: str = ("input" if p.side == INPUT else "output")
     html:
@@ -68,8 +69,8 @@ def to_html(p: Port_T, node: int) -> Html:
 def to_html(n: Node_T) -> Html:
     let x: str = f"{n.at.x:.0f}"
     let y: str = f"{n.at.y:.0f}"
-    let w: str = str(NODE_W)
-    let h: str = str(NODE_H)
+    let w: str = str(float(NODE_W))
+    let h: str = str(float(NODE_H))
     let place: str = f"translate({x},{y})"
     html:
         g class="node" data_node=str(n.id) data_x=x data_y=y:

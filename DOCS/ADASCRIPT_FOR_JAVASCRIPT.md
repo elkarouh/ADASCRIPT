@@ -330,16 +330,16 @@ JavaScript numbers are all one type. A pixel and a unit of a drawing are both
 numbers, and nothing stops a pixel being added to a unit. Adascript makes them
 two types:
 
-<!-- from: TO_NIM/STDLIB/svg_drag.ady -->
+<!-- from: TO_NIM/STDLIB/drawing.ady -->
 ```python
 type Pixel_T is distinct float
-type Unit_T is distinct float
-type Scale_T is Unit_T / Pixel_T
+type Unit_in_pixel_T is distinct float
+type Scale_T is Unit_in_pixel_T / Pixel_T
 ```
 
 The module's own comment says that adding a pixel to a drawing unit does not
 compile. The only way across is a `Scale_T`, which says how many units a pixel
-is, and `spot_at` in the same file uses it to turn a mouse position into a
+is, and `spot_at` in `svg_drag.ady` uses it to turn a mouse position into a
 position in the drawing.
 
 A literal converts directly to a distinct type, so you write `4.0` where a

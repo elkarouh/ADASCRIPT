@@ -5,7 +5,8 @@ server.ady hands every request to a Session, as a method, a path and its fields,
 the page that comes out. The tests make a Session of their own and call answer() the same way, with
 no server running. A Session keeps the diagram in a text file (its store), written after every change.
 """
-from backend/node_editor_model import Diagram, Place_T, Pin_T, Refusal_T, Side_T, sample
+from drawing import Unit_in_pixel_T, Spot_T
+from backend/node_editor_model import Diagram, Pin_T, Refusal_T, Side_T, sample
 from backend/node_editor_gui import all_text
 from backend/node_editor_request import field_of, number_of, port_of
 
@@ -47,7 +48,7 @@ class Session:
     def answer(self, method: str, path: str, fields: str) -> str:
         var problem: None | !Refusal_T = None
         let id: int = int(number_of(field_of(fields, "id")))
-        let at: Place_T = Place_T(number_of(field_of(fields, "x")), number_of(field_of(fields, "y")))
+        let at: Spot_T = Spot_T(Unit_in_pixel_T(number_of(field_of(fields, "x"))), Unit_in_pixel_T(number_of(field_of(fields, "y"))))
         let out_port: Pin_T = port_of(fields, "out", OUTPUT)
         let in_port: Pin_T = port_of(fields, "in", INPUT)
         case method + " " + path:

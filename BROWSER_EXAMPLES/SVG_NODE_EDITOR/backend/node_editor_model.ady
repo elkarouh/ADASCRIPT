@@ -16,32 +16,29 @@ number a port is labelled with, stay what they were.
 
 Compiled both ways, as DIJKSTRA_HTMX's model is: the server draws the page and keeps the file with
 it, and the browser's View is built from the same text with the same Diagram(text), so where a port
-is is worked out from the model, never read off the drawing. No HTML, no HTTP. Every unit is a pixel
-of the drawing.
+is is worked out from the model, never read off the drawing. No HTML, no HTTP. Every length is a Unit_in_pixel_T, a
+unit of the drawing (its viewBox).
 """
-const NODE_W: float = 204.0
-const NODE_H: float = 128.0
+from drawing import Unit_in_pixel_T, Spot_T, Area_T
+
+const NODE_W: Unit_in_pixel_T = 204.0
+const NODE_H: Unit_in_pixel_T = 128.0
 const PORTS: int = 3                    # inputs, and outputs, on each node
-const PORT_R: float = 7.5               # a port's radius
-const GRAB: float = 12.0                # how near a released connector must be to a port to snap to it
+const PORT_R: Unit_in_pixel_T = 7.5               # a port's radius
+const GRAB: Unit_in_pixel_T = 12.0                # how near a released connector must be to a port to snap to it
 const MAX_TITLE: int = 24
 
 # Where a port is, from its node's top left corner (the page draws it there, see node_editor_gui.ady).
-const INPUT_DX: float = 15.0
-const OUTPUT_DX: float = 189.0
-const FIRST_PORT_DY: float = 60.0
-const PORT_PITCH: float = 25.0
+const INPUT_DX: Unit_in_pixel_T = 15.0
+const OUTPUT_DX: Unit_in_pixel_T = 189.0
+const FIRST_PORT_DY: Unit_in_pixel_T = 60.0
+const PORT_PITCH: Unit_in_pixel_T = 25.0
 
 # Why a change to the diagram is refused: the message the page shows the reader.
 type Refusal_T is record:
     message: str
 
 type Side_T is enum INPUT, OUTPUT
-
-# A place in the drawing.
-type Place_T is record:
-    x: float
-    y: float
 
 # A port of a node: which side it is on, and its row from the top.
 type Port_T is record:
@@ -52,7 +49,7 @@ type Port_T is record:
 type Node_T is record:
     id:    int
     title: str
-    at:    Place_T
+    at:    Spot_T
     ports: []Port_T
 
 # A port told apart from the others in the diagram: the id of its node, and the port.
@@ -80,18 +77,20 @@ def label_of(p: Pin_T) -> str:
     return ("Input " if p.port.side == INPUT else "Output ") + str(n)
 
 # Where the middle of port P is, for a node whose top left corner is AT.
-def port_spot(at: Place_T, p: Port_T) -> Place_T:
-    let dx: float = (INPUT_DX if p.side == INPUT else OUTPUT_DX)
-    Place_T(at.x + dx, at.y + FIRST_PORT_DY + PORT_PITCH * float(p.row))
+def port_spot(at: Spot_T, p: Port_T) -> Spot_T:
+    let dx: Unit_in_pixel_T = (INPUT_DX if p.side == INPUT else OUTPUT_DX)
+    Spot_T(at.x + dx, at.y + FIRST_PORT_DY + PORT_PITCH * float(p.row))
 
 # Whether two pins are the same port of the same node.
 def same_pin(a: Pin_T, b: Pin_T) -> bool:
     return a.node == b.node and a.port.side == b.port.side and a.port.row == b.port.row
 
 # Whether SPOT is on the port P of a node whose top left corner is AT: close enough to snap to it.
-def on_port(at: Place_T, p: Port_T, spot: Place_T) -> bool:
-    let c: Place_T = port_spot(at, p)
-    return (spot.x - c.x) ** 2 + (spot.y - c.y) ** 2 <= GRAB ** 2
+def on_port(at: Spot_T, p: Port_T, spot: Spot_T) -> bool:
+    let c: Spot_T = port_spot(at, p)
+    let dx: Unit_in_pixel_T = spot.x - c.x
+    let dy: Unit_in_pixel_T = spot.y - c.y
+    return dx * dx + dy * dy <= GRAB * GRAB
 
 class Diagram:
     var nodes: []Node_T                 # in the order they were made
@@ -121,7 +120,7 @@ class Diagram:
                             continue
                         if y is ParseFailure_T:
                             continue
-                        self.nodes.append(Node_T(id, " ".join(w[4:]), Place_T(x, y), ports_made()))
+                        self.nodes.append(Node_T(id, " ".join(w[4:]), Spot_T(Unit_in_pixel_T(x), Unit_in_pixel_T(y)), ports_made()))
                 when "link":
                     if len(w) == 5:
                         let a: int | !ParseFailure_T = parse_int(w[1])
@@ -160,15 +159,15 @@ class Diagram:
         return -1
 
     # Where the node ID has its top left corner.
-    def corner_of(self, id: int) -> Place_T:
+    def corner_of(self, id: int) -> Spot_T:
         return self.nodes[self.index_of(id)].at
 
     # Where PORT is, with the nodes where they are now.
-    def spot_of(self, p: Pin_T) -> Place_T:
+    def spot_of(self, p: Pin_T) -> Spot_T:
         return port_spot(self.corner_of(p.node), p.port)
 
     # The port of side SIDE, on a node other than SKIP, that SPOT is on; None when there is none.
-    def port_at(self, spot: Place_T, side: Side_T, skip: int) -> ?Pin_T:
+    def port_at(self, spot: Spot_T, side: Side_T, skip: int) -> ?Pin_T:
         for n in self.nodes:
             if n.id == skip:
                 continue
@@ -180,13 +179,13 @@ class Diagram:
     # ---- create, move, delete: each refuses with a Refusal_T, or is done (None) ----
 
     # A node with TITLE (1 to 24 characters) whose top left corner is AT.
-    def add_node(self, title: str, at: Place_T) -> None | !Refusal_T:
+    def add_node(self, title: str, at: Spot_T) -> None | !Refusal_T:
         let t: str = title.strip()
         if len(t) == 0 or len(t) > MAX_TITLE:
             return Refusal_T(message=f"A title is 1 to {MAX_TITLE} characters.")
         self.nodes.append(Node_T(self.next_id(), t, at, ports_made()))
 
-    def move(self, id: int, at: Place_T) -> None | !Refusal_T:
+    def move(self, id: int, at: Spot_T) -> None | !Refusal_T:
         let i: int = self.index_of(id)
         if i < 0:
             return Refusal_T(message=f"There is no node {id}.")
@@ -245,7 +244,7 @@ class Diagram:
 def sample() -> Diagram:
     var d: Diagram = Diagram([], [])
     for i in range(4):
-        let added: None | !Refusal_T = d.add_node(f"Process {i + 1}", Place_T(50.0 + 250.0 * float(i), 50.0))
+        let added: None | !Refusal_T = d.add_node(f"Process {i + 1}", Spot_T(Unit_in_pixel_T(50.0 + 250.0 * float(i)), Unit_in_pixel_T(50.0)))
     let a: None | !Refusal_T = d.add_link(Pin_T(0, Port_T(OUTPUT, 0)), Pin_T(2, Port_T(INPUT, 1)))
     let b: None | !Refusal_T = d.add_link(Pin_T(0, Port_T(OUTPUT, 2)), Pin_T(3, Port_T(INPUT, 2)))
     return d

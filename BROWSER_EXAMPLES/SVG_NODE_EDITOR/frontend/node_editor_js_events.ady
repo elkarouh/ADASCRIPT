@@ -26,19 +26,17 @@ The drag of a node is the standard library's svg_drag, the page (finding element
 page says on them, questions, keys) its browser module, and a connector's curve svg_path's.
 """
 from browser import Element_T, Event_T, Click_T, request, page, find, all, data, number, text, attr, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
-from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, no_click_cb, draggable
+from drawing import Unit_in_pixel_T, Spot_T
+from svg_drag import Hooks_T, spot_at, clamp, shift, no_click_cb, draggable
 from svg_path import SIDEWAYS, connector_d
-from backend/node_editor_model import NODE_W, NODE_H, Side_T, Place_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
+from backend/node_editor_model import NODE_W, NODE_H, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
 
-const WIDTH: float = 1100.0             # the drawing's size, as backend/node_editor_gui.ady draws it
-const HEIGHT: float = 520.0
+const WIDTH: Unit_in_pixel_T = 1100.0             # the drawing's size, as backend/node_editor_gui.ady draws it
+const HEIGHT: Unit_in_pixel_T = 520.0
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
-
-def place_of_spot(s: Spot_T) -> Place_T:
-    return Place_T(float(s.x), float(s.y))
 
 # The id of the node a <g class="node"> draws.
 def node_id_of(el: Element_T) -> int:
@@ -76,7 +74,7 @@ class View:
     var diagram: Diagram                # the model, as the server keeps it, with the nodes where they are now
     var drawing: bool                   # a connector is being dragged from a port
     var fixed: Pin_T                   # the port it leaves
-    var free: Place_T                   # and where its other end is, under the mouse
+    var free: Spot_T                   # and where its other end is, under the mouse
     var node: int                       # the node selected: its id, -1 for none
     var link: int                       # the connector selected: its index, -1 for none
     var swallow: bool                   # the click after a connector is let go: not a click on a node
@@ -85,7 +83,7 @@ class View:
         self.diagram = Diagram(kept_text())
         self.drawing = false
         self.fixed = Pin_T(0, Port_T(INPUT, 0))
-        self.free = Place_T(0.0, 0.0)
+        self.free = Spot_T(0.0, 0.0)
         self.node = -1
         self.link = -1
         self.swallow = false
@@ -93,8 +91,8 @@ class View:
 
     # The connector from A to B as markup, with its two ends marked. A wide invisible path on top is what
     # the reader clicks.
-    def link_html(self, a: Place_T, b: Place_T, index: int, lit: bool) -> str:
-        let d: str = connector_d(a.x, a.y, b.x, b.y, SIDEWAYS, 0.0, BEZIER_WEIGHT)
+    def link_html(self, a: Spot_T, b: Spot_T, index: int, lit: bool) -> str:
+        let d: str = connector_d(float(a.x), float(a.y), float(b.x), float(b.y), SIDEWAYS, 0.0, BEZIER_WEIGHT)
         let css: str = ("link selected" if lit else "link")
         return f"<g class='{css}' data-index='{index}'><path class='connector-hit' d='{d}'/><path class='connector-outline' d='{d}'/><path class='connector-path' d='{d}'/><circle class='connector-handle' cx='{a.x:.1f}' cy='{a.y:.1f}' r='4'/><circle class='connector-handle' cx='{b.x:.1f}' cy='{b.y:.1f}' r='4'/></g>"
 
@@ -116,7 +114,7 @@ class View:
     # ---- a drag from a port ----
 
     # The press on PORT: a connector starts from it, its free end at SPOT.
-    def start(self, p: Pin_T, spot: Place_T):
+    def start(self, p: Pin_T, spot: Spot_T):
         self.drawing = true
         self.fixed = p
         self.free = spot
@@ -124,13 +122,13 @@ class View:
         self.redraw()
 
     # The mouse has taken the free end to SPOT.
-    def drag_to(self, spot: Place_T):
+    def drag_to(self, spot: Spot_T):
         self.free = spot
         self.redraw()
 
     # The release at SPOT: on a port that fits, the connector is sent to the server, which keeps it; anywhere
     # else it is removed.
-    def finish(self, spot: Place_T):
+    def finish(self, spot: Spot_T):
         self.drawing = false
         self.swallow = true
         let other: Side_T = (INPUT if self.fixed.port.side == OUTPUT else OUTPUT)
@@ -181,9 +179,9 @@ var view: View = View()                 # the page is read again each time htmx 
 # While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and the
 # connectors at its ports follow.
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = Spot_T(x=clamp(wanted.x, Unit_T(0.0), Unit_T(WIDTH - NODE_W)), y=clamp(wanted.y, Unit_T(0.0), Unit_T(HEIGHT - NODE_H)))
+    let now: Spot_T = Spot_T(x=clamp(wanted.x, 0.0, WIDTH - NODE_W), y=clamp(wanted.y, 0.0, HEIGHT - NODE_H))
     shift(node, centre, now)
-    let moved: None | !Refusal_T = view.diagram.move(node_id_of(node), place_of_spot(now))
+    let moved: None | !Refusal_T = view.diagram.move(node_id_of(node), now)
     view.redraw()
     return now
 
@@ -220,7 +218,7 @@ def press(e: Event_T):
     let c: Click_T = click_of(e)
     if not left(c):
         return
-    let spot: Place_T = place_of_spot(spot_at(e))
+    let spot: Spot_T = spot_at(e)
     var port: ?Pin_T = view.diagram.port_at(spot, OUTPUT, -1)
     if port is None:
         port = view.diagram.port_at(spot, INPUT, -1)
@@ -231,11 +229,11 @@ def press(e: Event_T):
 
 def move(e: Event_T):
     if view.drawing:
-        view.drag_to(place_of_spot(spot_at(e)))
+        view.drag_to(spot_at(e))
 
 def release(e: Event_T):
     if view.drawing:
-        view.finish(place_of_spot(spot_at(e)))
+        view.finish(spot_at(e))
 
 # The click after a connector is let go belongs to the connector: it goes no further.
 def swallow_click(e: Event_T):
@@ -253,9 +251,9 @@ def double_click(e: Event_T):
     let title: str = ask("Title of the new node?", f"Process {view.diagram.next_id() + 1}")
     if title == "":
         return
-    let at: Place_T = place_of_spot(spot_at(e))
-    let x: float = max(0.0, min(WIDTH - NODE_W, at.x - NODE_W / 2.0))       # the node's middle goes where the mouse is
-    let y: float = max(0.0, min(HEIGHT - NODE_H, at.y - NODE_H / 2.0))
+    let at: Spot_T = spot_at(e)
+    let x: Unit_in_pixel_T = clamp(at.x - NODE_W / 2.0, 0.0, WIDTH - NODE_W)       # the node's middle goes where the mouse is
+    let y: Unit_in_pixel_T = clamp(at.y - NODE_H / 2.0, 0.0, HEIGHT - NODE_H)
     send("POST", "/nodes", {"title": title, "x": f"{x:.0f}", "y": f"{y:.0f}"})
 
 # Delete and Backspace remove what is selected; Escape clears the selection.
@@ -278,4 +276,4 @@ listen_first("click", swallow_click)
 listen("dblclick", double_click)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg#editor", Unit_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+draggable("g.node", "svg#editor", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
