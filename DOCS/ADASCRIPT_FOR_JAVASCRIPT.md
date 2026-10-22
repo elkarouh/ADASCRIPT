@@ -177,7 +177,7 @@ A JavaScript program that tracks "which kind of thing this is" stores a
 string, `"idle"`, `"pressed"`, and compares strings in several places. A
 typo in one comparison is silent. In Adascript the names are an enum:
 
-<!-- from: EXAMPLES/phonecode.ady -->
+<!-- from: EXAMPLES/PHONECODE/phonecode.ady -->
 ```python
 type Digit_T is enum D0, D1, D2, D3, D4, D5, D6, D7, D8, D9
 ```
