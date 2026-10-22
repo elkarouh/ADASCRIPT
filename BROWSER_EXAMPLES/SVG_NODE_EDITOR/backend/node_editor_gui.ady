@@ -63,6 +63,14 @@ def to_html(p: Port_T) -> Html:
             circle class="port-scrim" cx=cx cy=cy r=r data_node=str(p.node) data_side=side data_row=str(p.row)
             stext class="port-label" x=lx y=ly: label_of(p)
 
+# The ports of a node, an input and an output on each row.
+def ports_of(n: Node_T) -> []Port_T:
+    var ports: []Port_T = []
+    for row in range(PORTS):
+        ports.append(Port_T(n.id, INPUT, row))
+        ports.append(Port_T(n.id, OUTPUT, row))
+    return ports
+
 # A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node is
 # (data_x, data_y: its top left corner), which the script's drag starts from.
 def to_html(n: Node_T) -> Html:
@@ -82,9 +90,8 @@ def to_html(n: Node_T) -> Html:
                 g class="node-content":
                     rect x="2" y="44" width="200" height="82" rx="4" ry="4"
                     rect x="2" y="44" width="200" height="77"
-                for row in range(PORTS):
-                    + to_html(Port_T(n.id, INPUT, row))
-                    + to_html(Port_T(n.id, OUTPUT, row))
+                for p in ports_of(n):
+                    + p.to_html()
 
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
@@ -97,7 +104,7 @@ def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
             svg id="editor" viewBox=box:
                 g id="nodes":
                     for n in d.nodes:
-                        + to_html(n)
+                        + n.to_html()
                 g id="connections-layer"
             # the diagram as the server keeps it: for the browser's View to draw the connectors from
             pre id="diagram": d.text()
