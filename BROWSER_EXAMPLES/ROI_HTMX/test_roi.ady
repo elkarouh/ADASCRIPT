@@ -1,6 +1,7 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: ady2nim c -r test_roi.ady"""
 from backend/roi_model import GOLD, BITCOIN, SP500, Outcome, Portfolio, evaluate, new_portfolio, set_share, set_year
+from drawing import Spot_T
 from backend/roi_layout import Layout, move_block, new_layout
 from backend/roi_events import answer
 from backend/roi_gui import shell_text
@@ -28,9 +29,10 @@ assert set_year(p, 1999) != "" and p.investment.year == 2020                # no
 
 # ---- the layout: where the boxes are, which the model knows nothing of ----
 var l: Layout = new_layout()
-assert move_block(l, "gold", 300.0, 200.0) == "" and l.cx[1] == 300.0 and l.cy[1] == 200.0
-assert move_block(l, "gold", -50.0, 9999.0) == "" and l.cx[1] == 70.0 and l.cy[1] == 1940.0     # kept inside the drawing
-assert move_block(l, "nothing", 1.0, 1.0) != ""
+assert move_block(l, "gold", Spot_T(300.0, 200.0)) == "" and l.centres[1].x == 300.0 and l.centres[1].y == 200.0
+assert move_block(l, "gold", Spot_T(-50.0, 9999.0)) == ""
+assert abs(float(l.centres[1].x) - 75.59) < 0.01 and abs(float(l.centres[1].y) - 1984.25) < 0.01     # kept inside the drawing, whole
+assert move_block(l, "nothing", Spot_T(1.0, 1.0)) != ""
 
 # ---- the page, through the requests the server answers ----
 let first: str = answer("GET", "/all", "")

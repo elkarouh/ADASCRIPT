@@ -5,6 +5,7 @@ server.ady hands every request here as a method, a path and its fields, and send
 drawing that comes out. The tests call answer() the same way, with no server running. The
 portfolio and the layout live here, in memory: they start again when the server does.
 """
+from drawing import Unit_in_pixel_T, Spot_T
 from backend/roi_model import Portfolio, Product_T, new_portfolio, set_share, set_year
 from backend/roi_layout import Layout, move_block, new_layout
 from backend/roi_gui import all_text, field_of, name_of
@@ -38,7 +39,7 @@ def answer(method: str, path: str, fields: str) -> str:
                     if name_of(kind) == what:
                         set_share(portfolio, kind, min(value, 100.0))
     elif method == "PUT" and path == "/move":                    # name, x, y: where a block was let go
-        move_block(layout, field_of(fields, "name"), number_of(field_of(fields, "x"), 0.0), number_of(field_of(fields, "y"), 0.0))
+        move_block(layout, field_of(fields, "name"), Spot_T(Unit_in_pixel_T(number_of(field_of(fields, "x"), 0.0)), Unit_in_pixel_T(number_of(field_of(fields, "y"), 0.0))))
     elif method == "POST" and path == "/reset":
         portfolio = new_portfolio()
         layout = new_layout()

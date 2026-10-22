@@ -25,8 +25,10 @@ from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from drawing import Unit_in_pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_of, clamp, shift, trace, no_click_cb, draggable
 
-const WIDTH: Unit_in_pixel_T = 3000.0    # the drawing's size (the svg's viewBox, and its size on the page)
-const HEIGHT: Unit_in_pixel_T = 2000.0
+from backend/roi_layout import WIDE, HIGH
+
+const WIDTH: Unit_in_pixel_T = Unit_in_pixel_T(WIDE)    # the drawing's size (the svg's viewBox, and its size on the page)
+const HEIGHT: Unit_in_pixel_T = Unit_in_pixel_T(HIGH)
 
 # What the server wrote on an element, read as if it were a field: `rect.data_name`.
 def data_name(n: Element_T) -> str:
@@ -48,19 +50,19 @@ def corner_of(block: Element_T, at: Spot_T) -> Spot_T:
 
 # Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
 # being dragged (NODE), else where the server drew it; OFFSET_X and OFFSET_Y from its top left.
-def end_of(node: Element_T, at: Spot_T, name: str, dx: float, dy: float) -> Spot_T:
+def end_of(node: Element_T, at: Spot_T, name: str, dx: Unit_in_pixel_T, dy: Unit_in_pixel_T) -> Spot_T:
     let block: Element_T = block_named(name)
     let centre: Spot_T = (at if name == node.data_name else spot_of(block))
     let corner: Spot_T = corner_of(block, centre)
-    return Spot_T(x=corner.x + Unit_in_pixel_T(dx), y=corner.y + Unit_in_pixel_T(dy))
+    return Spot_T(x=corner.x + dx, y=corner.y + dy)
 
 # Redraw, in the browser, the arrows that end at NODE's block, as if it stood at AT.
 def redraw_arrows_of(node: Element_T, at: Spot_T):
     let name: str = node.data_name
     for arrow in page.all("g.arrow"):
         if name in [arrow.data_a, arrow.data_b]:
-            let a: Spot_T = end_of(node, at, arrow.data_a, arrow.number("data_ax"), arrow.number("data_ay"))
-            let b: Spot_T = end_of(node, at, arrow.data_b, arrow.number("data_bx"), arrow.number("data_by"))
+            let a: Spot_T = end_of(node, at, arrow.data_a, Unit_in_pixel_T(arrow.number("data_ax")), Unit_in_pixel_T(arrow.number("data_ay")))
+            let b: Spot_T = end_of(node, at, arrow.data_b, Unit_in_pixel_T(arrow.number("data_bx")), Unit_in_pixel_T(arrow.number("data_by")))
             let leave: Leave_T = (VERTICAL if arrow.data("leave") == "vertical" else SIDEWAYS)
             for path in arrow.all("path"):
                 path.trace(connector_d(float(a.x), float(a.y), float(b.x), float(b.y), leave, arrow.number("data_stop")))

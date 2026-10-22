@@ -12,6 +12,7 @@ says what each looks like inside its box; where the boxes are is the Layout (roi
 """
 from uri nimport decodeUrl
 from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPercentage, Outcome, Portfolio, Product_T, ProductOutcome, evaluate
+from drawing import Unit_in_pixel_T
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
 
@@ -50,13 +51,18 @@ def color_of(kind: Product_T) -> str:
             return "#FFCCD6"
 
 # Where the results of each product are inside the box of the results, from its top left.
-const PERF_DX: float = 30.0
-const PERF_DY: []float = [50.0, 170.0, 290.0]
+const PERF_DX: Unit_in_pixel_T = 30.0
+const PERF_DY: []Unit_in_pixel_T = [50.0, 170.0, 290.0]
+const PERF_W: Unit_in_pixel_T = 200.0           # and how big each is
+const PERF_H: Unit_in_pixel_T = 100.0
 
 # Where the arrows to the products leave the investment box, from its top left: out of the top
-# for gold, the right side for bitcoin, the bottom for the S&P 500.
-const SEND_X: []float = [70.0, 140.0, 70.0]
-const SEND_Y: []float = [0.0, 115.0, 230.0]
+# for gold, the right side for bitcoin, the bottom for the S&P 500; the middle of the side it leaves.
+def send_x(i: int) -> Unit_in_pixel_T:
+    return (width_of("investment") if i == 1 else width_of("investment") / 2.0)
+
+def send_y(i: int) -> Unit_in_pixel_T:
+    return (height_of("investment") if i == 2 else (height_of("investment") / 2.0 if i == 1 else Unit_in_pixel_T(0.0)))
 
 # A number as a person writes it: 25, not 25.0; 12.5 stays.
 def plain(v: float) -> str:
@@ -69,7 +75,7 @@ def money(v: float) -> str:
 
 # How much room an arrow's head takes: the arrow stops this short of its box, where the head
 # (head_html, below) begins, so that the tip of the head is at the box.
-const HEAD: float = 13.0
+const HEAD: Unit_in_pixel_T = 13.0
 
 # The name of the head (a <marker>) for arrows of COLOR, and how an arrow refers to it.
 def head_id(color: str) -> str:
@@ -82,12 +88,12 @@ def head_url(color: str) -> str:
 # and the head. It starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's.
 # The page writes those on it (data_*), and how it leaves and how short it stops, for the script
 # that redraws it while a block is dragged.
-def arrow_html(layout: Layout, from_block: str, fx: float, fy: float, to_block: str, tx: float, ty: float, color: str, leave: Leave_T) -> Html:
-    let d: str = connector_d(left_of(layout, from_block) + fx, top_of(layout, from_block) + fy,
-                             left_of(layout, to_block) + tx, top_of(layout, to_block) + ty, leave, HEAD)
+def arrow_html(layout: Layout, from_block: str, fx: Unit_in_pixel_T, fy: Unit_in_pixel_T, to_block: str, tx: Unit_in_pixel_T, ty: Unit_in_pixel_T, color: str, leave: Leave_T) -> Html:
+    let d: str = connector_d(float(left_of(layout, from_block) + fx), float(top_of(layout, from_block) + fy),
+                             float(left_of(layout, to_block) + tx), float(top_of(layout, to_block) + ty), leave, float(HEAD))
     let leaves: str = ("vertical" if leave == VERTICAL else "sideways")
     html:
-        g class="arrow" data_a=from_block data_ax=str(fx) data_ay=str(fy) data_b=to_block data_bx=str(tx) data_by=str(ty) data_leave=leaves data_stop=str(HEAD):
+        g class="arrow" data_a=from_block data_ax=f"{fx:.1f}" data_ay=f"{fy:.1f}" data_b=to_block data_bx=f"{tx:.1f}" data_by=f"{ty:.1f}" data_leave=leaves data_stop=f"{HEAD:.1f}":
             path class="outline" d=d
             path class="line" d=d stroke=color marker_end=head_url(color)
 
@@ -95,12 +101,12 @@ def arrow_html(layout: Layout, from_block: str, fx: float, fy: float, to_block: 
 # to the block called BLOCK, and moves with it. A box that is a block of its own, FOR_DRAG,
 # is the grip: the script lets the mouse take hold of its rectangle and nothing else, so the
 # fields in it can still be clicked.
-def box_html(block: str, x: float, y: float, w: float, h: float, color: str, inside: Html, grip: bool) -> Html:
+def box_html(block: str, x: Unit_in_pixel_T, y: Unit_in_pixel_T, w: Unit_in_pixel_T, h: Unit_in_pixel_T, color: str, inside: Html, grip: bool) -> Html:
     let css: str = ("node" if grip else "body")
     html:
         g class="box":
-            rect class=css x=f"{x}" y=f"{y}" rx="10" ry="10" width=f"{w}" height=f"{h}" fill=color data_block=block data_name=block data_x=f"{x+w/2.0}" data_y=f"{y+h/2.0}"
-            foreignObject x=f"{x}" y=f"{y}" width=f"{w}" height=f"{h}" data_block=block:
+            rect class=css x=f"{x:.1f}" y=f"{y:.1f}" rx="10" ry="10" width=f"{w:.1f}" height=f"{h:.1f}" fill=color data_block=block data_name=block data_x=f"{x+w/2.0:.1f}" data_y=f"{y+h/2.0:.1f}"
+            foreignObject x=f"{x:.1f}" y=f"{y:.1f}" width=f"{w:.1f}" height=f"{h:.1f}" data_block=block:
                 div class="jj-form":
                     + inside
 
@@ -183,10 +189,10 @@ def head_html(color: str) -> Html:
 
 def all_html(portfolio: Portfolio, layout: Layout) -> Html:
     let outcome: Outcome = evaluate(portfolio)
-    let box: str = f"0 0 {WIDE:.0f} {HIGH:.0f}"
+    let box: str = f"0 0 {Unit_in_pixel_T(WIDE):.0f} {Unit_in_pixel_T(HIGH):.0f}"
     html:
         div id="all":
-            svg viewBox=box width=str(int(WIDE)) height=str(int(HIGH)) class="drawing":
+            svg viewBox=box width=f"{Unit_in_pixel_T(WIDE):.0f}" height=f"{Unit_in_pixel_T(HIGH):.0f}" class="drawing":
                 defs:
                     + head_html(INVEST_COLOR)
                     for share in portfolio.shares:
@@ -196,10 +202,10 @@ def all_html(portfolio: Portfolio, layout: Layout) -> Html:
                     + box_html(name_of(share.kind), left_of(layout, name_of(share.kind)), top_of(layout, name_of(share.kind)), width_of(name_of(share.kind)), height_of(name_of(share.kind)), color_of(share.kind), to_html(share), True)
                 + box_html("overall", left_of(layout, "overall"), top_of(layout, "overall"), width_of("overall"), height_of("overall"), OVERALL_COLOR, to_html(outcome), True)
                 for i in 0 ..< len(outcome.list_of_outcomes):
-                    + box_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], 200.0, 100.0, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
+                    + box_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], PERF_W, PERF_H, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
                 for i in 0 ..< len(outcome.list_of_outcomes):
-                    + arrow_html(layout, "investment", SEND_X[i], SEND_Y[i], name_of(outcome.list_of_outcomes[i].kind), 0.0, 60.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
-                    + arrow_html(layout, name_of(outcome.list_of_outcomes[i].kind), 140.0, 60.0, "overall", PERF_DX, PERF_DY[i] + 50.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
+                    + arrow_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Unit_in_pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
+                    + arrow_html(layout, name_of(outcome.list_of_outcomes[i].kind), width_of(name_of(outcome.list_of_outcomes[i].kind)), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
 
 const STYLE: str = """
 * { font-family: sans-serif; }
