@@ -28,9 +28,21 @@ The page itself (finding elements, reading what the server wrote, forms, clicks)
 browser module's, in plain words; this one adds the drawing: its units, a drag, and moving
 what is drawn.
 """
-from drawing import Pixel_T, Unit_in_pixel_T, Scale_T, Screen_T, Spot_T
+from drawing import Unit_in_pixel_T, Spot_T
 from browser import Element_T, page, set_attr, number, Click_T, click_of, on
 from dom nimport Event, MouseEvent, BoundingRect, document, getBoundingClientRect, addEventListener, preventDefault, stopPropagation
+
+# ---- The mouse's unit ----
+#
+# The mouse reports pixels, and the drawing is scaled to fit the page, so a pixel is not a unit of
+# the drawing. They are two types, and the only way across is the scale.
+
+type Pixel_T is distinct float          # on the screen, as the mouse reports it
+type Scale_T is Unit_in_pixel_T / Pixel_T        # drawing units a pixel: pixels * scale = units
+
+type Screen_T is tuple:                   # a place on the screen
+    x: Pixel_T
+    y: Pixel_T
 
 const MOVED: Pixel_T = 4.0              # how far a press goes before it is a drag
 

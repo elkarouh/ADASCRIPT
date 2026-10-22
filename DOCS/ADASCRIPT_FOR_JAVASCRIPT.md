@@ -328,12 +328,18 @@ written out in the function itself, next to the state it depends on.
 
 JavaScript numbers are all one type. A pixel and a unit of a drawing are both
 numbers, and nothing stops a pixel being added to a unit. Adascript makes them
-two types:
+two types. The drawing's is in `drawing.ady`, which the server can import too:
 
 <!-- from: TO_NIM/STDLIB/drawing.ady -->
 ```python
-type Pixel_T is distinct float
 type Unit_in_pixel_T is distinct float
+```
+
+and the mouse's is in `svg_drag.ady`, with the scale between them:
+
+<!-- from: TO_NIM/STDLIB/svg_drag.ady -->
+```python
+type Pixel_T is distinct float
 type Scale_T is Unit_in_pixel_T / Pixel_T
 ```
 

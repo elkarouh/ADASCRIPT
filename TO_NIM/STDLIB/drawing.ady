@@ -6,21 +6,13 @@
 # A drawing (an SVG) has its own units, its viewBox, whatever size it has on the screen. A shape's
 # place is kept in them. This module has no page in it (no dom), so a model that is compiled both
 # for the server and for the browser can use the same types as the script that drags the shapes
-# (svg_drag.ady, which takes them from here).
+# (svg_drag.ady, which takes them from here and adds the mouse's own unit).
 
-# Two units: the mouse's and the drawing's.
-#
-# The mouse reports pixels; the server keeps a shape's place in the drawing's own units (its
-# viewBox), whatever size the drawing has on the screen. `distinct` makes them two types, so
-# adding a pixel to a drawing unit does not compile. The only way across is the scale.
+# The unit of a drawing: the server keeps a shape's place in the drawing's own units (its viewBox),
+# whatever size the drawing has on the screen. `distinct` makes it a type of its own, so a length
+# in another unit (the mouse's pixels, see svg_drag.ady) cannot be added to it by mistake.
 
-type Pixel_T is distinct float          # on the screen, as the mouse reports it
 type Unit_in_pixel_T is distinct float           # in the drawing, as the server keeps a shape's place
-type Scale_T is Unit_in_pixel_T / Pixel_T        # drawing units a pixel: pixels * scale = units
-
-type Screen_T is tuple:                   # a place on the screen
-    x: Pixel_T
-    y: Pixel_T
 
 type Spot_T is tuple:                     # a place in the drawing
     x: Unit_in_pixel_T
