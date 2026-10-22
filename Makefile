@@ -787,9 +787,9 @@ test-part-06:
 	@rm -f $(TMPDIR)/ady2nim_selftest.out
 
 test-part-07:
-	@# EXAMPLES/REFUSED: programs a backend must refuse, each naming what the refusal says.
-	@echo "=== EXAMPLES/REFUSED ==="
-	@EXAMPLES/REFUSED/check.sh $(PYTHON)
+	@# TESTS/REFUSED: programs a backend must refuse, each naming what the refusal says.
+	@echo "=== TESTS/REFUSED ==="
+	@TESTS/REFUSED/check.sh $(PYTHON)
 
 test-part-08:
 	@# db: Nim's db_sqlite under ady2nim, Python's sqlite3 under ady2py (TO_PYTHON/STDLIB/db.ady).
