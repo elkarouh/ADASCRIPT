@@ -143,13 +143,12 @@ import lib/fleet          # <dir>/lib/fleet.ady, or <parent>/lib/fleet.ady
 Two consequences worth internalising:
 
 - **A sibling is imported by its bare name.** Inside `lib/fleet.ady`,
-  `import geometry` finds `lib/geometry.ady` by rule 1.
+  `import geometry` finds `lib/geometry.ady` by rule 1. So does
+  `EXAMPLES/TIMETABLE/timetable_server.ady`: its `import timetable_engine`
+  and `import timetable_sa` find the solvers next to it.
 - **The parent rule is what makes `bin/` + `lib/` layouts work.** From
   `bin/tool.ady`, `import lib/util` misses `bin/lib/util.ady` and then hits
-  `<project>/lib/util.ady` by rule 2. `EXAMPLES/TIMETABLE/timetable_server.ady`
-  lives on this rule: its `import timetable_engine` and `import timetable_sa`
-  resolve to `EXAMPLES/timetable_engine.ady` and `EXAMPLES/timetable_sa.ady`,
-  one directory up.
+  `<project>/lib/util.ady` by rule 2.
 
 There is no `..` syntax: a module name starts with a letter, so
 `import ../lib/util` is not a name ady2nim will resolve. The parent rule

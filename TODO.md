@@ -29,7 +29,7 @@ libraries bundled with ady2nim build with it too; `db.ady` through its Python
 version, TO_PYTHON/STDLIB/db.ady (sqlite3). TOOLS/ACCOUNTING's tests pass on
 it, all but test_htmx, whose `html:` block is refused as Nim only.
 
-- [ ] EXAMPLES/timetable_sa and timetable_backtrack stop at Nim's json
+- [ ] EXAMPLES/TIMETABLE/timetable_sa and timetable_backtrack stop at Nim's json
       (`parseJson`) and a `proc` type.
 
 ### Under `ady2nim js`
