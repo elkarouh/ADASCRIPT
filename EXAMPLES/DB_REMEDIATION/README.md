@@ -38,8 +38,8 @@ database fleet](https://stripe.dev/blog/how-stripe-uses-graph-search-and-state-m
 
 | Article | Demo | Reused code |
 |---|---|---|
-| BFS planner | `BreadthPlanner` | `EXAMPLES/state_search.ady` `StateSearcher.search` |
-| Dijkstra with weights | `WeightedPlanner` | `EXAMPLES/shortest_path.ady` `Minimizer.shortest_path` |
+| BFS planner | `BreadthPlanner` | `TO_NIM/STDLIB/state_search.ady` `StateSearcher.search` |
+| Dijkstra with weights | `WeightedPlanner` | `TO_NIM/STDLIB/shortest_path.ady` `Minimizer.shortest_path` |
 | Least-misconfigured state | `Sweeper` (a `StateSearcher` that records scores) | `state_search.ady` |
 | Shared simulate/execute | one `apply()` used by planners and `execute()` | |
 | Composable scoring | `rule_scores()`: node down, vote mismatch, priority mismatch | |

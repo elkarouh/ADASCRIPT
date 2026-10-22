@@ -43,8 +43,6 @@ BINDIR ?= $(PREFIX)/bin
 # Libraries — no main block; compile only, never run
 # -----------------------------------------------------------------------
 LIBS := \
-    state_search.ady \
-    shortest_path.ady \
     timetable_engine.ady
 
 # -----------------------------------------------------------------------

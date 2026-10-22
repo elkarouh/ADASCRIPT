@@ -162,7 +162,7 @@ processors share the skeleton.
 ## 9.5 Generic classes
 
 Type parameters go in brackets after the class name and thread through all
-generated procs. The framework in `EXAMPLES/shortest_path.ady` is built on
+generated procs. The framework in `TO_NIM/STDLIB/shortest_path.ady` is built on
 two of them:
 
 ```python
