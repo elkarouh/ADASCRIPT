@@ -8,6 +8,7 @@ JavaScript for a script that redraws a path while a shape is dragged, and both g
 
     let d: str = connector_d(160.0, 355.0, 290.0, 120.0)          # from here to there, sideways
     let d2: str = connector_d(90.0, 240.0, 290.0, 120.0, VERTICAL, 13.0)   # up out of a box, a head's length short
+    let d3: str = connector_d(160.0, 355.0, 290.0, 120.0, SIDEWAYS, 0.0, 0.675)   # bending out further, as a node editor's
 """
 
 # How a connector leaves its start: out of the side of a box, or straight up or down out of
@@ -23,11 +24,20 @@ const ACROSS: float = 0.44
 # boxes does. With SIDEWAYS it leaves sideways too; with VERTICAL it leaves straight up or
 # down and bends towards the end. It stops STOP_SHORT before X2, the room an arrow's head
 # takes, whose tip is then at X2.
-def connector_d(x1: float, y1: float, x2: float, y2: float, leave: Leave_T = SIDEWAYS, stop_short: float = 0.0) -> str:
+#
+# WEIGHT says how far out of each end a SIDEWAYS curve goes before it bends. At 0.0 the
+# curve bends at the middle. Above 0.0 each end sends it out, to the right from the start and
+# arriving from the left at the end, WEIGHT times the distance between the two ends across,
+# as a node editor's wires do (0.675 is the one of https://codepen.io/osublake/embed/OxWjgq);
+# a curve that goes back, the end left of the start, then loops round. VERTICAL has no use for it.
+def connector_d(x1: float, y1: float, x2: float, y2: float, leave: Leave_T = SIDEWAYS, stop_short: float = 0.0, weight: float = 0.0) -> str:
     let end: float = x2 - stop_short
     if leave == VERTICAL:
         let turn: float = y1 + (y2 - y1) * TURN
         let across: float = x1 + (end - x1) * ACROSS
         return f"M {x1:.1f} {y1:.1f} C {x1:.1f} {turn:.1f} {across:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
+    if weight > 0.0:
+        let out: float = abs(end - x1) * weight
+        return f"M {x1:.1f} {y1:.1f} C {x1 + out:.1f} {y1:.1f} {end - out:.1f} {y2:.1f} {end:.1f} {y2:.1f}"
     let mid: float = (x1 + end) / 2.0
     return f"M {x1:.1f} {y1:.1f} C {mid:.1f} {y1:.1f} {mid:.1f} {y2:.1f} {end:.1f} {y2:.1f}"

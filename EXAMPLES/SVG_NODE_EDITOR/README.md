@@ -28,11 +28,10 @@ You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
 
 The drag of a node is the stdlib's `svg_drag`, the page (finding elements, reading `data_*`
 attributes, replacing the connectors' layer) its `browser` module, and a connector's curve
-`svg_path.connector_d`.
+`svg_path.connector_d`, with the original's weight of 0.675.
 
 ## Differences from the original
 
 The original moves everything with GSAP (TweenMax, Draggable) and finds a dropped end with
 `Draggable.hitTest`. Here the model knows where every port is, so a release is tested against
-the ports' positions, and nothing is loaded from a CDN. A connector's curve is `connector_d`'s S,
-not the original's weighted one. A connector that already exists is not added a second time.
+the ports' positions, and nothing is loaded from a CDN. A connector that already exists is not added a second time.

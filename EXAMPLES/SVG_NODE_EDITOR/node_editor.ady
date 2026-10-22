@@ -18,11 +18,12 @@ from it each time something changes.
 """
 from browser import Element_T, Event_T, Click_T, page, all, element, data, number, click_of, on, left, stop, listen, listen_first, set_html
 from svg_drag import Hooks_T, Unit_T, Spot_T, spot_at, clamp, shift, no_click_cb, draggable
-from svg_path import connector_d
+from svg_path import SIDEWAYS, connector_d
 from node_model import NODE_W, NODE_H, Side_T, Place_T, Port_T, Link_T, same_port, port_spot, on_port
 
 const WIDTH: float = 1100.0             # the drawing's size, as node_page.ady draws it
 const HEIGHT: float = 520.0
+const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
 
@@ -65,7 +66,7 @@ class Editor:
 
     # The connector from output O to input I, as a path, drawn with its two ends marked.
     def link_html(self, a: Place_T, b: Place_T) -> str:
-        let d: str = connector_d(a.x, a.y, b.x, b.y)
+        let d: str = connector_d(a.x, a.y, b.x, b.y, SIDEWAYS, 0.0, BEZIER_WEIGHT)
         return f"<path class='connector-outline' d='{d}'/><path class='connector-path' d='{d}'/><circle class='connector-handle' cx='{a.x:.1f}' cy='{a.y:.1f}' r='4'/><circle class='connector-handle' cx='{b.x:.1f}' cy='{b.y:.1f}' r='4'/>"
 
     # Draw every connector again: the joined ones, and the one being dragged.
