@@ -23,7 +23,8 @@ orange. The drawing is the network, and every part of it can be
 created, changed and deleted: add a node or an edge, change a cost, and delete from the
 right-click menu or with the Delete key. Drag a node and its edges follow; where you let go is kept. The server
 keeps the network in `graph.txt` (in the directory it runs in), written after
-every change; Reset puts the sample back.
+every change; Reset puts the sample back. Open it in two tabs: a change made in one shows in
+the other.
 
 | File | What it knows |
 |---|---|
@@ -31,9 +32,9 @@ every change; Reset puts the sample back.
 | `backend/dijkstra_layout.ady` | where each node is drawn when the reader has not put it somewhere: `place_of` (the places the model keeps, else `new_spot`, the layout algorithm: evenly spaced round an ellipse, in the model's order), and `inside`, which keeps a node within the drawing's margin. Compiled both ways, like the model: the server draws the page with it, and the browser's `NetworkView` moves nodes with it. |
 | `backend/dijkstra_gui.ady` | how to draw it: the SVG, the buttons, the form `#state`, the menus, the text. A function from the network and what is picked to HTML: `all_html` for the page, `to_html` for the drawing and for each node and edge in it. |
 | `backend/dijkstra_request.ady` | the fields of a request: `field_of` and `number_of` read them, `params_of` reads the reader's choice (`Params_T`: the start, the goal, the node clicked). No HTML, no HTTP. |
-| `backend/dijkstra_events_gui.ady` | what each request does: `Session.answer(method, path, fields)` calls the model, saves, and returns the page. A `Session` holds the network and the file it is kept in. No HTTP, so the tests call it. |
+| `backend/dijkstra_events_gui.ady` | what each request does: `Session.answer(method, path, fields)`: a read returns the page; a command calls the model, answers only whether it went through (`#problem`), and publishes the `Change` on its channel (`nodes`, `edges`). A `Session` holds the network and the file it is kept in (`keep` writes it). No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to `session.answer`, and serves the two scripts. |
-| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes); the server keeps it and draws the page again. Every change it sends goes through `request` (in the stdlib's `browser.ady`): the method, the path and the fields by name, with the form `#state`; htmx sends it and swaps the answer into `#all`, as for a button. |
+| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes). Every change it sends goes through `request` (in the stdlib's `browser.ady`): the method, the path and the fields by name, with the form `#state`; htmx sends it and swaps the answer into `#problem`, as for a button. It follows `GET /events` and reads the page again (`GET /all`, into `#all`) on each change, whichever page made it. |
 | `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
@@ -41,7 +42,7 @@ every change; Reset puts the sample back.
 
 ## How it works
 
-The routes are a small REST interface on two collections, every answer the whole page:
+The routes are a small REST interface on two collections. Commands in, events out: the read answers the whole page; a command answers only whether it went through (the paragraph `#problem`, empty when it did), and each change it made is told to every open page, which reads itself again:
 
 | Request | Does | Fields |
 |---|---|---|
@@ -52,26 +53,28 @@ The routes are a small REST interface on two collections, every answer the whole
 | `POST /edges` | create an edge | `a`, `b`, `cost` |
 | `PUT /edges` | change a cost | `a`, `b`, `cost` |
 | `DELETE /edges` | delete an edge | `a`, `b` |
+| `POST /relayout` | every node where the layout puts it | |
 | `POST /reset` | put the sample back | |
 | `GET /events` | the changes, as they are made: a stream every open page follows, and draws itself again on | |
 
-* The **network** is the server's (the model, kept in `graph.txt`). **What the
+* The **network** is the server's (the model, kept in `graph.txt` by a subscriber, after every change). **What the
   reader has picked** (the start and the goal) is the page's: the fields of the
   form `#state`, sent with every request, so the server keeps no session.
 * Each button, field and form names its request in htmx attributes
   (`hx-post`, `hx-put`, `hx-delete`, `hx-get`; `hx-vals` for which node or edge;
-  `hx-include="#state"`; `hx-target="#all"`, `hx-swap="outerHTML"`), all in
-  `backend/dijkstra_gui.ady`. htmx sends it and swaps in the page that comes back.
+  `hx-include="#state"`; `hx-target="#problem"`, `hx-swap="outerHTML"`), all in
+  `backend/dijkstra_gui.ady`. htmx sends it and swaps in the answer; the page is drawn
+  again on the news of the change.
 * A gesture on the drawing (a click on a node, a drag, a wire, a double-click, a
   menu, the Delete key) has no button: `frontend/dijkstra_js_events.ady` names
   its request in one line, `send_gesture("DELETE", "/nodes", {"name": n})`, and
   the browser module's `request` sends it the same way, with `#state`, into
-  `#all`. So the page holds no hidden forms or buttons for the script to fill
+  `#problem`. So the page holds no hidden forms or buttons for the script to fill
   in and press, and each route is named where the gesture that uses it is.
 * A mistake (a name taken, an edge that is there already) comes back as a line
-  in red on the page; nothing is changed.
-* So testing the GUI is calling `session.answer(method, path, fields)` and reading the
-  page: see `tests/test_dijkstra.ady`.
+  in red on the page that made it; nothing is changed, and no other page hears of it.
+* So testing the GUI is calling `session.answer(method, path, fields)`, reading the
+  page, and subscribing to hear what changed: see `tests/test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command
   line, a test) uses the model, `build_graph` and `shortest_route` unchanged.
 

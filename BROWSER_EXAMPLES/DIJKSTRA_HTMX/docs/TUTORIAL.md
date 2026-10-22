@@ -244,7 +244,7 @@ does best.
 attributes. The browser does nothing itself:
 
 ```adascript
-button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
+button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
 ```
 
 `data_hx_post` names the request, and `data_hx_confirm` asks first.
@@ -261,28 +261,36 @@ class Session:
         ...
         case method + " " + path:
             when "GET /all":
-                pass
+                return all_text(self.net, params_of(fields), self.unsaved)
             when "POST /nodes":
                 ...
                 problem = self.net.add_node(name)
-                if problem is None:
-                    ...
+                ...
+                node_changes.append(Change(CREATE, name))
             when "DELETE /nodes":
+                ...
                 problem = self.net.remove_node(name)
-            when "POST /edges":
-                problem = self.net.add_edge(a, b, cost_of(fields))
+                node_changes.append(Change(DELETE, name))
             ...
             when others:
                 return ""
-        if method != "GET" and problem is None:
-            let saved: None | !Refusal_T = self.save()
-            if saved is Refusal_T:
-                return all_text(self.net, params_of(fields), saved)
-        return all_text(self.net, params_of(fields), problem)
+        if problem is None:
+            for c in edge_changes:
+                self.edges.publish(c)
+            for c in node_changes:
+                self.nodes.publish(c)
+        return problem_text(problem)
 ```
 
-The routes are listed in a comment above `answer`, in the class. Every answer is the
-whole page, which htmx swaps in. A request with an unknown path returns
+The routes are listed in a comment above `answer`, in the class. **Commands in, events
+out.** The read, `GET /all`, answers the whole page, which htmx swaps into `#all`. A
+command (POST, PUT, DELETE) answers only whether it went through: the paragraph
+`#problem`, empty, or saying why not. When it went through, each change is published
+on a channel (stdlib's `blackboard.ady`): `nodes` or `edges` carries a `Change`, such as
+`CREATE H`. The Session does not know who listens. The server does: `keep` writes the
+network to its file, and `tell` writes the change to every open page (`GET /events`,
+server-sent events), which reads itself again. So every page, the one that made the
+change too, is drawn the same way: from the news. A request with an unknown path returns
 `""`, and the server answers 404.
 
 ![A request, from a click to the new page](request_flow.svg)
@@ -337,10 +345,10 @@ Read it from the top:
    draws every edge that ends at it. Nothing goes to the server yet.
 2. **On release**, `dropped_cb` sends the node's name and its new place
    with `request`.
-3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model,
-   saves the file, and returns the page.
-4. **htmx swaps** the page into `#all`. The new page is the same as the
-   one the browser was showing, now drawn from the server's copy.
+3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model
+   and publishes `UPDATE A`; the server keeps the file and tells every page.
+4. **Every page reads itself again** (`GET /all`, into `#all`). For this one the new
+   page is the same as the one it was showing, now drawn from the server's copy.
 
 Here the browser and the server both compute the drawing, which is why
 `place_of` is shared: both call the same function on the same network.
@@ -380,8 +388,9 @@ reads.
 sends along. So the server keeps no session, and any page can be
 rebuilt from what the request carries.
 
-**Errors.** A refused change returns the whole page again, with the
-reason in a red line. Nothing is half-done: the model either did the
+**Errors.** A refused change answers with the reason, in a red line
+(`#problem`), to the page that asked; nothing is published, so no other
+page hears of it. Nothing is half-done: the model either did the
 change or returned a `Refusal_T`, and the page shows which.
 
 ---

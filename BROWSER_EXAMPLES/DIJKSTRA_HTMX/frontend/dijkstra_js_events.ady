@@ -17,8 +17,9 @@ reader a question is here. The gestures, the usual ones of a diagram:
     Delete, Backspace            removes the selection (asks first)
     Escape                       closes the menu
 
-A change the server must keep is sent to it as a request, with the form #state, and the page the
-server answers with takes the place of #all (see dijkstra_gui.ady).
+A change the server must keep is sent to it as a command, with the form #state; its answer says only
+whether it went through (the paragraph #problem). The page is drawn again when the server tells it of
+a change, from any page: it reads itself (GET /all), and that takes the place of #all.
 
 The nodes and edges here are the model's own (backend/dijkstra_model.ady), with the places the
 reader put them, and where a node without one is drawn is the layout's (backend/dijkstra_layout.ady):
@@ -68,10 +69,14 @@ def set_selected(el: Element_T, lit: bool):
     else:
         el.set_attr("class", cls.replace(" selected", ""))
 
-# Send a change: METHOD to URL with FIELDS, and the reader's choice (the form #state). The page the
-# server answers with takes the place of #all.
+# Send a change: METHOD to URL with FIELDS, and the reader's choice (the form #state). The answer
+# takes the place of #problem: empty, or why it was refused. The page is drawn again on the news (below).
 def send_gesture(method: str, url: str, fields: {str}str):
-    request(method, url, fields, "#all", "#state")
+    request(method, url, fields, "#problem", "#state")
+
+# Read the page again, with FIELDS and the reader's choice (the form #state): it takes the place of #all.
+def read_page(fields: {str}str):
+    request("GET", "/all", fields, "#all", "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
@@ -92,7 +97,7 @@ class NodeView:
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        send_gesture("GET", "/all", {"pick": self.node.name, "act": ("unpick" if unpick else "")})
+        read_page({"pick": self.node.name, "act": ("unpick" if unpick else "")})
 
     # Let it go at AT: its name and new centre are sent.
     def drop_at(self, at: Spot_T):
@@ -481,13 +486,13 @@ var wire: Wire = Wire()
 # ---- What another page changed ----
 
 # The server tells every open page of each change to the network (GET /events, "nodes CREATE H"),
-# whichever page made it; each draws itself again from the server, keeping what its reader picked
-# (#state). Not while a node or a wire is held: what is let go sends a request of its own, and the
-# page that comes back has every change in it.
+# whichever page made it, this one included; each draws itself again from the server, keeping what
+# its reader picked (#state). Not while a node or a wire is held: what is let go is a change of its
+# own, and its news draws the page again.
 def news(change: str):
     if holding() or wire.linking:
         return
-    request("GET", "/all", {:}, "#all", "#state")
+    read_page({:})
 
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)

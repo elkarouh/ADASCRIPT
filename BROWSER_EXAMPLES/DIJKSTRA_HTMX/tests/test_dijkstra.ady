@@ -27,6 +27,19 @@ assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edge
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
 var session: Session = Session("")
+
+# A command, then the page read again, as every open page does when it hears of the change: why the
+# command was refused, if it was, and the page.
+def after(method: str, path: str, fields: str) -> str:
+    let problem: str = session.answer(method, path, fields)
+    return problem + session.answer("GET", "/all", fields)
+
+# A command's answer is only whether it went through
+assert session.answer("POST", "/nodes", "name=Q") == "<p id=\"problem\" class=\"problem\"></p>"
+assert "There is a node Q already." in session.answer("POST", "/nodes", "name=Q")
+assert "<svg" not in session.answer("POST", "/nodes", "name=Q")
+assert "<p id=\"problem\" class=\"problem\"></p>" in session.answer("GET", "/all", "")    # where it goes
+session.answer("DELETE", "/nodes", "name=Q")
 assert "Click a node to start from." in session.answer("GET", "/all", "")
 assert "click a node to go to." in session.answer("GET", "/all", "start=A&pick=A")
 assert "Shortest way from A to E: A → C → F → E, cost 20." in session.answer("GET", "/all", "start=A&goal=E")
@@ -34,28 +47,28 @@ assert "name=\"start\" value=\"C\"" in session.answer("GET", "/all", "start=A&go
 assert "<form id=\"state\">" in session.answer("GET", "/all", "")         # what every request the script sends includes
 assert session.answer("GET", "/nowhere", "") == ""
 
-assert "A → F → E, cost 23" in session.answer("PUT", "/edges", "start=A&goal=E&a=C&b=F&cost=40")   # C-F made dear
-assert "A → C → F → E, cost 20" in session.answer("PUT", "/edges", "start=A&goal=E&a=F&b=C&cost=2")
-assert "A → F → E, cost 23" in session.answer("DELETE", "/edges", "start=A&goal=E&a=C&b=F")
-let added: str = session.answer("POST", "/nodes", "name=H")
+assert "A → F → E, cost 23" in after("PUT", "/edges", "start=A&goal=E&a=C&b=F&cost=40")   # C-F made dear
+assert "A → C → F → E, cost 20" in after("PUT", "/edges", "start=A&goal=E&a=F&b=C&cost=2")
+assert "A → F → E, cost 23" in after("DELETE", "/edges", "start=A&goal=E&a=C&b=F")
+let added: str = after("POST", "/nodes", "name=H")
 assert "data-name=\"H\"" in added
-assert "There is a node H already." in session.answer("POST", "/nodes", "name=H")
-assert "A → F → E, cost 23" in session.answer("POST", "/edges", "start=A&goal=E&a=A&b=H&cost=1")      # H leads nowhere yet
-assert "A → H → E, cost 2." in session.answer("POST", "/edges", "start=A&goal=E&a=H&b=E&cost=1")
-let moved: str = session.answer("PUT", "/nodes", "name=H&x=300&y=100")
+assert "There is a node H already." in after("POST", "/nodes", "name=H")
+assert "A → F → E, cost 23" in after("POST", "/edges", "start=A&goal=E&a=A&b=H&cost=1")      # H leads nowhere yet
+assert "A → H → E, cost 2." in after("POST", "/edges", "start=A&goal=E&a=H&b=E&cost=1")
+let moved: str = after("PUT", "/nodes", "name=H&x=300&y=100")
 assert "data-x=\"300\"" in moved
-assert "A → F → E, cost 23" in session.answer("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
-assert "Click a node to start from." in session.answer("DELETE", "/nodes", "start=A&goal=E&name=A")
+assert "A → F → E, cost 23" in after("DELETE", "/nodes", "start=A&goal=E&name=H")       # its edges went with it
+assert "Click a node to start from." in after("DELETE", "/nodes", "start=A&goal=E&name=A")
 assert "Click a node to start from." in session.answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
 assert "From C: click a node to go to." in session.answer("GET", "/all", "start=C&goal=B&pick=B&act=unpick")  # a chosen goal clicked again
-assert "A → C → F → E, cost 20" in session.answer("POST", "/reset", "start=A&goal=E")
-assert "at A " not in session.answer("POST", "/relayout", "")         # no kept places: the layout draws every node
+assert "A → C → F → E, cost 20" in after("POST", "/reset", "start=A&goal=E")
+assert "at A " not in after("POST", "/relayout", "")         # no kept places: the layout draws every node
 assert "data-hx-post=\"/relayout\"" in session.answer("GET", "/all", "")
-session.answer("POST", "/reset", "")                                   # the sample again, for the tests that follow
+after("POST", "/reset", "")                                   # the sample again, for the tests that follow
 # the drawing's own gestures: a node where it was double-clicked, and the wire
-let placed: str = session.answer("POST", "/nodes", "name=K&x=120&y=200")
+let placed: str = after("POST", "/nodes", "name=K&x=120&y=200")
 assert "data-x=\"120\"" in placed
-assert "There is a node K already." in session.answer("POST", "/nodes", "name=K&x=5&y=5")
+assert "There is a node K already." in after("POST", "/nodes", "name=K&x=5&y=5")
 assert "id=\"gesture\"" not in session.answer("GET", "/all", "") and "id=\"wire\"" in session.answer("GET", "/all", "")
 assert "id=\"menu-node\"" in session.answer("GET", "/all", "") and "data-tool=\"delete\"" in session.answer("GET", "/all", "")
 assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "at A 60 190\n" in session.answer("GET", "/all", "")   # what the browser builds its NetworkView from
@@ -77,4 +90,9 @@ told.answer("DELETE", "/nodes", "name=H")                # its edge first, then 
 told.answer("POST", "/reset", "")
 assert heard == ["nodes CREATE H", "edges CREATE A H", "edges UPDATE A H", "nodes UPDATE H",
                  "edges DELETE A H", "nodes DELETE H", "edges RELOAD ", "nodes RELOAD "]
+
+# a change that could not be kept: every page says so, until one is
+var stuck: Session = Session("/nowhere/graph.txt")
+stuck.keep()
+assert "Could not write " in stuck.answer("GET", "/all", "")
 print "dijkstra: all checks passed"

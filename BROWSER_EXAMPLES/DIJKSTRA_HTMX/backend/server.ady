@@ -11,8 +11,10 @@
 Every other request (GET /all, and the routes for nodes, edges, relayout and reset) is answered
 by Session.answer in dijkstra_events_gui.ady, which lists them.
 
-Every answer but the scripts is the whole page, which htmx swaps in. The network is kept
-in graph.txt, in the directory the server runs in; it is written after every change.
+A read answers the whole page, which htmx swaps in; a command only whether it went through. Each
+change it made is published, and two subscribers here hear of it: `keep`, which writes the network to
+graph.txt (in the directory the server runs in), and `tell`, which tells every open page, which then
+reads itself again.
 """
 from asyncdispatch nimport asyncCheck, complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
@@ -46,6 +48,10 @@ def tell(channel: str, change: Change):
             asyncCheck(send_news(client, message))   # its failure is handled there
             still.append(client)
     followers = still
+
+# A change, kept: the network written to graph.txt.
+def keep(channel: str, change: Change):
+    session.keep()
 
 # A script the page loads, from the frontend directory.
 async def send_script(req: Request, path: str):
@@ -85,6 +91,8 @@ def main():
         else:
             port = n
     session = Session("graph.txt")
+    session.nodes.subscribe(keep)       # kept first, so a page that reads again sees it saved, or why not
+    session.edges.subscribe(keep)
     session.nodes.subscribe(tell)
     session.edges.subscribe(tell)
     print f"http://127.0.0.1:{port}/ (Ctrl-C to stop); the network is kept in graph.txt"

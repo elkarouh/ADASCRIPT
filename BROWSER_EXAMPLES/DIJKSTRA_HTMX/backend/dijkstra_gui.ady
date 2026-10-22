@@ -3,9 +3,11 @@
 
 What the page shows is a function of the network (the model, which the server keeps)
 and of what the reader has picked: the start and the goal, the fields of the form
-`#state`. Every request sends that form along and gets the whole page back, which
-htmx swaps in. Reading is GET /all. The drawing's gestures and the menus (dijkstra_js_events.ady)
-send POST, PUT or DELETE to /nodes or /edges themselves, with the form #state (see server.ady). `pick` is the node clicked, for the start or the
+`#state`. Reading is GET /all, which sends that form along and gets the whole page back, which
+htmx swaps in. A change is a command: POST, PUT or DELETE, from a button here or from the drawing's
+gestures and menus (dijkstra_js_events.ady); its answer is only the paragraph #problem, empty when
+it went through, and every open page then reads itself again (GET /all) when the server tells it of
+the change. `pick` is the node clicked, for the start or the
 goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
@@ -139,6 +141,18 @@ def to_html(net: Network, p: Params_T, way: []str) -> Html:
                 + to_html(n, place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
             path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 
+# Why the last command was refused, where the page shows it: empty (and not shown) when it went through.
+# The answer to a command is this paragraph alone.
+def problem_html(problem: None | !Refusal_T) -> Html:
+    var message: str = ""
+    if problem is Refusal_T:
+        message = problem.message
+    html:
+        p id="problem" class="problem": message
+
+def problem_text(problem: None | !Refusal_T) -> str:
+    return str(problem_html(problem))
+
 def all_html(net: Network, p0: Params_T, problem: None | !Refusal_T) -> Html:
     let p: Params_T = picked(p0, net.names())
     let found: (float, []str) = shortest_route[str](net.build_graph(), p.start, p.goal)
@@ -151,11 +165,10 @@ def all_html(net: Network, p0: Params_T, problem: None | !Refusal_T) -> Html:
                 input type="hidden" name="start" value=p.start
                 input type="hidden" name="goal" value=p.goal
             div class="toolbar":
-                button type="button" class="quiet" data_hx_post="/relayout" data_hx_confirm="Put every node where the layout puts it? Nodes you moved go back to the layout." data_hx_target="#all" data_hx_swap="outerHTML": "Relayout"
-                button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
+                button type="button" class="quiet" data_hx_post="/relayout" data_hx_confirm="Put every node where the layout puts it? Nodes you moved go back to the layout." data_hx_target="#problem" data_hx_swap="outerHTML": "Relayout"
+                button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
             p class=said_css: said
-            if problem is Refusal_T:
-                p class="problem": problem.message
+            + problem_html(problem)
             + to_html(net, p, way)
             # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
             pre id="network": net.text()
@@ -176,6 +189,7 @@ div.board { background: var(--card); border: 1px solid var(--line); border-radiu
 p.said { font-weight: 600; margin: 0 0 0.4em; min-height: 1.4em; }
 p.said.found { color: var(--way); }
 p.problem { color: var(--bad); background: #fdecea; border-radius: 6px; padding: 0.4em 0.7em; margin: 0 0 0.4em; }
+p.problem:empty { display: none; }
 p.hint { color: var(--soft); font-size: 0.85em; margin: 0.4em 0 0; }
 input, button { font: inherit; font-size: 0.9em; }
 button { border: 1px solid #cbd2d9; border-radius: 6px; padding: 0.3em 0.8em; background: #fff; cursor: pointer; }
