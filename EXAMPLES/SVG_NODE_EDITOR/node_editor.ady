@@ -136,9 +136,14 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     editor.redraw()
     return now
 
-# Where a node is let go is not kept by anyone else: the model has it already.
+# NODE let go at AT. No server draws the page again here, so the node is redrawn at AT itself: its
+# inner <g> is moved there and the shift svg_drag put on it is taken off. Its data_x, data_y say where it
+# is now, which is where the next drag starts from.
 def dropped_cb(node: Element_T, at: Spot_T):
-    pass
+    node.element("g").set_attr("transform", f"translate({at.x:.1f},{at.y:.1f})")
+    node.set_attr("transform", "")
+    node.set_attr("data_x", f"{at.x:.1f}")
+    node.set_attr("data_y", f"{at.y:.1f}")
 
 # ---- A drag from a port: a connector ----
 #
