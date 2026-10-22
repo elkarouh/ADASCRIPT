@@ -104,7 +104,7 @@ env/
 .vscode/
 *.swp
 *.swo
-BENCHMARK/phonecode
+EXAMPLES/PHONECODE/phonecode
 BENCHMARK/graph
 BENCHMARK/h_shortest_path
 BENCHMARK/*.nim

@@ -126,7 +126,7 @@ var counts : [Severity_T]Natural = [INFO : 0, WARN : 0, ERROR : 0, OTHER: 0]
 counts[sev] += 1
 ```
 
-and `EXAMPLES/phonecode.ady` builds a trie whose children are indexed by a
+and `EXAMPLES/PHONECODE/phonecode.ady` builds a trie whose children are indexed by a
 digit enum — ten slots per node, no dictionary overhead in the Nim build:
 
 ```python

@@ -263,7 +263,7 @@ STDIN_EXAMPLES := \
 ARG_EXAMPLES := \
     argparse.ady \
     clsworkspace.ady \
-    phonecode.ady \
+    PHONECODE/phonecode.ady \
     spell.ady
 
 # -----------------------------------------------------------------------
@@ -1445,10 +1445,10 @@ test-part-28:
 test-part-29:
 	@echo "=== Arg examples ==="
 	@printf '  %-42s' "phonecode.ady (test_words.txt test_phones.txt)"; \
-	    $(EXDIR)/phonecode $(EXDIR)/test_words.txt $(EXDIR)/test_phones.txt \
+	    $(EXDIR)/PHONECODE/phonecode $(EXDIR)/PHONECODE/test_words.txt $(EXDIR)/PHONECODE/test_phones.txt \
 	        >/dev/null 2>&1 && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "argparse.ady (test_words.txt)"; \
-	    $(EXDIR)/argparse $(EXDIR)/test_words.txt >/dev/null 2>&1 \
+	    $(EXDIR)/argparse $(EXDIR)/PHONECODE/test_words.txt >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }
 	@printf '  %-42s' "spell.ady (big.txt speling)"; \
 	    $(EXDIR)/spell $(EXDIR)/big.txt speling >/dev/null 2>&1 \
