@@ -112,8 +112,7 @@ class Session:
         let name: str = c.value("name")
         let a: str = c.value("a")
         let b: str = c.value("b")
-        let cost_given: float = number_of(c.value("cost"))      # -1 when there is none, which the model refuses
-        let cost: int = int(cost_given)
+        let cost: int = int(number_of(c.value("cost")))         # -1 when there is none, which the model refuses
         var node_changes: []Change = []             # published once the command went through
         var edge_changes: []Change = []
         case c.thing:

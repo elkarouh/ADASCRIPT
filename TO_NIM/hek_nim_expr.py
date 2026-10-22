@@ -1524,6 +1524,65 @@ def _field_type(expr):
     return _ftype or ""
 
 
+def _last_method_call(s):
+    """`base.method(args)` as a match whose groups are BASE and METHOD, when S is one: the
+    last `.method(` outside any bracket or string, whose `(` closes at the very end. None
+    when S is no such call. `num(b.value("cost"))` is a call of num, not of value on `num(b`;
+    `s.strip().upper()` is upper on `s.strip()`."""
+    import re as _re
+    if not s.endswith(")"):
+        return None
+    depth, quote, found = 0, None, None
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch == '"':
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "." and depth == 0:
+            m = _re.compile(r"\.([A-Za-z_]\w*)\(").match(s, i)
+            if m and i > 0 and _balanced(s[m.end() - 1:]) and _closes_at_end(s, m.end() - 1):
+                found = (i, m)
+        i += 1
+    if not found or _re.search(r"\s", s[:found[0]]):
+        return None                     # no call, or a base with a space in it: not a plain one
+    i, m = found
+    return _re.match(r"^(.{%d})\.([A-Za-z_]\w*)\(" % i, s, _re.S)
+
+
+def _closes_at_end(s, open_at):
+    """Whether the bracket that opens at OPEN_AT in S is closed by S's last character."""
+    depth, quote = 0, None
+    i = open_at
+    while i < len(s):
+        ch = s[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch == '"':
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i == len(s) - 1
+        i += 1
+    return False
+
+
 def _nim_expr_type(expr):
     """Infer the Nim type of an already-emitted expression string.
 
@@ -1576,7 +1635,7 @@ def _nim_expr_type(expr):
 
         # method call: base.method(args) — skip if expression contains top-level binary ops
         _has_outer_op = bool(_re.search(r'\s+(==|!=|and|or|not)\s+', s))
-        call_m = _re.match(r"^(\S+?)\.([A-Za-z_]\w*)\(.*\)$", s) if not _has_outer_op else None
+        call_m = _last_method_call(s) if not _has_outer_op else None
         if call_m:
             base_type = _resolve(call_m.group(1))
             method = call_m.group(2)
@@ -3834,6 +3893,8 @@ def to_nim(self, prec=None):
                         if m_kw:
                             fn, fv = m_kw.group(1), m_kw.group(2)
                             ftype = ftype_map.get(fn, "")
+                            # On JS a dict literal is a JavaScript object; a {K}V field wants a Table
+                            fv = _js_table_literal(fv, ftype)
                             # Fix bare initTable() when field type is known
                             if fv == "initTable()" and ftype.startswith("Table["):
                                 fv = f"initTable[{ftype[6:-1]}]()"
@@ -3904,6 +3965,9 @@ def to_nim(self, prec=None):
                                 ParserState.nim_imports.add("options")
                         if av == "initHashSet()" and ftype.startswith("HashSet["):
                             av = f"initHashSet[{ftype[8:-1]}]()"
+                        # On JS a dict literal is a JavaScript object; a {K}V field wants a Table,
+                        # as a {K}V parameter does: `Command(DELETE, NODE, {"name": n})`
+                        av = _js_table_literal(av, ftype)
                         av = _lift_union_field(av, ftype)
                         # If field type is a ref object class, cast to that type for proper subtype coercion
                         if ftype.strip() == "char":

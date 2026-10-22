@@ -13,7 +13,7 @@ make test                 # the model and the page, tested without a server
 
 ## The whole picture
 
-![A change, from a click to every open page](request_flow.svg)
+![A change, from a gesture to every open page: a Command in, a Change out](request_flow.svg)
 
 A change goes in as a command, and comes out as an event that every open page hears;
 each page then reads itself again. The program is split by what each part knows:
@@ -304,7 +304,7 @@ server-sent events), which reads itself again. So every page, the one that made 
 change too, is drawn the same way: from the news. A request with an unknown path returns
 `""`, and the server answers 404.
 
-![A change, from a click to every open page](request_flow.svg)
+![A change, from a gesture to every open page: a Command in, a Change out](request_flow.svg)
 
 **Some events stay in the browser.** A drag must follow the mouse many
 times a second, and a server round trip for each move would be too slow.
@@ -326,7 +326,7 @@ type Command is record:
     fields: {str}str
 
 def delete_node(name: str) -> Command:
-    return command(DELETE, NODE, {"name": name})
+    return Command(DELETE, NODE, {"name": name})
 ```
 
 A gesture only says which command it means. The Delete key, Backspace and the

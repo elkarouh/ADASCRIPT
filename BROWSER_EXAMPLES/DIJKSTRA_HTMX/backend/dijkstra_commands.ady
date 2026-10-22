@@ -27,10 +27,6 @@ type Command is record:
     thing:  Thing_T
     fields: {str}str
 
-# A command: VERB, done to THING, with FIELDS.
-def command(verb: Verb_T, thing: Thing_T, fields: {str}str) -> Command:
-    return Command(verb, thing, fields)
-
 # The field NAME of command C, or "" when it has none.
 def value(c: Command, name: str) -> str:
     if name in c.fields:
@@ -67,36 +63,36 @@ def command_of(method: str, url: str, fields: {str}str) -> ?Command:
             continue
         for thing in Thing_T:
             if url_of(thing) == url and (verb == READ) == (thing == NETWORK):
-                return command(verb, thing, fields)
+                return Command(verb, thing, fields)
     return None
 
 # ---- The commands, by name: one each for what the page can ask ----
 
 # C: a node NAME, at AT (in the drawing's units).
 def create_node(name: str, at: Spot_T) -> Command:
-    return command(CREATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+    return Command(CREATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
 
 # U: the node NAME, moved to AT.
 def update_node(name: str, at: Spot_T) -> Command:
-    return command(UPDATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+    return Command(UPDATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
 
 # D: the node NAME, and its edges.
 def delete_node(name: str) -> Command:
-    return command(DELETE, NODE, {"name": name})
+    return Command(DELETE, NODE, {"name": name})
 
 # C: an edge from A to B, costing COST (as the reader typed it; the server refuses what is no cost).
 def create_edge(a: str, b: str, cost: str) -> Command:
-    return command(CREATE, EDGE, {"a": a, "b": b, "cost": cost})
+    return Command(CREATE, EDGE, {"a": a, "b": b, "cost": cost})
 
 # U: the edge from A to B, now costing COST.
 def update_edge(a: str, b: str, cost: str) -> Command:
-    return command(UPDATE, EDGE, {"a": a, "b": b, "cost": cost})
+    return Command(UPDATE, EDGE, {"a": a, "b": b, "cost": cost})
 
 # D: the edge from A to B.
 def delete_edge(a: str, b: str) -> Command:
-    return command(DELETE, EDGE, {"a": a, "b": b})
+    return Command(DELETE, EDGE, {"a": a, "b": b})
 
 # R: the network, as this reader sees it, after clicking the node PICK ("" for none): the start, then
 # the goal, or, with UNPICK, a chosen node taken out again.
 def read_network(pick: str, unpick: bool) -> Command:
-    return command(READ, NETWORK, {"pick": pick, "act": ("unpick" if unpick else "")})
+    return Command(READ, NETWORK, {"pick": pick, "act": ("unpick" if unpick else "")})

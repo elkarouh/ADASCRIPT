@@ -1,0 +1,22 @@
+# A dict literal given to a record's {K}V field, by position or by name, is a table on every
+# backend: on JS a bare dict literal is a JavaScript object, and the field wants a Table.
+# And `int(f(b.value(...)))` is int of what f returns, a float: the method call inside the
+# argument is not the outer expression, so it is no string to parse.
+type Command is record:
+    verb:   str
+    fields: {str}str
+
+def value(c: Command, name: str) -> str:
+    if name in c.fields:
+        return c.fields[name]
+    return ""
+
+def half(s: str) -> float:
+    return float(len(s)) / 2.0
+
+let by_position: Command = Command("delete", {"name": "A"})
+let by_name: Command = Command(verb="create", fields={"a": "A", "b": "B"})
+print by_position.value("name"), by_name.value("b"), len(by_name.fields)
+let n: int = int(half(by_name.value("a") + "xyz"))
+print n
+assert n == 2
