@@ -6,6 +6,7 @@
     GET    /            the page: a script tag and a div that loads /all
     GET    /htmx.min.js htmx itself
     GET    /dijkstra_js_events.js     dijkstra_js_events.ady, compiled to JavaScript
+    GET    /events      the changes, as they are made, for every open page (server-sent events)
 
 Every other request (GET /all, and the routes for nodes, edges, relayout and reset) is answered
 by Session.answer in dijkstra_events_gui.ady, which lists them.
@@ -13,13 +14,38 @@ by Session.answer in dijkstra_events_gui.ady, which lists them.
 Every answer but the scripts is the whole page, which htmx swaps in. The network is kept
 in graph.txt, in the directory the server runs in; it is written after every change.
 """
-from asyncdispatch nimport complete, newFuture, Port, waitFor
+from asyncdispatch nimport asyncCheck, complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from asyncnet nimport AsyncSocket, send, close, isClosed
+from blackboard import PublishChannel
 from backend/dijkstra_gui import shell_text
-from backend/dijkstra_events_gui import Session
+from backend/dijkstra_events_gui import Change, Session
 
 # The session the requests are answered from: main makes it the one that keeps the network in graph.txt.
 var session: Session = Session("")
+
+# The pages following GET /events: the answer to each is kept open, and every change is written to it.
+var followers: []AsyncSocket = []
+
+# The first lines of the answer to GET /events, which never ends: a stream of messages.
+const EVENTS_HEAD: str = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n"
+
+# MESSAGE to one page; a page that has gone is closed, and dropped at the next change.
+async def send_news(client: AsyncSocket, message: str):
+    try:
+        await client.send(message)
+    except Exception:
+        client.close()
+
+# A change, told to every page that follows: subscribed to the session's channels in main.
+def tell(channel: str, change: Change):
+    let message: str = f"data: {channel} {change.kind} {change.key}\n\n"
+    var still: []AsyncSocket = []
+    for client in followers:
+        if not client.isClosed():
+            asyncCheck(send_news(client, message))   # its failure is handled there
+            still.append(client)
+    followers = still
 
 # A script the page loads, from the frontend directory.
 async def send_script(req: Request, path: str):
@@ -39,6 +65,9 @@ async def handler(req: Request):
             await send_script(req, path)
         when "/dijkstra_js_events.js":
             await send_script(req, path)
+        when "/events":
+            await req.client.send(EVENTS_HEAD)  # and no end: the changes follow, from tell
+            followers.append(req.client)
         when others:
             let page: str = session.answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
             if page == "":
@@ -56,6 +85,8 @@ def main():
         else:
             port = n
     session = Session("graph.txt")
+    session.nodes.subscribe(tell)
+    session.edges.subscribe(tell)
     print f"http://127.0.0.1:{port}/ (Ctrl-C to stop); the network is kept in graph.txt"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))

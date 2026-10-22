@@ -13,6 +13,7 @@ reader a question is here. The gestures, the usual ones of a diagram:
     double-click the space       a new node there (asks the name)
     double-click an edge         its cost (asks it)
     right-click                  a menu of what can be done to what was clicked
+    (another page's change)      the page is drawn again, from GET /all
     Delete, Backspace            removes the selection (asks first)
     Escape                       closes the menu
 
@@ -38,9 +39,9 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first
+from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
-from svg_drag import Hooks_T, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
+from svg_drag import Hooks_T, holding, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T
 from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
 
@@ -477,6 +478,17 @@ class Wire:
 
 var wire: Wire = Wire()
 
+# ---- What another page changed ----
+
+# The server tells every open page of each change to the network (GET /events, "nodes CREATE H"),
+# whichever page made it; each draws itself again from the server, keeping what its reader picked
+# (#state). Not while a node or a wire is held: what is let go sends a request of its own, and the
+# page that comes back has every change in it.
+def news(change: str):
+    if holding() or wire.linking:
+        return
+    request("GET", "/all", {:}, "#all", "#state")
+
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)
 listen("mouseup", wire.up)
@@ -487,3 +499,4 @@ listen("contextmenu", context)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
 draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+follow("/events", news)

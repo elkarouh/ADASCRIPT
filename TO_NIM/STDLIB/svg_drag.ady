@@ -97,6 +97,11 @@ type Grip_T is Idle_T | Held_T | Ended_T
 var grip: Grip_T = Idle_T()             # the one drag there is; nothing held at first
 var setup: Setup_T                      # what draggable was given; set before any mouse event
 
+# Whether a shape is held now, from the press until it is let go: a page that would be drawn
+# again under the mouse waits until it is not.
+def holding() -> bool:
+    return grip is Held_T
+
 # ---- Reading the page ----
 
 # Attribute NAME of NODE ("data_x", "data_y") as drawing units; 0 if it is not a number.

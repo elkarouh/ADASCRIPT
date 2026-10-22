@@ -35,6 +35,11 @@ in the page, as htmx does for a button:
 
     request("DELETE", "/nodes", {"name": "A"}, "#all", "#state")   # METHOD, URL, fields, target, forms included
 
+News the server sends by itself, without being asked (a change another page made), comes to a
+function the page names, as text:
+
+    follow("/events", heard)                    # heard(news: str) is called with each message
+
 A CSS selector names elements the way the page's stylesheet does: "g.node" is a <g> of class
 node, "#move" the element with id="move", "g[data_from]" a <g> that has a data_from
 attribute, "input[name=pos]" the <input> named pos.
@@ -269,6 +274,23 @@ def ask(question: str, answer: str) -> str:
 # Ask the reader to say yes or no to QUESTION.
 def ask_yes(question: str) -> bool:
     return window.confirm(cstring(question))
+
+# ---- News the server sends ----
+
+# nimraw: proc newEventSource(url: cstring): JsObject {.importjs: "new EventSource(#)".}
+
+# Call HANDLER with the text of every message the server sends on the stream at URL, for as long as
+# the page is open: the server keeps that answer open and writes a message to it whenever it has
+# news ("server-sent events"). When the stream is cut the browser opens it again by itself.
+#
+#     def heard(news: str):
+#         print news                    # what the server wrote, "nodes CREATE H"
+#     follow("/events", heard)
+def follow(url: str, handler: (str) -> None):
+    let source: JsObject = newEventSource(cstring(url))
+    def heard(e: Event_T):
+        handler(str(toJs(e).data.to(cstring)))
+    source.addEventListener(cstring("message"), heard)
 
 # ---- A page in a window of its own ----
 

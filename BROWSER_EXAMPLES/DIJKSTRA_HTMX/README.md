@@ -53,6 +53,7 @@ The routes are a small REST interface on two collections, every answer the whole
 | `PUT /edges` | change a cost | `a`, `b`, `cost` |
 | `DELETE /edges` | delete an edge | `a`, `b` |
 | `POST /reset` | put the sample back | |
+| `GET /events` | the changes, as they are made: a stream every open page follows, and draws itself again on | |
 
 * The **network** is the server's (the model, kept in `graph.txt`). **What the
   reader has picked** (the start and the goal) is the page's: the fields of the
