@@ -6043,6 +6043,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         _SELF_TUPLE_TARGET = _re.compile(
             r"^[ \t]*\(?[^\n=()]*\bself\.\w+[^\n=()]*,[^\n=()]*\)?[ \t]*=(?!=)"
             r"|\bswap\([^)]*\bself\.\w+", _re.M)
+        _FIELD_MUTATORS = {'add', 'append', 'extend', 'pop', 'clear', 'remove', 'sort',
+                           'del', 'incl', 'excl', 'insert', 'delete', 'setLen'}
         def _body_has_self_mutation(body_text):
             if _SELF_TUPLE_TARGET.search(body_text):
                 return True
@@ -6054,6 +6056,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # the method kept a non-var self and Nim refused the assignment.
             if _re.search(r"self\.\w+(?:\[[^\]]*\]|\.\w+)+\s*[+\-*/&]?=(?!=)", body_text):
                 return True
+            # A mutating call on what a subscript or a nested field holds:
+            # `self.bags[i].items.add(x)`, `self.channels[kind].subscribe(f)`.
+            # The builtin mutators, and the methods of the program that take
+            # their self by var, change self just as `self.items.add(x)` does.
+            for m in _re.finditer(r'self(?:\.\w+|\[[^\]\n]*\])+\.(\w+)\s*\(', body_text):
+                if m.group(1) in _FIELD_MUTATORS or m.group(1) in ParserState.var_self_methods:
+                    return True
             # Method call on self that isn't known-read-only
             for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
                 if m.group(1) not in _READONLY_METHODS:

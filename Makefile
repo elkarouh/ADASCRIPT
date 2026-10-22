@@ -81,6 +81,7 @@ STANDALONE := \
     ownership_tour.ady \
     ../TESTS/test_iters.ady \
     ../TESTS/test_blackboard.ady \
+    ../TESTS/test_field_chain_mutation.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \
@@ -363,7 +364,7 @@ COMPILE_ONLY := \
 
 # Run on both backends and their output compared, below: the Nim run there
 # is the one they get, so the self-contained loop leaves them out.
-BOTH_BACKENDS_COMPARED := ../TESTS/test_blackboard blackboard_demo trading_blackboard ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_fstring_width ../TESTS/test_result ../TESTS/test_optional_spelling \
+BOTH_BACKENDS_COMPARED := ../TESTS/test_blackboard ../TESTS/test_field_chain_mutation blackboard_demo trading_blackboard ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_fstring_width ../TESTS/test_result ../TESTS/test_optional_spelling \
     ../TESTS/test_union ../TESTS/test_case_ranges ../TESTS/test_contextmanager_fstring \
     ../TESTS/test_ordered_map ../TESTS/test_function_type ../TESTS/test_distinct ../TESTS/test_units ../TESTS/test_units_fields ../TESTS/test_tuple_assign_block ../TESTS/test_self_tuple_assign ../TESTS/test_math_names ../TESTS/test_min3_notimpl ../TESTS/test_option_literals ../TESTS/test_fstring_flags ../TESTS/test_fstring_leading_newline ../TESTS/test_call_field_literal ../TESTS/test_local_named_like_field ../TESTS/test_narrowed_value ../TESTS/test_seq_field_concat ../TESTS/test_distinct_float_range ../TESTS/test_narrowed_type ../TESTS/test_mod_type ../TESTS/test_ring_buffer ../TESTS/test_negative_int_range ../TESTS/test_overload_types ../TESTS/test_slice_semantics ../TESTS/test_money accounting \
     ../TESTS/test_subrange_array ../TESTS/test_variant_literal ../TESTS/test_set_operators \

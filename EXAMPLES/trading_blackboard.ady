@@ -27,26 +27,20 @@ class Blackboard:
     var symbol: str
     var channels: [EventType]PublishChannel[Event]
     var published: int
-    var subscriptions: int          # live subscriptions across all channels
 
     def __init__(self, symbol: str, keep_history: bool):
         self.symbol = symbol
         self.published = 0
-        self.subscriptions = 0
         for kind in EventType:
             self.channels[kind] = PublishChannel[Event](f"{kind}")
             self.channels[kind].raise_errors = True
             self.channels[kind].keep_history = keep_history and kind != PRICE_UPDATE
 
     def subscribe(self, kind: EventType, callback: (str, Event) -> None) -> int:
-        self.subscriptions += 1
         return self.channels[kind].subscribe(callback)
 
     def unsubscribe(self, kind: EventType, id: int) -> bool:
-        let removed: bool = self.channels[kind].unsubscribe(id)
-        if removed:
-            self.subscriptions -= 1
-        return removed
+        return self.channels[kind].unsubscribe(id)
 
     def publish(self, kind: EventType, source: str, data: {str}str) -> Event:
         self.published += 1
@@ -65,5 +59,4 @@ board.subscribe(BUY_SIGNAL, on_buy_signal)
 board.publish(BUY_SIGNAL, "RSI", {"entry_price": "150.0", "confidence": "0.75"})
 board.publish(PRICE_UPDATE, "feed", {"close": "151.2"})        # nobody listens: fine
 print board.subscriber_count(BUY_SIGNAL), board.subscriber_count(SELL_SIGNAL)
-print board.subscriptions
 print len(board.channels[BUY_SIGNAL].history), len(board.channels[PRICE_UPDATE].history)

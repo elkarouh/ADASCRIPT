@@ -1,0 +1,31 @@
+# A method that changes what an element or a field of its own holds changes self:
+# `self.bags[i].items.append(x)`, and a call of a method that takes its self by var,
+# `self.bags[i].fill(x)`. Both need the method's self to be var on Nim, without a write
+# to a field of self anywhere in sight.
+class Bag:
+    var items: []int
+    def __init__(self):
+        self.items = []
+    def fill(self, x: int):
+        self.items.append(x)
+
+class Holder:
+    var bags: []Bag
+    var by_name: {str}Bag
+    def __init__(self):
+        self.bags = [Bag(), Bag(), Bag()]
+    def add_to(self, i: int, x: int):
+        self.bags[i].items.append(x)
+    def fill_bag(self, i: int, x: int):
+        self.bags[i].fill(x)
+    def add_named(self, name: str, x: int):
+        self.by_name[name].items.append(x)
+
+var h: Holder = Holder()
+h.add_to(1, 5)
+h.fill_bag(1, 6)
+h.by_name["a"] = Bag()
+h.add_named("a", 7)
+assert h.bags[1].items == [5, 6]
+assert h.by_name["a"].items == [7]
+print "ok"
