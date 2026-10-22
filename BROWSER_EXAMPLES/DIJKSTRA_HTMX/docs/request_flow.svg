@@ -4,8 +4,8 @@
 <text x="30" y="34" font-size="16" fill="#1f2933" font-weight="700" text-anchor="start" >A change, from a click to every open page: the command goes in, the change goes out</text>
 <rect x="40" y="80" width="180" height="90" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
 <text x="130.0" y="111.0" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">Browser</text>
-<text x="130.0" y="130.0" text-anchor="middle" font-size="13" fill="#52606d"  >a button, or request()</text>
-<text x="130.0" y="149.0" text-anchor="middle" font-size="13" fill="#52606d"  >POST /nodes, its fields</text>
+<text x="130.0" y="130.0" text-anchor="middle" font-size="13" fill="#52606d"  >a gesture: a command</text>
+<text x="130.0" y="149.0" text-anchor="middle" font-size="13" fill="#52606d"  >send(create_node(H, at))</text>
 <rect x="260" y="80" width="180" height="90" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
 <text x="350.0" y="101.5" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">htmx</text>
 <text x="350.0" y="120.5" text-anchor="middle" font-size="13" fill="#52606d"  >sends POST /nodes</text>

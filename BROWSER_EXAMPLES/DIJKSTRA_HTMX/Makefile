@@ -28,7 +28,7 @@ server: backend/dijkstra_model.ady backend/dijkstra_layout.ady backend/dijkstra_
 # The one script of our own, Adascript compiled to JavaScript; the server sends it as /dijkstra_js_events.js.
 # backend/ is native (C), frontend/ is what the browser runs; the model (backend/dijkstra_model.ady) and its layout
 # (backend/dijkstra_layout.ady) are compiled both ways.
-frontend/dijkstra_js_events.js: frontend/dijkstra_js_events.ady backend/dijkstra_model.ady backend/dijkstra_layout.ady
+frontend/dijkstra_js_events.js: frontend/dijkstra_js_events.ady frontend/dijkstra_commands.ady backend/dijkstra_model.ady backend/dijkstra_layout.ady
 	@echo "building frontend/dijkstra_js_events.js"
 	@$(ADY2NIM) js frontend/dijkstra_js_events.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log

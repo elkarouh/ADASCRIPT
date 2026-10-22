@@ -25,7 +25,8 @@ each page then reads itself again. The program is split by what each part knows:
 | The page | `backend/dijkstra_gui.ady` | how the data looks as HTML |
 | The requests | `backend/dijkstra_events_gui.ady` | what each request does to the data, and the change it publishes |
 | The server | `backend/server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
-| The browser | `frontend/dijkstra_js_events.ady` | the gestures that must follow the mouse |
+| The commands | `frontend/dijkstra_commands.ady` | what the page can ask of the server: C, R, U or D of a node or an edge |
+| The browser | `frontend/dijkstra_js_events.ady` | the gestures, each making a command; what must follow the mouse |
 
 Each layer only calls the one below it. The model never imports HTML,
 and the server never looks inside a node. That is what makes each layer
@@ -299,17 +300,49 @@ change too, is drawn the same way: from the news. A request with an unknown path
 **Some events stay in the browser.** A drag must follow the mouse many
 times a second, and a server round trip for each move would be too slow.
 Those are in `frontend/dijkstra_js_events.ady`, which is compiled to
-JavaScript with `ady2nim js`. It sends its final result with the
-browser module's `request`, which does what such a button does, with no
-button: the method, the path, the fields by name, where the answer goes,
-and the forms whose fields go along:
+JavaScript with `ady2nim js`.
+
+**A gesture makes a command; one place sends it.** What the page can ask of the
+server is four verbs on two things, Create, Read, Update or Delete of a node or an
+edge, and each is a `Command`, in `frontend/dijkstra_commands.ady`:
 
 ```adascript
-def send_gesture(method: str, url: str, fields: {str}str):
-    request(method, url, fields, "#all", "#state")
+type Verb_T is enum CREATE, READ, UPDATE, DELETE
+type Thing_T is enum NODE, EDGE, NETWORK
 
-send_gesture("DELETE", "/nodes", {"name": self.node.name})
+type Command is record:
+    verb:   Verb_T
+    thing:  Thing_T
+    fields: {str}str
+
+def delete_node(name: str) -> Command:
+    return command(DELETE, NODE, {"name": name})
 ```
+
+A gesture only says which command it means. The Delete key, Backspace and the
+right-click menu's "Delete node" are three gestures and one command:
+
+```adascript
+send(delete_node(self.node.name))
+```
+
+`send` is the one place a command meets the server: the verb is the HTTP method
+(POST, GET, PUT, DELETE), the thing is the URL (`/nodes`, `/edges`, `/all`), the
+reader's choice (`#state`) goes along, and the browser module's `request` sends it,
+as a button with hx-* attributes would. The answer to C, U or D goes to `#problem`
+(whether it went through); a read's, the page, to `#all`.
+
+| Gesture | Command |
+|---|---|
+| click a node | R `read_network(name, unpick)` |
+| double-click the space, or the menu's "New node here" | C `create_node(name, at)` |
+| drag from a node's dot to another node | C `create_edge(a, b, cost)` |
+| let go of a dragged node | U `update_node(name, at)` |
+| double-click an edge, or the menu's "Change cost" | U `update_edge(a, b, cost)` |
+| Delete, Backspace, or the menu's "Delete" | D `delete_node(name)` or `delete_edge(a, b)` |
+| another page's change (the news) | R `read_network("", False)` |
+
+Which of a node and an edge the Delete key deletes is the selection's to say:
 
 ```adascript
 class Selection:
@@ -405,8 +438,8 @@ Read it from the top:
 1. **While the mouse moves**, `moved_cb` runs in the browser. It puts the
    node where the mouse is, the model takes the new place, and `Drawing.redraw_edges`
    draws every edge that ends at it. Nothing goes to the server yet.
-2. **On release**, `dropped_cb` sends the node's name and its new place
-   with `request`.
+2. **On release**, `dropped_cb` makes the command `update_node(name, at)`
+   and `send`s it.
 3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model
    and publishes `UPDATE A`; the server keeps the file and tells every page.
 4. **Every page reads itself again** (`GET /all`, into `#all`). For this one the new

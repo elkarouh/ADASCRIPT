@@ -17,9 +17,21 @@ reader a question is here. The gestures, the usual ones of a diagram:
     Delete, Backspace            removes the selection (asks first)
     Escape                       closes the menu
 
-A change the server must keep is sent to it as a command, with the form #state; its answer says only
-whether it went through (the paragraph #problem). The page is drawn again when the server tells it of
-a change, from any page: it reads itself (GET /all), and that takes the place of #all.
+A gesture never talks to the server: it makes a Command, Create, Read, Update or Delete of a node or
+an edge (dijkstra_commands.ady), and `send` sends it. Many gestures may make one command: a Delete is
+the Delete key, Backspace, or the menu's "Delete node". The answer to C, U or D says only whether it
+went through (the paragraph #problem); the page is drawn again when the server tells it of a change,
+from any page: it reads itself (R), and that takes the place of #all.
+
+    gesture                      command
+    click a node                 R  read_network(name, ...)
+    double-click the space       C  create_node(name, at)        and the space menu's "New node here"
+    drag from a dot to a node    C  create_edge(a, b, cost)
+    let go of a dragged node     U  update_node(name, at)
+    double-click an edge         U  update_edge(a, b, cost)      and the edge menu's "Change cost"
+    Delete, Backspace            D  delete_node(name) or delete_edge(a, b), for what is selected,
+                                    and the menus' "Delete node", "Delete edge"
+    (another page's change)      R  read_network("", False)
 
 The nodes and edges here are the model's own (backend/dijkstra_model.ady), with the places the
 reader put them, and where a node without one is drawn is the layout's (backend/dijkstra_layout.ady):
@@ -40,11 +52,12 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
+from browser import Element_T, Event_T, Click_T, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T
 from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
+from frontend/dijkstra_commands import send, create_node, update_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
@@ -69,15 +82,6 @@ def set_selected(el: Element_T, lit: bool):
     else:
         el.set_attr("class", cls.replace(" selected", ""))
 
-# Send a change: METHOD to URL with FIELDS, and the reader's choice (the form #state). The answer
-# takes the place of #problem: empty, or why it was refused. The page is drawn again on the news (below).
-def send_gesture(method: str, url: str, fields: {str}str):
-    request(method, url, fields, "#problem", "#state")
-
-# Read the page again, with FIELDS and the reader's choice (the form #state): it takes the place of #all.
-def read_page(fields: {str}str):
-    request("GET", "/all", fields, "#all", "#state")
-
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
 # A NodeView is a node as the page draws it: its Node_T and its element. An EdgeView is an edge
@@ -97,16 +101,16 @@ class NodeView:
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        read_page({"pick": self.node.name, "act": ("unpick" if unpick else "")})
+        send(read_network(self.node.name, unpick))
 
-    # Let it go at AT: its name and new centre are sent.
+    # Let it go at AT: it is moved there.
     def drop_at(self, at: Spot_T):
-        send_gesture("PUT", "/nodes", {"name": self.node.name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+        send(update_node(self.node.name, at))
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.node.name} and its edges?"):
-            send_gesture("DELETE", "/nodes", {"name": self.node.name})
+            send(delete_node(self.node.name))
 
 class EdgeView:
     var edge: Edge_T
@@ -119,14 +123,14 @@ class EdgeView:
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
-            send_gesture("DELETE", "/edges", {"a": self.edge.a, "b": self.edge.b})
+            send(delete_edge(self.edge.a, self.edge.b))
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
         if cost == "":
             return
-        send_gesture("PUT", "/edges", {"a": self.edge.a, "b": self.edge.b, "cost": cost})
+        send(update_edge(self.edge.a, self.edge.b, cost))
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -211,9 +215,7 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     network.drawing.redraw_edges(name, network.network)  # and the edges that end at it are drawn again
     return now
 
-# NODE let go at AT: tell the server, the way a form is sent. The hidden form #move gets the
-# node's name and new centre, and its button #redraw sends it (hx-put="/nodes", see
-# dijkstra_gui.ady); htmx puts the page the server answers with in place of this one.
+# NODE let go at AT: it is moved there (U).
 def dropped_cb(node: Element_T, at: Spot_T):
     let view: ?NodeView = network.drawing.node_at(node)
     if view is not None:
@@ -303,9 +305,6 @@ def page_drawn(e: Event_T):
 def ask_name() -> str:
     return ask("Name of the new node (letters and digits)?", "")
 
-# Send a new node NAME: placed at X, Y (drawing units, as text) when given, else where the server puts it.
-def send_node(name: str, x: str, y: str):
-    send_gesture("POST", "/nodes", {"name": name, "x": x, "y": y})
 
 # ---- Double-click: a new node in the space, or a new cost for an edge ----
 
@@ -322,9 +321,7 @@ def double_click(e: Event_T):
     let name: str = ask_name()
     if name == "":
         return
-    let at: Spot_T = spot_at(e)
-    let kept: Spot_T = inside(at)
-    send_node(name, f"{kept.x:.0f}", f"{kept.y:.0f}")
+    send(create_node(name, inside(spot_at(e))))
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 
@@ -363,7 +360,7 @@ def context(e: Event_T):
 # ---- The toolbar and the menus: a button with data_tool does that action ----
 
 # What a button with data_tool asks for (see menus_html in dijkstra_gui.ady).
-type Tool_T is enum NO_TOOL, ADD_HERE, CHANGE_COST, DELETE
+type Tool_T is enum NO_TOOL, ADD_HERE, CHANGE_COST, REMOVE
 
 def tool_of(name: str) -> Tool_T:
     case name:
@@ -372,7 +369,7 @@ def tool_of(name: str) -> Tool_T:
         when "cost":
             return CHANGE_COST
         when "delete":
-            return DELETE
+            return REMOVE
         when others:
             return NO_TOOL
 
@@ -388,10 +385,10 @@ def tool_click(e: Event_T):
         when ADD_HERE:
             let name: str = ask_name()
             if name != "":
-                send_node(name, f"{menus.at.x:.0f}", f"{menus.at.y:.0f}")
+                send(create_node(name, menus.at))
         when CHANGE_COST:
             selection.change_cost()
-        when DELETE:
+        when REMOVE:
             selection.remove()
         when NO_TOOL:
             pass
@@ -472,7 +469,7 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
         if cost == "":
             return
-        send_gesture("POST", "/edges", {"a": self.from_node.name, "b": to.name, "cost": cost})
+        send(create_edge(self.from_node.name, to.name, cost))
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
@@ -492,7 +489,7 @@ var wire: Wire = Wire()
 def news(change: str):
     if holding() or wire.linking:
         return
-    read_page({:})
+    send(read_network("", False))
 
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)

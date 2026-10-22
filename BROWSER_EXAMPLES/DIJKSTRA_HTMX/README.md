@@ -34,7 +34,8 @@ the other.
 | `backend/dijkstra_request.ady` | the fields of a request: `field_of` and `number_of` read them, `params_of` reads the reader's choice (`Params_T`: the start, the goal, the node clicked). No HTML, no HTTP. |
 | `backend/dijkstra_events_gui.ady` | what each request does: `Session.answer(method, path, fields)`: a read returns the page; a command calls the model, answers only whether it went through (`#problem`), and publishes the `Change` on its channel (`nodes`, `edges`). A `Session` holds the network and the file it is kept in (`keep` writes it). No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and who hears of a change: hands each request to `session.answer`, serves the two scripts, keeps `GET /events` open for every page, and subscribes `keep` (writes `graph.txt`) and `tell` (writes the change to every open page) to the session's channels. |
-| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes). Every change it sends goes through `request` (in the stdlib's `browser.ady`): the method, the path and the fields by name, with the form `#state`; htmx sends it and swaps the answer into `#problem`, as for a button. It follows `GET /events` and reads the page again (`GET /all`, into `#all`) on each change, whichever page made it. |
+| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes). Every gesture makes a command (`dijkstra_commands.ady`) and `send`s it. It follows `GET /events` and reads the page again (`GET /all`, into `#all`) on each change, whichever page made it. |
+| `frontend/dijkstra_commands.ady` | what the page can ask of the server: a `Command` is a verb (`CREATE`, `READ`, `UPDATE`, `DELETE`), what it is done to (`NODE`, `EDGE`, the `NETWORK` that is read) and its fields; one function per command (`create_node`, `update_node`, `delete_node`, `create_edge`, `update_edge`, `delete_edge`, `read_network`), and `send`, the one place a command goes to the server. |
 | `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask (a command, then the page read again), and of what a subscriber hears; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
@@ -65,11 +66,13 @@ The routes are a small REST interface on two collections. Commands in, events ou
   first page loads itself with `hx-get="/all"`, all in `backend/dijkstra_gui.ady`. htmx
   sends it and swaps in the answer; the page is drawn again on the news of the change.
 * A gesture on the drawing (a click on a node, a drag, a wire, a double-click, a
-  menu, the Delete key) has no button: `frontend/dijkstra_js_events.ady` names
-  its request in one line, `send_gesture("DELETE", "/nodes", {"name": n})`, and
-  the browser module's `request` sends it the same way, with `#state`, into
-  `#problem`. So the page holds no hidden forms or buttons for the script to fill
-  in and press, and each route is named where the gesture that uses it is.
+  menu, the Delete key) has no button: it makes a **command**, Create, Read, Update or
+  Delete of a node or an edge, and `send` sends it: `send(delete_node(n))`
+  (`frontend/dijkstra_commands.ady`). Several gestures make the same command (Delete,
+  Backspace and the menu's "Delete node" all make `delete_node`), and nothing after the
+  command knows which gesture it was. The verb is the HTTP method, the thing the URL;
+  the browser module's `request` sends it with `#state`, into `#problem` (a read, into
+  `#all`). So the page holds no hidden forms or buttons for the script to fill in and press.
 * A mistake (a name taken, an edge that is there already) comes back as a line
   in red on the page that made it; nothing is changed, and no other page hears of it.
 * Who hears of a change is decided by subscribing, not in `answer`: the `Network` is the
