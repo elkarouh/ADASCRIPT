@@ -78,6 +78,16 @@ it but do:. Not yet:
       (Nim's async procs cannot take `var` parameters, so `self` would have
       to be a ref). page_server's `News.follow` is not async meanwhile.
 
+### A method that reads only, taken for one that changes
+
+- [ ] in a generic class, `let n: int | !ParseFailure_T = parse_int(self.value(name))`
+      makes the method's `self` a `var`, though nothing is changed: a
+      `let` command then cannot call it ("expression is immutable"). The
+      same line with `self.get()`, or outside a generic class, is right;
+      the method's name, `value`, may be what is taken for a write.
+      commands.ady's `number_value` and `spot` read the field into a
+      `let` first meanwhile.
+
 ### A str joined with a char
 
 - [ ] `vals += ("" if done else ", ") + '"' + name`: a conditional
