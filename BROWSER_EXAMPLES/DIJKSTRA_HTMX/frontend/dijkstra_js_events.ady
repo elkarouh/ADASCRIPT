@@ -370,20 +370,6 @@ var pointer: Pointer = Pointer()
 draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=pointer.moved, dropped_cb=pointer.dropped, clicked_cb=pointer.clicked))
 listen("dblclick", pointer.double_clicked)
 
-# What a button with data_tool asks for (see menus_html in dijkstra_gui.ady).
-type Tool_T is enum NO_TOOL, ADD_HERE, CHANGE_COST, REMOVE
-
-def tool_of(name: str) -> Tool_T:
-    case name:
-        when "add-here":
-            return ADD_HERE
-        when "cost":
-            return CHANGE_COST
-        when "delete":
-            return REMOVE
-        when others:
-            return NO_TOOL
-
 # The menus: the right-click menu of what can be done to what was clicked, the buttons with
 # data_tool (in the menus and the toolbar), and the keys. `at` is where the space's menu was opened.
 class Menus:
@@ -417,24 +403,24 @@ class Menus:
             self.at = spot_at(e)
             show_at(page.element("#menu-space"), c)
 
-    # Any click closes the menus; one on a button with data_tool does what it names.
+    # Any click closes the menus; one on a button with data_tool does what it names (see menus_html
+    # in dijkstra_gui.ady).
     def clicked(self, e: Event_T):
         let c: Click_T = click_of(e)
         self.hide()
         let b: ?Element_T = on(c, "button[data_tool]")
         if b is None:
             return
-        let tool: Tool_T = tool_of(b.data("tool"))
-        case tool:
-            when ADD_HERE:
+        case b.data("tool"):
+            when "add-here":
                 let name: str = ask_name()
                 if name != "":
                     publish_command(create_node(name, self.at))
-            when CHANGE_COST:
+            when "cost":
                 selection.change_cost()
-            when REMOVE:
+            when "delete":
                 selection.remove()
-            when NO_TOOL:
+            when others:
                 pass
 
     # Delete and Backspace remove what is selected; Escape closes the menus.
