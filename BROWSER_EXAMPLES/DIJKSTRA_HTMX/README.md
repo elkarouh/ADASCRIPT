@@ -32,7 +32,8 @@ file or from any site. Its one script, `frontend/frontend_server.ady`, is `backe
 in the browser: it makes the same `Session` and hands it every request htmx and
 `dijkstra_js_events` make (the stdlib's `page_alone.ady`), and the network is kept in the
 browser's storage instead of `graph.txt` (the stdlib's `kept.ady`). The page, its script and htmx
-are the same, and do not know the difference; a second tab has a network of its own.
+are the same, and do not know the difference; a second tab has a network of its own. The tutorial's
+Step 6 goes through it.
 
 | File | What it knows |
 |---|---|

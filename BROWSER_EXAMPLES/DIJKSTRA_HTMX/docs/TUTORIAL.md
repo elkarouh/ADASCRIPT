@@ -9,6 +9,7 @@ is built with htmx and how the two fit together.
 ```
 make app                  # builds the browser script and the server, opens the page
 make test                 # the model and the page, tested without a server
+make alone                # the same app with no server: open frontend/index.html
 ```
 
 ## The whole picture
@@ -26,6 +27,7 @@ each page then reads itself again. The program is split by what each part knows:
 | The server | `backend/backend_server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
 | The commands | `backend/dijkstra_commands.ady` | what the page can ask of the server, in words both share: C, R, U or D of a node or an edge |
 | The browser | `frontend/dijkstra_js_events.ady` | the gestures, each making a command; what must follow the mouse |
+| The server in the page | `frontend/frontend_server.ady` | what the server does, done in the browser, for the app with no server (Step 6) |
 
 Each layer only calls the one below it. The model never imports HTML,
 and the server never looks inside a node. That is what makes each layer
@@ -600,6 +602,67 @@ rebuilt from what the request carries.
 (`#problem`), to the page that asked; nothing is published, so no other
 page hears of it. Nothing is half-done: the model either did the
 change or returned a `Refusal_T`, and the page shows which.
+
+---
+
+## Step 6: no server at all
+
+The layers above pay off here. `Session` knows no HTTP: the server hands it a method, a
+path and the fields, and sends back the text it returns. Nothing stops the browser from
+doing the same, so the whole app can run in the page, opened from a file, with no
+server running anywhere:
+
+```
+make alone                # builds the scripts, then opens frontend/index.html
+```
+
+`frontend/frontend_server.ady` is `backend/backend_server.ady` done in the browser. It makes
+the same `Session`, subscribes the same two knowledge sources, and hands every request to
+it:
+
+```adascript
+from page_alone import serve_in_page, tell_page
+
+var session: Session = Session("graph.txt")
+
+def tell(channel: Channel_T, change: Change):       # the page reads itself again
+    tell_page(f"{channel} {change.kind} {change.key}")
+
+def keep(channel: Channel_T, change: Change):       # the network, kept
+    session.keep()
+
+def answer(method: str, path: str, fields: str) -> str:
+    return session.answer(method, path, fields)
+
+session.nodes_channel.subscribe(keep)
+session.edges_channel.subscribe(keep)
+session.nodes_channel.subscribe(tell)
+session.edges_channel.subscribe(tell)
+serve_in_page(answer, shell_text())
+```
+
+`serve_in_page` (the standard library's `page_alone.ady`) answers every request htmx and
+`dijkstra_js_events` make with `answer`, in the page, and writes the page the server would
+send for `GET /`. `tell_page` is what the server's `GET /events` did. Nothing else
+changes: the gestures, the commands, the drawing and htmx are the same files, and do
+not know there is no server. `frontend/index.html` loads this one script, and it loads
+the rest.
+
+Two things make the session fit for the browser:
+
+1. **It keeps the network through `kept.ady`**, not a file: `kept_text(name)` and
+   `keep_text(name, text)` are a file natively and the browser's storage in the page.
+   So `Session("graph.txt")` keeps it in `graph.txt` on the server and under that name
+   in the browser, and a reload finds it again.
+2. **Everything it imports compiles to JavaScript**: no files, sockets, shell or regular
+   expressions. A request is read by `page_request.ady`, which compiles both ways.
+
+The page names its scripts from where it is (`"dijkstra_js_events.js"`), so it opens
+from a file as well as from a site. What is lost is the second tab: each page has a
+session of its own, so a change made in one is not seen in the other.
+
+To make another app run alone, the same holds: a `frontend_server.ady` like this one and
+an `index.html` that loads it, and a session that keeps what it keeps through `kept.ady`.
 
 ---
 
