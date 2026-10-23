@@ -22,6 +22,17 @@ it but do:. Not yet:
       callee, or a typed `shell:`-like block -- and how the exception's
       message maps onto `F`'s fields.
 
+### Narrowing an optional
+
+- [ ] a leaving guard whose `or` mixes other tests with `x is None`:
+      `if not flag or now is None: return` proves `now` below it in
+      Python, but Nim still reads it as an `Option` (`shift(el, at, now)`
+      is a type mismatch). A guard made only of `is None` tests, `if a is
+      None or now is None: return`, already proves each of them
+      (note_option_guard in hek_nim_parser.py). Any `or` that leaves the
+      block proves each `x is None` in it false, whatever the other tests
+      are.
+
 ### The Python backend
 
 `ady2py` replaces `import X` by X.ady's text (see `include_ady_modules`). The
