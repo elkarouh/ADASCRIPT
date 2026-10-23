@@ -19,7 +19,7 @@ reader a question is here. The gestures, the usual ones of a diagram:
 
 A gesture never talks to the server: it makes a Command, Create, Read, Update or Delete of a node or
 an edge (backend/dijkstra_commands.ady, the server's vocabulary too, which reads each request back
-into one), and publishes it on the page's blackboard, the channel `commands`. Many gestures may make
+into one), and publishes it on the page's blackboard, the channel `commands_channel`. Many gestures may make
 one command: a Delete is the Delete key, Backspace, or the menu's "Delete node". The gesture does not
 know who carries the command out. Two subscribers do:
 
@@ -31,7 +31,7 @@ know who carries the command out. Two subscribers do:
 What decides is what a command means, not which gesture made it: a draft changes only the page, and
 anything else is the model's, so the server's. The answer to C, U or D says only whether it went
 through (the paragraph #problem). What the server says changed, on any page, comes in on the other
-channel, `changes`; `read_again` hears it and asks for the page again (R, which takes the place of #all).
+channel, `changes_channel`; `read_again` hears it and asks for the page again (R, which takes the place of #all).
 So the browser is built like the server: a blackboard, subscribers that know nothing of each other,
 and the liaison between the two.
 
@@ -99,15 +99,15 @@ type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel
 type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
 
 # What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
-var commands: Command_Channel_T = Command_Channel_T(COMMANDS)
+var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
 # What the server says changed ("NODES_CHAN CREATE H"), whichever page changed it.
-var changes: Change_Channel_T = Change_Channel_T(CHANGES)
-commands.raise_errors = True            # a subscriber that fails is a bug: let it show
-changes.raise_errors = True
+var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
+commands_channel.raise_errors = True    # a subscriber that fails is a bug: let it show
+changes_channel.raise_errors = True
 
 # Ask for C: the gesture's one way out.
 def ask_for(c: Command):
-    commands.publish(c)
+    commands_channel.publish(c)
 
 # ---- The liaison officer: between the page's blackboard and the server's ----
 
@@ -118,7 +118,7 @@ def liaison(channel: Page_Channel_T, c: Command):
 
 # What the server says changed goes on the page's blackboard.
 def heard(change: str):
-    changes.publish(change)
+    changes_channel.publish(change)
 
 # Send COMMAND, with the reader's choice (the form #state): its verb is the method, its thing the URL.
 # A read's answer is the page, in place of #all; a change's is whether it went through, in place of
@@ -553,9 +553,9 @@ def read_again(channel: Page_Channel_T, change: str):
         return
     ask_for(read_network("", False))
 
-let to_server: int = commands.subscribe(liaison)
-let drafts: int = commands.subscribe(follow_mouse)
-let news: int = changes.subscribe(read_again)
+let to_server: int = commands_channel.subscribe(liaison)
+let drafts: int = commands_channel.subscribe(follow_mouse)
+let news: int = changes_channel.subscribe(read_again)
 
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)

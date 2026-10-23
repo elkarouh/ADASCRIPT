@@ -455,41 +455,41 @@ type Page_Channel_T is enum COMMANDS, CHANGES
 type Command_Channel_T is PublishChannel[Page_Channel_T, Command]
 type Change_Channel_T is PublishChannel[Page_Channel_T, str]
 
-var commands: Command_Channel_T = Command_Channel_T(COMMANDS)  # what the reader asks
-var changes: Change_Channel_T = Change_Channel_T(CHANGES)      # what the server says changed
+var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)  # what the reader asks
+var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)      # what the server says changed
 ```
 
-Every gesture publishes a command on `commands` (`ask_for`), and nothing else. Who
+Every gesture publishes a command on `commands_channel` (`ask_for`), and nothing else. Who
 carries it out is decided by subscribing:
 
 | Subscriber | Hears | Does |
 |---|---|---|
-| `liaison` | `commands` | the liaison officer: sends to the server what is the server's (`send`) |
-| `follow_mouse` | `commands` | draws a draft here and now: the node still held, and its edges |
-| `read_again` | `changes` | asks for the page again (`read_network`), which goes out through the liaison |
+| `liaison` | `commands_channel` | the liaison officer: sends to the server what is the server's (`send`) |
+| `follow_mouse` | `commands_channel` | draws a draft here and now: the node still held, and its edges |
+| `read_again` | `changes_channel` | asks for the page again (`read_network`), which goes out through the liaison |
 
 The liaison decides by what a command *means*, not by which gesture made it or how
 often it comes: a **draft** (`move_node`, a node the reader still holds) changes only
 the page, so it stays in the browser; anything else is the model's, and the model is
 changed in one place, the server's. Speed follows without being the rule: what changes
 only the page is exactly what comes many times a second. `heard` is the liaison's
-other half: it puts what `GET /events` says on `changes`.
+other half: it puts what `GET /events` says on `changes_channel`.
 
 ```adascript
 def liaison(channel: Page_Channel_T, c: Command):
     if not is_draft(c):
         send(c)
 
-let to_server: int = commands.subscribe(liaison)
-let drafts: int = commands.subscribe(follow_mouse)
-let news: int = changes.subscribe(read_again)
+let to_server: int = commands_channel.subscribe(liaison)
+let drafts: int = commands_channel.subscribe(follow_mouse)
+let news: int = changes_channel.subscribe(read_again)
 follow("/events", heard)
 ```
 
 So the two ends have one shape: a blackboard, subscribers that know nothing of each
 other, and between the two blackboards the wire, crossed in one place each way (`send`
 out, `heard` in). A new thing for the page to do with a command, an undo list, a log,
-drawing a deletion before the server confirms it, is one more subscriber on `commands`,
+drawing a deletion before the server confirms it, is one more subscriber on `commands_channel`,
 and no gesture changes.
 
 ---
