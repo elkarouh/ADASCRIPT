@@ -2,7 +2,7 @@
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
-from backend/dijkstra_gui import Choice, Route
+from backend/dijkstra_gui import Choice, Route, Role_T
 from commands import Change
 from store import Store
 from backend/dijkstra_events_gui import Channel_T, Session
@@ -16,7 +16,7 @@ assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
 assert shortest_route[str](net.build_graph(), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
 let route: Route = Route(net, Choice("A", "E", net.names()))
 assert route.way == w[1] and route.uses(Edge_T("C", "F", 2)) and not route.uses(Edge_T("A", "B", 7))
-assert route.role_of("A") == "start" and route.role_of("F") == "way" and route.role_of("B") == ""
+assert route.role_of("A") == START and route.role_of("F") == WAY and route.role_of("B") == NO_ROLE
 var choice: Choice = Choice("A", "Z", net.names())              # Z is no node: not chosen
 assert choice.goal == ""
 choice.click("E", False)

@@ -180,57 +180,62 @@ it from there, which is why it has no HTML in it.
 
 ## Step 3: give the objects a picture
 
-The page is written by functions that return `Html`. An `html:` block
+The page is written by methods that return `Html`. An `html:` block
 writes markup as Adascript code, with indentation for nesting, and a
-`+` to insert another piece:
+`+` to insert another piece. Each thing drawn has a view class, which holds
+its look (its `Style`, Step 3's last part) and draws it (`html`):
 
 ```adascript
-# A node of NET: its circle (coloured by what it is to ROUTE) and name, and a port (the dot on its
-# right) from which a wire is drawn to another.
-def to_html(n: Node_T, net: Network, route: Route) -> Html:
-    let at: Spot_T = net.place_of(n.name)
-    let cx: str = f"{at.x:.0f}"
-    let cy: str = f"{at.y:.0f}"
-    let ty: str = f"{at.y + NAME_DY:.0f}"
-    let px: str = f"{at.x + NODE_R:.0f}"
-    let nr: str = f"{NODE_R:.0f}"
-    let pr: str = f"{PORT_R:.0f}"
-    let css: str = "node " + route.role_of(n.name)
-    html:
-        g class=css data_name=n.name data_x=cx data_y=cy:
-            circle cx=cx cy=cy r=nr
-            stext class="name" x=cx y=ty: n.name
-            circle class="port" cx=px cy=cy r=pr
+class Node_View:
+    var style: Style = Style("g.node")
+
+    # Node N of NET, as ROUTE has it.
+    def html(self, n: Node_T, net: Network, route: Route) -> Html:
+        let at: Spot_T = net.place_of(n.name)
+        let cx: str = f"{at.x:.0f}"
+        let cy: str = f"{at.y:.0f}"
+        let ty: str = f"{at.y + NAME_DY:.0f}"
+        let px: str = f"{at.x + NODE_R:.0f}"
+        let role: Role_T = route.role_of(n.name)
+        let css: str = ("node" if role == NO_ROLE else "node " + self.style.class_of(role))
+        let nr: str = f"{NODE_R:.0f}"
+        let pr: str = f"{PORT_R:.0f}"
+        html:
+            g class=css data_name=n.name data_x=cx data_y=cy:
+                circle cx=cx cy=cy r=nr
+                stext class="name" x=cx y=ty: n.name
+                circle class="port" cx=px cy=cy r=pr
 ```
 
 Three things to note:
 
-- **The object is an argument.** `to_html` takes a `Node_T`, the network
+- **The object is an argument.** `html` takes a `Node_T`, the network
   that says where it is, and the route that says what it is to the way.
   It works nothing out: the route is found once, before the drawing.
 - **Attributes are names.** `class=css` puts the value of the variable
   `css`; `class="name"` puts the text. Attribute names with a dash are
   written with an underscore, `data_name` (see *Why htmx and how* below).
-- **The picture of one object is one function.** The picture of the
-  whole network is another, which calls these in turn:
+- **The picture of one object is one class.** The picture of the
+  whole network is another, `Network_View`, which holds an `Edge_View` and a
+  `Node_View` and calls them in turn:
 
 ```adascript
-def to_html(net: Network, route: Route) -> Html:
-    let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
-    html:
-        svg viewBox=box class="graph":
-            for e in net.edges:
-                + to_html(e, net, route)
-            for n in net.nodes:
-                + to_html(n, net, route)
-            path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+    def html(self, net: Network, route: Route) -> Html:
+        let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
+        html:
+            svg viewBox=box class="graph":
+                for e in net.edges:
+                    + self.edges.html(e, net, route)
+                for n in net.nodes:
+                    + self.nodes.html(n, net, route)
+                path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 ```
 
 What the reader has chosen is a `Choice`: the start and the goal, and `click`, which says
 what a click on a node does to them (the start, then the goal, then the start again; a
 chosen node clicked again is no longer chosen). The way between them is a `Route`, found
 once from the network and the choice: its nodes, its cost, `uses(e)` (an edge on the way,
-drawn in orange), `role_of(name)` (start, goal, way, or nothing) and `said()`, the line under
+drawn in orange), `role_of(name)` (a `Role_T`: `START`, `GOAL`, `WAY` or `NO_ROLE`) and `said()`, the line under
 the drawing. The functions that draw only ask it.
 
 The edges are drawn first, so each node sits on top of the lines that
@@ -244,21 +249,26 @@ The whole page is `all_html`, which puts its parts in one `div`. The
 hidden form `#state` holds the start and the goal, and every request
 sends it along, so the requests carry the choice the reader has made.
 
-### The look goes beside the code that uses it
+### The look is in the class
 
-The CSS of a node is defined next to `to_html` for the node, so one
-place says both what a node is and how it looks:
+A node's look is written in `Node_View` itself, with the stdlib's `style.ady`: a `Style` is the
+rules of what one class draws, all under its element (`g.node`), and a `Look` is what a rule sets,
+each property named, so a misspelt one does not compile:
 
 ```adascript
-const NODE_STYLE: str = """
-g.node { cursor: grab; }
-g.node circle { fill: #fff; stroke: #7b8794; stroke-width: 2; }
-g.node.start circle { fill: #e3f2e5; stroke: var(--start); stroke-width: 4; }
-g.node.selected circle { stroke: var(--accent); stroke-width: 4; }
-"""
+    def __init__(self):
+        self.style.part("", Look(cursor="grab"))
+        self.style.part(" circle", Look(fill=PAPER, stroke=RIM, stroke_width=2.0))
+        self.style.part(":hover circle", Look(stroke=INK))
+        self.style.when(START, " circle", Look(fill=PALE_GREEN, stroke=GREEN, stroke_width=4.0))
+        self.style.part(".selected circle", Look(stroke=ACCENT, stroke_width=4.0))
 ```
 
-`ALL_STYLE` joins the parts together for the page. A page-wide rule (the
+`part` writes a rule for the element followed by a part of it (`" circle"`, `":hover circle"`);
+`when` the same in a state, a `Role_T` value: `START` is the class `start`, which `html` gives the
+node (`class_of`). The colours are named once, at the top of the drawing (`INK`, `ORANGE`, ...).
+The rules are written once for the class, not for each node: the page puts them in its `<style>`
+(`network_view.css()`, the network's and those of its edges and nodes). A page-wide rule (the
 body, the buttons) stays in `STYLE`.
 
 ---
@@ -676,8 +686,8 @@ Each of these changes one layer, so you can see the others not change.
 1. **Add a field to the model.** Give `Node_T` a `colour: str`, change
    `add_node` to take it, and make `text()` and `Network(text)` keep it. The
    page does not change until you draw it.
-2. **Draw the field.** In `to_html(n: Node_T, …)`, use `n.colour` for the
-   circle's `fill`, and add its rule to `NODE_STYLE`.
+2. **Draw the field.** In `Node_View.html`, use `n.colour` for the
+   circle's `fill`, and take `fill` out of its rule in `Node_View`'s style.
 3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
    with `r.field("colour")`, call a new method, and publish `Change(UPDATE, name)` when it went
    through. Add a command for it in `dijkstra_commands.ady`, and put a button for it

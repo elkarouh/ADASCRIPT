@@ -17,6 +17,7 @@ from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, WIDTH, HE
 from backend/dijkstra_commands import Thing_T, Command, url, read_network, relayout_network, reset_network
 from server_page import Page_Of
 from drawing import Drawing_Pixel_T, Spot_T
+from style import Look, Style
 
 # ---- What the reader chose, and the way it gives ----
 
@@ -50,6 +51,9 @@ class Choice:
             elif name != self.start:
                 self.goal = name
 
+# What a node is to the way: each a state of the node's drawing (Node_View's style).
+type Role_T is enum NO_ROLE, START, GOAL, WAY
+
 # The shortest way from the choice's start to its goal, and what the page says of it.
 class Route:
     var choice: Choice
@@ -69,15 +73,15 @@ class Route:
                 return True
         return False
 
-    # What the node NAME is to the way: "start", "goal", "way" (a node it passes), or "" (none).
-    def role_of(self, name: str) -> str:
+    # What the node NAME is to the way: its START, its GOAL, a node on the WAY, or NO_ROLE.
+    def role_of(self, name: str) -> Role_T:
         if name == self.choice.start:
-            return "start"
+            return START
         if name == self.choice.goal:
-            return "goal"
+            return GOAL
         if name in self.way:
-            return "way"
-        return ""
+            return WAY
+        return NO_ROLE
 
     # What the page says under the drawing: where to start, where to go, or the way found and its cost.
     def said(self) -> str:
@@ -93,72 +97,107 @@ class Route:
 
 # ---- The drawing: an edge, a node, the network ----
 
-# The edge's own look: the line, the wider line to point at, the cost (see to_html).
-const EDGE_STYLE: str = """
-path.edge { stroke: #b0b8c1; stroke-width: 2.5; fill: none; }
-path.edge.way { stroke: var(--way); stroke-width: 5; }
-g[data-from].selected path.edge { stroke: var(--accent); stroke-width: 5; }
-path.hit { stroke: transparent; stroke-width: 14px; fill: none; cursor: pointer; }
-text.cost { font-size: 13px; fill: var(--soft); text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 4px; }
-"""
+# The colours, named once: the page's own rules (STYLE) take them as CSS variables.
+const INK: str = "#1f2933"          # text, and a node under the pointer
+const SOFT: str = "#616e7c"         # what is said in passing: an edge's cost
+const LINE: str = "#b0b8c1"         # an edge
+const RIM: str = "#7b8794"          # a node
+const PAPER: str = "#fff"
+const ORANGE: str = "#e65100"       # the way
+const GREEN: str = "#2e7d32"        # its start
+const PALE_GREEN: str = "#e3f2e5"
+const BLUE: str = "#1565c0"         # its goal
+const PALE_BLUE: str = "#e3eefb"
+const ACCENT: str = "#3a66db"       # what is selected, and what is being drawn
 
-# An edge of NET: a line between its nodes, orange when ROUTE runs along it, and its cost over its middle.
-def to_html(e: Edge_T, net: Network, route: Route) -> Html:
-    let p1: Spot_T = net.place_of(e.a)
-    let p2: Spot_T = net.place_of(e.b)
-    let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
-    let css: str = ("edge way" if route.uses(e) else "edge")
-    let lx: str = f"{(p1.x + p2.x) / 2.0:.0f}"
-    let ly: str = f"{(p1.y + p2.y) / 2.0 - COST_DY:.0f}"
-    let label: str = str(e.cost)
-    html:
-        g data_from=e.a data_to=e.b data_cost=label:
-            path class=css d=d
-            path class="hit" d=d
-            stext class="cost" x=lx y=ly: label
+# An edge of a network: a line between its nodes, orange when the route runs along it, and its cost
+# over its middle. Its look is its Style; the edge's g is selected by the browser (dijkstra_js_events).
+class Edge_View:
+    var style: Style = Style("g[data-from]")
 
-# The node's own look: its circle, its name, its port (see to_html).
-const NODE_STYLE: str = """
-g.node { cursor: grab; }
-g.node circle { fill: #fff; stroke: #7b8794; stroke-width: 2; }
-g.node:hover circle { stroke: var(--ink); }
-g.node.way circle { stroke: var(--way); stroke-width: 4; }
-g.node.start circle { fill: #e3f2e5; stroke: var(--start); stroke-width: 4; }
-g.node.goal circle { fill: #e3eefb; stroke: var(--goal); stroke-width: 4; }
-g.node.selected circle { stroke: var(--accent); stroke-width: 4; }
-circle.port { fill: var(--accent); opacity: 0; cursor: crosshair; }
-g.node:hover circle.port, g.node.selected circle.port { opacity: 1; }
-text.name { font-size: 16px; font-weight: 700; text-anchor: middle; pointer-events: none; fill: var(--ink); }
-"""
+    def __init__(self):
+        self.style.part(" path.edge", Look(stroke=LINE, stroke_width=2.5, fill="none"))
+        self.style.part(" path.edge.way", Look(stroke=ORANGE, stroke_width=5.0))
+        self.style.part(".selected path.edge", Look(stroke=ACCENT, stroke_width=5.0))
+        self.style.part(" path.hit", Look(stroke="transparent", stroke_width=14.0, fill="none", cursor="pointer"))
+        self.style.part(" text.cost", Look(font_size=13.0, fill=SOFT, text_anchor="middle", paint_order="stroke", stroke=PAPER, stroke_width=4.0))
 
-# A node of NET: its circle (coloured by what it is to ROUTE) and name, and a port (the dot on its
-# right) from which a wire is drawn to another.
-def to_html(n: Node_T, net: Network, route: Route) -> Html:
-    let at: Spot_T = net.place_of(n.name)
-    let cx: str = f"{at.x:.0f}"
-    let cy: str = f"{at.y:.0f}"
-    let ty: str = f"{at.y + NAME_DY:.0f}"
-    let px: str = f"{at.x + NODE_R:.0f}"
-    let css: str = "node " + route.role_of(n.name)
-    let nr: str = f"{NODE_R:.0f}"
-    let pr: str = f"{PORT_R:.0f}"
-    html:
-        g class=css data_name=n.name data_x=cx data_y=cy:
-            circle cx=cx cy=cy r=nr
-            stext class="name" x=cx y=ty: n.name
-            circle class="port" cx=px cy=cy r=pr
+    # Edge E of NET, as ROUTE has it.
+    def html(self, e: Edge_T, net: Network, route: Route) -> Html:
+        let p1: Spot_T = net.place_of(e.a)
+        let p2: Spot_T = net.place_of(e.b)
+        let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
+        let css: str = ("edge way" if route.uses(e) else "edge")
+        let lx: str = f"{(p1.x + p2.x) / 2.0:.0f}"
+        let ly: str = f"{(p1.y + p2.y) / 2.0 - COST_DY:.0f}"
+        let label: str = str(e.cost)
+        html:
+            g data_from=e.a data_to=e.b data_cost=label:
+                path class=css d=d
+                path class="hit" d=d
+                stext class="cost" x=lx y=ly: label
+
+# A node of a network: its circle, coloured by what it is to the route (a Role_T), its name, and a
+# port (the dot on its right) from which a wire is drawn to another. Its look is its Style.
+class Node_View:
+    var style: Style = Style("g.node")
+
+    def __init__(self):
+        self.style.part("", Look(cursor="grab"))
+        self.style.part(" circle", Look(fill=PAPER, stroke=RIM, stroke_width=2.0))
+        self.style.part(":hover circle", Look(stroke=INK))
+        self.style.when(WAY, " circle", Look(stroke=ORANGE, stroke_width=4.0))
+        self.style.when(START, " circle", Look(fill=PALE_GREEN, stroke=GREEN, stroke_width=4.0))
+        self.style.when(GOAL, " circle", Look(fill=PALE_BLUE, stroke=BLUE, stroke_width=4.0))
+        self.style.part(".selected circle", Look(stroke=ACCENT, stroke_width=4.0))
+        self.style.part(" circle.port", Look(fill=ACCENT, opacity=0.0, cursor="crosshair"))
+        self.style.part(":hover circle.port", Look(opacity=1.0))
+        self.style.part(".selected circle.port", Look(opacity=1.0))
+        self.style.part(" text.name", Look(font_size=16.0, font_weight=700, text_anchor="middle", pointer_events="none", fill=INK))
+
+    # Node N of NET, as ROUTE has it.
+    def html(self, n: Node_T, net: Network, route: Route) -> Html:
+        let at: Spot_T = net.place_of(n.name)
+        let cx: str = f"{at.x:.0f}"
+        let cy: str = f"{at.y:.0f}"
+        let ty: str = f"{at.y + NAME_DY:.0f}"
+        let px: str = f"{at.x + NODE_R:.0f}"
+        let role: Role_T = route.role_of(n.name)
+        let css: str = ("node" if role == NO_ROLE else "node " + self.style.class_of(role))
+        let nr: str = f"{NODE_R:.0f}"
+        let pr: str = f"{PORT_R:.0f}"
+        html:
+            g class=css data_name=n.name data_x=cx data_y=cy:
+                circle cx=cx cy=cy r=nr
+                stext class="name" x=cx y=ty: n.name
+                circle class="port" cx=px cy=cy r=pr
 
 # The network: the svg with each edge and each node, and the wire the browser draws while an edge is
-# made (see dijkstra_js_events.ady).
-def to_html(net: Network, route: Route) -> Html:
-    let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
-    html:
-        svg viewBox=box class="graph":
-            for e in net.edges:
-                + to_html(e, net, route)
-            for n in net.nodes:
-                + to_html(n, net, route)
-            path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+# made (see dijkstra_js_events.ady). Its look is its own Style and those of its edges and nodes.
+class Network_View:
+    var edges: Edge_View = Edge_View()
+    var nodes: Node_View = Node_View()
+    var style: Style = Style("svg.graph")
+
+    def __init__(self):
+        self.style.part(" path.wire", Look(stroke=ACCENT, stroke_width=2.5, stroke_dasharray="6 4", fill="none", pointer_events="none"))
+
+    def html(self, net: Network, route: Route) -> Html:
+        let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
+        html:
+            svg viewBox=box class="graph":
+                for e in net.edges:
+                    + self.edges.html(e, net, route)
+                for n in net.nodes:
+                    + self.nodes.html(n, net, route)
+                path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+
+    # The rules of the drawing, for the page's <style>.
+    def css(self) -> str:
+        return self.style.css() + self.edges.style.css() + self.nodes.style.css()
+
+# The drawing, as every page draws it.
+let network_view: Network_View = Network_View()
 
 # ---- Around the drawing: the menus, the buttons, the answer to a command ----
 
@@ -216,16 +255,16 @@ def all_html(net: Network, choice: Choice, problem: None | !Refusal_T) -> Html:
                 + page.button("Reset the sample", reset_network(), "Put the sample network back?", "quiet")
             p class=said_css: route.said()
             + problem_html(problem)
-            + to_html(net, route)
+            + network_view.html(net, route)
             # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
             pre id="network": net.text()
             p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
             + menus_html()
 
-# The page's own look: the body, the form, the drawing as a whole (the parts of it have their own, above).
+# The page's own look: the body, the form, the drawing as a whole (the drawing's parts have their
+# own, in their classes above).
+let COLOURS: str = f":root {{ --ink: {INK}; --soft: {SOFT}; --line: #e4e7eb; --bg: #f5f7fa; --card: {PAPER}; --way: {ORANGE}; --bad: #c62828; --accent: {ACCENT}; }}\n"
 const STYLE: str = """
-:root { --ink: #1f2933; --soft: #616e7c; --line: #e4e7eb; --bg: #f5f7fa; --card: #fff;
-        --way: #e65100; --start: #2e7d32; --goal: #1565c0; --bad: #c62828; --accent: #3a66db; }
 * { box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg);
        margin: 0; padding: 1.5em 1em 3em; }
@@ -246,10 +285,8 @@ button.danger { color: var(--bad); }
 div.toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 0.8em; }
 pre#network { display: none; }
 svg.graph { width: 100%; height: auto; user-select: none; display: block; }
-path.wire { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
 """
 
-const ALL_STYLE: str = STYLE + EDGE_STYLE + NODE_STYLE + MENU_STYLE
 
 # What the page says above itself.
 def header_html() -> Html:
@@ -259,7 +296,7 @@ def header_html() -> Html:
             p: "Dijkstra on a network you can edit, drawn by the server."
 
 def shell_text() -> str:
-    return page.shell_text("Shortest way", ALL_STYLE, ["dijkstra_js_events.js"], [header_html()], read_network("", False))
+    return page.shell_text("Shortest way", COLOURS + STYLE + network_view.css() + MENU_STYLE, ["dijkstra_js_events.js"], [header_html()], read_network("", False))
 
 def all_text(net: Network, choice: Choice, problem: None | !Refusal_T) -> str:
     return str(all_html(net, choice, problem))
