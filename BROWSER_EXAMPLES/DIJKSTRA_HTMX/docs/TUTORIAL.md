@@ -20,8 +20,7 @@ each page then reads itself again. The program is split by what each part knows:
 
 | Layer | Files | Knows about |
 |---|---|---|
-| The model | `backend/dijkstra_model.ady` | the data and its rules; nothing else |
-| The layout | `backend/dijkstra_layout.ady` | where each node is drawn when nobody has put it |
+| The model | `backend/dijkstra_model.ady` | the data and its rules, and the layout: where each node is drawn when nobody has put it |
 | The page | `backend/dijkstra_gui.ady` | how the data looks as HTML |
 | The requests | `backend/dijkstra_events_gui.ady` | what each request does to the data, and the change it publishes |
 | The server | `backend/server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
@@ -155,10 +154,9 @@ def place_of(net: Network, name: str) -> Spot_T:
 `new_spot` spreads the nodes evenly round an ellipse. The layout's sizes are
 lengths of their own: the drawing is `WIDTH = 15 cm` by `HEIGHT = 10 cm`, the
 ellipse `ACROSS` and `UP` centimetres, and what is small, a node's radius or
-its margin, is in pixels. The layout is
-imported by both the server (`dijkstra_gui.ady`) and the browser
-(`dijkstra_js_events.ady`), which is why it is kept in its own file, with
-no HTML in it.
+its margin, is in pixels. The layout is the end of the model's file: both the
+server (`dijkstra_gui.ady`) and the browser (`dijkstra_js_events.ady`) import
+it from there, which is why it has no HTML in it.
 
 ---
 
@@ -254,7 +252,7 @@ button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put th
 
 **The server reads each request back into a command.** `server.ady` only matches
 the path and hands the request on. `Session.answer` reads it back into the same
-`Command` the page sent (`r.command()`, a `Request` of `backend/dijkstra_request.ady`,
+`Command` the page sent (`r.command()`, a `Request`, the request read once,
 which asks `command_of` in `backend/dijkstra_commands.ady`, the vocabulary both sides share), and `carry_out` does it, one `case` on what it is done
 to and one on the verb:
 

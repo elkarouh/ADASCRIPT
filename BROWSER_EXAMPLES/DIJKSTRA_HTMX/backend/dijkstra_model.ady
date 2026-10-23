@@ -5,14 +5,19 @@ where it is kept.
 A node has a name; an edge joins two nodes, both ways, at a cost. The network is a Network,
 a class: it is changed only through its methods (create, update, delete), each of which says
 what was wrong, or "" when it was done. It also keeps where the reader has put each node (put),
-as data; a node without a place is laid out by dijkstra_layout.ady. It is kept in a text file,
+as data; a node without a place is laid out (place_of, at the end: the layout). It is kept in a text file,
 one line a node, an edge or a place (Network.text, and Network(text) to read it back; the file itself is read and
 written by dijkstra_events_gui.ady). The shortest way itself is the library's (TO_NIM/STDLIB/graphs.ady):
 build_graph turns the network into the graph it wants.
 
+The layout, at the end, says where each node is drawn when nobody has put it: computed from the
+network, never read off a page, so the server (dijkstra_gui.ady) and the browser
+(frontend/dijkstra_js_events.ady) find the same places. Like the rest, it is compiled both ways.
+
 A placeholder: replace this file with your own model. No HTML, no HTTP.
 """
-from drawing import Drawing_Pixel_T, Spot_T
+from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
+nimport math
 
 # Why a change to the network is refused: the message the page shows the reader.
 type Refusal_T is record:
@@ -180,3 +185,40 @@ def uses(route: []str, e: Edge_T) -> bool:
         if (route[i] == e.a and route[i + 1] == e.b) or (route[i] == e.b and route[i + 1] == e.a):
             return True
     return False
+
+# ---- The layout: where each node is drawn, when nobody has put it ----
+
+const WIDTH: Drawing_cm_T = 15.0        # the drawing's width
+const HEIGHT: Drawing_cm_T = 10.0       # the drawing's height
+const MARGIN: Drawing_Pixel_T = 30.0    # how near its edge a node may go
+const ACROSS: Drawing_cm_T = 6.0        # the ellipse the unplaced nodes sit on: its half width
+const UP: Drawing_cm_T = 4.0            # and its half height
+
+# The sizes of what is drawn at a node and an edge.
+const NODE_R: Drawing_Pixel_T = 24.0    # a node's radius
+const PORT_R: Drawing_Pixel_T = 6.0     # its port's, the dot on its right, NODE_R from its middle
+const NAME_DY: Drawing_Pixel_T = 5.0    # a node's name is this far under its middle
+const COST_DY: Drawing_Pixel_T = 6.0    # an edge's cost is this far over its middle
+
+# P, kept inside the drawing: a node may not go nearer its edge than MARGIN.
+def inside(p: Spot_T) -> Spot_T:
+    let right: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH) - MARGIN
+    let bottom: Drawing_Pixel_T = Drawing_Pixel_T(HEIGHT) - MARGIN
+    return Spot_T(max(MARGIN, min(right, p.x)), max(MARGIN, min(bottom, p.y)))
+
+# The place of the K-th of N nodes that nobody has put anywhere: the nodes sit on an ellipse
+# that fills the drawing, evenly spaced, in the order the model keeps them. Deterministic, so the
+# same network is drawn the same way on the server and in the browser.
+def new_spot(k: int, n: int) -> Spot_T:
+    let angle: float = 6.283185307179586 * float(k) / float(max(n, 1))
+    let middle: Spot_T = Spot_T(Drawing_Pixel_T(WIDTH) / 2.0, Drawing_Pixel_T(HEIGHT) / 2.0)
+    return Spot_T(middle.x + Drawing_Pixel_T(ACROSS) * math.cos(angle), middle.y + Drawing_Pixel_T(UP) * math.sin(angle))
+
+# Where the node NAME of NET is drawn: where the reader put it, else where the layout puts it.
+def place_of(net: Network, name: str) -> Spot_T:
+    if name in net.places:
+        return net.places[name]
+    for i in range(len(net.nodes)):
+        if net.nodes[i].name == name:
+            return new_spot(i, len(net.nodes))
+    return Spot_T(0.0, 0.0)

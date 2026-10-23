@@ -1,0 +1,13 @@
+# a module of test_import_except.ady: a type named like one of Nim's times module, and a class
+type Duration is record:
+    secs: int
+
+class Box:
+    var d: int
+
+    def __init__(self, d: int):
+        self.d = d
+
+    def twice(self) -> int:
+        let own: Duration = Duration(self.d)
+        return own.secs * 2

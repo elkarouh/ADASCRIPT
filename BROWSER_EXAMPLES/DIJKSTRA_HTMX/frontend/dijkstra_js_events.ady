@@ -47,7 +47,7 @@ and the liaison between the two.
     (a change, from any page)    R  read_network("", False)
 
 The nodes and edges here are the model's own (backend/dijkstra_model.ady), with the places the
-reader put them, and where a node without one is drawn is the layout's (backend/dijkstra_layout.ady):
+reader put them, and where a node without one is drawn is the layout's (at the end of the model):
 the same modules the server draws the page with. The page carries the network as the server keeps it
 (pre#network); Network(text) builds the model from that, and the layout works out where everything goes,
 never from where the page happens to draw it.
@@ -69,8 +69,7 @@ from blackboard import PublishChannel
 from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
-from backend/dijkstra_model import Network, Node_T, Edge_T
-from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
+from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside, place_of
 from backend/dijkstra_commands import Command, READ, UPDATE, NODE, method, url, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 

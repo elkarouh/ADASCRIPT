@@ -1,0 +1,13 @@
+#!/usr/bin/env ady2nim
+# test_import_except.ady -- a name taken from a Nim module, beside an .ady module that has a type of
+# that name and is imported for something else: the name is the one the file took.
+#
+#   ady2nim TESTS/test_import_except.ady -r
+
+from times nimport Duration, initDuration, inSeconds
+from xn_mod import Box
+
+let d: Duration = initDuration(seconds=3)
+let b: Box = Box(4)
+assert d.inSeconds() == 3 and b.twice() == 8
+print d.inSeconds(), b.twice()

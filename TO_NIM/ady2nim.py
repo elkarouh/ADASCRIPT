@@ -800,6 +800,23 @@ def _resolved_imports(code, search_dir):
         from ady_modules import refuse_shared_names
         refuse_shared_names(code, {mod: (listed, open(find(mod), encoding="utf-8").read())
                                    for mod, listed in import_map(code).items() if find(mod)})
+        # A type of an .ady module the file does not take, whose name the file
+        # takes from another module (`from asynchttpserver nimport Request`
+        # beside `from session import Session`, whose module has a Request):
+        # Nim imports a whole module, and would see two, so it is left out.
+        import re as _re_ex
+        _imports = import_map(code)
+        _excepts = {}
+        for mod, listed in _imports.items():
+            path = find(mod)
+            if path and listed:
+                with open(path, encoding="utf-8") as f:
+                    _types = set(_re_ex.findall(r"^(?:class|type)\s+(\w+)", f.read(), _re_ex.M))
+                _elsewhere = {n for other, names in _imports.items()
+                              if other != mod and names for n in names}
+                _left_out = sorted((_types - set(listed)) & _elsewhere)
+                if _left_out:
+                    _excepts[mod] = _left_out
         for mod, listed in import_map(code).items():
             path = find(mod)
             if path:
@@ -808,6 +825,8 @@ def _resolved_imports(code, search_dir):
     except SyntaxError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
+    if _excepts:
+        _ady_import_excepts_of[code] = _excepts
     return code
 
 
@@ -845,10 +864,29 @@ def _reexports(code, search_dir):
     return "\n".join("export " + m for m in sorted(set(out)))
 
 
+# {module: [type names]}: the types of an .ady module the file being translated
+# does not import, and takes under the same name from another; see _resolved_imports.
+_ady_import_excepts: dict = {}
+# the same, by the resolved source they were found for: translate_once takes
+# the ones of the code it translates
+_ady_import_excepts_of: dict = {}
+
+
 def _nim_import_line():
     """The `import` line for ParserState.nim_imports. options goes on a line of
-    its own without its `$` when the program prints a ?T its own way."""
+    its own without its `$` when the program prints a ?T its own way, and a
+    module with types left out (_ady_import_excepts) on one of its own too."""
     mods = sorted(ParserState.nim_imports)
+    excepts = [m for m in mods if m in _ady_import_excepts]
+    if excepts:
+        mods = [m for m in mods if m not in _ady_import_excepts]
+        ParserState.nim_imports.difference_update(excepts)
+        try:
+            rest = _nim_import_line() if ParserState.nim_imports else ""
+        finally:
+            ParserState.nim_imports.update(excepts)
+        return "\n".join(([rest] if rest else []) + [f"import {m} except {', '.join(_ady_import_excepts[m])}"
+                                    for m in excepts])
     if getattr(ParserState, "_options_own_repr", False) and "options" in mods:
         mods.remove("options")
         return ("import " + ", ".join(mods) + "\n" if mods else "") + "import options except `$`"
@@ -892,6 +930,8 @@ def translate_once(code, export_symbols=False):
     if not code.strip():
         return code
 
+    _ady_import_excepts.clear()
+    _ady_import_excepts.update(_ady_import_excepts_of.get(code, {}))
     from ady_stmt import expand_one_line_records
     code = expand_one_line_records(code)       # `type P is record: x: int`: see ady_stmt
     from hek_parsec import ParserState

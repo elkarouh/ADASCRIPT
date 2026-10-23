@@ -87,6 +87,7 @@ STANDALONE := \
     ../TESTS/test_field_default_call.ady \
     ../TESTS/test_field_result_assign.ady \
     ../TESTS/test_return_optional_call.ady \
+    ../TESTS/test_import_except.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \
@@ -384,7 +385,7 @@ BOTH_BACKENDS_COMPARED := ../TESTS/test_blackboard ../TESTS/test_field_chain_mut
 # int on JS is a double, so the 64-bit bounds it reads do not fit. The others
 # left out run commands, use files or use regular expressions, which ady2nim
 # js refuses, naming which.
-JS_COMPARED := ../TESTS/test_blackboard ../TESTS/test_record_table_literal ../TESTS/test_method_through_module ../TESTS/test_field_default_call ../TESTS/test_field_result_assign ../TESTS/test_return_optional_call ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_case_ranges ../TESTS/test_ordered_map accounting \
+JS_COMPARED := ../TESTS/test_blackboard ../TESTS/test_record_table_literal ../TESTS/test_import_except ../TESTS/test_method_through_module ../TESTS/test_field_default_call ../TESTS/test_field_result_assign ../TESTS/test_return_optional_call ../TESTS/test_do_block ../TESTS/test_do_discard ../TESTS/test_case_ranges ../TESTS/test_ordered_map accounting \
     ../TESTS/test_portable_gaps2 ../TESTS/test_fstring_width ../TESTS/test_optional_spelling ../TESTS/test_contextmanager_fstring \
     ../TESTS/test_function_type ../TESTS/test_distinct ../TESTS/test_units ../TESTS/test_units_fields ../TESTS/test_tuple_assign_block \
     ../TESTS/test_self_tuple_assign ../TESTS/test_math_names ../TESTS/test_min3_notimpl ../TESTS/test_option_literals ../TESTS/test_fstring_flags \

@@ -338,6 +338,9 @@ def resolve_imports(code, module, listed, module_source, clash="rename"):
         use = re.search(rf'(?<![\w.$]){re.escape(name)}\b', text)
         if not use or _binds(text, name):
             continue                   # unused, or a name of the file's own
+        if any(name in other_names for other, other_names in import_map(code).items()
+               if other != module and other_names is not STAR):
+            continue                   # another module's: `from asynchttpserver nimport Request`
         line = text.count("\n", 0, use.start()) + 1
         what = f"'{name}'" if owner == name else f"'{name}' (a member of {owner})"
         from_list = f"`from {module} import {', '.join(sorted(set(listed) | {owner}))}`"

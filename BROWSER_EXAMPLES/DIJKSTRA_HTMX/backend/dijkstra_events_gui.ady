@@ -20,13 +20,55 @@ and the Session knows none of them:
 Relayout and reset are no command on one node or edge: each is its own route, and what it changed is
 an UPDATE with no key: everything, read it all again.
 """
+from uri nimport decodeUrl
 from drawing import Drawing_Pixel_T, Spot_T
 from blackboard import PublishChannel
-from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
-from backend/dijkstra_layout import place_of
-from backend/dijkstra_gui import all_text, problem_text
-from backend/dijkstra_request import Request, number_of
+from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, place_of
+from backend/dijkstra_gui import Params_T, all_text, problem_text
 from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value
+
+# ---- A request: its method, its path and its fields ----
+#
+# The fields come in the query and the body ("a=1&b=2") and are read once, by name. r.field(key) is
+# one of them, r.params() what the page keeps about the reader's choice (dijkstra_gui.ady), and
+# r.command() the Command it is (dijkstra_commands.ady).
+
+class Request:
+    var method: str                 # GET, POST, PUT, DELETE
+    var path:   str                 # /all, /nodes, /edges, ...
+    var fields: {str}str            # by name, from the query and the body
+
+    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2").
+    def __init__(self, method: str, path: str, text: str):
+        self.method = method
+        self.path = path
+        self.fields = {:}
+        for pair in text.split("&"):
+            let at: int = pair.find("=")
+            if at > 0:
+                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
+
+    # The field KEY, or "".
+    def field(self, key: str) -> str:
+        if key in self.fields:
+            return self.fields[key]
+        return ""
+
+    # The reader's choice: the start, the goal, the node clicked, and whether to unpick it.
+    def params(self) -> Params_T:
+        return Params_T(self.field("start"), self.field("goal"), self.field("pick"), self.field("act"))
+
+    # The command this request is; None when it is none.
+    def command(self) -> ?Command:
+        return command_of(self.method, self.path, self.fields)
+
+# TEXT as a number: -1 when it is not one.
+def number_of(text: str) -> float:
+    let n: float | !ParseFailure_T = parse_float(text)
+    if n is ParseFailure_T:
+        return -1.0
+    else:
+        return n
 
 # The channels of the server's blackboard: one per collection.
 type Channel_T is enum NODES_CHAN, EDGES_CHAN

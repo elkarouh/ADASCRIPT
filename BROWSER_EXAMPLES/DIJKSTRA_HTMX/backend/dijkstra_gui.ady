@@ -11,10 +11,17 @@ the change. `pick` is the node clicked, for the start or the
 goal; `act` is unpick (a chosen node clicked again).
 """
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, uses
+from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, uses, WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY, place_of
 from drawing import Drawing_Pixel_T, Spot_T
-from backend/dijkstra_layout import WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY, place_of
-from backend/dijkstra_request import Params_T
+
+# What the page keeps about the reader's choice, sent with every request as the form #state
+# and the gesture form: the start and the goal of the route, the node clicked, and whether it
+# was clicked to be unchosen.
+type Params_T is record:
+    start: str
+    goal:  str
+    pick:  str                      # the node clicked
+    act:   str                      # unpick
 
 # ---- the drawing ----
 
