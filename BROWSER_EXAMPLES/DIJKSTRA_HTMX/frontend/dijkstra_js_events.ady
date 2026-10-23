@@ -88,9 +88,14 @@ var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
 commands_channel.raise_errors = True    # a subscriber that fails is a bug: let it show
 changes_channel.raise_errors = True
 
+# What goes on the page's blackboard, and only through these two.
 # Ask for C: the gesture's one way out.
 def publish_command(c: Command):
     commands_channel.publish(c)
+
+# What the server says changed (GET /events): the server's one way in.
+def publish_change(change: str):
+    changes_channel.publish(change)
 
 # ---- The liaison officer: between the page's blackboard and the server's ----
 
@@ -98,18 +103,14 @@ def publish_command(c: Command):
 class Liaison_Officer(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
         if not is_draft(c):
-            send(c)
+            self.send(c)
 
-# What the server says changed goes on the page's blackboard.
-def publish_change(change: str):
-    changes_channel.publish(change)
-
-# Send COMMAND, with the reader's choice (the form #state): its verb is the method, its thing the URL.
-# A read's answer is the page, in place of #all; a change's is whether it went through, in place of
-# #problem (the page is drawn again on the news of the change, below).
-def send(c: Command):
-    let target: str = ("#all" if c.verb == READ else "#problem")
-    send_request(c.method(), c.url(), c.fields, target, "#state")
+    # Send C, with the reader's choice (the form #state): its verb is the method, its thing the URL.
+    # A read's answer is the page, in place of #all; a change's is whether it went through, in place
+    # of #problem (the page is drawn again on the news of the change).
+    def send(self, c: Command):
+        let target: str = ("#all" if c.verb == READ else "#problem")
+        send_request(c.method(), c.url(), c.fields, target, "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #

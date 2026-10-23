@@ -498,7 +498,7 @@ other half: it puts what `GET /events` says on `changes_channel`.
 class Liaison_Officer(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
         if not is_draft(c):
-            send(c)
+            self.send(c)
 
 let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
