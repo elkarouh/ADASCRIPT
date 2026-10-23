@@ -37,7 +37,7 @@ the other.
 | `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask (a command, then the page read again), and of what a subscriber hears; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
-`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). The model (its layout included) and the commands are compiled both ways: the page carries the network, its places included, as the server keeps it (a hidden `pre#network`), and `dijkstra_js_events.ady` builds its `NetworkView` from that with the same `Network(text)`, so where a node is drawn is computed from the model, never read off the drawing.
+`backend/` is native (compiled to C), `frontend/` is what the browser runs (JavaScript: our `dijkstra_js_events.ady` and the vendored htmx). The model (its layout included) and the commands are compiled both ways: the page carries the network, its places included, as the server keeps it (a hidden `pre#network`), and `dijkstra_js_events.ady` builds its `NetworkView`, a kind of `Network`, from that with the same `Network(text)`, so where a node is drawn is computed from the model, never read off the drawing.
 
 ## How it works
 

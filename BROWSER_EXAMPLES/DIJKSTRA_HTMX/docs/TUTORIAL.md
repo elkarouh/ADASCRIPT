@@ -37,7 +37,8 @@ testable on its own (see `tests/test_dijkstra.ady`).
 
 The model says what a network is. It has two classes: a node and an edge. The page's views of them
 (`NodeView`, `EdgeView`, in `frontend/dijkstra_js_events.ady`) are kinds of them, so
-they are `@virtual`: a class another module inherits says so.
+they are `@virtual`: a class another module inherits says so. So is `Network`, which
+the page's `NetworkView` extends with the views of what it draws.
 The place where the reader has put a node on the drawing is a `Spot_T`
 from the library's `drawing` module: two lengths, each a `Drawing_Pixel_T`
 (a length in the drawing's own units, which a plain `float` is not).
@@ -68,6 +69,7 @@ The network is a class. It holds the three lists and is changed only
 through its methods:
 
 ```adascript
+@virtual
 class Network:
     var nodes: []Node_T                 # in the order they were made
     var edges: []Edge_T                 # each edge once
@@ -520,7 +522,7 @@ Read it from the top:
 
 1. **While the mouse moves**, `moved_cb` runs in the browser. It publishes a
    draft, `move_node(name, at)`; the `Mouse_Follower` puts the node where the mouse is,
-   the page's model takes the new place, and `Drawing.redraw_edges` draws every edge
+   the page's model takes the new place, and `NetworkView.redraw_edges` draws every edge
    that ends at it. The liaison leaves a draft in the browser: nothing goes to the server yet.
 2. **On release**, `dropped_cb` publishes the command `update_node(name, at)`, which
    is not a draft, and the liaison `send`s it.

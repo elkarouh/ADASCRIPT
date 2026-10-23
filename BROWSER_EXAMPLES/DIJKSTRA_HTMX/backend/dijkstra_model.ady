@@ -45,6 +45,8 @@ class Edge_T:
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
+# The network. The page's NetworkView inherits it, so it is @virtual.
+@virtual
 class Network:
     var nodes: []Node_T                 # in the order they were made
     var edges: []Edge_T                 # each edge once
