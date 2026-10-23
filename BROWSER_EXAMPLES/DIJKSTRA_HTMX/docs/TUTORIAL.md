@@ -187,7 +187,8 @@ its look (its `Style`, Step 3's last part) and draws it (`html`):
 
 ```adascript
 class Node_View:
-    var style: Style = Style("g.node")
+    style "g.node":
+        ...
 
     # Node N of NET, as ROUTE has it.
     def html(self, n: Node_T, net: Network, route: Route) -> Html:
@@ -251,22 +252,23 @@ sends it along, so the requests carry the choice the reader has made.
 
 ### The look is in the class
 
-A node's look is written in `Node_View` itself, with the stdlib's `style.ady`: a `Style` is the
-rules of what one class draws, all under its element (`g.node`), and a `Look` is what a rule sets,
-each property named, so a misspelt one does not compile:
+A node's look is written in `Node_View` itself, as a `style` block: the rules of what the class
+draws, all under its element (`g.node`), each property named, so a misspelt one does not compile:
 
 ```adascript
-    def __init__(self):
-        self.style.part("", Look(cursor="grab"))
-        self.style.part(" circle", Look(fill=PAPER, stroke=RIM, stroke_width=2.0))
-        self.style.part(":hover circle", Look(stroke=INK))
-        self.style.when(START, " circle", Look(fill=PALE_GREEN, stroke=GREEN, stroke_width=4.0))
-        self.style.part(".selected circle", Look(stroke=ACCENT, stroke_width=4.0))
+class Node_View:
+    style "g.node":
+        &:                      cursor="grab"
+        circle:                 fill=PAPER stroke=RIM stroke_width=2
+        &:hover circle:         stroke=INK
+        [START] circle:         fill=PALE_GREEN stroke=GREEN stroke_width=4
+        &.selected circle:      stroke=ACCENT stroke_width=4
 ```
 
-`part` writes a rule for the element followed by a part of it (`" circle"`, `":hover circle"`);
-`when` the same in a state, a `Role_T` value: `START` is the class `start`, which `html` gives the
-node (`class_of`). The colours are named once, at the top of the drawing (`INK`, `ORANGE`, ...).
+`circle` is a circle in the node, `&` the node itself (`&:hover circle`); `[START]` is the node in a
+state, a `Role_T` value: the class `start`, which `html` gives the node (`style.class_of`). The block
+is the field `style`, a `Style` of the stdlib's `style.ady`. The colours are named once, at the top
+of the drawing (`INK`, `ORANGE`, ...).
 The rules are written once for the class, not for each node: the page puts them in its `<style>`
 (`network_view.css()`, the network's and those of its edges and nodes). A page-wide rule (the
 body, the buttons) stays in `STYLE`.
@@ -687,7 +689,7 @@ Each of these changes one layer, so you can see the others not change.
    `add_node` to take it, and make `text()` and `Network(text)` keep it. The
    page does not change until you draw it.
 2. **Draw the field.** In `Node_View.html`, use `n.colour` for the
-   circle's `fill`, and take `fill` out of its rule in `Node_View`'s style.
+   circle's `fill`, and take `fill` out of the `circle:` rule of its style block.
 3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
    with `r.field("colour")`, call a new method, and publish `Change(UPDATE, name)` when it went
    through. Add a command for it in `dijkstra_commands.ady`, and put a button for it

@@ -1,0 +1,34 @@
+#!/usr/bin/env ady2nim
+"""A style block in a class: its rules, scoped to the class's element, as the stdlib's Style
+writes them; the states an enum. Both backends.
+
+    ady2nim c -r test_style_block.ady
+"""
+from style import Look, Rule, Style
+
+type Role_T is enum NO_ROLE, START, GOAL
+
+const RIM: str = "#7b8794"
+
+class Node_View:
+    style "g.node":
+        &:                  cursor="grab"
+        circle:             fill="#fff" stroke=RIM stroke_width=2   # a comment
+        &:hover circle:     stroke="black"
+
+        [START] circle:     stroke_width=4.5 font_weight=700
+        &.picked circle.port: opacity=1 stroke_dasharray="6 4"
+    var name: str = "n"
+
+let view: Node_View = Node_View()
+let css: str = view.style.css()
+let want: str = """g.node { cursor: grab; }
+g.node circle { fill: #fff; stroke: #7b8794; stroke-width: 2px; }
+g.node:hover circle { stroke: black; }
+g.node.start circle { stroke-width: 4.5px; font-weight: 700; }
+g.node.picked circle.port { stroke-dasharray: 6 4; opacity: 1; }
+"""
+assert css == want, css
+assert view.name == "n"
+assert view.style.class_of(GOAL) == "goal"
+print "style block ok"

@@ -17,7 +17,7 @@ from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, WIDTH, HE
 from backend/dijkstra_commands import Thing_T, Command, url, read_network, relayout_network, reset_network
 from server_page import Page_Of
 from drawing import Drawing_Pixel_T, Spot_T
-from style import Look, Style
+from style import Look, Rule, Style
 
 # ---- What the reader chose, and the way it gives ----
 
@@ -113,14 +113,12 @@ const ACCENT: str = "#3a66db"       # what is selected, and what is being drawn
 # An edge of a network: a line between its nodes, orange when the route runs along it, and its cost
 # over its middle. Its look is its Style; the edge's g is selected by the browser (dijkstra_js_events).
 class Edge_View:
-    var style: Style = Style("g[data-from]")
-
-    def __init__(self):
-        self.style.part(" path.edge", Look(stroke=LINE, stroke_width=2.5, fill="none"))
-        self.style.part(" path.edge.way", Look(stroke=ORANGE, stroke_width=5.0))
-        self.style.part(".selected path.edge", Look(stroke=ACCENT, stroke_width=5.0))
-        self.style.part(" path.hit", Look(stroke="transparent", stroke_width=14.0, fill="none", cursor="pointer"))
-        self.style.part(" text.cost", Look(font_size=13.0, fill=SOFT, text_anchor="middle", paint_order="stroke", stroke=PAPER, stroke_width=4.0))
+    style "g[data-from]":
+        path.edge:              stroke=LINE stroke_width=2.5 fill="none"
+        path.edge.way:          stroke=ORANGE stroke_width=5
+        &.selected path.edge:   stroke=ACCENT stroke_width=5
+        path.hit:               stroke="transparent" stroke_width=14 fill="none" cursor="pointer"
+        text.cost:              font_size=13 fill=SOFT text_anchor="middle" paint_order="stroke" stroke=PAPER stroke_width=4
 
     # Edge E of NET, as ROUTE has it.
     def html(self, e: Edge_T, net: Network, route: Route) -> Html:
@@ -140,20 +138,18 @@ class Edge_View:
 # A node of a network: its circle, coloured by what it is to the route (a Role_T), its name, and a
 # port (the dot on its right) from which a wire is drawn to another. Its look is its Style.
 class Node_View:
-    var style: Style = Style("g.node")
-
-    def __init__(self):
-        self.style.part("", Look(cursor="grab"))
-        self.style.part(" circle", Look(fill=PAPER, stroke=RIM, stroke_width=2.0))
-        self.style.part(":hover circle", Look(stroke=INK))
-        self.style.when(WAY, " circle", Look(stroke=ORANGE, stroke_width=4.0))
-        self.style.when(START, " circle", Look(fill=PALE_GREEN, stroke=GREEN, stroke_width=4.0))
-        self.style.when(GOAL, " circle", Look(fill=PALE_BLUE, stroke=BLUE, stroke_width=4.0))
-        self.style.part(".selected circle", Look(stroke=ACCENT, stroke_width=4.0))
-        self.style.part(" circle.port", Look(fill=ACCENT, opacity=0.0, cursor="crosshair"))
-        self.style.part(":hover circle.port", Look(opacity=1.0))
-        self.style.part(".selected circle.port", Look(opacity=1.0))
-        self.style.part(" text.name", Look(font_size=16.0, font_weight=700, text_anchor="middle", pointer_events="none", fill=INK))
+    style "g.node":
+        &:                      cursor="grab"
+        circle:                 fill=PAPER stroke=RIM stroke_width=2
+        &:hover circle:         stroke=INK
+        [WAY] circle:           stroke=ORANGE stroke_width=4
+        [START] circle:         fill=PALE_GREEN stroke=GREEN stroke_width=4
+        [GOAL] circle:          fill=PALE_BLUE stroke=BLUE stroke_width=4
+        &.selected circle:      stroke=ACCENT stroke_width=4
+        circle.port:            fill=ACCENT opacity=0 cursor="crosshair"
+        &:hover circle.port:    opacity=1
+        &.selected circle.port: opacity=1
+        text.name:              font_size=16 font_weight=700 text_anchor="middle" pointer_events="none" fill=INK
 
     # Node N of NET, as ROUTE has it.
     def html(self, n: Node_T, net: Network, route: Route) -> Html:
@@ -177,10 +173,8 @@ class Node_View:
 class Network_View:
     var edges: Edge_View = Edge_View()
     var nodes: Node_View = Node_View()
-    var style: Style = Style("svg.graph")
-
-    def __init__(self):
-        self.style.part(" path.wire", Look(stroke=ACCENT, stroke_width=2.5, stroke_dasharray="6 4", fill="none", pointer_events="none"))
+    style "svg.graph":
+        path.wire:              stroke=ACCENT stroke_width=2.5 stroke_dasharray="6 4" fill="none" pointer_events="none"
 
     def html(self, net: Network, route: Route) -> Html:
         let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"

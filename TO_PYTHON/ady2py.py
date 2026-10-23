@@ -336,6 +336,8 @@ def translate(code):
     refuse_override_var_mismatch(code)         # an override's `var` parameters: Nim refuses a mismatch
     from ady_stmt import expand_variant_literals
     code = expand_variant_literals(code)   # `VNum(3.0)`: see ady_stmt
+    from ady_style import expand_style_blocks
+    code = expand_style_blocks(code)       # `style "scope":` blocks in a class: see ady_style
     from ady_stmt import resolve_unit_aliases, desugar_optional_unions
     code = desugar_optional_unions(code)    # `A | B | None` is ?(A | B)
     code = resolve_unit_aliases(code)      # an alias of a unit is the unit

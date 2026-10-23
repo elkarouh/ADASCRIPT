@@ -984,6 +984,8 @@ def translate_once(code, export_symbols=False):
     code = expand_variant_literals(code)       # `VNum(3.0)`: see ady_stmt
     from ady_html import expand_html_blocks
     code = expand_html_blocks(code)  # `html:` blocks: see ady_html
+    from ady_style import expand_style_blocks
+    code = expand_style_blocks(code)  # `style "scope":` blocks in a class: see ady_style
     from ady_stmt import resolve_unit_aliases, desugar_optional_unions
     code = desugar_optional_unions(code)    # `A | B | None` is ?(A | B)
     code = resolve_unit_aliases(code, _nimport_carried.get("distinct_types", {}))

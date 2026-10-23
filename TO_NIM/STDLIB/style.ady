@@ -1,27 +1,26 @@
 """style -- the look of what a class draws, written in the class: CSS rules scoped to it, with the
 properties checked by name.
 
-A class that draws something holds its Style, built in its constructor, and the page puts every
-Style it draws into its <style> once: the rules are written once for the class, never for each
-element, and an element carries only its class and its state.
+A class that draws something holds its Style, and the page puts every Style it draws into its
+<style> once: the rules are written once for the class, never for each element, and an element
+carries only its class and its state. The class writes it as a style block (GRAMMAR/ady_style.py),
+which is this module's Style, Rule and Look:
 
     type Role_T is enum NO_ROLE, WAY, START, GOAL
 
     class Node_View:
-        var style: Style = Style("g.node")
-
-        def __init__(self):
-            self.style.part("", Look(cursor="grab"))
-            self.style.part(" circle", Look(fill=WHITE, stroke=GREY, stroke_width=2.0))
-            self.style.part(":hover circle", Look(stroke=INK))
-            self.style.when(WAY, " circle", Look(stroke=ORANGE, stroke_width=4.0))
+        style "g.node":
+            &:                  cursor="grab"
+            circle:             fill=WHITE stroke=GREY stroke_width=2
+            &:hover circle:     stroke=INK
+            [WAY] circle:       stroke=ORANGE stroke_width=4
 
     page.shell_text(title, STYLE + Node_View().style.css(), ...)
 
-`part` is a rule for the scope followed by PART: "" the element itself, " circle" a circle in it,
-":hover circle" one when the pointer is over it. `when` is the same in a state of the element,
-an enum value: WAY is the class "way", `class_of(WAY)`, which the element carries.
-Compiles both ways.
+A rule is for the scope followed by its part: "" the element itself (`&`), " circle" a circle in
+it, ":hover circle" one when the pointer is over it, ".way circle" one in the state WAY (`[WAY]`),
+an enum value whose class, `class_of(WAY)`, the element carries. `part` and `when` add a rule
+to a Style made in code. Compiles both ways.
 """
 
 # What a rule sets: each property named as in CSS, with _ for -. A property left at its default
@@ -39,13 +38,20 @@ type Look is record:
     pointer_events:   str = ""          # none
     paint_order:      str = ""          # stroke: the outline under the fill, as a halo
 
+# A rule of a Style: what follows the scope (" circle", ":hover circle", ".way circle"), and its look.
+type Rule is record:
+    part: str
+    look: Look
+
 # The rules of what a class draws, every one under SCOPE, the selector of its element.
 class Style:
     var scope: str
     var rules: []str = []
 
-    def __init__(self, scope: str):
+    def __init__(self, scope: str, rules: []Rule = []):
         self.scope = scope
+        for r in rules:
+            self.part(r.part, r.look)
 
     # A number as CSS writes it: 2, not 2.0.
     def number(self, f: float) -> str:

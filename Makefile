@@ -98,6 +98,7 @@ STANDALONE := \
     ../TESTS/test_method_named_like_function.ady \
     ../TESTS/test_table_literal_types.ady \
     ../TESTS/test_store.ady \
+    ../TESTS/test_style_block.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \
@@ -970,6 +971,9 @@ test-part-15:
 	    [ "$$(grep -c 'self.vehicles = \[\]' $(TMPDIR)/test_class_fields_per_instance.py)" = 1 ] \
 	    && [ "$$(grep -c 'self.opened = ' $(TMPDIR)/test_class_fields_per_instance.py)" = 2 ] \
 	    && echo OK || { echo FAIL; exit 1; }
+	@printf '  %-42s' "TESTS/test_style_block.ady (python)"; \
+	    $(PYTHON) $(CURDIR)/TO_PYTHON/ady2py.py $(CURDIR)/TESTS/test_style_block.ady | $(PYTHON) - \
+	    | grep -qx "style block ok" && echo OK || { echo FAIL; exit 1; }
 	@rm -f $(TMPDIR)/test_class_fields_per_instance.py
 
 test-part-16:

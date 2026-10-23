@@ -3579,6 +3579,37 @@ reads them back with `read_json(text)` (a `?Json_T`, None when it is not JSON)
 and, by name, `json_list`, `json_text`, `json_number` and `json_flag`.
 `BROWSER_EXAMPLES/ACCOUNTING` hands its accounts and arrows over this way.
 
+### The look, in the class: `style` blocks
+
+A class that draws something writes its look in its body, as a `style` block:
+
+```python
+from style import Look, Rule, Style
+
+type Role_T is enum NO_ROLE, START, GOAL
+
+class Node_View:
+    style "g.node":
+        &:                  cursor="grab"
+        circle:             fill=PAPER stroke=RIM stroke_width=2
+        &:hover circle:     stroke=INK
+        [START] circle:     fill=PALE_GREEN stroke=GREEN stroke_width=4
+```
+
+The string is the scope, the selector of the class's element, and every rule
+is under it: `circle` is a circle in the element, `&` the element itself
+(`&:hover circle`, `&.selected circle`), `[START]` the element in a state, an
+enum value whose class (`start`, `style.class_of(START)`) the element carries.
+After the `:`, the properties are `name=value`, each value an expression and
+each name a field of the stdlib's `Look` (`stroke_width` for
+`stroke-width`), so a misspelt one does not compile.
+
+The block is the field `style`, a `Style` (`TO_NIM/STDLIB/style.ady`), made
+for each instance; the page puts `view.style.css()` in its `<style>` once,
+and an element carries only its class and its state. Both backends;
+`TESTS/test_style_block.ady`, and DIJKSTRA_HTMX's `Network_View`,
+`Edge_View` and `Node_View`.
+
 ---
 
 ## Modules and Project Layout
@@ -3812,7 +3843,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import page_server` | (c) what every server of an htmx page does the same: `News` (the pages following `GET /events`: `follow`, `tell`), `send_script`, `port_of` |
 | `import page_request` | (c, js) a request as the page sent it: `Page_Request` (its method, path and fields, read once from the query and the body: `field`, `number_field`) |
 | `import page_alone` | (js) an htmx page with no server: `serve_in_page(answer, shell)` answers every request the page makes with the app's own session, in the page, and writes the page; `tell_page` tells it a change, as `GET /events` would; `ady2nim js` keeps such a script's names to itself, beside the page's own (DIJKSTRA_HTMX's `make alone`) |
-| `from style import Look, Style` | (c, js) the look of what a class draws, written in the class: a `Style(scope)` with `part(part, Look(...))` and `when(state, part, Look(...))`, each `Look` property named as in CSS (`stroke_width`), and `css()` for the page's `<style>`, once per class; DIJKSTRA_HTMX's `Node_View` uses it |
+| `from style import Look, Rule, Style` | (c, js) the look of what a class draws, written in the class as a `style` block (see [The look, in the class](#the-look-in-the-class-style-blocks)): a `Style(scope, rules)`, each `Look` property named as in CSS (`stroke_width`), `css()` for the page's `<style>`, once per class; `part` and `when` add a rule in code |
 | `from store import Store` | (c, js) texts kept by name from one run to the next: `Store(place)` with `names`, `read`, `write`, `drop`; natively the files of a directory, under `ady2nim js` the browser's storage under the place's name, and `Store("")` in memory (for tests) |
 | `import server_page` | (c) the page a server draws, in the page's own words: `Page_Of[Thing_T]` writes the htmx attributes from a command, so an app's gui says only which command each part sends: `button`, `sending` (any element), `on_change` (a field or a form), `every` (a tick), `shell_text` (the first page, which loads the rest) |
 | `import page_board` | (js) the blackboard of an htmx page's script: `Page_Channel_T` (`COMMANDS`, `CHANGES`), `changes_channel` (what the server says changed, from `GET /events`), and `Liaison_Officer[Thing_T]`, the observer that sends each command to the server but a draft |
