@@ -480,9 +480,9 @@ def liaison(channel: Page_Channel_T, c: Command):
     if not is_draft(c):
         send(c)
 
-let to_server: int = commands_channel.subscribe(liaison)
-let drafts: int = commands_channel.subscribe(follow_mouse)
-let news: int = changes_channel.subscribe(read_again)
+commands_channel.subscribe(liaison)
+commands_channel.subscribe(follow_mouse)
+changes_channel.subscribe(read_again)
 follow("/events", heard)
 ```
 

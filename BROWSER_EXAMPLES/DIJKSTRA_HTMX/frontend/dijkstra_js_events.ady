@@ -553,9 +553,9 @@ def read_again(channel: Page_Channel_T, change: str):
         return
     ask_for(read_network("", False))
 
-let to_server: int = commands_channel.subscribe(liaison)
-let drafts: int = commands_channel.subscribe(follow_mouse)
-let news: int = changes_channel.subscribe(read_again)
+commands_channel.subscribe(liaison)
+commands_channel.subscribe(follow_mouse)
+changes_channel.subscribe(read_again)
 
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)
