@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""roi_gui -- the page as HTML the server draws, for htmx to swap in; no JointJS.
+"""roi_gui -- the page as HTML the server draws; no JointJS.
 
 The page is one SVG: boxes (rects with a form inside, in a foreignObject) joined by arrows
 (paths). The browser draws it and nothing more. A field that is changed sends its command
@@ -15,7 +15,12 @@ from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPe
 from drawing import Drawing_Pixel_T
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
-from backend/roi_commands import Command, url, update_investment, update_share
+from backend/roi_commands import Thing_T, Command, url, read_portfolio, update_investment, update_share
+from server_page import Page_Of
+
+# The page: a command goes to its URL, and a change's answer takes the place of #problem.
+type Page is Page_Of[Thing_T]
+let page: Page = Page(url, "#problem", "")
 
 const INVEST_COLOR: str = "#D4D9D7"
 const OVERALL_COLOR: str = "#EAECEA"
@@ -103,6 +108,25 @@ def box_html(block: str, x: Drawing_Pixel_T, y: Drawing_Pixel_T, w: Drawing_Pixe
                 div class="jj-form":
                     + inside
 
+# The fields of the boxes, bare: what each sends when it is changed is said where it is drawn.
+
+def funds_field(investment: Investment) -> Html:
+    html:
+        input class="jj-input" type="number" name="funds" value=plain(investment.funds) min="0"
+
+def year_field(investment: Investment, years: []int) -> Html:
+    html:
+        select class="jj-input" name="year":
+            for y in years:
+                if y == investment.year:
+                    option value=str(y) selected="selected": str(y)
+                else:
+                    option value=str(y): str(y)
+
+def percentage_field(share: InvestmentPercentage) -> Html:
+    html:
+        input class="jj-input" type="number" name="percentage" value=plain(share.percentage) min="0" max="100" step="1"
+
 # What the Investment looks like inside its box: the money, and the year it was put in.
 def to_html(investment: Investment) -> Html:
     var years: []int = []
@@ -116,16 +140,11 @@ def to_html(investment: Investment) -> Html:
             div class="jj-field-vertical":
                 label:
                     "How much did you invest?"
-                    input class="jj-input" type="number" name="funds" value=plain(investment.funds) min="0" data_hx_put=update_investment().url() data_hx_trigger="change" data_hx_target="#problem" data_hx_swap="outerHTML"
+                    + page.on_change(update_investment(), funds_field(investment))
             div class="jj-field-vertical":
                 label:
                     "What year it was?"
-                    select class="jj-input" name="year" data_hx_put=update_investment().url() data_hx_trigger="change" data_hx_target="#problem" data_hx_swap="outerHTML":
-                        for y in years:
-                            if y == investment.year:
-                                option value=str(y) selected="selected": str(y)
-                            else:
-                                option value=str(y): str(y)
+                    + page.on_change(update_investment(), year_field(investment, years))
 
 # What an InvestmentPercentage looks like inside its box: the question, and the field.
 def to_html(share: InvestmentPercentage) -> Html:
@@ -136,7 +155,7 @@ def to_html(share: InvestmentPercentage) -> Html:
                 strong: label_of(share.kind)
                 "?"
                 span class="jj-input-container":
-                    input class="jj-input" type="number" name="percentage" value=plain(share.percentage) min="0" max="100" step="1" data_hx_put=update_share(name_of(share.kind)).url() data_hx_trigger="change" data_hx_vals=update_share(name_of(share.kind)).vals() data_hx_target="#problem" data_hx_swap="outerHTML"
+                    + page.on_change(update_share(name_of(share.kind)), percentage_field(share))
                     span class="jj-input-unit": "%"
 
 # A line of a results box: what it is, and its value, which cannot be edited.
@@ -238,20 +257,8 @@ input:invalid { background-color: ivory; border: 2px solid lightgray; outline: 2
 .jj-input-unit { flex-shrink: 0; padding-left: 5px; text-align: right; }
 """
 
-def shell() -> Html:
-    html:
-        html lang="en":
-            head:
-                meta charset="utf-8"
-                title: "Return of investment"
-                style: STYLE
-                script src="/htmx.min.js"
-                script src="/roi_js_events.js"
-            body:
-                div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
-
 def shell_text() -> str:
-    return "<!doctype html>" + str(shell())
+    return page.shell_text("Return of investment", STYLE, ["/roi_js_events.js"], [], read_portfolio())
 
 def all_text(portfolio: Portfolio, layout: Layout) -> str:
     return str(all_html(portfolio, layout))

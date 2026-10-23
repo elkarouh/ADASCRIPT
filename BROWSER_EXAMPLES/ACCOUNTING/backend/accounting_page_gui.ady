@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""accounting_page_gui -- the page as HTML the server draws, for htmx to swap in.
+"""accounting_page_gui -- the page as HTML the server draws.
 
     GET /h        the shell: a script tag and a div that loads /h/all
     GET /h/all    the whole page, drawn from the books and the settings in the query
@@ -19,7 +19,7 @@ used draw it, here native: the amounts are 64-bit, and the grouping is not limit
 browser's int can count. An account is dragged by accounting_js_events.ady, the page's one script of
 our own. It records a transaction by an arrow drawn from one account to another, replays, runs the
 exercise, closes the year, opens and deletes accounts and transactions, starts a scenario over,
-saves it and deletes it. Each button sends a command (accounting_commands.ady) by its own method
+saves it and deletes it. Each button sends a command (accounting_commands.ady), and `page` (the stdlib's server_page.ady) writes how: by its own method
 and URL: a read's answer is the page, in place of #all; a change's answer is only the paragraph
 #told, above the page: what was done, or why not. The page is drawn again on the news of the change
 (accounting_js_events.ady), on every page that shows the books.
@@ -32,36 +32,20 @@ from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_
 from backend/books_text import AccountRow, Books, Ratio, kind_text, ratios_of
 from backend/accounting_groups import Grouping
 from backend/accounting_page_state import Settings, View, posting_text
-from commands import CREATE, READ, UPDATE, DELETE
-from backend/accounting_commands import Command, url, read_books, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario, close_year
+from server_page import Page_Of
+from backend/accounting_commands import Thing_T, Command, url, no_fields, read_books, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario, close_year
 
 # ---- Buttons ----
 
-# A button that sends the command C, by its verb's method to its URL, with the fields within INCLUDE
-# (CSS selectors, "" for none), after ASK is confirmed ("" asks nothing). A read takes the settings
-# (#state) along, and its answer, the page, takes the place of #all; a change's answer, what was
-# done or why not, takes the place of the paragraph #told.
-def command_button(label: str, c: Command, include: str, ask: str, css: str) -> Html:
-    let vals: str = c.vals()
-    case c.verb:
-        when READ:
-            let along: str = ("#state" if include == "" else "#state, " + include)
-            html:
-                button type="button" class=css data_hx_get=c.url() data_hx_include=along data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": label
-        when CREATE:
-            html:
-                button type="button" class=css data_hx_post=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
-        when UPDATE:
-            html:
-                button type="button" class=css data_hx_put=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
-        when DELETE:
-            html:
-                button type="button" class=css data_hx_delete=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
+# The page: a command goes to its URL; a change's answer takes the place of the paragraph #told,
+# and a read takes the settings (the form #state) along.
+type Page is Page_Of[Thing_T]
+let page: Page = Page(url, "#told", "#state")
 
 # A button that asks for the page again with the field NAME set to VALUE: what was done.
 def setting_button(label: str, name: str, value: str) -> Html:
     let fields: {str}str = {name: value}
-    return command_button(label, read_books(fields), "", "", "")
+    return page.button(label, read_books(fields))
 
 def option_html(value: str, label: str, chosen: bool) -> Html:
     if chosen:
@@ -117,6 +101,18 @@ class Drawing:
     # The account I of the graph drawn: a click freezes it, or opens it when it is a group.
     def node_html(self, i: int) -> Html:
         let a: Account = self.v.drawn.accounts[i]
+        let key: str = self.v.groups.key_of(a.name)
+        let state: str = ("node from" if a.name == self.v.s.source else ("node now" if a.name in self.v.now_accounts else "node"))
+        let css: str = (state + " picked" if a.name in self.v.s.picked else state)
+        let freeze: {str}str = {"freeze": a.name}
+        let toggle: {str}str = {"toggle": key}
+        if key == "":
+            return page.sending(read_books(freeze), self.box_of(i, css), "", "", "")
+        return page.sending(read_books(toggle), self.box_of(i, css + " group"), "", "", "")
+
+    # The box of account I, its class CSS, and what hovering over it says.
+    def box_of(self, i: int, css: str) -> Html:
+        let a: Account = self.v.drawn.accounts[i]
         let p: Spot_T = self.at.points[i]
         let shape: Shape = Shape(True, boxes().half_w, self.tall[i])
         let x: str = f"{p.x:.1f}"
@@ -124,24 +120,10 @@ class Drawing:
         let h: str = f"{self.tall[i]:.1f}"
         let id: str = self.id_of(self.rows[i])
         let tip: str = self.v.groups.tip(self.v.drawn, a)
-        let key: str = self.v.groups.key_of(a.name)
-        let state: str = ("node from" if a.name == self.v.s.source else ("node now" if a.name in self.v.now_accounts else "node"))
-        let css: str = (state + " picked" if a.name in self.v.s.picked else state)
-        let freeze: {str}str = {"freeze": a.name}
-        let toggle: {str}str = {"toggle": key}
-        if key == "":
-            let vals: str = read_books(freeze).vals()
-            html:
-                g class=css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
-                    title: tip
-                    + box_html(a, p, shape)
-        else:
-            let vals: str = read_books(toggle).vals()
-            let group_css: str = css + " group"
-            html:
-                g class=group_css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
-                    title: tip
-                    + box_html(a, p, shape)
+        html:
+            g class=css data_id=id data_name=a.name data_x=x data_y=y data_h=h:
+                title: tip
+                + box_html(a, p, shape)
 
     # The arrow F of the graph drawn, along ROUTE; highlighted when it is the transaction replayed's.
     def arrow_html(self, f: Flow, route: Route_T) -> Html:
@@ -191,10 +173,13 @@ class Drawing:
 # The popup of the view V: from the frozen account to the one the arrow went to, say when, what and
 # how much. Record sends it; Cancel closes it.
 def popup_html(v: View) -> Html:
+    return page.sending(create_entry(), popup_form(v), "", "", "#state")
+
+def popup_form(v: View) -> Html:
     let title: str = f"{v.s.source}  →  {v.s.target}"
     let date: str = (v.s.popup.date if v.s.popup.date != "" or len(v.b.entries) == 0 else v.b.entries[len(v.b.entries) - 1].date)
     html:
-        form id="popup" class="popup" data_hx_post=create_entry().url() data_hx_include="#state" data_hx_target="#told" data_hx_swap="outerHTML":
+        form id="popup" class="popup":
             h3: title
             label: "Date"
             input name="date" value=date placeholder="2012-01-31"
@@ -248,7 +233,7 @@ class Tabs:
         let ask: str = f"Delete the transaction of {b.entries[i].date}, {b.entries[i].what}?"
         html:
             td:
-                + command_button("Delete", delete_entry(b.ids[i]), "", ask, "delete")
+                + page.button("Delete", delete_entry(b.ids[i]), ask, "delete")
 
     # How transaction I is shown in the replay: the one replayed, one after it (greyed), or as it is.
     def replayed_css(self, i: int, css: str) -> str:
@@ -337,7 +322,7 @@ class Tabs:
                 else:
                     td class="num": money(balance)
                 td:
-                    + command_button("Delete", delete_account(r.name), "", ask, "delete")
+                    + page.button("Delete", delete_account(r.name), ask, "delete")
 
     # Every account, and a row to open a new one.
     def accounts_html(self) -> Html:
@@ -369,7 +354,7 @@ class Tabs:
                     if dc:
                         td: ""
                     td:
-                        + command_button("Open", create_account(), "tr.new", "", "")
+                        + page.button("Open", create_account(), "", "", "tr.new")
 
     # What an accountant or a banker reads off the balance sheet.
     def ratios_html(self) -> Html:
@@ -447,9 +432,8 @@ def state_html(v: View, names: []str, titles: []str, current: str) -> Html:
     let position: int = v.replay.position(s.step)
     let last_day: str = str(max(len(days) - 1, 0))
     let tidy: {str}str = {"tidy": "1"}
-    let tidy_vals: str = read_books(tidy).vals()
     html:
-        form id="state" data_hx_get="/h/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
+        form id="state":
             strong: "Scenario "
             select name="scenario":
                 for i in range(len(names)):
@@ -482,7 +466,7 @@ def state_html(v: View, names: []str, titles: []str, current: str) -> Html:
             input type="hidden" name="score" value=str(s.score)
             input type="hidden" name="tries" value=str(s.tries)
             + setting_button(("Hide help" if s.help else "Help"), "act", "help")
-            button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
+            + page.sending(read_books(tidy), tidy_button(), "", "", "")
             if s.ex >= 0:
                 p class="replay":
                     if v.asking():
@@ -514,6 +498,10 @@ def state_html(v: View, names: []str, titles: []str, current: str) -> Html:
             if s.hint() != "":
                 p class="hint": s.hint()
 
+def tidy_button() -> Html:
+    html:
+        button type="button" title="Lay the accounts out again": "Tidy up"
+
 # The buttons that change the books or the scenario (CURRENT), and the merge of the accounts picked.
 def tools_html(v: View, current: str) -> Html:
     let saved: str = current + "_mine"
@@ -521,18 +509,18 @@ def tools_html(v: View, current: str) -> Html:
     let picked_text: str = "Picked: " + ", ".join(picked)
     html:
         p class="tools":
-            + command_button("Start over", update_scenario(), "", "Start this scenario over? What you changed in it is lost.", "")
+            + page.button("Start over", update_scenario(), "Start this scenario over? What you changed in it is lost.")
             span: " "
             input id="newname" name="newname" value=saved size="16" title="Letters, digits, _ and -"
-            + command_button("Save as...", create_scenario(), "#newname", "", "")
-            + command_button("Delete scenario", delete_scenario(), "", "Delete this scenario, and the changes you made in it? It cannot be undone.", "")
+            + page.button("Save as...", create_scenario(), "", "", "#newname")
+            + page.button("Delete scenario", delete_scenario(), "Delete this scenario, and the changes you made in it? It cannot be undone.")
             if v.can_close():
-                + command_button("Close the year", close_year(), "", "Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero.", "")
+                + page.button("Close the year", close_year(), "Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero.")
             if len(picked) > 0:
                 span class="picked": " " + picked_text
             if len(picked) >= 2:
                 input id="mergename" name="mergename" placeholder="name of the merged accounts" size="24"
-                + command_button("Merge the picked", read_books({"act": "merge"}), "#mergename", "", "")
+                + page.button("Merge the picked", read_books({"act": "merge"}), "", "", "#mergename")
 
 # ---- The page ----
 
@@ -543,10 +531,9 @@ def all_html(v: View, names: []str, titles: []str, current: str) -> Html:
     let about: []str = (v.b.about.split("\n") if s.help and v.b.about != "" else [])
     let note_css: str = ("refused" if s.bad else "note")
     let tick: {str}str = {"act": "tick"}
-    let tick_vals: str = read_books(tick).vals()
     html:
         div id="all":
-            + state_html(v, names, titles, current)
+            + page.on_change(read_books(no_fields()), state_html(v, names, titles, current))
             + tools_html(v, current)
             if s.help:
                 p: APP_INTRO
@@ -560,11 +547,11 @@ def all_html(v: View, names: []str, titles: []str, current: str) -> Html:
             + Drawing(v).to_html()
             div class="tabs":
                 for name in TAB_NAMES:
-                    + command_button(name, read_books({"go": name}), "", "", ("selected" if name == s.tab else ""))
+                    + page.button(name, read_books({"go": name}), "", ("selected" if name == s.tab else ""))
             for part in Tabs(v).to_html(s.tab):
                 + part
             if s.playing:
-                div class="ticker" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tick_vals data_hx_trigger="load delay:1800ms" data_hx_target="#all" data_hx_swap="outerHTML"
+                + page.every(1800, read_books(tick))
 
 const EXTRA: str = """
 body { max-width: 80em; }
@@ -622,26 +609,12 @@ def told_html(done: str | !BookFailure_T) -> Html:
 def told_text(done: str | !BookFailure_T) -> str:
     return str(told_html(done))
 
-def shell() -> Html:
+def title_html() -> Html:
     html:
-        html lang="en":
-            head:
-                meta charset="utf-8"
-                title: "Accounting, as graph theory"
-                style: STYLE + NODE_STYLE + EDGE_STYLE + EXTRA
-                script src="/htmx.min.js"
-                script src="/accounting_js_events.js"
-            body:
-                h1: "Accounting, as graph theory"
-                + told_html("")
-                div id="all" data_hx_get="/h/all" data_hx_trigger="load": "Loading..."
-
-# The pages as text, for the server.
-# karax turns an onerror attribute into a handler of its own, so it is added to the text.
-const MISSING: str = "<script onerror=\"addEventListener('load', function () { document.getElementById('all').textContent = 'htmx.min.js did not load: run make app, which copies it to build/.' })\" src=\"/htmx.min.js\">"
+        h1: "Accounting, as graph theory"
 
 def shell_text() -> str:
-    return "<!doctype html>" + str(shell()).replace("<script src=\"/htmx.min.js\">", MISSING)
+    return page.shell_text("Accounting, as graph theory", STYLE + NODE_STYLE + EDGE_STYLE + EXTRA, ["/accounting_js_events.js"], [title_html(), told_html("")], read_books(no_fields()))
 
 # The page for the books B of scenario CURRENT, of the scenarios NAMES (their TITLES), as the settings
 # S ask, what the reader did carried out.

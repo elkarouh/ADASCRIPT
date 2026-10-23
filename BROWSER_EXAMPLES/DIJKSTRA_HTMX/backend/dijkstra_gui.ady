@@ -1,19 +1,21 @@
 #!/usr/bin/env ady2nim
-"""dijkstra_gui -- the page as HTML the server draws, for htmx to swap in.
+"""dijkstra_gui -- the page as HTML the server draws.
 
 What the page shows is a function of the network (the model, which the server keeps) and of what
 the reader has chosen, a Choice: the start and the goal, which the page keeps in the form #state and
 sends with every request. A Route is the shortest way between them, worked out once, and what the
 page says of it; the drawing only draws (a to_html for an edge, a node and the network).
 
-Reading is GET /all, which gets the whole page back, for htmx to swap in. A change is a command,
-from a button here (command_button) or from the drawing's gestures and menus
-(dijkstra_js_events.ady): its answer is only the paragraph #problem, empty when it went through, and
-every open page then reads itself again when the server tells it of the change.
+Each button sends a command (dijkstra_commands.ady), and says which: `page.button`, the stdlib's
+server_page.ady, writes how it is sent. A read gets the whole page back; a change, from a button here
+or from the drawing's gestures and menus (dijkstra_js_events.ady), gets only the paragraph
+#problem, empty when it went through, and every open page then reads itself again when the server
+tells it of the change.
 """
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY
-from backend/dijkstra_commands import Command, url, relayout_network, reset_network
+from backend/dijkstra_commands import Thing_T, Command, url, read_network, relayout_network, reset_network
+from server_page import Page_Of
 from drawing import Drawing_Pixel_T, Spot_T
 
 # ---- What the reader chose, and the way it gives ----
@@ -180,19 +182,10 @@ def menus_html() -> Html:
             div id="menu-space" class="menu":
                 button type="button" data_tool="add-here": "New node here"
 
-# A button that sends the command C, after asking ASK: its verb is the method, its thing the URL,
-# and its answer takes the place of #problem.
-def command_button(label: str, c: Command, ask: str) -> Html:
-    case c.method():
-        when "PUT":
-            html:
-                button type="button" class="quiet" data_hx_put=c.url() data_hx_vals=c.vals() data_hx_confirm=ask data_hx_target="#problem" data_hx_swap="outerHTML": label
-        when "DELETE":
-            html:
-                button type="button" class="quiet" data_hx_delete=c.url() data_hx_vals=c.vals() data_hx_confirm=ask data_hx_target="#problem" data_hx_swap="outerHTML": label
-        when others:
-            html:
-                button type="button" class="quiet" data_hx_post=c.url() data_hx_vals=c.vals() data_hx_confirm=ask data_hx_target="#problem" data_hx_swap="outerHTML": label
+# The page: a command goes to its URL; a change's answer takes the place of #problem, and a read
+# takes the reader's choice (#state) along.
+type Page is Page_Of[Thing_T]
+let page: Page = Page(url, "#problem", "#state")
 
 # Why the last command was refused, where the page shows it: empty (and not shown) when it went through.
 # The answer to a command is this paragraph alone.
@@ -219,8 +212,8 @@ def all_html(net: Network, choice: Choice, problem: None | !Refusal_T) -> Html:
                 input type="hidden" name="start" value=choice.start
                 input type="hidden" name="goal" value=choice.goal
             div class="toolbar":
-                + command_button("Relayout", relayout_network(), "Put every node where the layout puts it? Nodes you moved go back to the layout.")
-                + command_button("Reset the sample", reset_network(), "Put the sample network back?")
+                + page.button("Relayout", relayout_network(), "Put every node where the layout puts it? Nodes you moved go back to the layout.", "quiet")
+                + page.button("Reset the sample", reset_network(), "Put the sample network back?", "quiet")
             p class=said_css: route.said()
             + problem_html(problem)
             + to_html(net, route)
@@ -258,23 +251,15 @@ path.wire { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; fil
 
 const ALL_STYLE: str = STYLE + EDGE_STYLE + NODE_STYLE + MENU_STYLE
 
-def shell() -> Html:
+# What the page says above itself.
+def header_html() -> Html:
     html:
-        html lang="en":
-            head:
-                meta charset="utf-8"
-                title: "Shortest way"
-                style: ALL_STYLE
-                script src="/htmx.min.js"
-                script src="/dijkstra_js_events.js"
-            body:
-                header:
-                    h1: "Shortest way"
-                    p: "Dijkstra on a network you can edit, drawn by the server."
-                div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
+        header:
+            h1: "Shortest way"
+            p: "Dijkstra on a network you can edit, drawn by the server."
 
 def shell_text() -> str:
-    return "<!doctype html>" + str(shell())
+    return page.shell_text("Shortest way", ALL_STYLE, ["/dijkstra_js_events.js"], [header_html()], read_network("", False))
 
 def all_text(net: Network, choice: Choice, problem: None | !Refusal_T) -> str:
     return str(all_html(net, choice, problem))

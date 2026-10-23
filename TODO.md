@@ -87,6 +87,11 @@ it but do:. Not yet:
       the method's name, `value`, may be what is taken for a write.
       commands.ady's `number_value` and `spot` read the field into a
       `let` first meanwhile.
+- [ ] a field that holds a function, called (`self.url_of(c)`), is taken
+      for a call of a method that may change self: the method gets a `var
+      self`, and so does every method that calls it ("'page' is immutable").
+      server_page.ady's `sending` reads the field into a `let` first
+      meanwhile.
 
 ### A str joined with a char
 

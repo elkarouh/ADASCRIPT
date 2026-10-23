@@ -266,23 +266,28 @@ body, the buttons) stays in `STYLE`.
 There are two kinds of event, and the example uses each for what it
 does best.
 
-**Most events go to the server.** A button says what to ask for, in its
-attributes. The browser does nothing itself:
+**Most events go to the server.** A button says which command it sends. The
+browser does nothing itself:
 
 ```adascript
-+ command_button("Reset the sample", reset_network(), "Put the sample network back?")
++ page.button("Reset the sample", reset_network(), "Put the sample network back?", "quiet")
 ```
 
 which writes
 
 ```html
-<button type="button" class="quiet" data-hx-delete="/all" data-hx-vals="{}" data-hx-confirm="Put the sample network back?" data-hx-target="#problem" data-hx-swap="outerHTML">Reset the sample</button>
+<button type="button" class="quiet" data-hx-delete="/all" data-hx-confirm="Put the sample network back?" data-hx-target="#problem" data-hx-swap="outerHTML">Reset the sample</button>
 ```
 
 The button sends a command, `reset_network()` (Delete the network: the sample is put
-back), and the command says the method and the URL (see below): `data_hx_delete`
-names the request, and `data_hx_confirm` asks first. `data_hx_target` and
-`data_hx_swap` say where the answer goes.
+back), and the command says the method and the URL (see below). `page` is the app's
+`Page_Of[Thing_T]`, from the standard library's `server_page.ady`, made once in
+`dijkstra_gui.ady` with where a command goes (`url`) and where a change's answer goes
+(`#problem`): it writes the htmx attributes (`data-hx-delete` names the request,
+`data-hx-confirm` asks first, `data-hx-target` and `data-hx-swap` say where the answer
+goes), so the gui never does. The same `page` makes any element send a command
+(`page.sending`), a field send one when it is changed (`page.on_change`), and the shell
+that loads the first page (`page.shell_text`).
 
 **The server reads each request back into a command.** `server.ady` only matches
 the path and hands the request on. `Session.answer` reads it back into the same
@@ -568,7 +573,8 @@ JavaScript expects. htmx removes the middle step: the server sends
 HTML, and htmx puts it where the attributes say. The page is always what
 the server last drew, so there is nothing to keep in step.
 
-**How.** A button, a form or a `div` carries the request in attributes:
+**How.** A button, a form or a `div` carries the request in attributes, which
+`server_page.ady` writes from a command (the app's gui does not):
 
 | Attribute | Means |
 |---|---|
@@ -580,9 +586,9 @@ the server last drew, so there is nothing to keep in step.
 | `data_hx_confirm="..."` | ask first, and send only on yes |
 | `data_hx_trigger="load"` | send when the element appears (the first page) |
 
-The attributes are written with underscores, since an Adascript name
-cannot contain a dash; the `html:` block writes each `_` of an
-attribute's name as `-`, so the page has `data-hx-post`, the name htmx
+In an `html:` block the attributes would be written with underscores,
+since an Adascript name cannot contain a dash (`data_hx_post`); the block
+writes each `_` as `-`, so the page has `data-hx-post`, the name htmx
 reads.
 
 **State.** The network is on the server. The choice the reader has made
@@ -608,8 +614,8 @@ Each of these changes one layer, so you can see the others not change.
    circle's `fill`, and add its rule to `NODE_STYLE`.
 3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
    with `r.field("colour")`, call a new method, and publish `Change(UPDATE, name)` when it went
-   through. Put a button for it in `node_buttons_html`, with `data_hx_post="/relabel"`
-   and `data_hx_target="#problem"`.
+   through. Add a command for it in `dijkstra_commands.ady`, and put a button for it
+   in the toolbar: `page.button("Relabel", relabel_node(name, "red"))`.
 4. **Test it without a server.** In `tests/test_dijkstra.ady`, call
    `after("POST", "/relabel", "name=A&colour=red")` (the command, then the page read
    again) and check the page contains `red`.

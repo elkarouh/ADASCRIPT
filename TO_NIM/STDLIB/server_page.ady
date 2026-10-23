@@ -1,0 +1,115 @@
+#!/usr/bin/env ady2nim
+"""
+server_page.ady -- the page a server draws, in the page's own words: which command each part sends,
+never how it is sent
+
+A page of BROWSER_EXAMPLES (DIJKSTRA_HTMX, SVG_NODE_EDITOR, ACCOUNTING, ROI_HTMX) is drawn by its
+server, and htmx (frontend/htmx.min.js) sends what the reader does: each part of the page that does
+something carries attributes that say where to send it and where the answer goes. Those attributes
+are written here, once, from a command (commands.ady): the app says which command a part sends,
+and the page gets the rest. Its verb is the HTTP method, its thing the URL (the app's `url`), its
+fields go along. A read's answer is the page, which takes the place of #all; a change's answer is
+whether it went through, which takes the place of the paragraph the app names (#problem).
+
+    from server_page import Page_Of
+
+    type Page is Page_Of[Thing_T]
+    let page: Page = Page(url, "#problem", "#state")
+
+    page.button("Reset", reset_network(), "Put the sample back?", "quiet")   # a button that sends a command
+    page.button("Open", create_account(), "", "", "tr.new")                # ... with the fields of the row
+    page.sending(read_books(fields), box, "", "", "")                      # any element that does, on a click
+    page.on_change(update_investment(), field)                              # a field, or a form, when it changes
+    page.every(1800, read_books(tick))                                     # a part that sends it after a while
+    page.shell_text("Shortest way", STYLE, ["/dijkstra_js_events.js"], [header], read_network("", False))
+
+`settings`, the third, is the form whose fields go along with every read ("#state", the reader's
+choices the server does not keep), or "". The server serves /htmx.min.js (page_server's send_script);
+shell_text says so on the page when it did not load.
+"""
+from karax/vdom nimport setAttr
+from commands import READ, Command_Of
+
+# The parts the page makes, bare: what they send is added to them (Page_Of.sending).
+
+def bare_button(label: str, css: str) -> Html:
+    html:
+        button type="button" class=css: label
+
+def ticker() -> Html:
+    html:
+        div class="ticker"
+
+def loading() -> Html:
+    html:
+        div id="all": "Loading..."
+
+def shell_html(title: str, style: str, scripts: []str, top: []Html, all: Html) -> Html:
+    html:
+        html lang="en":
+            head:
+                meta charset="utf-8"
+                title: title
+                style: style
+                script src="/htmx.min.js"
+                for s in scripts:
+                    script src=s
+            body:
+                for part in top:
+                    + part
+                + all
+
+# karax turns an onerror attribute into a handler of its own, so it is added to the text.
+const MISSING: str = "<script onerror=\"addEventListener('load', function () { document.getElementById('all').textContent = 'htmx.min.js did not load: run make, which puts it where the server finds it.' })\" src=\"/htmx.min.js\">"
+
+# A page whose app's commands are of Thing_T: where each goes, and where its answer goes.
+class Page_Of[Thing_T]:
+    var url_of:   (Command_Of[Thing_T]) -> str     # the URL a command goes to: the app's
+    var answers:  str                               # what a change's answer takes the place of: "#problem"
+    var settings: str                               # the form whose fields go with a read: "#state", or ""
+
+    def __init__(self, url_of: (Command_Of[Thing_T]) -> str, answers: str, settings: str):
+        self.url_of = url_of
+        self.answers = answers
+        self.settings = settings
+
+    # ELEMENT, made to send the command C when ON happens to it ("" for what its kind does: a
+    # click, a form's submit), after ASK is confirmed ("" asks nothing), with the fields within
+    # INCLUDE (CSS selectors, or ""). A read takes the settings along too.
+    def sending(self, c: Command_Of[Thing_T], element: Html, on: str, ask: str, include: str) -> Html:
+        let url_of: (Command_Of[Thing_T]) -> str = self.url_of      # not self.url_of(c): see TODO.md
+        let where: str = url_of(c)
+        setAttr(element, "data-hx-" + c.method().lower(), where)
+        if len(c.fields) > 0:
+            setAttr(element, "data-hx-vals", c.vals())
+        if on != "":
+            setAttr(element, "data-hx-trigger", on)
+        if ask != "":
+            setAttr(element, "data-hx-confirm", ask)
+        var along: str = include
+        if c.verb == READ and self.settings != "":
+            along = (self.settings if include == "" else self.settings + ", " + include)
+        if along != "":
+            setAttr(element, "data-hx-include", along)
+        setAttr(element, "data-hx-target", ("#all" if c.verb == READ else self.answers))
+        setAttr(element, "data-hx-swap", "outerHTML")
+        return element
+
+    # A button LABEL that sends C, after ASK is confirmed ("" asks nothing), with the fields within
+    # INCLUDE ("" for none); CSS is its class, or "".
+    def button(self, label: str, c: Command_Of[Thing_T], ask: str = "", css: str = "", include: str = "") -> Html:
+        return self.sending(c, bare_button(label, css), "", ask, include)
+
+    # ELEMENT, a field or a form, made to send C when what is in it changes: with its fields.
+    def on_change(self, c: Command_Of[Thing_T], element: Html) -> Html:
+        return self.sending(c, element, "change", "", "this")
+
+    # An empty part of the page that sends C MS milliseconds after it is drawn: a clock's tick.
+    def every(self, ms: int, c: Command_Of[Thing_T]) -> Html:
+        return self.sending(c, ticker(), f"load delay:{ms}ms", "", "")
+
+    # The page as the browser first gets it: TITLE, the STYLE, htmx and the app's SCRIPTS, the parts
+    # of TOP above the page, and the page itself (#all), which the read C brings once it is loaded.
+    def shell_text(self, title: str, style: str, scripts: []str, top: []Html, c: Command_Of[Thing_T]) -> str:
+        let all: Html = self.sending(c, loading(), "load", "", "")
+        return "<!doctype html>" + str(shell_html(title, style, scripts, top, all)).replace("<script src=\"/htmx.min.js\">", MISSING)

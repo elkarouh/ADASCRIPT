@@ -1,18 +1,23 @@
 #!/usr/bin/env ady2nim
-"""node_editor_gui -- the page as HTML the server draws, for htmx to swap in.
+"""node_editor_gui -- the page as HTML the server draws.
 
 What the page shows is a function of the diagram (the model, which the server keeps): the nodes,
 with their ports, and the diagram as text, which the browser's script builds its View from. The
 connectors are not drawn here: the script draws them from that text, so the one place that knows
-how a connector looks is node_editor_js_events.ady. A read (GET /all) gets the whole #all back, which
-htmx swaps in; a change made by the script's gestures, or by Reset, gets only the paragraph #problem,
+how a connector looks is node_editor_js_events.ady. A read (GET /all) gets the whole #all back; a
+change made by the script's gestures, or by Reset, gets only the paragraph #problem,
 empty when it went through, and the page is drawn again on the news of the change.
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
 from drawing import Drawing_Pixel_T, Spot_T
-from backend/node_editor_commands import url, reset_diagram
+from backend/node_editor_commands import Thing_T, url, read_diagram, reset_diagram
+from server_page import Page_Of
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, PORTS, PORT_R, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot
+
+# The page: a command goes to its URL, and a change's answer takes the place of #problem.
+type Page is Page_Of[Thing_T]
+let page: Page = Page(url, "#problem", "")
 
 
 const STYLE: str = """
@@ -111,7 +116,7 @@ def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
     html:
         div id="all":
             div class="toolbar":
-                button type="button" data_hx_delete=reset_diagram().url() data_hx_confirm="Put the sample diagram back? What you made is lost." data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
+                + page.button("Reset the sample", reset_diagram(), "Put the sample diagram back? What you made is lost.", "")
             + problem_html(problem)
             svg id="editor" viewBox=box:
                 g id="nodes":
@@ -122,23 +127,15 @@ def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
             pre id="diagram": d.text()
             p class="hint": "Double-click the space for a new node. Drag a node to move it, or from a port to a port of another node to join them. Click a node or a connector to select it, then Delete removes it."
 
-def shell() -> Html:
+# What the page says above itself.
+def header_html() -> Html:
     html:
-        html lang="en":
-            head:
-                meta charset="utf-8"
-                title: "SVG node editor"
-                style: STYLE
-                script src="/htmx.min.js"
-                script src="/node_editor_js_events.js"
-            body:
-                header:
-                    h1: "SVG node editor"
-                    p: "Nodes and connectors, kept in diagram.txt by the server."
-                div id="all" data_hx_get="/all" data_hx_trigger="load": "Loading..."
+        header:
+            h1: "SVG node editor"
+            p: "Nodes and connectors, kept in diagram.txt by the server."
 
 def shell_text() -> str:
-    return "<!doctype html>" + str(shell())
+    return page.shell_text("SVG node editor", STYLE, ["/node_editor_js_events.js"], [header_html()], read_diagram())
 
 def all_text(d: Diagram, problem: None | !Refusal_T) -> str:
     return str(all_html(d, problem))
