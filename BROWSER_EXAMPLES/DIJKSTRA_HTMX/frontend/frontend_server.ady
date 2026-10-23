@@ -1,9 +1,9 @@
 #!/usr/bin/env ady2nim
-"""dijkstra_alone -- the server, in the page: the app with no server at all.
+"""frontend_server -- the server, in the page: the app with no server at all.
 
     make alone          then open frontend/index.html, from the file or from any site
 
-What backend/server.ady does, done in the browser (the stdlib's page_alone.ady): the requests htmx
+What backend/backend_server.ady does, done in the browser (the stdlib's page_alone.ady): the requests htmx
 and dijkstra_js_events make are handed to a Session, which keeps the network in the browser's
 storage instead of graph.txt, and each change is told to the page, which then reads itself again.
 frontend/index.html loads this script only; it writes the page, which loads the others.

@@ -1902,10 +1902,10 @@ test-part-56:
 	    printf '  %-42s' "DIJKSTRA_HTMX/tests/test_dijkstra.ady"; \
 	    (cd $(BEXDIR)/DIJKSTRA_HTMX && $(ADY2NIM) c -r tests/test_dijkstra.ady 2>/dev/null) | grep -qF "dijkstra: all checks passed" \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    printf '  %-42s' "DIJKSTRA_HTMX/frontend/dijkstra_alone.ady (ady2nim js)"; \
-	    $(ADY2NIM) js $(BEXDIR)/DIJKSTRA_HTMX/frontend/dijkstra_alone.ady >/dev/null 2>&1 \
+	    printf '  %-42s' "DIJKSTRA_HTMX/frontend/frontend_server.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(BEXDIR)/DIJKSTRA_HTMX/frontend/frontend_server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
-	    rm -f $(BEXDIR)/DIJKSTRA_HTMX/frontend/dijkstra_alone.js; \
+	    rm -f $(BEXDIR)/DIJKSTRA_HTMX/frontend/frontend_server.js; \
 	fi
 
 test-part-57:

@@ -23,7 +23,7 @@ each page then reads itself again. The program is split by what each part knows:
 | The model | `backend/dijkstra_model.ady` | the data and its rules, and the layout: where each node is drawn when nobody has put it |
 | The page | `backend/dijkstra_gui.ady` | how the data looks as HTML |
 | The requests | `backend/dijkstra_events_gui.ady` | what each request does to the data, and the change it publishes |
-| The server | `backend/server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
+| The server | `backend/backend_server.ady` | HTTP, and who hears of a change: the file (`keep`) and every open page (`tell`) |
 | The commands | `backend/dijkstra_commands.ady` | what the page can ask of the server, in words both share: C, R, U or D of a node or an edge |
 | The browser | `frontend/dijkstra_js_events.ady` | the gestures, each making a command; what must follow the mouse |
 
@@ -289,7 +289,7 @@ goes), so the gui never does. The same `page` makes any element send a command
 (`page.sending`), a field send one when it is changed (`page.on_change`), and the shell
 that loads the first page (`page.shell_text`).
 
-**The server reads each request back into a command.** `server.ady` only matches
+**The server reads each request back into a command.** `backend_server.ady` only matches
 the path and hands the request on. `Session.answer` reads it back into the same
 `Command` the page sent (`command_of` in `backend/dijkstra_commands.ady`, the vocabulary both
 sides share, given the fields read once by a `Page_Request`, from the standard library's
@@ -484,7 +484,7 @@ hears, and checks the list (`tests/test_dijkstra.ady`).
 
 A subscriber is a plain function, `(channel: Channel_T, change: Change) -> None`, so what it
 needs (the session, the open pages) it finds at module level, as `keep` and `tell` do in
-`server.ady`.
+`backend_server.ady`.
 
 ### Two blackboards and a liaison
 

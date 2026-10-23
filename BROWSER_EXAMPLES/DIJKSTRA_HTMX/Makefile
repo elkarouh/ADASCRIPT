@@ -21,9 +21,9 @@ PORT    ?= 8810
 all: server frontend/dijkstra_js_events.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so these always run it.
-server: backend/dijkstra_model.ady backend/dijkstra_commands.ady backend/dijkstra_gui.ady backend/dijkstra_events_gui.ady backend/server.ady
-	@echo "building backend/server"
-	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+server: backend/dijkstra_model.ady backend/dijkstra_commands.ady backend/dijkstra_gui.ady backend/dijkstra_events_gui.ady backend/backend_server.ady
+	@echo "building backend/backend_server"
+	@$(ADY2NIM) c backend/backend_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 # The one script of our own, Adascript compiled to JavaScript; the server sends it as /dijkstra_js_events.js.
@@ -38,23 +38,23 @@ frontend/dijkstra_js_events.js: frontend/dijkstra_js_events.ady backend/dijkstra
 frontend/htmx.min.js:
 	git checkout -- frontend/htmx.min.js
 
-# The server, in the page (frontend/dijkstra_alone.ady): frontend/index.html loads it, and it writes
+# The server, in the page (frontend/frontend_server.ady): frontend/index.html loads it, and it writes
 # the page, which loads the others. Nothing to start: the page opens from the file. Its names are
 # kept to itself, in a function: dijkstra_js_events.js names its own the same, and would replace them.
-frontend/dijkstra_alone.js: frontend/dijkstra_alone.ady backend/dijkstra_events_gui.ady backend/dijkstra_gui.ady backend/dijkstra_commands.ady backend/dijkstra_model.ady
-	@echo "building frontend/dijkstra_alone.js"
-	@$(ADY2NIM) js frontend/dijkstra_alone.ady > build.log 2>&1 || { cat build.log; exit 1; }
-	@{ echo "(function () {"; cat frontend/dijkstra_alone.js; echo "})();"; } > build.log && mv build.log frontend/dijkstra_alone.js
+frontend/frontend_server.js: frontend/frontend_server.ady backend/dijkstra_events_gui.ady backend/dijkstra_gui.ady backend/dijkstra_commands.ady backend/dijkstra_model.ady
+	@echo "building frontend/frontend_server.js"
+	@$(ADY2NIM) js frontend/frontend_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@{ echo "(function () {"; cat frontend/frontend_server.js; echo "})();"; } > build.log && mv build.log frontend/frontend_server.js
 
-alone: frontend/dijkstra_js_events.js frontend/dijkstra_alone.js frontend/htmx.min.js
+alone: frontend/dijkstra_js_events.js frontend/frontend_server.js frontend/htmx.min.js
 	@$(OPEN) frontend/index.html
 
 app: all frontend/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
-	./backend/server $(PORT)
+	./backend/backend_server $(PORT)
 
 test:
 	$(ADY2NIM) c -r tests/test_dijkstra.ady 2>/dev/null
 
 clean:
-	rm -f backend/server test_dijkstra frontend/dijkstra_js_events.js frontend/dijkstra_alone.js build.log
+	rm -f backend/backend_server test_dijkstra frontend/dijkstra_js_events.js frontend/frontend_server.js build.log

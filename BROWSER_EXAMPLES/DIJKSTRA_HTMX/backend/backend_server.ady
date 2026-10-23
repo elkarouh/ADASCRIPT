@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """server -- the one place that knows about HTTP; what a request does is dijkstra_events_gui.ady.
 
-    make app [PORT=n]  (or: ady2nim js frontend/dijkstra_js_events.ady; ady2nim c -r backend/server.ady [PORT])        then open http://127.0.0.1:8810/
+    make app [PORT=n]  (or: ady2nim js frontend/dijkstra_js_events.ady; ady2nim c -r backend/backend_server.ady [PORT])        then open http://127.0.0.1:8810/
 
     GET    /            the page: a script tag and a div that loads /all
     GET    /htmx.min.js htmx itself

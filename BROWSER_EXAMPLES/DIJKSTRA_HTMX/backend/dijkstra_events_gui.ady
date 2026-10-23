@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """dijkstra_events_gui -- what each event the page sends does, and the network it does it to; no HTTP.
 
-server.ady hands every request to a Session, as a method, a path and its fields, and sends back
+backend_server.ady hands every request to a Session, as a method, a path and its fields, and sends back
 what comes out. The tests make a Session of their own and call answer() the same way, with no server
 running.
 
@@ -37,7 +37,7 @@ type Channel_T is enum NODES_CHAN, EDGES_CHAN
 type Change_Channel_T is PublishChannel[Channel_T, Change]
 
 # The network, and where it is kept: the server makes one that keeps it in the file graph.txt, the
-# page alone (frontend/dijkstra_alone.ady) one that keeps it in the browser, the tests one that
+# page alone (frontend/frontend_server.ady) one that keeps it in the browser, the tests one that
 # keeps it nowhere.
 class Session:
     var net: Network

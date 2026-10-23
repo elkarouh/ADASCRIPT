@@ -20,7 +20,7 @@ page's script make, in place of a server. The page's script and htmx do not know
 The script is the page's first, alone in an index.html beside it, so that it is there before htmx
 and the page's script ask anything:
 
-    <!doctype html><script src="dijkstra_alone.js"></script>
+    <!doctype html><script src="frontend_server.js"></script>
 
 and in it, what the server does:
 
