@@ -811,7 +811,7 @@ class Config:
 let c: Config | !Bad_T = Config(text)
 ```
 
-**`@virtual`** — only needed when subclasses live in a different file (module). Makes Nim emit `ref object of RootObj` for cross-module dynamic dispatch.
+**`@virtual`** — only needed when subclasses live in a different file (module). Makes Nim emit `ref object of RootObj` for cross-module dynamic dispatch. A class whose body passes one of its own methods as a value (`listen("click", self.clicked)` in `__init__`) is a `ref object` without it, so the function keeps the object itself, as a Python bound method does (`TESTS/test_method_value_self.ady`).
 
 **Inheritance:**
 ```adascript

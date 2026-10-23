@@ -444,6 +444,32 @@ def _prescan_classes(stmts):
     return ref_classes, all_methods, hierarchy
 
 
+def _method_value_classes(code, all_methods):
+    """The classes whose body names one of their own methods as a value --
+    `listen("click", self.clicked)` in __init__, not `self.clicked(e)`. The
+    function made of it keeps the object, as Python's bound method does, and
+    Nim lets a closure keep only a reference: such a class is a `ref object`,
+    as one that is inherited is."""
+    import re
+    found = set()
+    lines = code.split("\n")
+    for i, ln in enumerate(lines):
+        m = re.match(r'^(\s*)class\s+(\w+)', ln)
+        if not m or m.group(2) not in all_methods:
+            continue
+        indent, body = len(m.group(1)), []
+        for nxt in lines[i + 1:]:
+            if nxt.strip() and len(nxt) - len(nxt.lstrip()) <= indent:
+                break
+            body.append(nxt.split("#")[0])
+        text = "\n".join(body)
+        for name in re.findall(r'\bself\.(\w+)\b(?!\s*[(.=\[])', text):
+            if name in all_methods[m.group(2)]:
+                found.add(m.group(2))
+                break
+    return found
+
+
 import re as _re_order
 
 _TOP_TYPE = _re_order.compile(r'^type\b')
@@ -971,6 +997,7 @@ def translate_once(code, export_symbols=False):
     (ParserState._ref_classes,
      ParserState._all_class_methods,
      ParserState._all_class_parents) = _prescan_classes(stmts)
+    ParserState._ref_classes |= _method_value_classes(code, ParserState._all_class_methods)
     # Every routine's return annotation, wherever it is in the file: which
     # side of a `T | E` a returned call is on, and whether a call is one
     # already, has to be known for routines defined further down. And the

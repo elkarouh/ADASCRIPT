@@ -28,9 +28,10 @@ it but do:. Not yet:
       assignment, a field or a closure holds a copy. In Python it is a
       reference. So `self.selection = selection` in another object, or a
       closure made in `__init__` (`listen("click", self.clicked)`), sees
-      a copy whose state drifts from the original. DIJKSTRA_HTMX's gestures
-      are made at module level, their listen(...) lines under them, for
-      that reason. `@virtual` (a `ref object`) is the workaround today.
+      a copy whose state drifts from the original. A class that passes its
+      own method as a value is a `ref object` already
+      (`_method_value_classes`, ady2nim.py); for the rest `@virtual` is the
+      workaround today.
 
 ### Narrowing an optional
 

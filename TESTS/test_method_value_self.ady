@@ -1,0 +1,37 @@
+#!/usr/bin/env ady2nim
+# test_method_value_self.ady -- a class that hands its own methods out as values in __init__
+# (`listen(self.clicked)`), as a gesture registering its listeners does. The functions keep the
+# object itself, as Python's bound methods do: what one changes, the other and the variable see.
+#
+#   ady2nim TESTS/test_method_value_self.ady -r
+#   ady2py  TESTS/test_method_value_self.ady -c
+
+var handlers: [](int) -> None = []
+var heard: []str = []
+
+def listen(f: (int) -> None):
+    handlers.append(f)
+
+class Menus:
+    var at: int
+
+    def __init__(self):
+        self.at = 0
+        listen(self.right_clicked)
+        listen(self.clicked)
+
+    def right_clicked(self, x: int):
+        self.at = x
+
+    def clicked(self, x: int):
+        heard.append(f"at {self.at}")
+
+var menus: Menus = Menus()
+handlers[0](5)                      # right_clicked sets at
+handlers[1](0)                      # clicked reads it
+assert heard == ["at 5"]
+assert menus.at == 5                # the variable is the same object
+menus.at = 7
+handlers[1](0)
+assert heard == ["at 5", "at 7"]
+print heard, menus.at

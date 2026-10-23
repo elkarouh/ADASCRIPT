@@ -120,7 +120,6 @@ class PublishChannel[Channel_T, Event_T]:
 #     let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
 #
 # `id` is the subscription's, for the channel's `unsubscribe`.
-@virtual
 class Observer[Channel_T, Event_T]:
     var id: int
 
