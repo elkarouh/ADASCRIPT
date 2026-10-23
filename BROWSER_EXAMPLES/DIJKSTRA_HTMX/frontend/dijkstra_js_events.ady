@@ -83,10 +83,6 @@ def node_of(el: Element_T) -> Node_T:
 def edge_of(el: Element_T) -> Edge_T:
     return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
 
-# Where the node NAME of NETWORK is drawn, as a spot: where the reader put it, else the layout's place.
-def spot_of_network(network: Network, name: str) -> Spot_T:
-    return place_of(network, name)
-
 # Outline the element EL, or take the outline off it.
 def set_selected(el: Element_T, lit: bool):
     let cls: str = el.attr("class")
@@ -226,7 +222,7 @@ class Drawing:
     def redraw_edges(self, name: str, network: Network):
         for e in self.edge_list:
             if e.edge.a == name or e.edge.b == name:
-                e.redraw(spot_of_network(network, e.edge.a), spot_of_network(network, e.edge.b))
+                e.redraw(place_of(network, e.edge.a), place_of(network, e.edge.b))
 
 # The text the server keeps the network in, as the page carries it: its node, edge and "at" lines
 # (see dijkstra_gui.ady). Before htmx has drawn the page there is none: an empty network.
@@ -248,7 +244,7 @@ class NetworkView:
 
     # Where the node NAME is drawn.
     def spot_of(self, name: str) -> Spot_T:
-        return spot_of_network(self.network, name)
+        return place_of(self.network, name)
 
 var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (page_drawn)
 
