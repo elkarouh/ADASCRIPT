@@ -1,0 +1,31 @@
+#!/usr/bin/env ady2nim
+# test_store.ady -- texts kept under names (the stdlib's store.ady): in a directory, and in memory.
+#
+#   ady2nim TESTS/test_store.ady -r
+from store import Store
+
+def check(store: var Store):
+    assert store.names() == []
+    assert store.read("a.txt") is None
+    assert store.write("b.txt", "node A\nedge A B 3\n") and store.write("a.txt", "one")
+    let back: ?str = store.read("b.txt")
+    assert back is not None and back == "node A\nedge A B 3\n"
+    assert store.write("a.txt", "two")
+    let again: ?str = store.read("a.txt")
+    assert again is not None and again == "two"
+    assert store.names() == ["a.txt", "b.txt"]
+    assert store.drop("a.txt") and store.drop("never.txt")
+    assert store.names() == ["b.txt"]
+    assert store.read("a.txt") is None
+
+var in_memory: Store = Store("")
+check(in_memory)
+let dir: Path = Path("/tmp/ady_test_store")
+shell: rm -rf -- {!dir}
+assert dir.mkdir() is None
+var on_disk: Store = Store(str(dir))
+check(on_disk)
+shell: rm -rf -- {!dir}
+var nowhere: Store = Store("/nonexistent/ady_test_store")
+assert nowhere.read("a.txt") is None and not nowhere.write("a.txt", "x")
+print "store ok"

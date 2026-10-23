@@ -4,6 +4,7 @@ from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
 from backend/dijkstra_gui import Choice, Route
 from commands import Change
+from store import Store
 from backend/dijkstra_events_gui import Channel_T, Session
 from backend/dijkstra_commands import Command, command_of, url, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network, relayout_network, reset_network
 from drawing import Drawing_Pixel_T, Spot_T
@@ -53,7 +54,7 @@ assert move_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))).is_d
 assert not update_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))).is_draft() and not delete_node("H").is_draft()
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
-var session: Session = Session("")
+var session: Session = Session(Store(""))
 
 # A command, then the page read again, as every open page does when it hears of the change: why the
 # command was refused, if it was, and the page.
@@ -104,7 +105,7 @@ assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "
 var heard: []str = []
 def hear(channel: Channel_T, change: Change):
     heard.append(f"{channel} {change.kind} {change.key}")
-var told: Session = Session("")
+var told: Session = Session(Store(""))
 told.nodes_channel.subscribe(hear)
 told.edges_channel.subscribe(hear)
 told.answer("GET", "/all", "")
@@ -119,7 +120,7 @@ assert heard == ["NODES_CHAN CREATE H", "EDGES_CHAN CREATE A H", "EDGES_CHAN UPD
                  "EDGES_CHAN DELETE A H", "NODES_CHAN DELETE H", "EDGES_CHAN UPDATE ", "NODES_CHAN UPDATE "]
 
 # a change that could not be kept: every page says so, until one is
-var stuck: Session = Session("/nowhere/graph.txt")
+var stuck: Session = Session(Store("/nowhere"))
 stuck.keep()
 assert "Could not write " in stuck.answer("GET", "/all", "")
 print "dijkstra: all checks passed"

@@ -9,12 +9,13 @@ storage instead of diagram.txt, and each change is told to the page, which then 
 frontend/index.html loads this script only; it writes the page, which loads the others.
 """
 from page_alone import serve_in_page, tell_page
+from store import Store
 from commands import Change
 from backend/node_editor_gui import shell_text
 from backend/node_editor_events_gui import Channel_T, Session
 
 # The session the requests are answered from, which keeps the diagram in the browser.
-var session: Session = Session("diagram.txt")
+var session: Session = Session(Store("node_editor"))
 
 # A change, told to the page: subscribed to the session's channels below.
 def tell(channel: Channel_T, change: Change):

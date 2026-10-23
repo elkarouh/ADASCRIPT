@@ -1,0 +1,119 @@
+#!/usr/bin/env ady2nim
+"""
+store.ady -- where an app keeps what it keeps: a set of texts, each under a name
+
+A session knows its model and its model's text, and keeps that text in a Store, which it is
+given: it never opens a file, a database or the browser's storage itself. Where the texts are
+is the Store's place, which whoever makes the session chooses:
+
+    Store("scenarios")      natively, the files of the directory scenarios; under `ady2nim js`,
+                            the browser's own storage (localStorage), under that place's name
+    Store("")               nowhere but in the Store: the tests' (nothing outlives the run)
+
+The same code then keeps its texts on a server, in a page with no server, and in a test:
+
+    var store: Store = Store(".")
+    if not store.write("graph.txt", net.text()):     # in place of what was
+        print "Could not write graph.txt."
+    let text: ?str = store.read("graph.txt")        # None: there is none, or it cannot be read
+    for name in store.names():                      # every name it holds, in order
+        print name
+    store.drop("old.txt")                           # whether it could
+"""
+
+# nimraw: when defined(js):
+# nimraw:   from strutils import startsWith
+# nimraw:   from algorithm import sort
+# nimraw:   proc storageGet(key: cstring): cstring {.importjs: "localStorage.getItem(#)".}
+# nimraw:   proc storageSet(key, text: cstring) {.importjs: "localStorage.setItem(#, #)".}
+# nimraw:   proc storageRemove(key: cstring) {.importjs: "localStorage.removeItem(#)".}
+# nimraw:   proc storageLength(): int {.importjs: "localStorage.length@".}
+# nimraw:   proc storageKey(i: int): cstring {.importjs: "localStorage.key(#)".}
+# nimraw:   proc placeThere(place, name: string): bool =
+# nimraw:     try: not storageGet(cstring(place & "/" & name)).isNil except CatchableError: false
+# nimraw:   proc placeRead(place, name: string): string = $storageGet(cstring(place & "/" & name))
+# nimraw:   proc placeWrite(place, name, text: string): bool =
+# nimraw:     try:
+# nimraw:       storageSet(cstring(place & "/" & name), cstring(text))
+# nimraw:       true
+# nimraw:     except CatchableError:
+# nimraw:       false
+# nimraw:   proc placeDrop(place, name: string): bool =
+# nimraw:     try:
+# nimraw:       storageRemove(cstring(place & "/" & name))
+# nimraw:       true
+# nimraw:     except CatchableError:
+# nimraw:       false
+# nimraw:   proc placeNames(place: string): seq[string] =
+# nimraw:     try:
+# nimraw:       for i in 0 ..< storageLength():
+# nimraw:         let key = $storageKey(i)
+# nimraw:         if key.startsWith(place & "/"): result.add key[place.len + 1 .. ^1]
+# nimraw:     except CatchableError:
+# nimraw:       discard
+# nimraw:     result.sort()
+# nimraw: when not defined(js):
+# nimraw:   from os import `/`, fileExists, removeFile, walkDir, extractFilename, PathComponent
+# nimraw:   from algorithm import sort
+# nimraw:   proc placeThere(place, name: string): bool = fileExists(place / name)
+# nimraw:   proc placeRead(place, name: string): string =
+# nimraw:     try: readFile(place / name) except IOError: ""
+# nimraw:   proc placeWrite(place, name, text: string): bool =
+# nimraw:     try:
+# nimraw:       writeFile(place / name, text)
+# nimraw:       true
+# nimraw:     except IOError:
+# nimraw:       false
+# nimraw:   proc placeDrop(place, name: string): bool =
+# nimraw:     try:
+# nimraw:       removeFile(place / name)
+# nimraw:       true
+# nimraw:     except OSError:
+# nimraw:       false
+# nimraw:   proc placeNames(place: string): seq[string] =
+# nimraw:     for kind, path in walkDir(place):
+# nimraw:       if kind == pcFile: result.add extractFilename(path)
+# nimraw:     result.sort()
+
+# Texts under names, at a place: a directory natively, a name in the browser's storage under
+# `ady2nim js`, or, for "", nowhere but here.
+class Store:
+    var place: str              # where the texts are; "" in this Store only
+    var held: {str}str          # the texts, when the place is ""
+
+    def __init__(self, place: str):
+        self.place = place
+        self.held = {:}
+
+    # Every name a text is kept under, in order.
+    def names(self) -> []str:
+        if self.place == "":
+            return sorted([name for name in self.held.keys()])
+        return place_names(self.place)
+
+    # The text kept under NAME; None when there is none, or it cannot be read.
+    def read(self, name: str) -> ?str:
+        if self.place == "":
+            if name in self.held:
+                return self.held[name]
+            return None
+        if not place_there(self.place, name):
+            return None
+        return place_read(self.place, name)
+
+    # TEXT kept under NAME, in place of what was: whether it could be.
+    def write(self, name: str, text: str) -> bool:
+        if self.place == "":
+            self.held[name] = text
+            return True
+        return place_write(self.place, name, text)
+
+    # The text under NAME gone: whether it could be (there being none is no failure).
+    def drop(self, name: str) -> bool:
+        if self.place == "":
+            if name in self.held:
+                self.held.del(name)
+            return True
+        if not place_there(self.place, name):
+            return True
+        return place_drop(self.place, name)

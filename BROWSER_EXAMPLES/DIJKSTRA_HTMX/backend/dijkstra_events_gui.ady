@@ -24,7 +24,7 @@ key: everything, read it all again.
 from drawing import Spot_T
 from blackboard import PublishChannel
 from page_request import Page_Request
-from kept import kept_text, keep_text
+from store import Store
 from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
 from backend/dijkstra_gui import Choice, all_text, problem_text
@@ -36,29 +36,32 @@ type Channel_T is enum NODES_CHAN, EDGES_CHAN
 # A channel of the session's: one of Channel_T, carrying a Change.
 type Change_Channel_T is PublishChannel[Channel_T, Change]
 
-# The network, and where it is kept: the server makes one that keeps it in the file graph.txt, the
-# page alone (frontend/frontend_server.ady) one that keeps it in the browser, the tests one that
-# keeps it nowhere.
+# The network is kept under this name, in the session's store.
+const KEPT_AS: str = "graph.txt"
+
+# The network, and the store it is kept in (the stdlib's store.ady), which the session is given:
+# the server's keeps it in the directory it runs in, the page alone's (frontend/frontend_server.ady)
+# in the browser, the tests' in memory.
 class Session:
     var net: Network
-    var store: str                      # the name the network is kept under (kept.ady); "" nowhere
+    var store: Store                    # where the network is kept, as KEPT_AS
     var unsaved: None | !Refusal_T      # why the last change could not be kept, shown on the page
     var nodes_channel: Change_Channel_T = Change_Channel_T(NODES_CHAN)    # what happened to a node
     var edges_channel: Change_Channel_T = Change_Channel_T(EDGES_CHAN)    # what happened to an edge
 
-    def __init__(self, store: str):
+    def __init__(self, store: Store):
         self.store = store
         self.unsaved = None
-        let text: ?str = kept_text(store)
+        let text: ?str = store.read(KEPT_AS)
         if text is None:
-            self.net = sample()         # nothing kept yet, or kept nowhere (""): the sample
+            self.net = sample()         # nothing kept yet: the sample
         else:
             self.net = Network(text)
 
     # The network, with its places, written to the store: refused with why, when it was not.
     def save(self) -> None | !Refusal_T:
-        if self.store != "" and not keep_text(self.store, self.net.text()):
-            return Refusal_T(message=f"Could not write {self.store}.")
+        if not self.store.write(KEPT_AS, self.net.text()):
+            return Refusal_T(message=f"Could not write {KEPT_AS}.")
 
     # Keep the network in the store, after a change: what the server subscribes to the channels.
     # When it cannot, every page says so, from `unsaved`, until a later change is kept.

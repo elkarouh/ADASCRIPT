@@ -24,7 +24,7 @@ and the page's script ask anything:
 
 and in it, what the server does:
 
-    var session: Session = Session("graph.txt")         # kept in the browser (kept.ady)
+    var session: Session = Session(Store("dijkstra"))  # kept in the browser (store.ady)
 
     def answer(method: str, path: str, fields: str) -> str:
         return session.answer(method, path, fields)

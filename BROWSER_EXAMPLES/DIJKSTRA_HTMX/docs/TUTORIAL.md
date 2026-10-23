@@ -622,8 +622,9 @@ it:
 
 ```adascript
 from page_alone import serve_in_page, tell_page
+from store import Store
 
-var session: Session = Session("graph.txt")
+var session: Session = Session(Store("dijkstra"))
 
 def tell(channel: Channel_T, change: Change):       # the page reads itself again
     tell_page(f"{channel} {change.kind} {change.key}")
@@ -650,10 +651,10 @@ the rest.
 
 Two things make the session fit for the browser:
 
-1. **It keeps the network through `kept.ady`**, not a file: `kept_text(name)` and
-   `keep_text(name, text)` are a file natively and the browser's storage in the page.
-   So `Session("graph.txt")` keeps it in `graph.txt` on the server and under that name
-   in the browser, and a reload finds it again.
+1. **It keeps the network in a `Store`**, not a file: the session is given one
+   (the stdlib's `store.ady`) and reads and writes `graph.txt` in it. `Store(".")` is
+   the directory the server runs in; `Store("dijkstra")` in the page is the browser's
+   storage under that name, so a reload finds it again; the tests' `Store("")` is memory.
 2. **Everything it imports compiles to JavaScript**: no files, sockets, shell or regular
    expressions. A request is read by `page_request.ady`, which compiles both ways.
 
@@ -662,9 +663,9 @@ from a file as well as from a site. What is lost is the second tab: each page ha
 session of its own, so a change made in one is not seen in the other.
 
 To make another app run alone, the same holds: a `frontend_server.ady` like this one and
-an `index.html` that loads it, and a session that keeps what it keeps through `kept.ady`.
-SVG_NODE_EDITOR and ROI_HTMX have theirs (`make alone` in each); ACCOUNTING keeps its books
-in SQLite, which a browser does not have.
+an `index.html` that loads it, and a session that keeps what it keeps in the `Store` it is given.
+SVG_NODE_EDITOR and ROI_HTMX have theirs (`make alone` in each); ACCOUNTING too, its
+scenarios kept in a `Store` as texts.
 
 ---
 

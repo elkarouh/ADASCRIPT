@@ -14,7 +14,7 @@ make alone      # the same editor with no server: builds the scripts and opens f
 `make alone` runs it with no server at all, from the file or from any site:
 `frontend/frontend_server.ady` makes the same `Session` in the page and hands it every request
 (the stdlib's `page_alone.ady`), and the diagram is kept in the browser's storage instead of
-`diagram.txt` (the stdlib's `kept.ady`). A second tab has a diagram of its own. DIJKSTRA_HTMX's
+`diagram.txt` (a `Store`, the stdlib's `store.ady`). A second tab has a diagram of its own. DIJKSTRA_HTMX's
 tutorial, Step 6, goes through it.
 
 You need karax 1.5.0 or later: `nimble install karax@1.5.0`.

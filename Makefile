@@ -97,7 +97,7 @@ STANDALONE := \
     ../TESTS/test_pure_calls.ady \
     ../TESTS/test_method_named_like_function.ady \
     ../TESTS/test_table_literal_types.ady \
-    ../TESTS/test_kept.ady \
+    ../TESTS/test_store.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \

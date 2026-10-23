@@ -3807,7 +3807,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import page_server` | (c) what every server of an htmx page does the same: `News` (the pages following `GET /events`: `follow`, `tell`), `send_script`, `port_of` |
 | `import page_request` | (c, js) a request as the page sent it: `Page_Request` (its method, path and fields, read once from the query and the body: `field`, `number_field`) |
 | `import page_alone` | (js) an htmx page with no server: `serve_in_page(answer, shell)` answers every request the page makes with the app's own session, in the page, and writes the page; `tell_page` tells it a change, as `GET /events` would; `ady2nim js` keeps such a script's names to itself, beside the page's own (DIJKSTRA_HTMX's `make alone`) |
-| `import kept` | (c, js) a text kept under a name from one run to the next: `kept_text`, `keep_text`; natively a file, under `ady2nim js` the browser's storage |
+| `from store import Store` | (c, js) texts kept by name from one run to the next: `Store(place)` with `names`, `read`, `write`, `drop`; natively the files of a directory, under `ady2nim js` the browser's storage under the place's name, and `Store("")` in memory (for tests) |
 | `import server_page` | (c) the page a server draws, in the page's own words: `Page_Of[Thing_T]` writes the htmx attributes from a command, so an app's gui says only which command each part sends: `button`, `sending` (any element), `on_change` (a field or a form), `every` (a tick), `shell_text` (the first page, which loads the rest) |
 | `import page_board` | (js) the blackboard of an htmx page's script: `Page_Channel_T` (`COMMANDS`, `CHANGES`), `changes_channel` (what the server says changed, from `GET /events`), and `Liaison_Officer[Thing_T]`, the observer that sends each command to the server but a draft |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EDITORS/VI/vi_curses.ady` uses it |
@@ -5881,7 +5881,7 @@ ADASCRIPT/
 │       ├── graphs.ady         Shortest paths, generic in the node type
 │       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       ├── illwill.nim        Curses-like terminal library, pure Nim (one file)
-│       └── db.ady, jointjs.ady, browser.ady, svg_drag.ady, svg_path.ady, commands.ady, page_server.ady, page_request.ady, server_page.ady, page_board.ady, page_alone.ady, kept.ady, karax_text.nim, expect.nim
+│       └── db.ady, jointjs.ady, browser.ady, svg_drag.ady, svg_path.ady, commands.ady, page_server.ady, page_request.ady, server_page.ady, page_board.ady, page_alone.ady, store.ady, karax_text.nim, expect.nim
 │
 ├── EXAMPLES/                  End-to-end example programs (`*.ady`)
 │                              Transpiled output is not kept here — it goes to

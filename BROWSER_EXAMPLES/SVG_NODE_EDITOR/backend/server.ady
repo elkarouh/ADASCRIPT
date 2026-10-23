@@ -18,13 +18,14 @@ reads itself again.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from store import Store
 from page_server import News, send_script, port_of
 from backend/node_editor_gui import shell_text
 from commands import Change
 from backend/node_editor_events_gui import Channel_T, Session
 
 # The session the requests are answered from: main makes it the one that keeps the diagram in diagram.txt.
-var session: Session = Session("")
+var session: Session = Session(Store(""))
 
 # The pages following GET /events.
 var news: News = News()
@@ -58,7 +59,7 @@ async def handler(req: Request):
 
 def main():
     let port: int = port_of($@, 8802)
-    session = Session("diagram.txt")
+    session = Session(Store("."))
     session.nodes_channel.subscribe(keep)       # kept first, so a page that reads again sees it saved, or why not
     session.links_channel.subscribe(keep)
     session.nodes_channel.subscribe(tell)
