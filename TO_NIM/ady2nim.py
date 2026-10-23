@@ -2962,6 +2962,16 @@ def main(argv=None):
         if result.returncode != 0:
             sys.exit(result.returncode)
 
+        # A script that serves its page (the stdlib's page_alone) is loaded beside the page's own
+        # script, and Nim gives both the same top-level names: its own are kept to itself, in a
+        # function, so that neither replaces the other's.
+        if subcommand in JS_COMMANDS and any(
+                os.path.basename(_d) == "page_alone.nim" for _d in _dep_nims):
+            with open(exe_file) as _f:
+                _js = _f.read()
+            with open(exe_file, "w") as _f:
+                _f.write("(function () {\n" + _js + "})();\n")
+
         # Create/update symlink next to the .ady source pointing at the binary.
         _make_symlink()
 

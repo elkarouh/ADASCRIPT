@@ -80,7 +80,7 @@ assert slots_of(odd_text)[0].name == "Ban\tk\n50% \"</script>" and slots_of(odd_
 assert len(slots_of("not JSON")) == 0
 assert float(layout_of_slots(slots_of(kept), "100000/0@600.0,300.0").points[0].x) == 600.0
 assert "<script id=\"books\" type=\"application/json\">{\"slots\": [{\"id\": " in all_text(b, ["x"], ["X"], "x", Settings(""))
-assert "<script src=\"/accounting_js_events.js\"" in shell_text()
+assert "<script src=\"accounting_js_events.js\"" in shell_text()
 # the popup's transaction
 let vat_books: Books = Books("USD", [row("550000", ASSET, "Bank"), row("700000", REVENUE, "Sales"), row("610000", EXPENSE, "Rent"),
                                     row("411000", ASSET, "VAT receivable"), row("451000", LIABILITY, "VAT payable")], [], [], "T", "")

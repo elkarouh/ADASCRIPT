@@ -258,7 +258,7 @@ input:invalid { background-color: ivory; border: 2px solid lightgray; outline: 2
 """
 
 def shell_text() -> str:
-    return page.shell_text("Return of investment", STYLE, ["/roi_js_events.js"], [], read_portfolio())
+    return page.shell_text("Return of investment", STYLE, ["roi_js_events.js"], [], read_portfolio())
 
 def all_text(portfolio: Portfolio, layout: Layout) -> str:
     return str(all_html(portfolio, layout))

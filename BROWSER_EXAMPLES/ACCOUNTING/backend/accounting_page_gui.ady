@@ -613,7 +613,7 @@ def title_html() -> Html:
         h1: "Accounting, as graph theory"
 
 def shell_text() -> str:
-    return page.shell_text("Accounting, as graph theory", STYLE + NODE_STYLE + EDGE_STYLE + EXTRA, ["/accounting_js_events.js"], [title_html(), told_html("")], read_books(no_fields()))
+    return page.shell_text("Accounting, as graph theory", STYLE + NODE_STYLE + EDGE_STYLE + EXTRA, ["accounting_js_events.js"], [title_html(), told_html("")], read_books(no_fields()))
 
 # The page for the books B of scenario CURRENT, of the scenarios NAMES (their TITLES), as the settings
 # S ask, what the reader did carried out.

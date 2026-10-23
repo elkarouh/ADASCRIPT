@@ -135,7 +135,7 @@ def header_html() -> Html:
             p: "Nodes and connectors, kept in diagram.txt by the server."
 
 def shell_text() -> str:
-    return page.shell_text("SVG node editor", STYLE, ["/node_editor_js_events.js"], [header_html()], read_diagram())
+    return page.shell_text("SVG node editor", STYLE, ["node_editor_js_events.js"], [header_html()], read_diagram())
 
 def all_text(d: Diagram, problem: None | !Refusal_T) -> str:
     return str(all_html(d, problem))

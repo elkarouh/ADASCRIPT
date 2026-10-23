@@ -32,7 +32,9 @@ and in it, what the server does:
     serve_in_page(answer, shell_text())
 
 The page's other scripts are named in SHELL by a path from the page ("htmx.min.js"), so the
-page opens from a file as well as from a site.
+page opens from a file as well as from a site. `ady2nim js` keeps the script's names to itself
+(the page's own script, also Nim's, has the same ones), so a script that serves its page is its
+one .ady, an index.html, and nothing else.
 """
 
 # nimraw: {.emit: """

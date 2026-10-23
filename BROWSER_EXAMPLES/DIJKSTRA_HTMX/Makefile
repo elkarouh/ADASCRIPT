@@ -39,12 +39,11 @@ frontend/htmx.min.js:
 	git checkout -- frontend/htmx.min.js
 
 # The server, in the page (frontend/frontend_server.ady): frontend/index.html loads it, and it writes
-# the page, which loads the others. Nothing to start: the page opens from the file. Its names are
-# kept to itself, in a function: dijkstra_js_events.js names its own the same, and would replace them.
+# the page, which loads the others. Nothing to start: the page opens from the file.
 frontend/frontend_server.js: frontend/frontend_server.ady backend/dijkstra_events_gui.ady backend/dijkstra_gui.ady backend/dijkstra_commands.ady backend/dijkstra_model.ady
 	@echo "building frontend/frontend_server.js"
 	@$(ADY2NIM) js frontend/frontend_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
-	@{ echo "(function () {"; cat frontend/frontend_server.js; echo "})();"; } > build.log && mv build.log frontend/frontend_server.js
+	@rm -f build.log
 
 alone: frontend/dijkstra_js_events.js frontend/frontend_server.js frontend/htmx.min.js
 	@$(OPEN) frontend/index.html
