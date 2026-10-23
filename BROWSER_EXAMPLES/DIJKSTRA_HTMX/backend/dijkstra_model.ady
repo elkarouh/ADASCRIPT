@@ -130,7 +130,7 @@ class Network:
     def remove_edge(self, a: str, b: str) -> None | !Refusal_T:
         let i: int = self.edge_at(a, b)
         return Refusal_T(message=f"There is no edge {a} - {b}.") if i < 0
-        self.edges = [ self.edges[k] for k in range(len(self.edges)) if k != i}
+        self.edges = [ self.edges[k] for k in range(len(self.edges)) if k != i]
 
     # ---- kept in a text file: "node A" and "edge A B 7", a line each ----
 
