@@ -251,14 +251,6 @@ class Mouse_Follower(Observer[Page_Channel_T, Command]):
 # and its __init__ says which event runs which (listen), so making it is starting it. A gesture
 # only publishes commands.
 
-# Outline the element EL, or take the outline off it.
-def set_selected(el: Element_T, lit: bool):
-    let cls: str = el.attr("class")
-    if lit:
-        el.set_attr("class", cls + " selected")
-    else:
-        el.set_attr("class", cls.replace(" selected", ""))
-
 # The reader's selection: the node or edge clicked last, and what is done to it.
 class Selection:
     # the node's view or the edge's view the reader clicked last; None when nothing is selected
@@ -268,10 +260,18 @@ class Selection:
         self.what = None
         listen("htmx:afterSwap", self.page_drawn)
 
+    # Outline the element EL, or take the outline off it.
+    def set_selected(self, el: Element_T, lit: bool):
+        let cls: str = el.attr("class")
+        if lit:
+            el.set_attr("class", cls + " selected")
+        else:
+            el.set_attr("class", cls.replace(" selected", ""))
+
     # Take the outline off everything selected, and forget it.
     def clear(self):
         for el in page.all(".selected"):
-            set_selected(el, false)
+            self.set_selected(el, false)
         self.what = None
 
     # Select the node EL, in place of what was selected.
@@ -280,7 +280,7 @@ class Selection:
         let view: ?NodeView = network.node_view(el)
         if view is not None:
             self.what = view
-            set_selected(el, true)
+            self.set_selected(el, true)
 
     # Select the edge EL, in place of what was selected.
     def select_edge(self, el: Element_T):
@@ -288,7 +288,7 @@ class Selection:
         let view: ?EdgeView = network.edge_view(el)
         if view is not None:
             self.what = view
-            set_selected(el, true)
+            self.set_selected(el, true)
 
     # Ask the cost of the selected edge, if an edge is selected.
     def change_cost(self):
