@@ -18,6 +18,15 @@ class Session:
     def __init__(self, name: str):
         self.name = name
 
+# a name for the generic class with its type arguments makes one too
+type Str_Channel_T is PublishChannel[Channel_T, str]
+
+class Board:
+    var edges_channel: Str_Channel_T = Str_Channel_T(EDGES_CHAN)
+
+    def __init__(self):
+        pass
+
 var heard: []str = []
 def hear(channel: Channel_T, event: str):
     heard.append(f"{channel} {event}")
@@ -31,4 +40,8 @@ assert a.nodes_channel.subscriber_count() == 1
 assert b.nodes_channel.subscriber_count() == 0            # b's channel is its own
 assert heard == ["NODES_CHAN x"]
 assert b.edges_channel.name == EDGES_CHAN
+var board_1: Board = Board()
+var board_2: Board = Board()
+board_1.edges_channel.subscribe(hear)
+assert board_2.edges_channel.subscriber_count() == 0 and board_1.edges_channel.name == EDGES_CHAN
 print heard[0], b.nodes_channel.subscriber_count()

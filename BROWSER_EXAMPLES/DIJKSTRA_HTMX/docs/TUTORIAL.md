@@ -408,9 +408,11 @@ type Change is record:
     kind: Verb_T                        # CREATE, UPDATE or DELETE: the commands' own verbs
     key:  str                           # the node's name, or the edge's two ends; "" for everything
 
+type Change_Channel_T is PublishChannel[Channel_T, Change]    # a channel of Channel_T, carrying a Change
+
 class Session:
-    var nodes_channel: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](NODES_CHAN)    # what happened to a node
-    var edges_channel: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](EDGES_CHAN)    # what happened to an edge
+    var nodes_channel: Change_Channel_T = Change_Channel_T(NODES_CHAN)    # what happened to a node
+    var edges_channel: Change_Channel_T = Change_Channel_T(EDGES_CHAN)    # what happened to an edge
     ...
         if problem is None:             # only what went through is told
             for ch in node_changes:

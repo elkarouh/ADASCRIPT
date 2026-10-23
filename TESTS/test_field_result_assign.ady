@@ -1,0 +1,32 @@
+#!/usr/bin/env ady2nim
+# test_field_result_assign.ady -- a field that is a `None | !F` takes None and a failure as a
+# variable of that type does: `self.last = None`, `self.last = Bad_T(...)`.
+#
+#   ady2nim TESTS/test_field_result_assign.ady -r
+#   ady2py  TESTS/test_field_result_assign.ady -c
+
+type Bad_T is record:
+    why: str
+
+class Box:
+    var last: None | !Bad_T
+
+    def __init__(self):
+        self.last = None
+
+    def fail(self):
+        self.last = Bad_T("no")
+
+    def clear(self):
+        self.last = None
+
+var b: Box = Box()
+assert b.last is None
+b.fail()
+assert b.last is Bad_T
+b.clear()
+assert b.last is None
+var v: None | !Bad_T = Bad_T("x")
+v = None
+assert v is None
+print "ok"

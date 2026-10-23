@@ -428,10 +428,11 @@ def to_nim(self):
     if len(parts) == 2 and prefix == "":
         _rsym = ParserState.symbol_table.lookup(lhs)
         _rtype = (_rsym.get("type") or "") if _rsym else ""
-        if not _rtype and ("[" in lhs or "." in lhs):
+        if _rtype in ("", "void") and ("[" in lhs or "." in lhs):
             # `self.bindings[k] = Num_T(1.0)`: the element or field is a union
+            # (`self.last = None` first noted the field as a void variable)
             _et = hek_nim_expr._nim_expr_type(lhs) or ""
-            if _et.startswith("OneOf"):
+            if _et.startswith(("OneOf", "Result[")):
                 _rtype = _et
         if _rtype.startswith(("Result[", "OneOf")):
             parts[1] = hek_nim_expr._result_wrap(parts[1], _rtype)
@@ -2627,6 +2628,15 @@ def to_nim(self, indent=0):
     # Record type alias so method translation can resolve it
     if rhs_type not in ("enum_def",):
         ParserState.symbol_table.add(name, value, "type")
+    # `type Chan_T is PublishChannel[K, E]`: a name for a generic class with its
+    # type arguments, so `Chan_T(k)` makes one, as `PublishChannel[K, E](k)` does
+    _gm = _re_nt.match(r"^(\w+)\[(.+)\]$", value)
+    if _gm and not params:
+        _gsym = ParserState.symbol_table.lookup(_gm.group(1))
+        if _gsym and _gsym.get("kind") in ("class", "ref_class"):
+            if not hasattr(ParserState, "generic_class_aliases"):
+                ParserState.generic_class_aliases = {}
+            ParserState.generic_class_aliases[name] = (_gm.group(1), _gm.group(2))
     _exp = "*" if getattr(ParserState, 'export_symbols', False) and ParserState.symbol_table.depth() <= 2 else ""
     return f"{_ind(indent)}type {name}{_exp}{params} = {value}"
 

@@ -972,6 +972,7 @@ def translate_once(code, export_symbols=False):
     ParserState.generic_funcs.update(scan_generic_funcs(code))
     check_generic_calls(stmts, ParserState.generic_funcs, scan_plain_defs(code))
     ParserState.union_aliases_nim = {}
+    ParserState.generic_class_aliases = {}
     ParserState.ady_return_types_nim = {}
     ParserState.result_procs = (either_procs(ParserState.ady_return_types,
                                              ParserState.failure_types)

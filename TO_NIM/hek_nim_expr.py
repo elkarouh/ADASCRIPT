@@ -4307,7 +4307,11 @@ def to_nim(self, prec=None):
             result = _ctor_with_args if has_args else _ctor_no_args
         else:
             sym = ParserState.symbol_table.lookup(raw_name)
-            if sym and sym.get("kind") in ("class", "ref_class"):
+            _galias = getattr(ParserState, "generic_class_aliases", {}).get(raw_name)
+            if _galias and _is_call:
+                # a name for a generic class with its type arguments: newC[K, E](...)
+                result = _constructor_name(_galias[0], _first_trailer) + f"[{_galias[1]}]"
+            elif sym and sym.get("kind") in ("class", "ref_class"):
                 _trs = self.nodes[1].nodes if len(self.nodes) > 1 and hasattr(self.nodes[1], 'nodes') else []
                 # `Box[int](3)`: the type arguments, then the call -- newBox[int](3)
                 _generic_call = (len(_trs) > 1 and type(_trs[0]).__name__ == "slice_trailer"
