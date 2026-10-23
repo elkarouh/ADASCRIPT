@@ -1,0 +1,29 @@
+#!/usr/bin/env ady2nim
+"""frontend_server -- the server, in the page: the ROI page with no server at all.
+
+    make alone          then open frontend/index.html, from the file or from any site
+
+What backend/server.ady does, done in the browser (the stdlib's page_alone.ady): the requests htmx
+and roi_js_events make are handed to a Session, and each change is told to the page, which then
+reads itself again. frontend/index.html loads this script only; it writes the page, which loads
+the others.
+"""
+from page_alone import serve_in_page, tell_page
+from commands import Change
+from backend/roi_gui import shell_text
+from backend/roi_events import Channel_T, Session
+
+# The portfolio and its drawing, which the requests are answered from.
+var session: Session = Session()
+
+# A change, told to the page: subscribed to the session's channels below.
+def tell(channel: Channel_T, change: Change):
+    tell_page(f"{channel} {change.kind} {change.key}")
+
+# What METHOD on PATH, with FIELDS, answers.
+def answer(method: str, path: str, fields: str) -> str:
+    return session.answer(method, path, fields)
+
+session.portfolio_channel.subscribe(tell)
+session.layout_channel.subscribe(tell)
+serve_in_page(answer, shell_text())

@@ -1906,6 +1906,12 @@ test-part-56:
 	    $(ADY2NIM) js $(BEXDIR)/DIJKSTRA_HTMX/frontend/frontend_server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    rm -f $(BEXDIR)/DIJKSTRA_HTMX/frontend/frontend_server.js; \
+	    for app in SVG_NODE_EDITOR ROI_HTMX; do \
+	        printf '  %-42s' "$$app/frontend/frontend_server.ady (ady2nim js)"; \
+	        $(ADY2NIM) js $(BEXDIR)/$$app/frontend/frontend_server.ady >/dev/null 2>&1 \
+	            && echo OK || { echo FAIL; exit 1; }; \
+	        rm -f $(BEXDIR)/$$app/frontend/frontend_server.js; \
+	    done; \
 	fi
 
 test-part-57:

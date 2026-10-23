@@ -663,6 +663,8 @@ session of its own, so a change made in one is not seen in the other.
 
 To make another app run alone, the same holds: a `frontend_server.ady` like this one and
 an `index.html` that loads it, and a session that keeps what it keeps through `kept.ady`.
+SVG_NODE_EDITOR and ROI_HTMX have theirs (`make alone` in each); ACCOUNTING keeps its books
+in SQLite, which a browser does not have.
 
 ---
 

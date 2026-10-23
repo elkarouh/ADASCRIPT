@@ -4,6 +4,7 @@
 #   make app      build node_editor_js_events.js and the server, start it, open the page
 #   make test     the model, the page, the requests and the file, no server
 #   make all      build the server and node_editor_js_events.js, start nothing
+#   make alone    the node editor with no server: build the scripts, then open frontend/index.html
 #   make clean    remove what was built
 #
 # $(OPEN) is xdg-open, or open on a Mac; on WSL, PowerShell opens the Windows browser.
@@ -15,7 +16,7 @@ ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 OPEN    ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 PORT    ?= 8802
 
-.PHONY: all app test clean
+.PHONY: all app alone test clean
 
 all: server frontend/node_editor_js_events.js
 
@@ -32,6 +33,16 @@ frontend/node_editor_js_events.js: frontend/node_editor_js_events.ady backend/no
 	@$(ADY2NIM) js frontend/node_editor_js_events.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
+# The server, in the page (frontend/frontend_server.ady): frontend/index.html loads it, and it writes
+# the page, which loads the others. Nothing to start: the page opens from the file.
+frontend/frontend_server.js: frontend/frontend_server.ady backend/node_editor_events_gui.ady backend/node_editor_gui.ady backend/node_editor_commands.ady backend/node_editor_model.ady
+	@echo "building frontend/frontend_server.js"
+	@$(ADY2NIM) js frontend/frontend_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@rm -f build.log
+
+alone: frontend/node_editor_js_events.js frontend/frontend_server.js
+	@$(OPEN) frontend/index.html
+
 app: all
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
 	./backend/server $(PORT)
@@ -40,5 +51,5 @@ test:
 	$(ADY2NIM) c -r tests/test_node_editor.ady 2>/dev/null
 
 clean:
-	rm -rf backend/server tests/test_node_editor test_node_editor frontend/node_editor_js_events.js build.log build \
+	rm -rf backend/server tests/test_node_editor test_node_editor frontend/node_editor_js_events.js frontend/frontend_server.js build.log build \
 	    backend/node_editor_model backend/node_editor_gui backend/node_editor_commands backend/node_editor_events_gui

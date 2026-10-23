@@ -8,7 +8,14 @@ a native server that keeps the diagram in a file and tells every open page of ea
 ```
 make app        # builds the script and the server, starts it and opens the page (http://127.0.0.1:8802/)
 make test       # the model, the page, the requests and the file, no server
+make alone      # the same editor with no server: builds the scripts and opens frontend/index.html
 ```
+
+`make alone` runs it with no server at all, from the file or from any site:
+`frontend/frontend_server.ady` makes the same `Session` in the page and hands it every request
+(the stdlib's `page_alone.ady`), and the diagram is kept in the browser's storage instead of
+`diagram.txt` (the stdlib's `kept.ady`). A second tab has a diagram of its own. DIJKSTRA_HTMX's
+tutorial, Step 6, goes through it.
 
 You need karax 1.5.0 or later: `nimble install karax@1.5.0`.
 
@@ -42,6 +49,7 @@ A node keeps its id for good, so deleting one does not renumber the ports of the
 | `backend/node_editor_commands.ady` | the one vocabulary of the page and the server: a `Command` (a `Command_Of` this app's things, from the stdlib's `commands.ady`) is Create, Read, Update or Delete of a node, a connector, or the whole diagram (read only), with its fields. On the wire the verb is the HTTP method and the thing the URL (`method`, `url`, and `command_of` back). `move_node` is a draft: the node still held, which stays in the browser. Compiled both ways. |
 | `backend/node_editor_gui.ady` | how to draw it: the nodes as SVG with `html:` blocks, the page, the diagram as text for the script. The connectors are not drawn here; the script draws them. |
 | `backend/node_editor_events_gui.ady` | what each request does: `Session.answer(method, path, fields)` reads it back into a `Command` and carries it out on the model. A read answers the whole page; a change only the paragraph `#problem` (empty when it went through), and what it changed is published on the session's blackboard (stdlib's `blackboard.ady`): `NODES_CHAN` or `LINKS_CHAN` carries a `Change`. No HTTP, so the tests call it. |
+| `frontend/frontend_server.ady`, `frontend/index.html` | the server, in the page: `make alone`. index.html loads this script alone; it makes a `Session` that keeps the diagram in the browser, subscribes `keep` and `tell` as the server does, and hands it every request (`serve_in_page`), which then writes the page. |
 | `backend/server.ady` | HTTP and nothing else, and the two subscribers to the session's changes: `keep`, which writes `diagram.txt`, and `tell`, which tells every open page (`GET /events`, server-sent events, through the stdlib's `page_server.ady`). |
 | `frontend/node_editor_js_events.ady` | the browser side, compiled to JavaScript, built as DIJKSTRA_HTMX's is: a blackboard of its own (with the stdlib's `page_board.ady`: the changes channel and the liaison). Every gesture (`Selection`, `Pointer`, `Connector`, each an object whose `__init__` says which event runs which of its methods) publishes a command on `commands_channel`, and two observers (the stdlib blackboard's `Observer`) carry it out: `Liaison_Officer` sends the server what is the diagram's, and brings its news back onto `changes_channel`; `Mouse_Follower` draws a draft (a node still held) here and now. `Page_Refresher` reads the page again on every change, whichever page made it. A `DiagramView`, the model built from the diagram text, draws the connectors. |
 | `tests/test_node_editor.ady` | tests of the model, of the page and the changes it publishes through `Session.answer`, and of the file. |

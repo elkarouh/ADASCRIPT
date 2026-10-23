@@ -1,0 +1,35 @@
+#!/usr/bin/env ady2nim
+"""frontend_server -- the server, in the page: the node editor with no server at all.
+
+    make alone          then open frontend/index.html, from the file or from any site
+
+What backend/server.ady does, done in the browser (the stdlib's page_alone.ady): the requests htmx
+and node_editor_js_events make are handed to a Session, which keeps the diagram in the browser's
+storage instead of diagram.txt, and each change is told to the page, which then reads itself again.
+frontend/index.html loads this script only; it writes the page, which loads the others.
+"""
+from page_alone import serve_in_page, tell_page
+from commands import Change
+from backend/node_editor_gui import shell_text
+from backend/node_editor_events_gui import Channel_T, Session
+
+# The session the requests are answered from, which keeps the diagram in the browser.
+var session: Session = Session("diagram.txt")
+
+# A change, told to the page: subscribed to the session's channels below.
+def tell(channel: Channel_T, change: Change):
+    tell_page(f"{channel} {change.kind} {change.key}")
+
+# A change, kept: the diagram written to the browser's storage.
+def keep(channel: Channel_T, change: Change):
+    session.keep()
+
+# What METHOD on PATH, with FIELDS, answers.
+def answer(method: str, path: str, fields: str) -> str:
+    return session.answer(method, path, fields)
+
+session.nodes_channel.subscribe(keep)
+session.links_channel.subscribe(keep)
+session.nodes_channel.subscribe(tell)
+session.links_channel.subscribe(tell)
+serve_in_page(answer, shell_text())

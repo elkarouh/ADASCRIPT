@@ -10,7 +10,13 @@ the page kept up with the server.
 ```
 make app          # builds the server and the script, starts it and opens http://127.0.0.1:8820/
 make test         # the model, the page and the requests, no server
+make alone        # the same page with no server: builds the scripts and opens frontend/index.html
 ```
+
+`make alone` runs it with no server at all, from the file or from any site:
+`frontend/frontend_server.ady` makes the same `Session` in the page and hands it every request
+(the stdlib's `page_alone.ady`). A second tab has a portfolio of its own. DIJKSTRA_HTMX's
+tutorial, Step 6, goes through it.
 
 Put in some money, the year you invested it, and how you split it between gold,
 bitcoin and the S&P 500 (prices of 2013 to 2023). The page shows what each part
@@ -51,6 +57,7 @@ The portfolio, and where the boxes are, are kept in memory: it starts again when
 | `backend/roi_gui.ady` | how to draw it: a `to_html` for each model type (what it looks like inside its box), and the boxes, the arrows and the page around them, from the portfolio and the layout. |
 | `backend/roi_commands.ady` | the commands, the one vocabulary of the page and the server (a `Command_Of` this app's things, from the stdlib's `commands.ady`): their verbs, what they are done to, their method and URL on the wire, and `command_of`, which reads a request back. Compiled both ways. |
 | `backend/roi_events.ady` | what each request does: a `Session` holds the portfolio and the layout, `answer(method, path, fields)` reads the request into a command, carries it out and publishes what changed on its channels. No HTTP, so the tests call it. |
+| `frontend/frontend_server.ady`, `frontend/index.html` | the server, in the page: `make alone`. index.html loads this script alone; it makes a `Session`, subscribes `tell` as the server does, and hands it every request (`serve_in_page`), which then writes the page. |
 | `backend/server.ady` | HTTP, and nothing else: hands each request to the session, serves the two scripts, and tells every page following `GET /events` of each change (the stdlib's `page_server.ady`). |
 | `frontend/roi_js_events.ady` | the browser side, compiled to JavaScript: the blackboard, its observers, and the drag of a box. |
 | `frontend/htmx.min.js` | htmx, vendored. |
