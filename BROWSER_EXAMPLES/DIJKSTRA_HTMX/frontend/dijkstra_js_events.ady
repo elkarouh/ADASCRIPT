@@ -317,9 +317,6 @@ def ask_name() -> str:
 # The pointer on the drawing: svg_drag's drag of a node, which calls moved, dropped or clicked,
 # and the double-click.
 class Pointer:
-    def __init__(self):
-        pass
-
     # While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
     # draft, which the Mouse_Follower draws).
     def moved(self, node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
