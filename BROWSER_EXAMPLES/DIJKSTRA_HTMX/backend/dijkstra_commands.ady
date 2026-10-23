@@ -14,12 +14,12 @@ whole NETWORK, which is what is read), and its fields by name:
 
 On the wire the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say
 which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a command
-on its own blackboard and its liaison sends it (`send` in dijkstra_js_events.ady), unless it is a
+on its own blackboard and its liaison sends it (`Liaison_Officer.send` in dijkstra_js_events.ady), unless it is a
 draft (`is_draft`), which stays in the browser; the server reads it back (`Session.answer` in
 dijkstra_events_gui.ady) and carries it out; and what it changed goes out with the same verbs (a
 `Change`, also of this module's Verb_T). No HTML, no HTTP.
 """
-from drawing import Spot_T
+from drawing import Drawing_Pixel_T, Spot_T
 
 type Verb_T is enum CREATE, READ, UPDATE, DELETE
 type Thing_T is enum NODE, EDGE, NETWORK
@@ -34,6 +34,16 @@ def value(c: Command, name: str) -> str:
     if name in c.fields:
         return c.fields[name]
     return ""
+
+# Where command C puts its node: its fields x and y; None when it has none, or they are not numbers.
+def spot(c: Command) -> ?Spot_T:
+    let x: float | !ParseFailure_T = parse_float(c.value("x"))
+    let y: float | !ParseFailure_T = parse_float(c.value("y"))
+    if x is ParseFailure_T:
+        return None
+    if y is ParseFailure_T:
+        return None
+    return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
 
 # ---- On the wire: the verb is the HTTP method, the thing is the URL ----
 

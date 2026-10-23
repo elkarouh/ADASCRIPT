@@ -25,7 +25,7 @@ from drawing import Drawing_Pixel_T, Spot_T
 from blackboard import PublishChannel
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, place_of
 from backend/dijkstra_gui import Params_T, all_text, problem_text
-from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value
+from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value, spot
 
 # ---- A request: its method, its path and its fields ----
 #
@@ -161,21 +161,22 @@ class Session:
         var edge_changes: []Change = []
         case c.thing:
             when NODE:
-                let x: float = number_of(c.value("x"))            # -1 when not given
-                let y: float = number_of(c.value("y"))
+                let at: ?Spot_T = c.spot()
                 case c.verb:
                     when CREATE:
                         problem = self.net.add_node(name)
                         if problem is None:
-                            if x < 0.0 or y < 0.0:                       # not given: the layout's place for it
+                            if at is None:                      # not given: the layout's place for it
                                 self.net.put(name, place_of(self.net, name))
                             else:
-                                self.net.put(name, Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
+                                self.net.put(name, at)
                     when UPDATE:
-                        if name in self.net.names():
-                            self.net.put(name, Spot_T(Drawing_Pixel_T(x), Drawing_Pixel_T(y)))
-                        else:
+                        if at is None:
+                            problem = Refusal_T(message=f"Where should {name} go? There is no place.")
+                        elif name not in self.net.names():
                             problem = Refusal_T(message=f"There is no node {name}.")
+                        else:
+                            self.net.put(name, at)
                     when DELETE:
                         for e in self.net.edges:        # its edges go with it, and are told first
                             if e.a == name or e.b == name:

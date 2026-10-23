@@ -71,7 +71,7 @@ from browser import Element_T, Event_T, Click_T, send_request, click_of, page, f
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside, place_of
-from backend/dijkstra_commands import Command, READ, UPDATE, NODE, method, url, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
+from backend/dijkstra_commands import Command, READ, method, url, value, spot, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
 # ---- The page's blackboard: what the reader asks, and what the server says changed ----
@@ -222,38 +222,33 @@ class NetworkView(Network):
             if e.a == name or e.b == name:
                 e.redraw(place_of(self, e.a), place_of(self, e.b))
 
-var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (page_drawn)
+var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (on_page_drawn)
 
 # While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
 # draft, which the Mouse_Follower draws).
-def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+def on_move(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = inside(wanted)
     publish_command(move_node(NodeView(node).name, now))
     return now
 
-# It draws a draft of a node's move: the node is drawn where it is asked to be, the page's model
-# keeps the place, and the edges that end at it are drawn again. Nothing goes to the server.
+# It draws a draft of a node's move (move_node, the only draft): the node is drawn where it is
+# asked to be, the page's model keeps the place, and the edges that end at it are drawn again.
+# Nothing goes to the server.
 class Mouse_Follower(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c) or c.verb != UPDATE or c.thing != NODE:
-            return
         let name: str = c.value("name")
-        if name not in network.node_views:
+        if not is_draft(c) or name not in network.node_views:
             return
-        let x: float | !ParseFailure_T = parse_float(c.value("x"))
-        let y: float | !ParseFailure_T = parse_float(c.value("y"))
-        if x is ParseFailure_T:
+        let now: ?Spot_T = c.spot()
+        if now is None:
             return
-        if y is ParseFailure_T:
-            return
-        let now: Spot_T = Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
         let el: Element_T = network.node_views[name].el
         shift(el, spot_of(el), now)
         network.put(name, now)
         network.redraw_edges(name)
 
 # NODE let go at AT: it is moved there (U).
-def dropped_cb(node: Element_T, at: Spot_T):
+def on_drop(node: Element_T, at: Spot_T):
     let view: ?NodeView = network.node_view(node)
     if view is not None:
         view.drop_at(at)
@@ -323,7 +318,7 @@ var selection: Selection = Selection()
 # it is chosen already (drawn as the start or the goal), takes it out of the route again. Anything
 # else is a selection: the edge under the click is selected, and the empty space clears it. A click
 # outside the drawing (the toolbar, a menu) is none of this.
-def clicked_cb(c: Click_T):
+def on_click(c: Click_T):
     if on(c, "svg.graph") is None:
         return
     let node: ?Element_T = on(c, "g.node")
@@ -341,19 +336,17 @@ def clicked_cb(c: Click_T):
 
 # The page was drawn again by the server: what was selected is gone with the old drawing, and the
 # drawing's objects are read off the new one.
-def page_drawn(e: Event_T):
+def on_page_drawn(e: Event_T):
     selection.forget()
     network = NetworkView()
 
-# ---- Asking the reader, and sending the answer ----
+# ---- Double-click: a new node in the space, or a new cost for an edge ----
 
+# Ask the reader the name of a new node; "" when they cancel.
 def ask_name() -> str:
     return ask("Name of the new node (letters and digits)?", "")
 
-
-# ---- Double-click: a new node in the space, or a new cost for an edge ----
-
-def double_click(e: Event_T):
+def on_double_click(e: Event_T):
     let c: Click_T = click_of(e)
     let edge: ?Element_T = on(c, "g[data_from]")
     if edge is not None:
@@ -383,7 +376,7 @@ class Menus:
 
 var menus: Menus = Menus()
 
-def context(e: Event_T):
+def on_right_click(e: Event_T):
     let c: Click_T = click_of(e)
     if on(c, "svg.graph") is None:
         return                          # the rest of the page keeps the browser's own menu
@@ -418,13 +411,12 @@ def tool_of(name: str) -> Tool_T:
         when others:
             return NO_TOOL
 
-def tool_click(e: Event_T):
+def on_tool(e: Event_T):
     let c: Click_T = click_of(e)
+    menus.hide()                        # any click closes the menus
     let b: ?Element_T = on(c, "button[data_tool]")
     if b is None:
-        menus.hide()                    # a click elsewhere closes the menus
         return
-    menus.hide()
     let tool: Tool_T = tool_of(b.data("tool"))
     case tool:
         when ADD_HERE:
@@ -439,14 +431,12 @@ def tool_click(e: Event_T):
             pass
 
 # Delete and Backspace remove what is selected; Escape closes the menus.
-def key_down(e: Event_T):
+def on_key(e: Event_T):
     let key: str = key_of(e)
     case key:
         when "Escape":
             menus.hide()
-        when "Delete":
-            selection.remove()
-        when "Backspace":
+        when "Delete" | "Backspace":
             selection.remove()
         when others:
             pass                            # any other key
@@ -462,13 +452,13 @@ def key_down(e: Event_T):
 # The wire's state, and what each gesture on it does.
 class Wire:
     var linking: bool                  # a wire is being drawn
-    var from_node: Node_T              # the node the wire starts at
+    var from_name: str                 # the node the wire starts at
     var from_at: Spot_T                # and where it is drawn
     var swallow: bool                  # the click after a wire is let go: not a click on a node
 
     def __init__(self):
         self.linking = false
-        self.from_node = Node_T("")
+        self.from_name = ""
         self.from_at = Spot_T(x=0.0, y=0.0)
         self.swallow = false
 
@@ -484,8 +474,8 @@ class Wire:
         if view is None:
             return
         stop(c)
-        self.from_node = Node_T(view.name)
-        self.from_at = network.spot_of(self.from_node.name)
+        self.from_name = view.name
+        self.from_at = network.spot_of(self.from_name)
         self.linking = true
         self.swallow = false
         let el: Element_T = page.element("path#wire")
@@ -509,12 +499,12 @@ class Wire:
         if target is None:
             return
         let to: NodeView = NodeView(target)
-        if to.name == self.from_node.name:
+        if to.name == self.from_name:
             return
-        let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
+        let cost: str = ask(f"Cost of the edge {self.from_name} — {to.name}?", "1")
         if cost == "":
             return
-        publish_command(create_edge(self.from_node.name, to.name, cost))
+        publish_command(create_edge(self.from_name, to.name, cost))
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
@@ -546,10 +536,10 @@ listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)
 listen("mouseup", wire.up)
 listen_first("click", wire.swallow_click)
-listen("click", tool_click)
-listen("dblclick", double_click)
-listen("contextmenu", context)
-listen("keydown", key_down)
-listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+listen("click", on_tool)
+listen("dblclick", on_double_click)
+listen("contextmenu", on_right_click)
+listen("keydown", on_key)
+listen("htmx:afterSwap", on_page_drawn)
+draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=on_move, dropped_cb=on_drop, clicked_cb=on_click))
 follow("/events", publish_change)
