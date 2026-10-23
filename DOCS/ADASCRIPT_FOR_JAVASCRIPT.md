@@ -76,15 +76,22 @@ and a module-level `var` only for state that really lives across events.
 
 <!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-def names(self) -> []str:
-    var names: []str = []
+def text(self) -> str:
+    var lines: []str = []
     for n in self.nodes:
-        names.append(n.name)
-    return names
+        lines.append(f"node {n.name}")
+    for e in self.edges:
+        lines.append(f"edge {e.a} {e.b} {e.cost}")
+    for n in self.nodes:
+        if n.name in self.places:
+            let p: Spot_T = self.places[n.name]
+            lines.append(f"at {n.name} {p.x:.0f} {p.y:.0f}")
+    return "\n".join(lines) + "\n"
 ```
 
-`names` is a `var` because it grows; `n` is bound by the `for`, and the loop
-itself does not reassign it.
+`lines` is a `var` because it grows; `p` is a `let` because it is never
+reassigned; `n` and `e` are bound by the `for`, and the loop itself does not
+reassign them.
 
 ---
 
