@@ -1,0 +1,59 @@
+#!/usr/bin/env ady2py
+"""store, as ady2py builds it: the same Store as TO_NIM/STDLIB/store.ady, its texts the files of a
+directory through Python's os rather than Nim's, or, for "", held in memory. ady2py takes this file
+for `from store import Store`, so a program that keeps texts builds on both backends.
+"""
+
+pyimport os
+
+
+@virtual
+class Store:
+    var place: str              # where the texts are; "" in this Store only
+    var held: {str}str          # the texts, when the place is ""
+
+    def __init__(self, place: str):
+        self.place = place
+        self.held = {:}
+
+    # Every name a text is kept under, in order.
+    def names(self) -> []str:
+        if self.place == "":
+            return sorted([name for name in self.held.keys()])
+        if not os.path.isdir(self.place):
+            return []
+        return sorted([name for name in os.listdir(self.place) if os.path.isfile(os.path.join(self.place, name))])
+
+    # The text kept under NAME; None when there is none, or it cannot be read.
+    def read(self, name: str) -> ?str:
+        if self.place == "":
+            if name in self.held:
+                return self.held[name]
+            return None
+        let text: str | !PathFailure_T = (Path(self.place) / name).read_text()
+        if text is PathFailure_T:
+            return None
+        else:
+            return text
+
+    # TEXT kept under NAME, in place of what was: whether it could be.
+    def write(self, name: str, text: str) -> bool:
+        if self.place == "":
+            self.held[name] = text
+            return True
+        return (Path(self.place) / name).write_text(text) is None
+
+    # The text under NAME gone: whether it could be (there being none is no failure).
+    def drop(self, name: str) -> bool:
+        if self.place == "":
+            var left: {str}str = {:}
+            for k in self.held.keys():
+                if k != name:
+                    left[k] = self.held[k]
+            self.held = left
+            return True
+        let file: str = os.path.join(self.place, name)
+        if not os.path.isfile(file):
+            return True
+        os.remove(file)
+        return not os.path.isfile(file)
