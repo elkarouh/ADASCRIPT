@@ -259,7 +259,7 @@ def header_html() -> Html:
             p: "Dijkstra on a network you can edit, drawn by the server."
 
 def shell_text() -> str:
-    return page.shell_text("Shortest way", ALL_STYLE, ["/dijkstra_js_events.js"], [header_html()], read_network("", False))
+    return page.shell_text("Shortest way", ALL_STYLE, ["dijkstra_js_events.js"], [header_html()], read_network("", False))
 
 def all_text(net: Network, choice: Choice, problem: None | !Refusal_T) -> str:
     return str(all_html(net, choice, problem))

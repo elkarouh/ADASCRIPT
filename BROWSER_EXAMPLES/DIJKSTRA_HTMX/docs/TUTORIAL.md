@@ -293,7 +293,7 @@ that loads the first page (`page.shell_text`).
 the path and hands the request on. `Session.answer` reads it back into the same
 `Command` the page sent (`command_of` in `backend/dijkstra_commands.ady`, the vocabulary both
 sides share, given the fields read once by a `Page_Request`, from the standard library's
-`page_server.ady`). A read answers the page; a change goes to the method for what it is
+`page_request.ady`). A read answers the page; a change goes to the method for what it is
 done to (`change_node`, `change_edge`, `change_network`), which has one `case` on the verb:
 
 ```adascript

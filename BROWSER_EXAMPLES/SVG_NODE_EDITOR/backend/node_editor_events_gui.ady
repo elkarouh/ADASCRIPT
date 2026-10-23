@@ -23,7 +23,7 @@ is an UPDATE with no key: everything, read it all again.
 """
 from drawing import Spot_T
 from blackboard import PublishChannel
-from page_server import Page_Request
+from page_request import Page_Request
 from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
 from backend/node_editor_model import Diagram, Link_T, Refusal_T, sample
 from backend/node_editor_gui import all_text, problem_text

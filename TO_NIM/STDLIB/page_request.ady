@@ -1,0 +1,44 @@
+#!/usr/bin/env ady2nim
+"""
+page_request.ady -- a request as a page sent it: its method, its path, and its fields
+
+Read once from the query and the body ("a=1&b=2"), by the server (page_server.ady) or, with no
+server, by the page itself (page_alone.ady): compiled both ways.
+
+    from page_request import Page_Request
+
+    let r: Page_Request = Page_Request("GET", "/all", "start=A&goal=")
+    r.field("start")                    # "A"
+    r.number_field("cost", -1)          # -1: there is none
+"""
+from uri nimport decodeUrl
+
+class Page_Request:
+    var method: str                 # GET, POST, PUT, DELETE
+    var path:   str                 # /all, /nodes, ...
+    var fields: {str}str            # by name, from the query and the body
+
+    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2"), or both joined
+    # by "&". A name that comes twice keeps its last value.
+    def __init__(self, method: str, path: str, text: str):
+        self.method = method
+        self.path = path
+        self.fields = {:}
+        for pair in text.split("&"):
+            let at: int = pair.find("=")
+            if at > 0:
+                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
+
+    # The field KEY, or "" when there is none.
+    def field(self, key: str) -> str:
+        if key in self.fields:
+            return self.fields[key]
+        return ""
+
+    # The field KEY as a whole number; OTHERWISE when there is none, or it is not a number.
+    def number_field(self, key: str, otherwise: int) -> int:
+        let text: str = self.field(key)
+        let n: int | !ParseFailure_T = parse_int(text)
+        if n is ParseFailure_T:
+            return otherwise
+        return n

@@ -1,0 +1,16 @@
+#!/usr/bin/env ady2nim
+# test_kept.ady -- a text kept under a name (the stdlib's kept.ady): natively, a file.
+#
+#   ady2nim TESTS/test_kept.ady -r
+from kept import kept_text, keep_text
+
+let name: str = "/tmp/ady_test_kept.txt"
+assert keep_text(name, "node A\nedge A B 3\n")
+let back: ?str = kept_text(name)
+assert back is not None and back == "node A\nedge A B 3\n"
+assert keep_text(name, "node B\n")
+let again: ?str = kept_text(name)
+assert again is not None and again == "node B\n"
+assert kept_text("/nonexistent/ady_test_kept.txt") is None
+assert not keep_text("/nonexistent/ady_test_kept.txt", "x")
+print "kept ok"

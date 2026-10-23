@@ -23,7 +23,7 @@ an UPDATE with no key: everything, read it all again.
 """
 from drawing import Spot_T
 from blackboard import PublishChannel
-from page_server import Page_Request
+from page_request import Page_Request
 from backend/roi_model import Portfolio, Product_T, new_portfolio, set_share, set_year
 from backend/roi_layout import Layout, new_layout, move_block
 from backend/roi_gui import all_text, problem_text, name_of

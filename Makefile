@@ -97,6 +97,7 @@ STANDALONE := \
     ../TESTS/test_pure_calls.ady \
     ../TESTS/test_method_named_like_function.ady \
     ../TESTS/test_table_literal_types.ady \
+    ../TESTS/test_kept.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \
@@ -1879,6 +1880,11 @@ test-part-56:
 	        $(ADY2NIM) c -r $(BEXDIR)/HTML/$$n.ady 2>/dev/null | grep -qF "$$want" \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	    done; \
+	    printf '  %-42s' "HTML/test_html_block.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(BEXDIR)/HTML/test_html_block.ady >/dev/null 2>&1 \
+	        && node $(BEXDIR)/HTML/test_html_block.js 2>&1 | grep -qF "html_block ok" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(BEXDIR)/HTML/test_html_block.js; \
 	    printf '  %-42s' "HTML/html_app.ady (ady2nim js)"; \
 	    $(ADY2NIM) js $(BEXDIR)/HTML/html_app.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
@@ -1893,6 +1899,13 @@ test-part-56:
 	    $(ADY2NIM) js $(BEXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    rm -f $(BEXDIR)/SVG_NODE_EDITOR/frontend/node_editor_js_events.js; \
+	    printf '  %-42s' "DIJKSTRA_HTMX/tests/test_dijkstra.ady"; \
+	    (cd $(BEXDIR)/DIJKSTRA_HTMX && $(ADY2NIM) c -r tests/test_dijkstra.ady 2>/dev/null) | grep -qF "dijkstra: all checks passed" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    printf '  %-42s' "DIJKSTRA_HTMX/frontend/dijkstra_alone.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(BEXDIR)/DIJKSTRA_HTMX/frontend/dijkstra_alone.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(BEXDIR)/DIJKSTRA_HTMX/frontend/dijkstra_alone.js; \
 	fi
 
 test-part-57:

@@ -206,7 +206,15 @@ def expand_html_blocks(code):
     # only compiles under `ady2nim js`; a page without one also builds native.
     karax = "karax/[karax, karaxdsl, vdom, vstyles]" if "__on(" in "\n".join(out) \
         else "karax/[karaxdsl, vdom, vstyles]"
-    head = [f"# nimraw: import {karax}", "# nimraw: type Html = VNode"]
+    # Under `ady2nim js` karax's `$` of a page is a dump of its nodes, for debugging: str(page) is
+    # the page's HTML there too, as natively (the stdlib's karax_text.nim).
+    js_karax = karax.replace("vdom, ", "")
+    head = ["# nimraw: when defined(js):",
+            f"# nimraw:   import {js_karax}, karax_text",
+            "# nimraw:   import karax/vdom except `$`",
+            "# nimraw: else:",
+            f"# nimraw:   import {karax}",
+            "# nimraw: type Html = VNode"]
     if "__tag_" in "\n".join(out) and re.search(r"\bstyle\s*=", "\n".join(out)):
         head += ["# nimraw: " + ln for ln in _CSS_HELPER.split("\n")]
     if out and out[0].startswith("#!"):               # keep the shebang first

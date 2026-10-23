@@ -21,11 +21,13 @@ whether it went through, which takes the place of the paragraph the app names (#
     page.sending(read_books(fields), box, "", "", "")                      # any element that does, on a click
     page.on_change(update_investment(), field)                              # a field, or a form, when it changes
     page.every(1800, read_books(tick))                                     # a part that sends it after a while
-    page.shell_text("Shortest way", STYLE, ["/dijkstra_js_events.js"], [header], read_network("", False))
+    page.shell_text("Shortest way", STYLE, ["dijkstra_js_events.js"], [header], read_network("", False))
 
 `settings`, the third, is the form whose fields go along with every read ("#state", the reader's
 choices the server does not keep), or "". The server serves /htmx.min.js (page_server's send_script);
-shell_text says so on the page when it did not load.
+shell_text says so on the page when it did not load. The page names it from where the page is
+("htmx.min.js"), and the app's scripts are best named so too: it is the same from a server's /,
+and the page then opens from a file as well, with no server (page_alone.ady).
 """
 from karax/vdom nimport setAttr
 from commands import READ, Command_Of
@@ -51,7 +53,7 @@ def shell_html(title: str, style: str, scripts: []str, top: []Html, all: Html) -
                 meta charset="utf-8"
                 title: title
                 style: style
-                script src="/htmx.min.js"
+                script src="htmx.min.js"
                 for s in scripts:
                     script src=s
             body:
@@ -60,7 +62,7 @@ def shell_html(title: str, style: str, scripts: []str, top: []Html, all: Html) -
                 + all
 
 # karax turns an onerror attribute into a handler of its own, so it is added to the text.
-const MISSING: str = "<script onerror=\"addEventListener('load', function () { document.getElementById('all').textContent = 'htmx.min.js did not load: run make, which puts it where the server finds it.' })\" src=\"/htmx.min.js\">"
+const MISSING: str = "<script onerror=\"addEventListener('load', function () { document.getElementById('all').textContent = 'htmx.min.js did not load: run make, which puts it where the server finds it.' })\" src=\"htmx.min.js\">"
 
 # A page whose app's commands are of Thing_T: where each goes, and where its answer goes.
 class Page_Of[Thing_T]:
@@ -110,4 +112,4 @@ class Page_Of[Thing_T]:
     # of TOP above the page, and the page itself (#all), which the read C brings once it is loaded.
     def shell_text(self, title: str, style: str, scripts: []str, top: []Html, c: Command_Of[Thing_T]) -> str:
         let all: Html = self.sending(c, loading(), "load", "", "")
-        return "<!doctype html>" + str(shell_html(title, style, scripts, top, all)).replace("<script src=\"/htmx.min.js\">", MISSING)
+        return "<!doctype html>" + str(shell_html(title, style, scripts, top, all)).replace("<script src=\"htmx.min.js\">", MISSING)

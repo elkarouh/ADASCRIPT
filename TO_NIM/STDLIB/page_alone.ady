@@ -1,0 +1,88 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""
+page_alone.ady -- a page that htmx draws, with no server: its requests answered in the page
+
+An app of BROWSER_EXAMPLES answers each request from a session (DIJKSTRA_HTMX's
+dijkstra_events_gui.ady), which knows nothing of HTTP: the server hands it every request, and tells
+every open page of each change. The session compiles to JavaScript as well, and then the page can
+be its own server: a script that makes the session, and hands it every request htmx and the
+page's script make, in place of a server. The page's script and htmx do not know the difference.
+
+    serve_in_page(answer, shell)    every request the page makes, from now on, is answered by
+                                    ANSWER(method, path, fields), as a server's handler would
+                                    (its fields the query and the body, "a=1&b=2"; "" when there
+                                    is no such thing); then the page is SHELL, what the server
+                                    answers to GET /
+    tell_page(change)               CHANGE told to the page, as the server's GET /events tells
+                                    it (page_board's changes_channel hears it)
+
+The script is the page's first, alone in an index.html beside it, so that it is there before htmx
+and the page's script ask anything:
+
+    <!doctype html><script src="dijkstra_alone.js"></script>
+
+and in it, what the server does:
+
+    var session: Session = Session("graph.txt")         # kept in the browser (kept.ady)
+
+    def answer(method: str, path: str, fields: str) -> str:
+        return session.answer(method, path, fields)
+
+    serve_in_page(answer, shell_text())
+
+The page's other scripts are named in SHELL by a path from the page ("htmx.min.js"), so the
+page opens from a file as well as from a site.
+"""
+
+# nimraw: {.emit: """
+# nimraw: window.adascriptStreams = [];
+# nimraw: function adascriptServeInPage(answer) {
+# nimraw:   function Request() {
+# nimraw:     this.readyState = 0; this.status = 0; this.timeout = 0; this.withCredentials = false;
+# nimraw:     this.upload = { addEventListener: function () {} };
+# nimraw:   }
+# nimraw:   Request.prototype.open = function (method, url) { this.method = method; this.url = url; this.readyState = 1; };
+# nimraw:   Request.prototype.setRequestHeader = function () {};
+# nimraw:   Request.prototype.overrideMimeType = function () {};
+# nimraw:   Request.prototype.addEventListener = function () {};
+# nimraw:   Request.prototype.abort = function () {};
+# nimraw:   Request.prototype.getAllResponseHeaders = function () { return "content-type: text/html\r\n"; };
+# nimraw:   Request.prototype.getResponseHeader = function (name) { return name.toLowerCase() === "content-type" ? "text/html" : null; };
+# nimraw:   Request.prototype.send = function (body) {
+# nimraw:     const request = this;
+# nimraw:     setTimeout(function () {
+# nimraw:       const url = new URL(request.url, document.baseURI);
+# nimraw:       const page = answer(request.method, url.pathname, url.search.slice(1) + "&" + (body == null ? "" : String(body)));
+# nimraw:       request.status = page === "" ? 404 : 200;
+# nimraw:       request.response = request.responseText = page === "" ? "not found" : page;
+# nimraw:       request.responseURL = url.href;
+# nimraw:       request.readyState = 4;
+# nimraw:       if (request.onload) request.onload();
+# nimraw:     }, 0);
+# nimraw:   };
+# nimraw:   window.XMLHttpRequest = Request;
+# nimraw:   window.EventSource = function () { this.heard = []; window.adascriptStreams.push(this); };
+# nimraw:   window.EventSource.prototype.addEventListener = function (kind, f) { if (kind === "message") this.heard.push(f); };
+# nimraw: }
+# nimraw: function adascriptTellPage(change) {
+# nimraw:   window.adascriptStreams.forEach(function (s) { s.heard.forEach(function (f) { f({ data: change }); }); });
+# nimraw: }
+# nimraw: """.}
+# nimraw: proc adascriptServeInPage(answer: proc (m, p, f: cstring): cstring) {.importjs: "adascriptServeInPage(#)".}
+# nimraw: proc adascriptTellPage(change: cstring) {.importjs: "adascriptTellPage(#)".}
+# nimraw: proc adascriptWritePage(text: cstring) {.importjs: "document.write(#)".}
+# nimraw: proc serveHere(answer: proc (m, p, f: string): string, shell: string) =
+# nimraw:   proc reply(m, p, f: cstring): cstring = cstring(answer($m, $p, $f))
+# nimraw:   adascriptServeInPage(reply)
+# nimraw:   adascriptWritePage(cstring(shell))
+# nimraw: proc tellHere(change: string) = adascriptTellPage(cstring(change))
+
+# Every request the page makes, from now on, answered by ANSWER(method, path, fields) ("" when there
+# is no such thing); then the page is SHELL.
+def serve_in_page(answer: (str, str, str) -> str, shell: str):
+    serve_here(answer, shell)
+
+# CHANGE told to the page, as a server tells it on GET /events.
+def tell_page(change: str):
+    tell_here(change)

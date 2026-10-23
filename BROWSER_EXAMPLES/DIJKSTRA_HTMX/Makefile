@@ -4,6 +4,7 @@
 #   make app      build dijkstra_js_events.js and the server, start it, open the page
 #   make test     the model, the page and the requests, no server
 #   make all      build the server and dijkstra_js_events.js, start nothing
+#   make alone    the app with no server: build the scripts, then open frontend/index.html
 #   make clean    remove what was built
 #
 # $(OPEN) is xdg-open, or open on a Mac; on WSL, PowerShell opens the Windows browser.
@@ -15,7 +16,7 @@ ADY2NIM ?= $(PYTHON) $(abspath $(CURDIR)/../../TO_NIM/ady2nim.py)
 OPEN    ?= $(shell command -v xdg-open || command -v open || command -v wslview || { command -v powershell.exe >/dev/null && echo 'powershell.exe -NoProfile -Command Start-Process'; } || echo true)
 PORT    ?= 8810
 
-.PHONY: all app test clean
+.PHONY: all app alone test clean
 
 all: server frontend/dijkstra_js_events.js
 
@@ -37,6 +38,17 @@ frontend/dijkstra_js_events.js: frontend/dijkstra_js_events.ady backend/dijkstra
 frontend/htmx.min.js:
 	git checkout -- frontend/htmx.min.js
 
+# The server, in the page (frontend/dijkstra_alone.ady): frontend/index.html loads it, and it writes
+# the page, which loads the others. Nothing to start: the page opens from the file. Its names are
+# kept to itself, in a function: dijkstra_js_events.js names its own the same, and would replace them.
+frontend/dijkstra_alone.js: frontend/dijkstra_alone.ady backend/dijkstra_events_gui.ady backend/dijkstra_gui.ady backend/dijkstra_commands.ady backend/dijkstra_model.ady
+	@echo "building frontend/dijkstra_alone.js"
+	@$(ADY2NIM) js frontend/dijkstra_alone.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@{ echo "(function () {"; cat frontend/dijkstra_alone.js; echo "})();"; } > build.log && mv build.log frontend/dijkstra_alone.js
+
+alone: frontend/dijkstra_js_events.js frontend/dijkstra_alone.js frontend/htmx.min.js
+	@$(OPEN) frontend/index.html
+
 app: all frontend/htmx.min.js
 	@(sleep 1; $(OPEN) http://127.0.0.1:$(PORT)/) &
 	./backend/server $(PORT)
@@ -45,4 +57,4 @@ test:
 	$(ADY2NIM) c -r tests/test_dijkstra.ady 2>/dev/null
 
 clean:
-	rm -f backend/server test_dijkstra frontend/dijkstra_js_events.js build.log
+	rm -f backend/server test_dijkstra frontend/dijkstra_js_events.js frontend/dijkstra_alone.js build.log

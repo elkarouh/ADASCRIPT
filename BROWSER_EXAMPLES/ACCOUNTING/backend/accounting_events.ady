@@ -23,7 +23,7 @@ from backend/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
 from backend/books_text import Books, Year_End, kind_named, text_of_books
 from backend/accounting_page_state import Settings, Popup
 from backend/accounting_page_gui import all_text, told_text
-from page_server import Page_Request
+from page_request import Page_Request
 from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
 from backend/accounting_commands import Command, A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, THE_BOOKS, command_of
 from backend/ledger import Config, Ledger, Scenarios, read_config

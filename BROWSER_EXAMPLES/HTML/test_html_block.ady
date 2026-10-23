@@ -5,7 +5,8 @@ Bare text beside tags, a `style:` whose CSS keeps its `>` and quotes, an
 attribute value with spaces inside brackets, a value joined with `+`, a
 format spec and a slice in an attribute f-string, and the tags karax names
 differently (`b`, `i`); `marker_end` is written `marker-end`, and `style=`
-takes CSS text.
+takes CSS text. The same page, and the same text of it, under `ady2nim js`:
+there karax's own text of a page is a dump of its nodes, and "→" was one byte.
 """
 const CSS: str = "a > b { font-family: \"Segoe UI\"; }"
 
@@ -18,6 +19,7 @@ def page(a: int, b: int, g: bool, w: float, c: str) -> Html:
                 b: "stocks"
                 "?"
             i: "slanted"
+            p title="A → B": "A → B"
             svg viewBox=f"0 0 {w} {w}":
                 rect x=str(a + b) class=("n" if g else "b") width=f"{w:.0f}"
                 path marker_end="url(#head"+c[1:]+")" fill=f"#{c[1:]}" style="stroke: #000"
@@ -32,4 +34,5 @@ assert "x=\"3\"" in out and "class=\"n\"" in out and "width=\"4\"" in out
 assert "marker-end=\"url(#headabc)\"" in out and "fill=\"#abc\"" in out
 assert "style=\"stroke: #000; \"" in out
 assert "<circle r=\"1\" style=\"fill: #abc; opacity: 0.5; \">" in out
+assert "<p title=\"A → B\">A → B</p>" in out
 print "html_block ok"

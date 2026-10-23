@@ -1,0 +1,50 @@
+#!/usr/bin/env ady2nim
+"""
+kept.ady -- a text kept under a name, from one run to the next: in a file, or in the browser
+
+Natively the name is a file's; under `ady2nim js` it is a key of the browser's own storage
+(localStorage), which a page keeps for its site, so the same code keeps its text on both sides:
+
+    from kept import kept_text, keep_text
+
+    let text: ?str = kept_text("graph.txt")         # None: nothing kept yet, or it cannot be read
+    if not keep_text("graph.txt", net.text()):
+        print "Could not write graph.txt."
+"""
+
+# nimraw: when defined(js):
+# nimraw:   proc storedText(name: cstring): cstring {.importjs: "localStorage.getItem(#)".}
+# nimraw:   proc storeText(name, text: cstring) {.importjs: "localStorage.setItem(#, #)".}
+# nimraw:   proc keptThere(name: string): bool =
+# nimraw:     try: not storedText(cstring(name)).isNil except CatchableError: false
+# nimraw:   proc keptRead(name: string): string = $storedText(cstring(name))
+# nimraw:   proc keptWrite(name, text: string): bool =
+# nimraw:     try:
+# nimraw:       storeText(cstring(name), cstring(text))
+# nimraw:       true
+# nimraw:     except CatchableError:
+# nimraw:       false
+# nimraw: when not defined(js):
+# nimraw:   proc keptThere(name: string): bool =
+# nimraw:     try:
+# nimraw:       discard readFile(name)
+# nimraw:       true
+# nimraw:     except IOError:
+# nimraw:       false
+# nimraw:   proc keptRead(name: string): string = readFile(name)
+# nimraw:   proc keptWrite(name, text: string): bool =
+# nimraw:     try:
+# nimraw:       writeFile(name, text)
+# nimraw:       true
+# nimraw:     except IOError:
+# nimraw:       false
+
+# The text kept under NAME; None when there is none, or it cannot be read.
+def kept_text(name: str) -> ?str:
+    if not kept_there(name):
+        return None
+    return kept_read(name)
+
+# TEXT kept under NAME, in place of what was: whether it could be.
+def keep_text(name: str, text: str) -> bool:
+    return kept_write(name, text)

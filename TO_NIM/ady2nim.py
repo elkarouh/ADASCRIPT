@@ -46,6 +46,8 @@ def _refuse_for_js(output, state):
     program's words rather than by Nim at a line of its standard library."""
     import re as _re_rj
     text = "\n".join(list(output) + list(getattr(state, "nim_top_decls", [])))
+    # what a module does natively only, under `when not defined(js):`, is not done here
+    text = _re_rj.sub(r"(?m)^(\s*)when not defined\(js\):\n(?:\1\s+.*\n?|\s*\n)*", "", text)
     imports = set(state.nim_imports)
     if "osproc" in imports:
         raise SyntaxError("this program runs commands (a shell: block, run(...) or a "

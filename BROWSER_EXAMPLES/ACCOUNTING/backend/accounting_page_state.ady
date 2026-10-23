@@ -19,7 +19,7 @@ from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Posti
 from backend/accounting_gui import signed
 from backend/books_text import Books, Year_End, account_numbered, graph_of, has_account, kind_of
 from backend/accounting_groups import Grouping
-from page_server import Page_Request
+from page_request import Page_Request
 
 # The transaction E as the page tells it: "Bank -$605.00, Furniture $500.00, VAT receivable $105.00".
 def posting_text(e: Entry) -> str:
