@@ -35,21 +35,33 @@ testable on its own (see `tests/test_dijkstra.ady`).
 
 ## Step 1: define the objects in the model
 
-The model says what a network is. It has two records: a node and an edge.
+The model says what a network is. It has two classes: a node and an edge. The page's views of them
+(`NodeView`, `EdgeView`, in `frontend/dijkstra_js_events.ady`) are kinds of them, so
+they are `@virtual`: a class another module inherits says so.
 The place where the reader has put a node on the drawing is a `Spot_T`
 from the library's `drawing` module: two lengths, each a `Drawing_Pixel_T`
 (a length in the drawing's own units, which a plain `float` is not).
 
 ```adascript
 # A node: its name.
-type Node_T is record:
-    name: str
+@virtual
+class Node_T:
+    var name: str
+
+    def __init__(self, name: str):
+        self.name = name
 
 # An edge: the two nodes it joins, both ways, and its cost.
-type Edge_T is record:
-    a:    str
-    b:    str
-    cost: int
+@virtual
+class Edge_T:
+    var a:    str
+    var b:    str
+    var cost: int
+
+    def __init__(self, a: str, b: str, cost: int):
+        self.a = a
+        self.b = b
+        self.cost = cost
 ```
 
 The network is a class. It holds the three lists and is changed only
@@ -332,7 +344,7 @@ A gesture only says which command it means. The Delete key, Backspace and the
 right-click menu's "Delete node" are three gestures and one command:
 
 ```adascript
-ask_for(delete_node(self.node.name))
+ask_for(delete_node(self.name))
 ```
 
 `ask_for` publishes the command on the page's own blackboard (see "Two blackboards and

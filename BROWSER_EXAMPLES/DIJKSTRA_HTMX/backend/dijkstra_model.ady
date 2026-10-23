@@ -23,15 +23,25 @@ nimport math
 type Refusal_T is record:
     message: str
 
-# A node: its name.
-type Node_T is record:
-    name: str
+# A node: its name. The page's NodeView inherits it, so it is @virtual.
+@virtual
+class Node_T:
+    var name: str
 
-# An edge: the two nodes it joins, both ways, and its cost.
-type Edge_T is record:
-    a:    str
-    b:    str
-    cost: int
+    def __init__(self, name: str):
+        self.name = name
+
+# An edge: the two nodes it joins, both ways, and its cost. The page's EdgeView inherits it.
+@virtual
+class Edge_T:
+    var a:    str
+    var b:    str
+    var cost: int
+
+    def __init__(self, a: str, b: str, cost: int):
+        self.a = a
+        self.b = b
+        self.cost = cost
 
 const LETTERS: str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 

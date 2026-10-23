@@ -113,55 +113,53 @@ def send(c: Command):
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
-# A NodeView is a node as the page draws it: its element, and the Node_T read off it. An EdgeView
-# is an edge as the page draws it: its element, and the Edge_T read off it. They draw what the
-# network tells them; they never decide where anything is.
+# A NodeView is a node as the page draws it: a Node_T, read off its element, and the element. An
+# EdgeView is an edge as the page draws it: an Edge_T, read off its element, and the element. They
+# draw what the network tells them; they never decide where anything is.
 #
 # An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
 # point at) and a <text class="cost">.
 
-class NodeView:
-    var node: Node_T
+class NodeView(Node_T):
     var el: Element_T
 
     # The node a <g class="node"> draws: its name. Where it is drawn is not the model's.
     def __init__(self, el: Element_T):
-        self.node = Node_T(el.data("name"))
+        super().__init__(el.data("name"))
         self.el = el
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        ask_for(read_network(self.node.name, unpick))
+        ask_for(read_network(self.name, unpick))
 
     # Let it go at AT: it is moved there.
     def drop_at(self, at: Spot_T):
-        ask_for(update_node(self.node.name, at))
+        ask_for(update_node(self.name, at))
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
-        if ask_yes(f"Delete the node {self.node.name} and its edges?"):
-            ask_for(delete_node(self.node.name))
+        if ask_yes(f"Delete the node {self.name} and its edges?"):
+            ask_for(delete_node(self.name))
 
-class EdgeView:
-    var edge: Edge_T
+class EdgeView(Edge_T):
     var el: Element_T
 
     # The edge a <g data_from data_to data_cost> draws.
     def __init__(self, el: Element_T):
-        self.edge = Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
+        super().__init__(el.data("from"), el.data("to"), int(el.number("data_cost")))
         self.el = el
 
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
-        if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
-            ask_for(delete_edge(self.edge.a, self.edge.b))
+        if ask_yes(f"Delete the edge {self.a} — {self.b}?"):
+            ask_for(delete_edge(self.a, self.b))
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
-        let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
+        let cost: str = ask(f"Cost of the edge {self.a} — {self.b}?", str(self.cost))
         if cost == "":
             return
-        ask_for(update_edge(self.edge.a, self.edge.b, cost))
+        ask_for(update_edge(self.a, self.b, cost))
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -193,14 +191,14 @@ class Drawing:
 
     # The view of the node drawn as EL, or none when the page does not draw it.
     def node_at(self, el: Element_T) -> ?NodeView:
-        let name: str = NodeView(el).node.name
+        let name: str = NodeView(el).name
         if name in self.nodes:
             return self.nodes[name]
         return None
 
     # The view of the edge drawn as EL, or none when the page does not draw it.
     def edge_at(self, el: Element_T) -> ?EdgeView:
-        let e: Edge_T = EdgeView(el).edge
+        let e: EdgeView = EdgeView(el)
         let key: str = f"{e.a}-{e.b}"
         if key in self.edges:
             return self.edges[key]
@@ -209,8 +207,8 @@ class Drawing:
     # Draw again each edge that ends at NAME, where NETWORK puts the two ends.
     def redraw_edges(self, name: str, network: Network):
         for e in self.edge_list:
-            if e.edge.a == name or e.edge.b == name:
-                e.redraw(place_of(network, e.edge.a), place_of(network, e.edge.b))
+            if e.a == name or e.b == name:
+                e.redraw(place_of(network, e.a), place_of(network, e.b))
 
 # The text the server keeps the network in, as the page carries it: its node, edge and "at" lines
 # (see dijkstra_gui.ady). Before htmx has drawn the page there is none: an empty network.
@@ -240,7 +238,7 @@ var network: NetworkView = NetworkView()     # the page is read again each time 
 # draft, which the Mouse_Follower draws).
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = inside(wanted)
-    ask_for(move_node(NodeView(node).node.name, now))
+    ask_for(move_node(NodeView(node).name, now))
     return now
 
 # It draws a draft of a node's move: the node is drawn where it is asked to be, the page's model
@@ -496,7 +494,7 @@ class Wire:
         if view is None:
             return
         stop(c)
-        self.from_node = view.node
+        self.from_node = Node_T(view.name)
         self.from_at = network.spot_of(self.from_node.name)
         self.linking = true
         self.swallow = false
@@ -520,7 +518,7 @@ class Wire:
         let target: ?Element_T = on(click_of(e), "g.node")
         if target is None:
             return
-        let to: Node_T = NodeView(target).node
+        let to: NodeView = NodeView(target)
         if to.name == self.from_node.name:
             return
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
