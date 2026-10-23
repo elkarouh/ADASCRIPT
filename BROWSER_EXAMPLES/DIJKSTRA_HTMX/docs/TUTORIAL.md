@@ -333,24 +333,28 @@ A gesture only says which command it means. The Delete key, Backspace and the
 right-click menu's "Delete node" are three gestures and one command:
 
 ```adascript
-send(delete_node(self.node.name))
+ask_for(delete_node(self.node.name))
 ```
 
-`send` is the one place a command meets the server: the verb is the HTTP method
-(POST, GET, PUT, DELETE), the thing is the URL (`/nodes`, `/edges`, `/all`), the
-reader's choice (`#state`) goes along, and the browser module's `request` sends it,
-as a button with hx-* attributes would. The answer to C, U or D goes to `#problem`
-(whether it went through); a read's, the page, to `#all`.
+`ask_for` publishes the command on the page's own blackboard (see "Two blackboards and
+a liaison" below), and the gesture is done: it does not know who carries it out. For
+a command that is the model's, that is `send`, the one place a command meets the
+server: the verb is the HTTP method (POST, GET, PUT, DELETE), the thing is the URL
+(`/nodes`, `/edges`, `/all`), the reader's choice (`#state`) goes along, and the
+browser module's `request` sends it, as a button with hx-* attributes would. The
+answer to C, U or D goes to `#problem` (whether it went through); a read's, the page,
+to `#all`.
 
 | Gesture | Command |
 |---|---|
 | click a node | R `read_network(name, unpick)` |
 | double-click the space, or the menu's "New node here" | C `create_node(name, at)` |
 | drag from a node's dot to another node | C `create_edge(a, b, cost)` |
+| drag a node (a draft, many times a second) | U `move_node(name, at)` |
 | let go of a dragged node | U `update_node(name, at)` |
 | double-click an edge, or the menu's "Change cost" | U `update_edge(a, b, cost)` |
 | Delete, Backspace, or the menu's "Delete" | D `delete_node(name)` or `delete_edge(a, b)` |
-| another page's change (the news) | R `read_network("", False)` |
+| a change, from any page (the news) | R `read_network("", False)` |
 
 Which of a node and an edge the Delete key deletes is the selection's to say:
 
@@ -436,6 +440,49 @@ A subscriber is a plain function, `(channel: str, change: Change) -> None`, so w
 needs (the session, the open pages) it finds at module level, as `keep` and `tell` do in
 `server.ady`.
 
+### Two blackboards and a liaison
+
+The page is built the same way. Its blackboard has two channels, in
+`frontend/dijkstra_js_events.ady`:
+
+```adascript
+var commands: PublishChannel[Command] = PublishChannel[Command]("commands")  # what the reader asks
+var changes: PublishChannel[str] = PublishChannel[str]("changes")            # what the server says changed
+```
+
+Every gesture publishes a command on `commands` (`ask_for`), and nothing else. Who
+carries it out is decided by subscribing:
+
+| Subscriber | Hears | Does |
+|---|---|---|
+| `liaison` | `commands` | the liaison officer: sends to the server what is the server's (`send`) |
+| `follow_mouse` | `commands` | draws a draft here and now: the node still held, and its edges |
+| `read_again` | `changes` | asks for the page again (`read_network`), which goes out through the liaison |
+
+The liaison decides by what a command *means*, not by which gesture made it or how
+often it comes: a **draft** (`move_node`, a node the reader still holds) changes only
+the page, so it stays in the browser; anything else is the model's, and the model is
+changed in one place, the server's. Speed follows without being the rule: what changes
+only the page is exactly what comes many times a second. `heard` is the liaison's
+other half: it puts what `GET /events` says on `changes`.
+
+```adascript
+def liaison(channel: str, c: Command):
+    if not is_draft(c):
+        send(c)
+
+let to_server: int = commands.subscribe(liaison)
+let drafts: int = commands.subscribe(follow_mouse)
+let news: int = changes.subscribe(read_again)
+follow("/events", heard)
+```
+
+So the two ends have one shape: a blackboard, subscribers that know nothing of each
+other, and between the two blackboards the wire, crossed in one place each way (`send`
+out, `heard` in). A new thing for the page to do with a command, an undo list, a log,
+drawing a deletion before the server confirms it, is one more subscriber on `commands`,
+and no gesture changes.
+
 ---
 
 ## Step 5: a drag, from the mouse to the page
@@ -444,11 +491,12 @@ needs (the session, the open pages) it finds at module level, as `keep` and `tel
 
 Read it from the top:
 
-1. **While the mouse moves**, `moved_cb` runs in the browser. It puts the
-   node where the mouse is, the model takes the new place, and `Drawing.redraw_edges`
-   draws every edge that ends at it. Nothing goes to the server yet.
-2. **On release**, `dropped_cb` makes the command `update_node(name, at)`
-   and `send`s it.
+1. **While the mouse moves**, `moved_cb` runs in the browser. It publishes a
+   draft, `move_node(name, at)`; `follow_mouse` puts the node where the mouse is,
+   the page's model takes the new place, and `Drawing.redraw_edges` draws every edge
+   that ends at it. The liaison leaves a draft in the browser: nothing goes to the server yet.
+2. **On release**, `dropped_cb` publishes the command `update_node(name, at)`, which
+   is not a draft, and the liaison `send`s it.
 3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model
    and publishes `UPDATE A`; the server keeps the file and tells every page.
 4. **Every page reads itself again** (`GET /all`, into `#all`). For this one the new

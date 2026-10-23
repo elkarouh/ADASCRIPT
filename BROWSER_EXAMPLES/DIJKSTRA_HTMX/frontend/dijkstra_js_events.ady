@@ -19,19 +19,32 @@ reader a question is here. The gestures, the usual ones of a diagram:
 
 A gesture never talks to the server: it makes a Command, Create, Read, Update or Delete of a node or
 an edge (backend/dijkstra_commands.ady, the server's vocabulary too, which reads each request back
-into one), and `send` sends it. Many gestures may make one command: a Delete is the Delete key,
-Backspace, or the menu's "Delete node". The answer to C, U or D says only whether it went through (the paragraph #problem); the page is drawn again when the server tells it of a change,
-from any page: it reads itself (R), and that takes the place of #all.
+into one), and publishes it on the page's blackboard, the channel `commands`. Many gestures may make
+one command: a Delete is the Delete key, Backspace, or the menu's "Delete node". The gesture does not
+know who carries the command out. Two subscribers do:
+
+    liaison         the liaison officer: what is for the server it sends there (`send`), so the
+                    model is changed in one place, the server's
+    follow_mouse    a draft (a node still held: `move_node`) only moves the drawing, here and now,
+                    many times a second; the liaison leaves it in the browser
+
+What decides is what a command means, not which gesture made it: a draft changes only the page, and
+anything else is the model's, so the server's. The answer to C, U or D says only whether it went
+through (the paragraph #problem). What the server says changed, on any page, comes in on the other
+channel, `changes`; `read_again` hears it and asks for the page again (R, which takes the place of #all).
+So the browser is built like the server: a blackboard, subscribers that know nothing of each other,
+and the liaison between the two.
 
     gesture                      command
     click a node                 R  read_network(name, ...)
     double-click the space       C  create_node(name, at)        and the space menu's "New node here"
     drag from a dot to a node    C  create_edge(a, b, cost)
+    drag a node                  U  move_node(name, at)          a draft: stays in the browser
     let go of a dragged node     U  update_node(name, at)
     double-click an edge         U  update_edge(a, b, cost)      and the edge menu's "Change cost"
     Delete, Backspace            D  delete_node(name) or delete_edge(a, b), for what is selected,
                                     and the menus' "Delete node", "Delete edge"
-    (another page's change)      R  read_network("", False)
+    (a change, from any page)    R  read_network("", False)
 
 The nodes and edges here are the model's own (backend/dijkstra_model.ady), with the places the
 reader put them, and where a node without one is drawn is the layout's (backend/dijkstra_layout.ady):
@@ -52,12 +65,13 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
+from blackboard import PublishChannel
 from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
-from svg_drag import Hooks_T, holding, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
+from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T
 from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
-from backend/dijkstra_commands import Command, READ, method_of, url_of, create_node, update_node, delete_node, create_edge, update_edge, delete_edge, read_network
+from backend/dijkstra_commands import Command, READ, UPDATE, NODE, method_of, url_of, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
@@ -82,7 +96,29 @@ def set_selected(el: Element_T, lit: bool):
     else:
         el.set_attr("class", cls.replace(" selected", ""))
 
-# ---- Sending a command: the one place the page talks to the server ----
+# ---- The page's blackboard: what the reader asks, and what the server says changed ----
+
+# What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
+var commands: PublishChannel[Command] = PublishChannel[Command]("commands")
+# What the server says changed ("nodes CREATE H"), whichever page changed it.
+var changes: PublishChannel[str] = PublishChannel[str]("changes")
+commands.raise_errors = True            # a subscriber that fails is a bug: let it show
+changes.raise_errors = True
+
+# Ask for C: the gesture's one way out.
+def ask_for(c: Command):
+    commands.publish(c)
+
+# ---- The liaison officer: between the page's blackboard and the server's ----
+
+# A command that is for the server goes there; a draft stays in the browser.
+def liaison(channel: str, c: Command):
+    if not is_draft(c):
+        send(c)
+
+# What the server says changed goes on the page's blackboard.
+def heard(change: str):
+    changes.publish(change)
 
 # Send COMMAND, with the reader's choice (the form #state): its verb is the method, its thing the URL.
 # A read's answer is the page, in place of #all; a change's is whether it went through, in place of
@@ -110,16 +146,16 @@ class NodeView:
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        send(read_network(self.node.name, unpick))
+        ask_for(read_network(self.node.name, unpick))
 
     # Let it go at AT: it is moved there.
     def drop_at(self, at: Spot_T):
-        send(update_node(self.node.name, at))
+        ask_for(update_node(self.node.name, at))
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.node.name} and its edges?"):
-            send(delete_node(self.node.name))
+            ask_for(delete_node(self.node.name))
 
 class EdgeView:
     var edge: Edge_T
@@ -132,14 +168,14 @@ class EdgeView:
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.edge.a} — {self.edge.b}?"):
-            send(delete_edge(self.edge.a, self.edge.b))
+            ask_for(delete_edge(self.edge.a, self.edge.b))
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.edge.a} — {self.edge.b}?", str(self.edge.cost))
         if cost == "":
             return
-        send(update_edge(self.edge.a, self.edge.b, cost))
+        ask_for(update_edge(self.edge.a, self.edge.b, cost))
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -214,15 +250,32 @@ class NetworkView:
 
 var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (page_drawn)
 
-# While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and its
-# edges follow.
+# While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
+# draft, which follow_mouse draws).
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = inside(wanted)
-    shift(node, centre, now)
-    let name: str = node_of(node).name
-    network.network.put(name, now)        # the model keeps the place
-    network.drawing.redraw_edges(name, network.network)  # and the edges that end at it are drawn again
+    ask_for(move_node(node_of(node).name, now))
     return now
+
+# A draft of a node's move: the node is drawn where it is asked to be, the page's model keeps the
+# place, and the edges that end at it are drawn again. Nothing goes to the server.
+def follow_mouse(channel: str, c: Command):
+    if not is_draft(c) or c.verb != UPDATE or c.thing != NODE:
+        return
+    let name: str = c.value("name")
+    if name not in network.drawing.nodes:
+        return
+    let x: float | !ParseFailure_T = parse_float(c.value("x"))
+    let y: float | !ParseFailure_T = parse_float(c.value("y"))
+    if x is ParseFailure_T:
+        return
+    if y is ParseFailure_T:
+        return
+    let now: Spot_T = Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
+    let el: Element_T = network.drawing.nodes[name].el
+    shift(el, spot_of(el), now)
+    network.network.put(name, now)
+    network.drawing.redraw_edges(name, network.network)
 
 # NODE let go at AT: it is moved there (U).
 def dropped_cb(node: Element_T, at: Spot_T):
@@ -330,7 +383,7 @@ def double_click(e: Event_T):
     let name: str = ask_name()
     if name == "":
         return
-    send(create_node(name, inside(spot_at(e))))
+    ask_for(create_node(name, inside(spot_at(e))))
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 
@@ -394,7 +447,7 @@ def tool_click(e: Event_T):
         when ADD_HERE:
             let name: str = ask_name()
             if name != "":
-                send(create_node(name, menus.at))
+                ask_for(create_node(name, menus.at))
         when CHANGE_COST:
             selection.change_cost()
         when REMOVE:
@@ -478,7 +531,7 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
         if cost == "":
             return
-        send(create_edge(self.from_node.name, to.name, cost))
+        ask_for(create_edge(self.from_node.name, to.name, cost))
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
@@ -489,16 +542,20 @@ class Wire:
 
 var wire: Wire = Wire()
 
-# ---- What another page changed ----
+# ---- What the server says changed ----
 
 # The server tells every open page of each change to the network (GET /events, "nodes CREATE H"),
-# whichever page made it, this one included; each draws itself again from the server, keeping what
-# its reader picked (#state). Not while a node or a wire is held: what is let go is a change of its
-# own, and its news draws the page again.
-def news(change: str):
+# whichever page made it, this one included; each asks for itself again, keeping what its reader
+# picked (#state). Not while a node or a wire is held: what is let go is a change of its own, and
+# its news draws the page again.
+def read_again(channel: str, change: str):
     if holding() or wire.linking:
         return
-    send(read_network("", False))
+    ask_for(read_network("", False))
+
+let to_server: int = commands.subscribe(liaison)
+let drafts: int = commands.subscribe(follow_mouse)
+let news: int = changes.subscribe(read_again)
 
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)
@@ -510,4 +567,4 @@ listen("contextmenu", context)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
 draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
-follow("/events", news)
+follow("/events", heard)

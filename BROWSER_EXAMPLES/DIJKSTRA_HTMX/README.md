@@ -35,7 +35,7 @@ the other.
 | `backend/dijkstra_request.ady` | the fields of a request: `fields_of` reads them all by name, `field_of` and `number_of` one, `params_of` reads the reader's choice (`Params_T`: the start, the goal, the node clicked). No HTML, no HTTP. |
 | `backend/dijkstra_events_gui.ady` | what each request does: `Session.answer(method, path, fields)` reads it back into a `Command`; a read returns the page; a change (`carry_out`) calls the model, answers only whether it went through (`#problem`), and publishes the `Change` on its channel (`nodes`, `edges`). A `Session` holds the network and the file it is kept in (`keep` writes it). No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP, and who hears of a change: hands each request to `session.answer`, serves the two scripts, keeps `GET /events` open for every page, and subscribes `keep` (writes `graph.txt`) and `tell` (writes the change to every open page) to the session's channels. |
-| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript: moves a node and redraws its edges while the mouse moves (the server could not keep up with every frame), then sends the new place (PUT /nodes). Every gesture makes a command (`backend/dijkstra_commands.ady`), and `send`, the one place the page talks to the server, sends it. It follows `GET /events` and reads the page again (`GET /all`, into `#all`) on each change, whichever page made it. |
+| `frontend/dijkstra_js_events.ady` | the browser side, compiled to JavaScript, built like the server: a blackboard of its own. Every gesture publishes a command (`backend/dijkstra_commands.ady`) on the channel `commands`, and two subscribers carry it out: `liaison`, the liaison officer, sends the server what is the model's (`send`, the one place the page talks to the server), and `follow_mouse` draws a draft (a node still held, `move_node`) here and now, which the liaison keeps in the browser (the server could not keep up with every frame). What `GET /events` says changed goes on the channel `changes`, and `read_again` reads the page again (`GET /all`, into `#all`), whichever page made it. |
 | `tests/test_dijkstra.ady` | tests of the model, and of the page through `session.answer`, as the browser would ask (a command, then the page read again), and of what a subscriber hears; nothing is started. |
 | `frontend/htmx.min.js` | htmx, vendored (14 KB gzipped). |
 
@@ -67,8 +67,9 @@ The routes are a small REST interface on two collections. Commands in, events ou
   sends it and swaps in the answer; the page is drawn again on the news of the change.
 * A gesture on the drawing (a click on a node, a drag, a wire, a double-click, a
   menu, the Delete key) has no button: it makes a **command**, Create, Read, Update or
-  Delete of a node or an edge, and `send` sends it: `send(delete_node(n))`
-  (`backend/dijkstra_commands.ady`). Several gestures make the same command (Delete,
+  Delete of a node or an edge, and publishes it on the page's blackboard: `ask_for(delete_node(n))`
+  (`backend/dijkstra_commands.ady`). The liaison sends it on; a draft (a node still held) it
+  keeps in the browser. Several gestures make the same command (Delete,
   Backspace and the menu's "Delete node" all make `delete_node`), and nothing after the
   command knows which gesture it was. The verb is the HTTP method, the thing the URL;
   the browser module's `request` sends it with `#state`, into `#problem` (a read, into
@@ -77,7 +78,9 @@ The routes are a small REST interface on two collections. Commands in, events ou
   in red on the page that made it; nothing is changed, and no other page hears of it.
 * Who hears of a change is decided by subscribing, not in `answer`: the `Network` is the
   blackboard, `Session.answer` the control, and `keep` (the file) and `tell` (every open page)
-  knowledge sources that know nothing of each other. See "The blackboard" in `docs/TUTORIAL.md`.
+  knowledge sources that know nothing of each other. The page has a blackboard of its own
+  (`commands` out, `changes` in), and the liaison between the two. See "The blackboard" and
+  "Two blackboards and a liaison" in `docs/TUTORIAL.md`.
 * So testing the GUI is calling `session.answer(method, path, fields)`, reading the
   page, and subscribing to hear what changed: see `tests/test_dijkstra.ady`.
 * The algorithm never learns about any of it. A different front end (a command

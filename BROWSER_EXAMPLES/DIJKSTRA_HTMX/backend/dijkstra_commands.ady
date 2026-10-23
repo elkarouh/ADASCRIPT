@@ -9,11 +9,13 @@ whole NETWORK, which is what is read), and its fields by name:
     delete_node("A")                    # D: DELETE /nodes   name=A
     create_edge("A", "B", "3")          # C: POST   /edges   a=A b=B cost=3
     update_node("A", at)                # U: PUT    /nodes   name=A x=.. y=..
+    move_node("A", at)                  # U, a draft: the node still held; it stays in the browser
     read_network("A", False)            # R: GET    /all     pick=A
 
 On the wire the verb is the HTTP method and the thing is the URL: `method_of` and `url_of` say which,
-and `command_of` reads them back, so the mapping is written once, here. The page sends a command
-(`send` in dijkstra_js_events.ady); the server reads it back (`Session.answer` in
+and `command_of` reads them back, so the mapping is written once, here. The page publishes a command
+on its own blackboard and its liaison sends it (`send` in dijkstra_js_events.ady), unless it is a
+draft (`is_draft`), which stays in the browser; the server reads it back (`Session.answer` in
 dijkstra_events_gui.ady) and carries it out; and what it changed goes out with the same verbs (a
 `Change`, also of this module's Verb_T). No HTML, no HTTP.
 """
@@ -75,6 +77,15 @@ def create_node(name: str, at: Spot_T) -> Command:
 # U: the node NAME, moved to AT.
 def update_node(name: str, at: Spot_T) -> Command:
     return Command(UPDATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+
+# U, while the reader still holds the node NAME: where it is now. A draft: the change is not made
+# yet, so only the page shows it; when the node is let go, update_node makes it.
+def move_node(name: str, at: Spot_T) -> Command:
+    return Command(UPDATE, NODE, {"name": name, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}", "draft": "yes"})
+
+# Whether C is a draft: the reader is still making it, and nothing is to be changed for it but the page.
+def is_draft(c: Command) -> bool:
+    return c.value("draft") == "yes"
 
 # D: the node NAME, and its edges.
 def delete_node(name: str) -> Command:
