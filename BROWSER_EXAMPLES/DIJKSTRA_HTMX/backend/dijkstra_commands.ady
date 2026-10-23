@@ -12,8 +12,8 @@ whole NETWORK, which is what is read), and its fields by name:
     move_node("A", at)                  # U, a draft: the node still held; it stays in the browser
     read_network("A", False)            # R: GET    /all     pick=A
 
-On the wire the verb is the HTTP method and the thing is the URL: `method_of` and `url_of` say which,
-and `command_of` reads them back, so the mapping is written once, here. The page publishes a command
+On the wire the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say
+which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a command
 on its own blackboard and its liaison sends it (`send` in dijkstra_js_events.ady), unless it is a
 draft (`is_draft`), which stays in the browser; the server reads it back (`Session.answer` in
 dijkstra_events_gui.ady) and carries it out; and what it changed goes out with the same verbs (a
@@ -37,8 +37,9 @@ def value(c: Command, name: str) -> str:
 
 # ---- On the wire: the verb is the HTTP method, the thing is the URL ----
 
-def method_of(verb: Verb_T) -> str:
-    case verb:
+# The HTTP method command C goes by: its verb.
+def method(c: Command) -> str:
+    case c.verb:
         when CREATE:
             return "POST"
         when READ:
@@ -48,8 +49,9 @@ def method_of(verb: Verb_T) -> str:
         when DELETE:
             return "DELETE"
 
-def url_of(thing: Thing_T) -> str:
-    case thing:
+# The URL command C goes to: what it is done to.
+def url(c: Command) -> str:
+    case c.thing:
         when NODE:
             return "/nodes"
         when EDGE:
@@ -57,15 +59,14 @@ def url_of(thing: Thing_T) -> str:
         when NETWORK:
             return "/all"
 
-# The command METHOD on URL is, with FIELDS; None when it is none of them. The network is only read,
-# and only the network is read.
-def command_of(method: str, url: str, fields: {str}str) -> ?Command:
+# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. The network is
+# only read, and only the network is read.
+def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
     for verb in Verb_T:
-        if method_of(verb) != method:
-            continue
         for thing in Thing_T:
-            if url_of(thing) == url and (verb == READ) == (thing == NETWORK):
-                return Command(verb, thing, fields)
+            let c: Command = Command(verb, thing, fields)
+            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == NETWORK):
+                return c
     return None
 
 # ---- The commands, by name: one each for what the page can ask ----

@@ -339,8 +339,8 @@ ask_for(delete_node(self.node.name))
 `ask_for` publishes the command on the page's own blackboard (see "Two blackboards and
 a liaison" below), and the gesture is done: it does not know who carries it out. For
 a command that is the model's, that is `send`, the one place a command meets the
-server: the verb is the HTTP method (POST, GET, PUT, DELETE), the thing is the URL
-(`/nodes`, `/edges`, `/all`), the reader's choice (`#state`) goes along, and the
+server: the verb is the HTTP method (POST, GET, PUT, DELETE: `c.method()`), the thing is
+the URL (`/nodes`, `/edges`, `/all`: `c.url()`), the reader's choice (`#state`) goes along, and the
 browser module's `request` sends it, as a button with hx-* attributes would. The
 answer to C, U or D goes to `#problem` (whether it went through); a read's, the page,
 to `#all`.

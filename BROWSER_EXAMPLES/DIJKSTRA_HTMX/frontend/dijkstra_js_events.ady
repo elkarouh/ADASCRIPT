@@ -71,7 +71,7 @@ from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T
 from backend/dijkstra_layout import WIDTH, COST_DY, inside, place_of
-from backend/dijkstra_commands import Command, READ, UPDATE, NODE, method_of, url_of, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
+from backend/dijkstra_commands import Command, READ, UPDATE, NODE, method, url, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
 # ---- The model's values, read off the drawing, and the drawing's values as the model's ----
@@ -128,7 +128,7 @@ def heard(change: str):
 # #problem (the page is drawn again on the news of the change, below).
 def send(c: Command):
     let target: str = ("#all" if c.verb == READ else "#problem")
-    request(method_of(c.verb), url_of(c.thing), c.fields, target, "#state")
+    request(c.method(), c.url(), c.fields, target, "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
