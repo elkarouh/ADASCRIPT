@@ -56,13 +56,11 @@ def update_investment() -> Command:
 
 # U: the share of PRODUCT ("gold"), by the field percentage, which sends itself.
 def update_share(product: str) -> Command:
-    let fields: {str}str = {"product": product}
-    return Command(UPDATE, A_SHARE, fields)
+    return Command(UPDATE, A_SHARE, {"product": product})
 
 # U: the block NAME, let go with its centre at AT.
 def update_block(name: str, at: Spot_T) -> Command:
-    let fields: {str}str = {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}
-    return Command(UPDATE, A_BLOCK, fields)
+    return Command(UPDATE, A_BLOCK, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
 
 # U, while the reader still holds the block NAME: where its centre is now. A draft: the change is
 # not made yet, so only the page shows it; when the block is let go, update_block makes it.

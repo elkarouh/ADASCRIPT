@@ -23,8 +23,7 @@ says: its `url`. The app's commands module, then:
             ...
 
     def delete_node(id: int) -> Command:
-        let fields: {str}str = {"id": str(id)}
-        return Command(DELETE, NODE, fields)
+        return Command(DELETE, NODE, {"id": str(id)})
 
 A command's fields are read with `c.value("id")`, a number of them with `c.number_value("id")`, all
 of them as a button's hx-vals with `c.vals()`, and the place it names (its fields x and y: where a
@@ -80,8 +79,7 @@ class Command_Of[Thing_T]:
 
     # The field NAME as a whole number; -1 when it is none.
     def number_value(self, name: str) -> int:
-        let text: str = self.value(name)
-        let n: int | !ParseFailure_T = parse_int(text)
+        let n: int | !ParseFailure_T = parse_int(self.value(name))
         if n is ParseFailure_T:
             return -1
         return n
@@ -89,10 +87,8 @@ class Command_Of[Thing_T]:
     # Where the command puts what it moves (a node dragged): its fields x and y; None when it has
     # none, or they are not numbers.
     def spot(self) -> ?Spot_T:
-        let x_text: str = self.value("x")
-        let y_text: str = self.value("y")
-        let x: float | !ParseFailure_T = parse_float(x_text)
-        let y: float | !ParseFailure_T = parse_float(y_text)
+        let x: float | !ParseFailure_T = parse_float(self.value("x"))
+        let y: float | !ParseFailure_T = parse_float(self.value("y"))
         if x is ParseFailure_T:
             return None
         if y is ParseFailure_T:

@@ -57,13 +57,11 @@ def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
 
 # C: a node titled TITLE, its top left corner at AT (in the drawing's units).
 def create_node(title: str, at: Spot_T) -> Command:
-    let fields: {str}str = {"title": title, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}
-    return Command(CREATE, NODE, fields)
+    return Command(CREATE, NODE, {"title": title, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
 
 # U: the node ID, moved to AT.
 def update_node(id: int, at: Spot_T) -> Command:
-    let fields: {str}str = {"id": str(id), "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}
-    return Command(UPDATE, NODE, fields)
+    return Command(UPDATE, NODE, {"id": str(id), "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
 
 # U, while the reader still holds the node ID: where it is now. A draft: the change is not made
 # yet, so only the page shows it; when the node is let go, update_node makes it.
@@ -73,8 +71,7 @@ def move_node(id: int, at: Spot_T) -> Command:
 
 # D: the node ID, and its connectors.
 def delete_node(id: int) -> Command:
-    let fields: {str}str = {"id": str(id)}
-    return Command(DELETE, NODE, fields)
+    return Command(DELETE, NODE, {"id": str(id)})
 
 # The fields that name the connector L.
 def link_fields(l: Link_T) -> {str}str:

@@ -44,8 +44,7 @@ let page: Page = Page(url, "#told", "#state")
 
 # A button that asks for the page again with the field NAME set to VALUE: what was done.
 def setting_button(label: str, name: str, value: str) -> Html:
-    let fields: {str}str = {name: value}
-    return page.button(label, read_books(fields))
+    return page.button(label, read_books({name: value}))
 
 def option_html(value: str, label: str, chosen: bool) -> Html:
     if chosen:

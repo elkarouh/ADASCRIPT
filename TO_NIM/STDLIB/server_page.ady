@@ -77,9 +77,7 @@ class Page_Of[Thing_T]:
     # click, a form's submit), after ASK is confirmed ("" asks nothing), with the fields within
     # INCLUDE (CSS selectors, or ""). A read takes the settings along too.
     def sending(self, c: Command_Of[Thing_T], element: Html, on: str, ask: str, include: str) -> Html:
-        let url_of: (Command_Of[Thing_T]) -> str = self.url_of      # not self.url_of(c): see TODO.md
-        let where: str = url_of(c)
-        setAttr(element, "data-hx-" + c.method().lower(), where)
+        setAttr(element, "data-hx-" + c.method().lower(), self.url_of(c))
         if len(c.fields) > 0:
             setAttr(element, "data-hx-vals", c.vals())
         if on != "":

@@ -168,8 +168,7 @@ class Page_Refresher(Observer[Page_Channel_T, str]):
     def callback(self, channel: Page_Channel_T, change: str):
         if holding():
             return
-        let fields: {str}str = {"scenario": "", "cancel": "1"}
-        commands_channel.publish(read_books(fields))
+        commands_channel.publish(read_books({"scenario": "", "cancel": "1"}))
 
 # ---- The gesture: the pointer on the drawing ----
 #
