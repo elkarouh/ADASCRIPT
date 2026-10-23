@@ -186,7 +186,7 @@ def popup_form(v: View) -> Html:
             label: "What happened"
             input name="what" value=v.s.popup.what placeholder="a chair for the office"
             label: "Amount, before VAT"
-            input name="amount" value=v.s.popup.howmuch placeholder="605.00"
+            input name="amount" value=v.s.popup.amount placeholder="605.00"
             label: "VAT"
             select name="vat":
                 for rate in VatRate_T:

@@ -28,21 +28,21 @@ def posting_text(e: Entry) -> str:
 # ---- The popup: the transaction an arrow drawn records ----
 
 # The transaction the popup describes, as the reader typed it: from the frozen account SOURCE to the
-# one the arrow went to, TARGET; HOWMUCH before VAT.
+# one the arrow went to, TARGET; AMOUNT before VAT.
 class Popup:
     var source: str
     var target: str
     var date:   str                 # 2012-01-31
     var what:   str                 # what happened
-    var howmuch: str                # the amount, 605.00, before VAT (not `amount`: see TODO.md)
+    var amount: str                 # 605.00, before VAT
     var vat:    str                 # the rate: a VatRate_T, by name
 
-    def __init__(self, source: str, target: str, date: str, what: str, howmuch: str, vat: str):
+    def __init__(self, source: str, target: str, date: str, what: str, amount: str, vat: str):
         self.source = source
         self.target = target
         self.date = date
         self.what = what
-        self.howmuch = howmuch
+        self.amount = amount
         self.vat = vat
 
     # The transaction to record in the books B, or why there is none. With VAT, a sale (the source
@@ -53,7 +53,7 @@ class Popup:
         if self.what == "":
             return BookFailure_T("Say what happened.")
         do:
-            amount <- parse_float(self.howmuch.replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
+            amount <- parse_float(self.amount.replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
             rate <- parse_enum(VatRate_T, self.vat) else BookFailure_T("Pick a VAT rate from the list.")
         let net: Cents_T = Cents_T(int(amount * 100.0 + 0.5))
         if net <= 0:
