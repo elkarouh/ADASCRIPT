@@ -3724,12 +3724,19 @@ def _bare_method_ref(self, raw_name):
     if type(tr).__name__ != "attr_trailer":
         return None
     sym = ParserState.symbol_table.lookup(raw_name)
+    if not sym and raw_name == "self" and getattr(ParserState, "_current_class_name", None):
+        sym = {"type": ParserState._current_class_name}   # in __init__, self is the class being built
     if not sym:
         return None
     import re as _re_ref
     cls = _re_ref.sub(r"^(?:var|ref)\s+", "", sym.get("type", "") or "").strip()
+    cls = _re_ref.sub(r"\[.*$", "", cls)
     meth = tr.nodes[0].to_nim()
-    if meth not in (getattr(ParserState, "_all_class_methods", None) or {}).get(cls, ()):
+    _methods = getattr(ParserState, "_all_class_methods", None) or {}
+    _parents = getattr(ParserState, "_all_class_parents", None) or {}
+    while cls and meth not in _methods.get(cls, ()):
+        cls = _re_ref.sub(r"\[.*$", "", _parents.get(cls) or "")   # or one its class inherits
+    if not cls:
         return None
     ptypes = (getattr(ParserState, "proc_param_types", None) or {}).get(meth)
     if not ptypes or len(ptypes) < 2:

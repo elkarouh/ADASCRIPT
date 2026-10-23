@@ -1,0 +1,59 @@
+#!/usr/bin/env ady2nim
+# test_observer.ady -- a subscriber that is an object: blackboard's Observer subscribes itself to the
+# channel it is made with, and a kind of observer says only what its `callback` does. Also a method
+# passed as a value from __init__ (self.callback), an override under a generic base (dispatched to
+# the override), and a subclass without __init__ made with its generic parent's constructor.
+#
+#   ady2nim TESTS/test_observer.ady -r
+#   ady2py  TESTS/test_observer.ady -c
+
+from blackboard import PublishChannel, Observer
+
+type Channel_T is enum ALARMS, NEWS
+type Text_Channel_T is PublishChannel[Channel_T, str]
+
+var alarms_channel: Text_Channel_T = Text_Channel_T(ALARMS)
+var news_channel: Text_Channel_T = Text_Channel_T(NEWS)
+var heard: []str = []
+
+# no __init__: made with Observer's own, the channel
+class Logger(Observer[Channel_T, str]):
+    def callback(self, channel: Channel_T, event: str):
+        heard.append(f"log {channel} {event}")
+
+# an __init__ of its own, which hands the channel on
+class Counter(Observer[Channel_T, str]):
+    var count: int
+
+    def __init__(self, channel: var Text_Channel_T):
+        super().__init__(channel)
+        self.count = 0
+
+    def callback(self, channel: Channel_T, event: str):
+        self.count += 1
+
+# a generic base of the program's own, whose __init__ passes its method on
+class Watcher[T]:
+    var seen: int
+
+    def __init__(self, channel: var PublishChannel[Channel_T, T]):
+        self.seen = channel.subscribe(self.noticed)
+
+    def noticed(self, channel: Channel_T, event: T):
+        pass
+
+class Shouter(Watcher[str]):
+    def noticed(self, channel: Channel_T, event: str):
+        heard.append(f"shout {event}")
+
+let logger: Logger = Logger(alarms_channel)
+let counter: Counter = Counter(alarms_channel)
+let shouter: Shouter = Shouter(news_channel)
+assert alarms_channel.publish("fire") == 2
+assert news_channel.publish("rain") == 1
+assert counter.count == 1
+assert alarms_channel.unsubscribe(logger.id)            # the id is the subscription's
+assert alarms_channel.publish("flood") == 1
+assert counter.count == 2
+assert heard == ["log ALARMS fire", "shout rain"]
+print heard, counter.count, logger.id, counter.id, shouter.seen

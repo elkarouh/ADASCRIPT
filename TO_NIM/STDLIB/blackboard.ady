@@ -106,3 +106,27 @@ class PublishChannel[Channel_T, Event_T]:
 
     def subscriber_count(self) -> int:
         return len(self.ids)
+
+
+# A subscriber that is an object: it subscribes itself to CHANNEL when it is made, and what it does with
+# an event is its method `callback`, which each kind of observer defines. So a knowledge source keeps
+# what it needs in its own fields, and the one line that makes it is the one that subscribes it:
+#
+#     class Liaison_Officer(Observer[Page_Channel_T, Command]):
+#         def callback(self, channel: Page_Channel_T, c: Command):
+#             if not is_draft(c):
+#                 send(c)
+#
+#     let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+#
+# `id` is the subscription's, for the channel's `unsubscribe`.
+@virtual
+class Observer[Channel_T, Event_T]:
+    var id: int
+
+    def __init__(self, channel: var PublishChannel[Channel_T, Event_T]):
+        self.id = channel.subscribe(self.callback)
+
+    # What the observer does with EVENT, heard on CHANNEL: nothing, until a kind of observer says.
+    def callback(self, channel: Channel_T, event: Event_T):
+        pass

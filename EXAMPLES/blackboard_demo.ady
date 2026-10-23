@@ -1,13 +1,14 @@
 #!/usr/bin/env ady2nim
 """blackboard_demo.ady -- knowledge sources on a blackboard, over stdlib's blackboard.ady
 
-The blackboard holds three alarm channels. Each knowledge source subscribes some of its own
-methods to the channels it cares about and knows nothing of the other sources; the publisher
-knows nothing of any source. The channels are named by an enum of the board's own; an alarm is
+The blackboard holds three alarm channels. Each knowledge source is an Observer (stdlib's
+blackboard.ady), one on each channel it cares about: made on a channel, it subscribes itself
+there, and its `callback` is what it does with an alarm. It knows nothing of the other sources;
+the publisher knows nothing of any source. The channels are named by an enum of the board's own; an alarm is
 a record, so a source reads its fields by name.
 """
 
-from blackboard import PublishChannel
+from blackboard import PublishChannel, Observer
 
 type Channel_T is enum ALARM_CHANNEL_1, ALARM_CHANNEL_2, ALARM_CHANNEL_3
 
@@ -31,17 +32,22 @@ class Blackboard:
 
 var board: Blackboard = Blackboard("BLACKBOARD")
 
-# Knowledge source 1 listens on channels 1 and 2; source 2 on channels 2 and 3.
-def source_1_accepts(channel: Channel_T, alarm: Alarm):
-    print "source 1 of", board.name, "received:", alarm.first, alarm.second, "on", channel
+# A knowledge source, as it listens on one channel: it says who it is and what it heard.
+class Source(Observer[Channel_T, Alarm]):
+    var name: str
 
-def source_2_accepts(channel: Channel_T, alarm: Alarm):
-    print "source 2 of", board.name, "received:", alarm.first, alarm.second, "on", channel
+    def __init__(self, name: str, channel: var Alarm_Channel_T):
+        super().__init__(channel)
+        self.name = name
 
-board.alarm_channel_1.subscribe(source_1_accepts)
-board.alarm_channel_2.subscribe(source_1_accepts)
-board.alarm_channel_2.subscribe(source_2_accepts)
-board.alarm_channel_3.subscribe(source_2_accepts)
+    def callback(self, channel: Channel_T, alarm: Alarm):
+        print self.name, "of", board.name, "received:", alarm.first, alarm.second, "on", channel
+
+# Source 1 listens on channels 1 and 2; source 2 on channels 2 and 3.
+let source_1_on_1: Source = Source("source 1", board.alarm_channel_1)
+let source_1_on_2: Source = Source("source 1", board.alarm_channel_2)
+let source_2_on_2: Source = Source("source 2", board.alarm_channel_2)
+let source_2_on_3: Source = Source("source 2", board.alarm_channel_3)
 
 board.alarm_channel_1.publish(Alarm("message for chan1", "111"))
 board.alarm_channel_2.publish(Alarm("message for chan2", "222"))

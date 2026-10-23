@@ -21,17 +21,18 @@ A gesture never talks to the server: it makes a Command, Create, Read, Update or
 an edge (backend/dijkstra_commands.ady, the server's vocabulary too, which reads each request back
 into one), and publishes it on the page's blackboard, the channel `commands_channel`. Many gestures may make
 one command: a Delete is the Delete key, Backspace, or the menu's "Delete node". The gesture does not
-know who carries the command out. Two subscribers do:
+know who carries the command out. Two observers do (blackboard's Observer: each is an object that
+subscribes itself as it is made, and its `callback` is what it does with what it hears):
 
-    liaison         the liaison officer: what is for the server it sends there (`send`), so the
+    Liaison_Officer the liaison officer: what is for the server it sends there (`send`), so the
                     model is changed in one place, the server's
-    follow_mouse    a draft (a node still held: `move_node`) only moves the drawing, here and now,
+    Mouse_Follower  a draft (a node still held: `move_node`) only moves the drawing, here and now,
                     many times a second; the liaison leaves it in the browser
 
 What decides is what a command means, not which gesture made it: a draft changes only the page, and
 anything else is the model's, so the server's. The answer to C, U or D says only whether it went
 through (the paragraph #problem). What the server says changed, on any page, comes in on the other
-channel, `changes_channel`; `read_again` hears it and asks for the page again (R, which takes the place of #all).
+channel, `changes_channel`; the Page_Refresher hears it and asks for the page again (R, which takes the place of #all).
 So the browser is built like the server: a blackboard, subscribers that know nothing of each other,
 and the liaison between the two.
 
@@ -65,7 +66,7 @@ The drag itself is the standard library's svg_drag; the page (finding elements, 
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
 gesture means in this app.
 """
-from blackboard import PublishChannel
+from blackboard import PublishChannel, Observer
 from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
@@ -111,10 +112,11 @@ def ask_for(c: Command):
 
 # ---- The liaison officer: between the page's blackboard and the server's ----
 
-# A command that is for the server goes there; a draft stays in the browser.
-def liaison(channel: Page_Channel_T, c: Command):
-    if not is_draft(c):
-        send(c)
+# It hears every command: one that is for the server goes there; a draft stays in the browser.
+class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c):
+            send(c)
 
 # What the server says changed goes on the page's blackboard.
 def heard(change: str):
@@ -251,31 +253,32 @@ class NetworkView:
 var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (page_drawn)
 
 # While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
-# draft, which follow_mouse draws).
+# draft, which the Mouse_Follower draws).
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = inside(wanted)
     ask_for(move_node(node_of(node).name, now))
     return now
 
-# A draft of a node's move: the node is drawn where it is asked to be, the page's model keeps the
-# place, and the edges that end at it are drawn again. Nothing goes to the server.
-def follow_mouse(channel: Page_Channel_T, c: Command):
-    if not is_draft(c) or c.verb != UPDATE or c.thing != NODE:
-        return
-    let name: str = c.value("name")
-    if name not in network.drawing.nodes:
-        return
-    let x: float | !ParseFailure_T = parse_float(c.value("x"))
-    let y: float | !ParseFailure_T = parse_float(c.value("y"))
-    if x is ParseFailure_T:
-        return
-    if y is ParseFailure_T:
-        return
-    let now: Spot_T = Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
-    let el: Element_T = network.drawing.nodes[name].el
-    shift(el, spot_of(el), now)
-    network.network.put(name, now)
-    network.drawing.redraw_edges(name, network.network)
+# It draws a draft of a node's move: the node is drawn where it is asked to be, the page's model
+# keeps the place, and the edges that end at it are drawn again. Nothing goes to the server.
+class Mouse_Follower(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c) or c.verb != UPDATE or c.thing != NODE:
+            return
+        let name: str = c.value("name")
+        if name not in network.drawing.nodes:
+            return
+        let x: float | !ParseFailure_T = parse_float(c.value("x"))
+        let y: float | !ParseFailure_T = parse_float(c.value("y"))
+        if x is ParseFailure_T:
+            return
+        if y is ParseFailure_T:
+            return
+        let now: Spot_T = Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
+        let el: Element_T = network.drawing.nodes[name].el
+        shift(el, spot_of(el), now)
+        network.network.put(name, now)
+        network.drawing.redraw_edges(name, network.network)
 
 # NODE let go at AT: it is moved there (U).
 def dropped_cb(node: Element_T, at: Spot_T):
@@ -548,14 +551,16 @@ var wire: Wire = Wire()
 # whichever page made it, this one included; each asks for itself again, keeping what its reader
 # picked (#state). Not while a node or a wire is held: what is let go is a change of its own, and
 # its news draws the page again.
-def read_again(channel: Page_Channel_T, change: str):
-    if holding() or wire.linking:
-        return
-    ask_for(read_network("", False))
+class Page_Refresher(Observer[Page_Channel_T, str]):
+    def callback(self, channel: Page_Channel_T, change: str):
+        if holding() or wire.linking:
+            return
+        ask_for(read_network("", False))
 
-commands_channel.subscribe(liaison)
-commands_channel.subscribe(follow_mouse)
-changes_channel.subscribe(read_again)
+# The page's knowledge sources: each subscribes itself to its channel as it is made.
+let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
+let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
 
 listen_first("mousedown", wire.down)
 listen("mousemove", wire.move)

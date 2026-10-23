@@ -719,6 +719,9 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
         # Use base_indent for procs/methods (top level), not the indented value
         base_indent = getattr(self, '_base_indent', indent)
         class_type = class_name + type_params if class_name else None
+        if class_name and type_params:
+            ParserState.class_type_params[class_name] = [
+                t.split(":")[0].strip() for t in type_params.strip("[]").split(",")]
 
         _generic_ctx = bool(type_params or (parent_name and "[" in parent_name))
         # Emit forward declarations for methods so any method (not just
@@ -822,13 +825,26 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                 ParserState.proc_param_types_full.get(f"new{parent_name.strip(chr(96))}", [])
                 if parent_name else []
             )
+            parent_init = f"init{parent_name.strip(chr(96))}" if parent_name else ""
+            if parent_name and "[" in parent_name and not parent_param_strs:
+                # a generic parent, `Observer[Channel_T, str]`: its constructor's parameters
+                # with the parent's type parameters replaced by the arguments given here
+                _pbase = _strip_generic(parent_name).strip(chr(96))
+                _pnames = ParserState.class_type_params.get(_pbase, [])
+                _pargs = hek_nim_expr._split_args(parent_name[parent_name.index("[") + 1:parent_name.rindex("]")])
+                if len(_pnames) == len(_pargs):
+                    _subst = dict(zip(_pnames, (a.strip() for a in _pargs)))
+                    parent_param_strs = [
+                        _re.sub(r"\b(\w+)\b", lambda m: _subst.get(m.group(1), m.group(1)), ps)
+                        for ps in ParserState.proc_param_types_full.get(f"new{_pbase}", [])]
+                    parent_init = f"init{_pbase}{parent_name[parent_name.index('['):]}"
             if parent_param_strs:
                 # Forward constructor: mirror parent params and call initParent(result, ...)
                 fwd_params = ", ".join(parent_param_strs)
                 fwd_args = ", ".join(p.split(":")[0].strip().split(" = ")[0] for p in parent_param_strs)
                 result_lines.append(f"{_ind(base_indent)}proc {new_name}{export}{type_params}({fwd_params}): {class_type} =")
                 result_lines.append(f"{_ind(base_indent + 1)}new(result)" if is_virtual_class else f"{_ind(base_indent + 1)}result = {class_type}()")
-                result_lines.append(f"{_ind(base_indent + 1)}init{parent_name.strip(chr(96))}(result, {fwd_args})")
+                result_lines.append(f"{_ind(base_indent + 1)}{parent_init}(result, {fwd_args})")
                 for fname, fdefault in field_defaults:
                     result_lines.append(f"{_ind(base_indent + 1)}result.{fname} = {fdefault}")
             else:

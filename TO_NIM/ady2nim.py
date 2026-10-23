@@ -114,7 +114,8 @@ _NIMPORT_CARRIED = ("tick_types", "distinct_types", "unit_relations", "unit_dims
                     "class_field_types", "noreturn_procs",
                     "iterator_names", "virtual_iterators", "contextmanager_funcs",
                     "by_value_procs", "var_param_procs", "var_self_methods",
-                    "failure_types", "ctor_overloads", "where_types")
+                    "failure_types", "ctor_overloads", "where_types",
+                    "class_type_params")
 _nimport_carried: dict = {}
 _nimport_module_symbols: dict = {}
 # The Nim standard modules a dependency's translation imported. An importer
@@ -170,6 +171,7 @@ def _nim_reset():
     ParserState._scaled_bases_done = set()   # bases whose to_B is emitted
     ParserState.generic_funcs = {}      # generic function -> its type parameters
     ParserState.class_field_types = {}
+    ParserState.class_type_params = {}   # a generic class -> the names of its type parameters
     ParserState.proc_param_types = {}
     ParserState.proc_param_types_full = {}
     ParserState.tuple_field_order = {}
@@ -716,6 +718,11 @@ def _declare_before_use(lines):
                 if ident in tops and tops[ident] >= where:
                     where = _top_level_extent(lines, tops[ident])
             if where > caller:
+                continue
+            if (sig.startswith('method ') and '{.base.}' not in sig
+                    and any('{.base.}' in s for _, s in entries)):
+                # an override: a call reaches it through its base, which is the one
+                # declared; declared too, under a generic base, Nim stops dispatching to it
                 continue
             if _re_order.match(r'^\w+\s+\w+\*?\s*\[', sig):
                 # a generic one: Nim warns that declaring those is deprecated

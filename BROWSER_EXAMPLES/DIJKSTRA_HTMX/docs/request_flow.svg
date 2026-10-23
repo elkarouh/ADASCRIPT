@@ -64,7 +64,7 @@
 <rect x="30" y="450" width="190" height="100" rx="8" fill="#eef7ef" stroke="#2e7d32" stroke-width="1.5"/>
 <text x="125.0" y="486.0" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">changes</text>
 <text x="125.0" y="505.0" text-anchor="middle" font-size="13" fill="#52606d"  >heard: on the page&#x27;s</text>
-<text x="125.0" y="524.0" text-anchor="middle" font-size="13" fill="#52606d"  >blackboard; read_again</text>
+<text x="125.0" y="524.0" text-anchor="middle" font-size="13" fill="#52606d"  >blackboard; Page_Refresher</text>
 <rect x="260" y="450" width="190" height="100" rx="8" fill="#fff4e5" stroke="#e65100" stroke-width="1.5"/>
 <text x="355.0" y="486.0" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">commands</text>
 <text x="355.0" y="505.0" text-anchor="middle" font-size="13" fill="#52606d"  >ask_for(</text>

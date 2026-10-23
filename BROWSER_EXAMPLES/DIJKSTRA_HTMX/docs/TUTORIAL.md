@@ -462,11 +462,16 @@ var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)      # what th
 Every gesture publishes a command on `commands_channel` (`ask_for`), and nothing else. Who
 carries it out is decided by subscribing:
 
-| Subscriber | Hears | Does |
+| Observer | Hears | Does |
 |---|---|---|
-| `liaison` | `commands_channel` | the liaison officer: sends to the server what is the server's (`send`) |
-| `follow_mouse` | `commands_channel` | draws a draft here and now: the node still held, and its edges |
-| `read_again` | `changes_channel` | asks for the page again (`read_network`), which goes out through the liaison |
+| `Liaison_Officer` | `commands_channel` | the liaison officer: sends to the server what is the server's (`send`) |
+| `Mouse_Follower` | `commands_channel` | draws a draft here and now: the node still held, and its edges |
+| `Page_Refresher` | `changes_channel` | asks for the page again (`read_network`), which goes out through the liaison |
+
+Each is an `Observer` (the stdlib's `blackboard.ady`): an object that subscribes itself to
+the channel it is made with, so making it is subscribing it, and what it keeps it keeps
+in its own fields. Its method `callback` is what it does with what it hears; that is all
+a kind of observer has to write.
 
 The liaison decides by what a command *means*, not by which gesture made it or how
 often it comes: a **draft** (`move_node`, a node the reader still holds) changes only
@@ -476,20 +481,21 @@ only the page is exactly what comes many times a second. `heard` is the liaison'
 other half: it puts what `GET /events` says on `changes_channel`.
 
 ```adascript
-def liaison(channel: Page_Channel_T, c: Command):
-    if not is_draft(c):
-        send(c)
+class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c):
+            send(c)
 
-commands_channel.subscribe(liaison)
-commands_channel.subscribe(follow_mouse)
-changes_channel.subscribe(read_again)
+let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
+let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
 follow("/events", heard)
 ```
 
 So the two ends have one shape: a blackboard, subscribers that know nothing of each
 other, and between the two blackboards the wire, crossed in one place each way (`send`
 out, `heard` in). A new thing for the page to do with a command, an undo list, a log,
-drawing a deletion before the server confirms it, is one more subscriber on `commands_channel`,
+drawing a deletion before the server confirms it, is one more observer on `commands_channel`,
 and no gesture changes.
 
 ---
@@ -501,7 +507,7 @@ and no gesture changes.
 Read it from the top:
 
 1. **While the mouse moves**, `moved_cb` runs in the browser. It publishes a
-   draft, `move_node(name, at)`; `follow_mouse` puts the node where the mouse is,
+   draft, `move_node(name, at)`; the `Mouse_Follower` puts the node where the mouse is,
    the page's model takes the new place, and `Drawing.redraw_edges` draws every edge
    that ends at it. The liaison leaves a draft in the browser: nothing goes to the server yet.
 2. **On release**, `dropped_cb` publishes the command `update_node(name, at)`, which
