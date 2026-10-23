@@ -183,7 +183,7 @@ it from there, which is why it has no HTML in it.
 The page is written by methods that return `Html`. An `html:` block
 writes markup as Adascript code, with indentation for nesting, and a
 `+` to insert another piece. Each thing drawn has a view class, which holds
-its look (its `Style`, Step 3's last part) and draws it (`html`):
+its look (its `Style`, Step 3's last part) and draws it (`to_html`):
 
 ```adascript
 class Node_View:
@@ -191,7 +191,7 @@ class Node_View:
         ...
 
     # Node N of NET, as ROUTE has it.
-    def html(self, n: Node_T, net: Network, route: Route) -> Html:
+    def to_html(self, n: Node_T, net: Network, route: Route) -> Html:
         let at: Spot_T = net.place_of(n.name)
         let cx: str = f"{at.x:.0f}"
         let cy: str = f"{at.y:.0f}"
@@ -210,7 +210,7 @@ class Node_View:
 
 Three things to note:
 
-- **The object is an argument.** `html` takes a `Node_T`, the network
+- **The object is an argument.** `to_html` takes a `Node_T`, the network
   that says where it is, and the route that says what it is to the way.
   It works nothing out: the route is found once, before the drawing.
 - **Attributes are names.** `class=css` puts the value of the variable
@@ -221,14 +221,14 @@ Three things to note:
   `Node_View` and calls them in turn:
 
 ```adascript
-    def html(self, net: Network, route: Route) -> Html:
+    def to_html(self, net: Network, route: Route) -> Html:
         let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
         html:
             svg viewBox=box class="graph":
                 for e in net.edges:
-                    + self.edges.html(e, net, route)
+                    + self.edges.to_html(e, net, route)
                 for n in net.nodes:
-                    + self.nodes.html(n, net, route)
+                    + self.nodes.to_html(n, net, route)
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 ```
 
@@ -266,7 +266,7 @@ class Node_View:
 ```
 
 `circle` is a circle in the node, `&` the node itself (`&:hover circle`); `[START]` is the node in a
-state, a `Role_T` value: the class `start`, which `html` gives the node (`style.class_of`). The block
+state, a `Role_T` value: the class `start`, which `to_html` gives the node (`style.class_of`). The block
 is the field `style`, a `Style` of the stdlib's `style.ady`. The colours are named once, at the top
 of the drawing (`INK`, `ORANGE`, ...).
 The rules are written once for the class, not for each node: the page puts them in its `<style>`
@@ -688,7 +688,7 @@ Each of these changes one layer, so you can see the others not change.
 1. **Add a field to the model.** Give `Node_T` a `colour: str`, change
    `add_node` to take it, and make `text()` and `Network(text)` keep it. The
    page does not change until you draw it.
-2. **Draw the field.** In `Node_View.html`, use `n.colour` for the
+2. **Draw the field.** In `Node_View.to_html`, use `n.colour` for the
    circle's `fill`, and take `fill` out of the `circle:` rule of its style block.
 3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
    with `r.field("colour")`, call a new method, and publish `Change(UPDATE, name)` when it went

@@ -121,7 +121,7 @@ class Edge_View:
         text.cost:              font_size=13 fill=SOFT text_anchor="middle" paint_order="stroke" stroke=PAPER stroke_width=4
 
     # Edge E of NET, as ROUTE has it.
-    def html(self, e: Edge_T, net: Network, route: Route) -> Html:
+    def to_html(self, e: Edge_T, net: Network, route: Route) -> Html:
         let p1: Spot_T = net.place_of(e.a)
         let p2: Spot_T = net.place_of(e.b)
         let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
@@ -152,7 +152,7 @@ class Node_View:
         text.name:              font_size=16 font_weight=700 text_anchor="middle" pointer_events="none" fill=INK
 
     # Node N of NET, as ROUTE has it.
-    def html(self, n: Node_T, net: Network, route: Route) -> Html:
+    def to_html(self, n: Node_T, net: Network, route: Route) -> Html:
         let at: Spot_T = net.place_of(n.name)
         let cx: str = f"{at.x:.0f}"
         let cy: str = f"{at.y:.0f}"
@@ -176,14 +176,14 @@ class Network_View:
     style "svg.graph":
         path.wire:              stroke=ACCENT stroke_width=2.5 stroke_dasharray="6 4" fill="none" pointer_events="none"
 
-    def html(self, net: Network, route: Route) -> Html:
+    def to_html(self, net: Network, route: Route) -> Html:
         let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
         html:
             svg viewBox=box class="graph":
                 for e in net.edges:
-                    + self.edges.html(e, net, route)
+                    + self.edges.to_html(e, net, route)
                 for n in net.nodes:
-                    + self.nodes.html(n, net, route)
+                    + self.nodes.to_html(n, net, route)
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 
     # The rules of the drawing, for the page's <style>.
@@ -249,7 +249,7 @@ def all_html(net: Network, choice: Choice, problem: None | !Refusal_T) -> Html:
                 + page.button("Reset the sample", reset_network(), "Put the sample network back?", "quiet")
             p class=said_css: route.said()
             + problem_html(problem)
-            + network_view.html(net, route)
+            + network_view.to_html(net, route)
             # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
             pre id="network": net.text()
             p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
