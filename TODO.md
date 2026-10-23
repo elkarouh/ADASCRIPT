@@ -22,6 +22,16 @@ it but do:. Not yet:
       callee, or a typed `shell:`-like block -- and how the exception's
       message maps onto `F`'s fields.
 
+### Classes are values in Nim, references in Python
+
+- [ ] a class that is not inherited is a Nim `object`, a value: an
+      assignment, a field or a closure holds a copy. In Python it is a
+      reference. So `self.selection = selection` in another object, or a
+      closure made in `__init__` (`listen("click", self.clicked)`), sees
+      a copy whose state drifts from the original. DIJKSTRA_HTMX's gestures
+      are made at module level, their listen(...) lines under them, for
+      that reason. `@virtual` (a `ref object`) is the workaround today.
+
 ### Narrowing an optional
 
 - [ ] a leaving guard whose `or` mixes other tests with `x is None`:
