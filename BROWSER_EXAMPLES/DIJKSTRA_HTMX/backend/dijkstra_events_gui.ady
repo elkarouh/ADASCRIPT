@@ -43,15 +43,13 @@ class Session:
     var net: Network
     var store: str                      # the file the network is kept in; "" keeps it nowhere
     var unsaved: None | !Refusal_T      # why the last change could not be kept, shown on the page
-    var nodes_channel: PublishChannel[Channel_T, Change]    # what happened to a node
-    var edges_channel: PublishChannel[Channel_T, Change]    # what happened to an edge
+    var nodes_channel: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](NODES_CHAN)    # what happened to a node
+    var edges_channel: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](EDGES_CHAN)    # what happened to an edge
 
     def __init__(self, store: str):
         self.store = store
         let kept: None | !Refusal_T = None
         self.unsaved = kept
-        self.nodes_channel = PublishChannel[Channel_T, Change](NODES_CHAN)
-        self.edges_channel = PublishChannel[Channel_T, Change](EDGES_CHAN)
         self.net = sample()
         if store != "":
             let text: str | !PathFailure_T = Path(store).read_text()

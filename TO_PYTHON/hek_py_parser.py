@@ -2284,7 +2284,11 @@ def _per_instance_fields(body, indent):
             inits.append(f"self.{name} = {hek_py_stmt._zero_value(ann)}")
         elif not _balanced(ann) or not _balanced(written):
             continue      # spans lines; left as it is
-        elif written[:1] in "[{" or _re_pif.match(r"^[A-Za-z_][\w.]*\(", written):
+        elif written[:1] in "[{" or _re_pif.match(r"^[A-Za-z_][\w.]*(?:\[[^\]]*\])?\(", written):
+            # a constructor call, a generic one too (`PublishChannel[K, E](k)`); a
+            # trailing comment stays on the class-level line
+            if "'" not in written and '"' not in written:
+                written = _re_pif.sub(r"\s+#.*$", "", written)
             inits.append(f"self.{name} = {written}")
     if not inits:
         return body

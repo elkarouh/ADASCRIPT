@@ -1,0 +1,34 @@
+#!/usr/bin/env ady2nim
+# test_field_default_call.ady -- a class field whose default is a constructor call: each instance
+# gets its own object, made afresh, on every backend. In Python the class body runs once, so the
+# default written there was one object shared by every instance.
+#
+#   ady2nim TESTS/test_field_default_call.ady -r
+#   ady2py  TESTS/test_field_default_call.ady -c
+
+from blackboard import PublishChannel
+
+type Channel_T is enum NODES_CHAN, EDGES_CHAN
+
+class Session:
+    var name: str
+    var nodes_channel: PublishChannel[Channel_T, str] = PublishChannel[Channel_T, str](NODES_CHAN)   # a generic constructor
+    var edges_channel: PublishChannel[Channel_T, str] = PublishChannel[Channel_T, str](EDGES_CHAN)
+
+    def __init__(self, name: str):
+        self.name = name
+
+var heard: []str = []
+def hear(channel: Channel_T, event: str):
+    heard.append(f"{channel} {event}")
+
+var a: Session = Session("a")
+var b: Session = Session("b")
+a.nodes_channel.subscribe(hear)
+a.nodes_channel.publish("x")
+b.edges_channel.publish("y")
+assert a.nodes_channel.subscriber_count() == 1
+assert b.nodes_channel.subscriber_count() == 0            # b's channel is its own
+assert heard == ["NODES_CHAN x"]
+assert b.edges_channel.name == EDGES_CHAN
+print heard[0], b.nodes_channel.subscriber_count()
