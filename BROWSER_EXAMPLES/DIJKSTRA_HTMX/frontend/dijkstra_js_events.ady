@@ -53,14 +53,20 @@ the same modules the server draws the page with. The page carries the network as
 (pre#network); Network(text) builds the model from that, and the layout works out where everything goes,
 never from where the page happens to draw it.
 
-Who holds what, in this file (each class keeps one thing):
-    NodeView      one node as the page draws it: its circle and name, how it is chosen, moved and deleted
-    EdgeView      one edge as the page draws it: its line, its cost, how it is redrawn, changed or deleted
-    NetworkView   the model, a Network, and the NodeView and EdgeView of each node and edge the page
-                  draws, by name; the one `network`, rebuilt when htmx draws the page
-    Selection     the node or edge clicked last; the one `selection`
-    Menus         the right-click menus; the one `menus`
-    Wire          the wire dragged from a node's dot to make an edge; the one `wire`
+What is in this file, in its order (each class keeps one thing):
+    the blackboard  the two channels, and publish_command and publish_change, the only ways onto them
+    the views       NodeView, EdgeView: one node or edge as the page draws it, and what can be done to
+                    it; NetworkView: the model, a Network, with the view of each node and edge the page
+                    draws (the one `network`, rebuilt when htmx draws the page)
+    the observers   Liaison_Officer, Mouse_Follower: each subscribes itself to the commands (and, after
+                    the gestures, whose wire it asks about, Page_Refresher to the changes)
+    the gestures    one object each, with the listen(...) lines under it that say which event runs
+                    which of its methods:
+                      Selection  the node or edge clicked last (and the page drawn again)
+                      Pointer    svg_drag's drag and click of a node, and the double-click
+                      Menus      the right-click menus, the buttons with data_tool, and the keys
+                      Wire       the wire dragged from a node's dot to make an edge
+    the start       the observers made, and the server's news followed
 
 The drag itself is the standard library's svg_drag; the page (finding elements, forms, menus,
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
@@ -96,21 +102,6 @@ def publish_command(c: Command):
 # What the server says changed (GET /events): the server's one way in.
 def publish_change(change: str):
     changes_channel.publish(change)
-
-# ---- The liaison officer: between the page's blackboard and the server's ----
-
-# It hears every command: one that is for the server goes there; a draft stays in the browser.
-class Liaison_Officer(Observer[Page_Channel_T, Command]):
-    def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c):
-            self.send(c)
-
-    # Send C, with the reader's choice (the form #state): its verb is the method, its thing the URL.
-    # A read's answer is the page, in place of #all; a change's is whether it went through, in place
-    # of #problem (the page is drawn again on the news of the change).
-    def send(self, c: Command):
-        let target: str = ("#all" if c.verb == READ else "#problem")
-        send_request(c.method(), c.url(), c.fields, target, "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
@@ -222,14 +213,22 @@ class NetworkView(Network):
             if e.a == name or e.b == name:
                 e.redraw(place_of(self, e.a), place_of(self, e.b))
 
-var network: NetworkView = NetworkView()     # the page is read again each time htmx draws it (on_page_drawn)
+var network: NetworkView = NetworkView()     # read again each time htmx draws the page (Selection.page_drawn)
 
-# While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
-# draft, which the Mouse_Follower draws).
-def on_move(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = inside(wanted)
-    publish_command(move_node(NodeView(node).name, now))
-    return now
+# ---- The observers of commands: the liaison officer, and the draft's drawer ----
+
+# It hears every command: one that is for the server goes there; a draft stays in the browser.
+class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c):
+            self.send(c)
+
+    # Send C, with the reader's choice (the form #state): its verb is the method, its thing the URL.
+    # A read's answer is the page, in place of #all; a change's is whether it went through, in place
+    # of #problem (the page is drawn again on the news of the change).
+    def send(self, c: Command):
+        let target: str = ("#all" if c.verb == READ else "#problem")
+        send_request(c.method(), c.url(), c.fields, target, "#state")
 
 # It draws a draft of a node's move (move_node, the only draft): the node is drawn where it is
 # asked to be, the page's model keeps the place, and the edges that end at it are drawn again.
@@ -247,13 +246,10 @@ class Mouse_Follower(Observer[Page_Channel_T, Command]):
         network.put(name, now)
         network.redraw_edges(name)
 
-# NODE let go at AT: it is moved there (U).
-def on_drop(node: Element_T, at: Spot_T):
-    let view: ?NodeView = network.node_view(node)
-    if view is not None:
-        view.drop_at(at)
-
-# ---- The selection: the node or edge the reader last clicked ----
+# ---- The gestures: one object each, with the events it listens to ----
+#
+# Each gesture is an object that keeps its own state; its methods are what the page's events do,
+# and the listen(...) lines under it say which event runs which. A gesture only publishes commands.
 
 # Outline the element EL, or take the outline off it.
 def set_selected(el: Element_T, lit: bool):
@@ -263,7 +259,7 @@ def set_selected(el: Element_T, lit: bool):
     else:
         el.set_attr("class", cls.replace(" selected", ""))
 
-# The reader's selection: what it holds, and what the gestures do with it.
+# The reader's selection: the node or edge clicked last, and what is done to it.
 class Selection:
     # the node's view or the edge's view the reader clicked last; None when nothing is selected
     var what: NodeView | EdgeView | None
@@ -305,94 +301,77 @@ class Selection:
         if picked is not None:
             picked.delete()
 
-    # Forget the selection without unmarking it: the page it was on has been drawn again.
-    def forget(self):
+    # The page was drawn again by the server: what was selected is gone with the old drawing
+    # (forgotten, not unmarked), and the drawing's objects are read off the new one.
+    def page_drawn(self, e: Event_T):
         self.what = None
+        network = NetworkView()
 
 var selection: Selection = Selection()
-
-# A click that svg_drag did not take for a drag. On a node it chooses it for the route, or, when
-# it is chosen already (drawn as the start or the goal), takes it out of the route again. Anything
-# else is a selection: the edge under the click is selected, and the empty space clears it. A click
-# outside the drawing (the toolbar, a menu) is none of this.
-def on_click(c: Click_T):
-    if on(c, "svg.graph") is None:
-        return
-    let node: ?Element_T = on(c, "g.node")
-    if node is not None:
-        selection.clear()
-        let view: ?NodeView = network.node_view(node)
-        if view is not None:
-            view.choose(has_class(node, "start") or has_class(node, "goal"))
-        return
-    let edge: ?Element_T = on(c, "g[data_from]")
-    if edge is None:
-        selection.clear()
-        return
-    selection.select_edge(edge)
-
-# The page was drawn again by the server: what was selected is gone with the old drawing, and the
-# drawing's objects are read off the new one.
-def on_page_drawn(e: Event_T):
-    selection.forget()
-    network = NetworkView()
-
-# ---- Double-click: a new node in the space, or a new cost for an edge ----
+listen("htmx:afterSwap", selection.page_drawn)
 
 # Ask the reader the name of a new node; "" when they cancel.
 def ask_name() -> str:
     return ask("Name of the new node (letters and digits)?", "")
 
-def on_double_click(e: Event_T):
-    let c: Click_T = click_of(e)
-    let edge: ?Element_T = on(c, "g[data_from]")
-    if edge is not None:
-        let view: ?EdgeView = network.edge_view(edge)
-        if view is not None:
-            view.change_cost()
-        return
-    if on(c, "svg.graph") is None or on(c, "g.node") is not None:
-        return                          # outside the drawing, or on a node (which has no double-click)
-    let name: str = ask_name()
-    if name == "":
-        return
-    publish_command(create_node(name, inside(spot_at(e))))
-
-# ---- Right-click: a menu of what can be done to what was clicked ----
-
-# The menus of the drawing: which are shown, and where the space's menu was opened.
-class Menus:
-    var at: Spot_T
-
+# The pointer on the drawing: svg_drag's drag of a node, which calls moved, dropped or clicked,
+# and the double-click.
+class Pointer:
     def __init__(self):
-        self.at = Spot_T(x=0.0, y=0.0)
+        pass
 
-    def hide(self):
-        for m in page.all(".menu"):
-            m.set_attr("style", "display:none")
+    # While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
+    # draft, which the Mouse_Follower draws).
+    def moved(self, node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+        let now: Spot_T = inside(wanted)
+        publish_command(move_node(NodeView(node).name, now))
+        return now
 
-var menus: Menus = Menus()
+    # NODE let go at AT: it is moved there (U).
+    def dropped(self, node: Element_T, at: Spot_T):
+        let view: ?NodeView = network.node_view(node)
+        if view is not None:
+            view.drop_at(at)
 
-def on_right_click(e: Event_T):
-    let c: Click_T = click_of(e)
-    if on(c, "svg.graph") is None:
-        return                          # the rest of the page keeps the browser's own menu
-    cancel(c)
-    menus.hide()
-    let node: ?Element_T = on(c, "g.node")
-    let edge: ?Element_T = on(c, "g[data_from]")
-    if node is not None:
-        selection.select_node(node)
-        show_at(page.element("#menu-node"), c)
-    elif edge is not None:
+    # A click that svg_drag did not take for a drag. On a node it chooses it for the route, or,
+    # when it is chosen already (drawn as the start or the goal), takes it out of the route again.
+    # Anything else is a selection: the edge under the click is selected, and the empty space
+    # clears it. A click outside the drawing (the toolbar, a menu) is none of this.
+    def clicked(self, c: Click_T):
+        if on(c, "svg.graph") is None:
+            return
+        let node: ?Element_T = on(c, "g.node")
+        if node is not None:
+            selection.clear()
+            let view: ?NodeView = network.node_view(node)
+            if view is not None:
+                view.choose(has_class(node, "start") or has_class(node, "goal"))
+            return
+        let edge: ?Element_T = on(c, "g[data_from]")
+        if edge is None:
+            selection.clear()
+            return
         selection.select_edge(edge)
-        show_at(page.element("#menu-edge"), c)
-    else:
-        selection.clear()
-        menus.at = spot_at(e)
-        show_at(page.element("#menu-space"), c)
 
-# ---- The toolbar and the menus: a button with data_tool does that action ----
+    # A double-click: on an edge, its cost is asked; on the space, a new node there.
+    def double_clicked(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        let edge: ?Element_T = on(c, "g[data_from]")
+        if edge is not None:
+            let view: ?EdgeView = network.edge_view(edge)
+            if view is not None:
+                view.change_cost()
+            return
+        if on(c, "svg.graph") is None or on(c, "g.node") is not None:
+            return                      # outside the drawing, or on a node (which has no double-click)
+        let name: str = ask_name()
+        if name == "":
+            return
+        publish_command(create_node(name, inside(spot_at(e))))
+
+var pointer: Pointer = Pointer()
+draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=pointer.moved, dropped_cb=pointer.dropped, clicked_cb=pointer.clicked))
+listen("dblclick", pointer.double_clicked)
 
 # What a button with data_tool asks for (see menus_html in dijkstra_gui.ady).
 type Tool_T is enum NO_TOOL, ADD_HERE, CHANGE_COST, REMOVE
@@ -408,37 +387,76 @@ def tool_of(name: str) -> Tool_T:
         when others:
             return NO_TOOL
 
-def on_tool(e: Event_T):
-    let c: Click_T = click_of(e)
-    menus.hide()                        # any click closes the menus
-    let b: ?Element_T = on(c, "button[data_tool]")
-    if b is None:
-        return
-    let tool: Tool_T = tool_of(b.data("tool"))
-    case tool:
-        when ADD_HERE:
-            let name: str = ask_name()
-            if name != "":
-                publish_command(create_node(name, menus.at))
-        when CHANGE_COST:
-            selection.change_cost()
-        when REMOVE:
-            selection.remove()
-        when NO_TOOL:
-            pass
+# The menus: the right-click menu of what can be done to what was clicked, the buttons with
+# data_tool (in the menus and the toolbar), and the keys. `at` is where the space's menu was opened.
+class Menus:
+    var at: Spot_T
 
-# Delete and Backspace remove what is selected; Escape closes the menus.
-def on_key(e: Event_T):
-    let key: str = key_of(e)
-    case key:
-        when "Escape":
-            menus.hide()
-        when "Delete" | "Backspace":
-            selection.remove()
-        when others:
-            pass                            # any other key
+    def __init__(self):
+        self.at = Spot_T(x=0.0, y=0.0)
 
-# ---- A drag from a node's dot: a wire, which is the new edge ----
+    def hide(self):
+        for m in page.all(".menu"):
+            m.set_attr("style", "display:none")
+
+    # A right-click on the drawing: the menu of the node, the edge or the space under it, which
+    # is selected. The rest of the page keeps the browser's own menu.
+    def right_clicked(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        if on(c, "svg.graph") is None:
+            return
+        cancel(c)
+        self.hide()
+        let node: ?Element_T = on(c, "g.node")
+        let edge: ?Element_T = on(c, "g[data_from]")
+        if node is not None:
+            selection.select_node(node)
+            show_at(page.element("#menu-node"), c)
+        elif edge is not None:
+            selection.select_edge(edge)
+            show_at(page.element("#menu-edge"), c)
+        else:
+            selection.clear()
+            self.at = spot_at(e)
+            show_at(page.element("#menu-space"), c)
+
+    # Any click closes the menus; one on a button with data_tool does what it names.
+    def clicked(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        self.hide()
+        let b: ?Element_T = on(c, "button[data_tool]")
+        if b is None:
+            return
+        let tool: Tool_T = tool_of(b.data("tool"))
+        case tool:
+            when ADD_HERE:
+                let name: str = ask_name()
+                if name != "":
+                    publish_command(create_node(name, self.at))
+            when CHANGE_COST:
+                selection.change_cost()
+            when REMOVE:
+                selection.remove()
+            when NO_TOOL:
+                pass
+
+    # Delete and Backspace remove what is selected; Escape closes the menus.
+    def key_pressed(self, e: Event_T):
+        let key: str = key_of(e)
+        case key:
+            when "Escape":
+                self.hide()
+            when "Delete" | "Backspace":
+                selection.remove()
+            when others:
+                pass                    # any other key
+
+var menus: Menus = Menus()
+listen("contextmenu", menus.right_clicked)
+listen("click", menus.clicked)
+listen("keydown", menus.key_pressed)
+
+# A drag from a node's dot: a wire, which is the new edge.
 #
 # Pressing on a node's dot (circle.port) holds it for a wire, not for a move: the press is
 # stopped before svg_drag sees it. While the mouse moves, a dashed line (path#wire, hidden
@@ -511,8 +529,12 @@ class Wire:
             stop(c)
 
 var wire: Wire = Wire()
+listen_first("mousedown", wire.down)
+listen("mousemove", wire.move)
+listen("mouseup", wire.up)
+listen_first("click", wire.swallow_click)
 
-# ---- What the server says changed ----
+# ---- The observer of changes ----
 
 # The server tells every open page of each change to the network (GET /events, "NODES_CHAN CREATE H"),
 # whichever page made it, this one included; each asks for itself again, keeping what its reader
@@ -524,19 +546,10 @@ class Page_Refresher(Observer[Page_Channel_T, str]):
             return
         publish_command(read_network("", False))
 
-# The page's knowledge sources: each subscribes itself to its channel as it is made.
+# ---- Start: the page's knowledge sources, and the server's news ----
+
+# Each subscribes itself to its channel as it is made.
 let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
 let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
-
-listen_first("mousedown", wire.down)
-listen("mousemove", wire.move)
-listen("mouseup", wire.up)
-listen_first("click", wire.swallow_click)
-listen("click", on_tool)
-listen("dblclick", on_double_click)
-listen("contextmenu", on_right_click)
-listen("keydown", on_key)
-listen("htmx:afterSwap", on_page_drawn)
-draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=on_move, dropped_cb=on_drop, clicked_cb=on_click))
 follow("/events", publish_change)

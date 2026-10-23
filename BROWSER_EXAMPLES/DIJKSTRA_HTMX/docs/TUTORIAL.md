@@ -520,11 +520,11 @@ and no gesture changes.
 
 Read it from the top:
 
-1. **While the mouse moves**, `on_move` runs in the browser. It publishes a
+1. **While the mouse moves**, `Pointer.moved` runs in the browser. It publishes a
    draft, `move_node(name, at)`; the `Mouse_Follower` puts the node where the mouse is,
    the page's model takes the new place, and `NetworkView.redraw_edges` draws every edge
    that ends at it. The liaison leaves a draft in the browser: nothing goes to the server yet.
-2. **On release**, `on_drop` publishes the command `update_node(name, at)`, which
+2. **On release**, `Pointer.dropped` publishes the command `update_node(name, at)`, which
    is not a draft, and the liaison `send`s it.
 3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model
    and publishes `UPDATE A`; the server keeps the file and tells every page.

@@ -1,0 +1,24 @@
+#!/usr/bin/env ady2nim
+# test_method_value_return.ady -- a method passed as a value (`pointer.moved`, not called) to a
+# parameter that takes a function returning something: the value is a function returning it too.
+#
+#   ady2nim TESTS/test_method_value_return.ady -r
+#   ady2py  TESTS/test_method_value_return.ady -c
+
+type Mover_T is (str, int) -> int
+
+class Pointer:
+    var step: int
+    def __init__(self, step: int):
+        self.step = step
+    def moved(self, name: str, at: int) -> int:
+        return at + self.step
+
+def drive(f: Mover_T) -> int:
+    return f("A", 10)
+
+var pointer: Pointer = Pointer(5)
+assert drive(pointer.moved) == 15
+pointer.step = 7
+assert drive(pointer.moved) == 17       # the global pointer, as it is when called
+print drive(pointer.moved)

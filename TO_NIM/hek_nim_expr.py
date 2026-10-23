@@ -3785,7 +3785,10 @@ def _bare_method_ref(self, raw_name):
     params = list(ptypes)[1:]
     names = [f"a{i}" for i in range(len(params))]
     sig = ", ".join(f"{n}: {t}" for n, t in zip(names, params))
-    return f"(proc ({sig}) = {meth}({', '.join([raw_name] + names)}))"
+    # what it returns, which the closure returns too (`moved` answers a Spot_T)
+    ret = (getattr(ParserState, "proc_return_types", None) or {}).get(f"{cls}.{meth}", "")
+    ret = f": {ret}" if ret and ret != "void" else ""
+    return f"(proc ({sig}){ret} = {meth}({', '.join([raw_name] + names)}))"
 
 
 @method(primary)
