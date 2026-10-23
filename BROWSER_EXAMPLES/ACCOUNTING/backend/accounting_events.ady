@@ -16,7 +16,8 @@ reads itself again -- and the Session knows none of them:
         print channel, change.kind, change.key          # "ENTRIES_CHAN CREATE a chair for the office"
     session.entries_channel.subscribe(heard)
 
-Nothing has to be kept on a change: the ledger writes each one to the scenario's database as it is made.
+Nothing has to be kept on a change: the ledger writes the books to the Store the session is given
+(bookkeeping.ady) as each change is made.
 """
 from blackboard import PublishChannel
 from backend/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
@@ -26,7 +27,8 @@ from backend/accounting_page_gui import all_text, told_text
 from page_request import Page_Request
 from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
 from backend/accounting_commands import Command, A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, THE_BOOKS, command_of
-from backend/ledger import Config, Ledger, Scenarios, read_config
+from store import Store
+from backend/bookkeeping import Config, Ledger, Scenarios
 
 # The channels of the server's blackboard: one per thing that changes.
 type Channel_T is enum ENTRIES_CHAN, ACCOUNTS_CHAN, SCENARIOS_CHAN
@@ -35,34 +37,29 @@ type Channel_T is enum ENTRIES_CHAN, ACCOUNTS_CHAN, SCENARIOS_CHAN
 type Change_Channel_T is PublishChannel[Channel_T, Change]
 
 # The books shown, the scenario they are, and the others there are; the config they are kept by.
-# The server makes one, and starts it on its config file; each request is one of its methods.
+# The server makes one on its config file and the scenarios beside it, the page alone
+# (frontend/frontend_server.ady) on the browser's storage, and starts it; each request is one
+# of its methods.
 class Session:
     var config: Config
-    var books: Ledger                   # the books shown: the scenario's database
-    var scenarios: Scenarios            # beside the config file
+    var books: Ledger                   # the books shown: the scenario's, as kept
+    var scenarios: Scenarios            # in the store the session is given
     var current: str                    # the scenario shown
     var entries_channel: Change_Channel_T = Change_Channel_T(ENTRIES_CHAN)        # what happened to a transaction
     var accounts_channel: Change_Channel_T = Change_Channel_T(ACCOUNTS_CHAN)      # to an account
     var scenarios_channel: Change_Channel_T = Change_Channel_T(SCENARIOS_CHAN)    # to the scenario shown
 
-    def __init__(self):
-        self.config = Config("USD", [])
-        self.books = Ledger(":memory:")
-        self.scenarios = Scenarios(Path("scenarios"))
+    def __init__(self, config: Config, store: Store):
+        self.config = config
+        self.books = Ledger(Store(""), "", "")
+        self.scenarios = Scenarios(store)
         self.current = ""
 
-    # The config at CONF_PATH read, and scenario FIRST shown (the first there is, when ""):
-    # what was wrong, or "".
-    def start(self, conf_path: Path, first: str) -> str:
-        let read: Config | !BookFailure_T = read_config(conf_path)
-        if read is BookFailure_T:
-            return read.detail
-        else:
-            self.config = read
-        self.scenarios = Scenarios(conf_path.parent / "scenarios")
+    # Scenario FIRST shown (the first there is, when ""): what was wrong, or "".
+    def start(self, first: str) -> str:
         let names: []str = self.scenarios.names()
         if len(names) == 0:
-            return f"no scenario in {self.scenarios.dir}: no *.books file"
+            return f"no scenario in {self.scenarios.store.place}: no *.books file"
         let shown: None | !BookFailure_T = self.show_scenario((first if first != "" else names[0]), False)
         if shown is BookFailure_T:
             return shown.detail
@@ -79,17 +76,13 @@ class Session:
             text += f"scenario\t{name}\t{self.scenarios.title_of(name)}\n"
         return text
 
-    # Scenario NAME shown, its database made from its .books file first if it
-    # has none, or if FRESH (Start over).
+    # Scenario NAME shown, as it was kept, or made from its .books text first if it has not been
+    # kept, or if FRESH (Start over).
     def show_scenario(self, name: str, fresh: bool) -> None | !BookFailure_T:
         if not self.scenarios.exists(name):
             return BookFailure_T(f"there is no scenario {name}")
-        if self.current != "":
-            self.books.close()
         let opened: Ledger | !BookFailure_T = self.scenarios.open(name, fresh)
         if opened is BookFailure_T:
-            if self.current != "":
-                self.books = Ledger(str(self.scenarios.db_file(self.current)))
             return opened
         else:
             self.books = opened
@@ -107,7 +100,6 @@ class Session:
         if len(self.scenarios.names()) < 2:
             return BookFailure_T("this is the only scenario; make another first")
         let gone: str = self.current
-        self.books.close()
         self.current = ""
         let done: None | !BookFailure_T = self.scenarios.delete(gone)
         if done is BookFailure_T:
@@ -176,8 +168,8 @@ class Session:
                     done = self.change_scenario(c)
                 when THE_BOOKS:
                     done = self.change_books()
-        except:                             # the database, not the books: say so, and keep serving
-            done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
+        except:                             # not the books: say so, and keep serving
+            done = BookFailure_T("the books failed: " + getCurrentExceptionMsg())
         return told_text(done)
 
     # The transaction C names recorded (the arrow and the popup: source, target, date, what, amount,

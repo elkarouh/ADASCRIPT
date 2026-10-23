@@ -20,8 +20,8 @@ answered by Session.answer in accounting_events.ady, which lists them. A read an
 page, which htmx swaps in; a command only what was done, or why not. Each change it made is
 published, and `tell`, here, tells every open page, which then reads itself again.
 
-A scenario is a pair of files in scenarios/, beside the config file:
-NAME.books, the books as text, and NAME.db, the database the page changes,
+A scenario is a pair of files in scenarios/, beside the config file (bookkeeping.ady):
+NAME.books, the books as they come, and NAME.kept, the books as the page changed them,
 made from NAME.books the first time NAME is shown and again by Start over.
 """
 from asyncdispatch nimport complete, newFuture, Port, waitFor
@@ -29,9 +29,12 @@ from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http
 from backend/accounting_page_gui import shell_text
 from page_server import News, send_script
 from commands import Change
+from store import Store
+from backend/accounting_model import BookFailure_T
+from backend/bookkeeping import Config, config_of
 from backend/accounting_events import Channel_T, Session
 
-var session: Session = Session()     # main starts it on the config file
+var session: Session = Session(Config("USD", []), Store(""))     # main makes it on the config file
 
 # The pages following GET /events.
 var news: News = News()
@@ -89,7 +92,16 @@ def main():
         i += 2
     die(f"unknown option {args[i]}") if i < len(args)
     www = conf_path.parent / "build"
-    let failed: str = session.start(conf_path, first)
+    let text: str | !PathFailure_T = conf_path.read_text()
+    if text is PathFailure_T:
+        die(f"{text.op} {text.path}: {text.reason}")
+    else:
+        let config: Config | !BookFailure_T = config_of(text, str(conf_path))
+        if config is BookFailure_T:
+            die(config.detail)
+        else:
+            session = Session(config, Store(str(conf_path.parent / "scenarios")))
+    let failed: str = session.start(first)
     if failed != "":
         die(failed)
     session.entries_channel.subscribe(tell)
@@ -99,7 +111,7 @@ def main():
         let found: str | !PathFailure_T = (www / file).read_text()
         if found is PathFailure_T:
             print f"warning: {www / file} is missing: run make app, which builds it"
-    print f"scenario {session.current} of {session.scenarios.dir}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    print f"scenario {session.current} of {session.scenarios.store.place}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))
 

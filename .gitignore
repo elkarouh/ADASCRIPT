@@ -136,6 +136,10 @@ BROWSER_EXAMPLES/ACCOUNTING/backend/accounting_gui
 BROWSER_EXAMPLES/ACCOUNTING/accounting.db
 BROWSER_EXAMPLES/ACCOUNTING/build/
 BROWSER_EXAMPLES/ACCOUNTING/scenarios/*.db
+BROWSER_EXAMPLES/ACCOUNTING/scenarios/*.kept
+BROWSER_EXAMPLES/ACCOUNTING/frontend/shipped.ady
+BROWSER_EXAMPLES/ACCOUNTING/frontend/frontend_server.js
+BROWSER_EXAMPLES/ACCOUNTING/frontend/accounting_js_events.js
 
 # Built test and editor binaries
 EDITORS/KILO/kilo

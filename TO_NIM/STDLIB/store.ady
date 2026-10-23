@@ -76,7 +76,9 @@ The same code then keeps its texts on a server, in a page with no server, and in
 # nimraw:     result.sort()
 
 # Texts under names, at a place: a directory natively, a name in the browser's storage under
-# `ady2nim js`, or, for "", nowhere but here.
+# `ady2nim js`, or, for "", nowhere but here. Shared, not copied: whoever holds a Store holds
+# the same texts, in memory too.
+@virtual
 class Store:
     var place: str              # where the texts are; "" in this Store only
     var held: {str}str          # the texts, when the place is ""
@@ -111,8 +113,11 @@ class Store:
     # The text under NAME gone: whether it could be (there being none is no failure).
     def drop(self, name: str) -> bool:
         if self.place == "":
-            if name in self.held:
-                self.held.del(name)
+            var left: {str}str = {:}
+            for k in self.held.keys():
+                if k != name:
+                    left[k] = self.held[k]
+            self.held = left
             return True
         if not place_there(self.place, name):
             return True

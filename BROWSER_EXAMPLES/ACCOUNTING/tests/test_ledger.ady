@@ -1,5 +1,5 @@
 #!/usr/bin/env ady2nim
-"""The ledger on an in-memory database: the chart of accounts of
+"""The ledger kept in memory: the chart of accounts of
 accounting.conf and the example's year give the same books as kleppmann(),
 and what does not fit the books is refused without a trace.
 
@@ -7,8 +7,10 @@ and what does not fit the books is refused without a trace.
 """
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, kleppmann, example_entries
 from backend/books_text import AccountRow, Books, Ratio, closing_entries, ratios_of, kind_named, parse_books, text_of_books, graph_of
-from backend/ledger import Config, Ledger, Scenarios, cents_of, open_chart, read_config, record_example
-from os nimport walkFiles, createDir, fileExists, removeDir
+from backend/ledger import cents_of, read_config, record_example
+from backend/bookkeeping import Config, Ledger, Scenarios, open_chart
+from store import Store
+from os nimport walkFiles
 
 # The value of a step that must not fail here.
 def config_of(path: Path) -> Config:
@@ -21,6 +23,14 @@ def config_of(path: Path) -> Config:
 
 def ledger_of(s: Scenarios, name: str) -> Ledger:
     let r: Ledger | !BookFailure_T = s.open(name, False)
+    case r:
+        when BookFailure_T:
+            raise ValueError(r.detail)
+        when Ledger:
+            return r
+
+def ledger_of_fresh(s: Scenarios, name: str) -> Ledger:
+    let r: Ledger | !BookFailure_T = s.open(name, True)
     case r:
         when BookFailure_T:
             raise ValueError(r.detail)
@@ -54,12 +64,12 @@ let config: Config = config_of(Path("accounting.conf"))
 assert len(config.accounts) == 33
 assert config.currency == "USD"
 
-var books: Ledger = Ledger(":memory:")
+var books: Ledger = Ledger(Store(""), "", "")
 assert number_of(open_chart(books, config)) == 33
 assert number_of(open_chart(books, config)) == 0                  # opening the chart twice opens nothing twice
 assert record_example(books) is None
-assert books.count("transactions") == 22
-assert books.count("postings") == 48               # 18 entries of two postings, 4 of three
+assert books.transaction_count() == 22
+assert books.posting_count() == 48               # 18 entries of two postings, 4 of three
 assert record_example(books) is BookFailure_T      # the example goes in an empty ledger only
 
 # The same books as the model's own example: every account, its balance and
@@ -100,9 +110,9 @@ assert parse_books("posting\tX\t5\n") is BookFailure_T       # a posting needs i
 
 # What does not fit is refused, and leaves nothing behind.
 def refused(e: Entry) -> bool:
-    let before: int = books.count("postings")
+    let before: int = books.posting_count()
     let r: None | !BookFailure_T = books.record(e)
-    return r is BookFailure_T and books.count("postings") == before
+    return r is BookFailure_T and books.posting_count() == before
 
 assert refused(Entry("2012-01-01", "does not add up", [Posting("Bank", -1000), Posting("Food", 900)]))
 assert refused(Entry("2012-01-01", "no such account", [Posting("Petty cash", -1000), Posting("Food", 1000)]))
@@ -126,15 +136,22 @@ assert kind_named("Revenue") is not BookFailure_T
 assert books.delete_account("Fuel") is None                          # no transactions yet
 assert books.delete_account("Fuel") is BookFailure_T                 # gone
 assert books.delete_account("Food") is BookFailure_T                 # has transactions
-let before: int = books.count("transactions")
+let before: int = books.transaction_count()
 let (numbered, ids) = books.numbered_entries()
 assert numbered[len(numbered) - 1].what == "Printer paper"
 assert books.delete_entry(ids[len(ids) - 1]) is None
-assert books.count("transactions") == before - 1
-assert books.count("postings") == 48
+assert books.transaction_count() == before - 1
+assert books.posting_count() == 48
 assert books.graph().balance("Food") == 1300
 assert books.delete_entry(ids[len(ids) - 1]) is BookFailure_T        # gone too
 assert books.delete_entry(9999) is BookFailure_T
+
+# An entry goes after those of its date or before, whatever the order it came in.
+assert books.record(Entry("2011-01-01", "First of all", [Posting("Bank", -100), Posting("Food", 100)])) is None
+let (in_order, numbers) = books.numbered_entries()
+for i in range(1, len(in_order)):
+    assert in_order[i - 1].date <= in_order[i].date
+assert in_order[0].what == "First of all" and numbers[0] > numbers[1]
 
 # Amounts as typed.
 assert cents("12.10") == 1210
@@ -142,7 +159,6 @@ assert cents("-605") == -60500
 assert cents("1,210.00") == 121000
 assert cents_of("twelve") is BookFailure_T
 
-books.close()
 
 # Every scenario loads into an empty ledger, balances, and comes back out as
 # it went in.
@@ -164,7 +180,7 @@ for file in walkFiles("scenarios/*.books"):
                     raise ValueError(f"{file}: {read.detail}")
                 when Books:
                     assert read.title != "" and read.about != "", file
-                    var scenario: Ledger = Ledger(":memory:")
+                    var scenario: Ledger = Ledger(Store(""), "", "")
                     assert scenario.load(read) is None, file
                     if len(read.entries) > 0:
                         assert scenario.load(read) is BookFailure_T, file      # into an empty ledger only
@@ -173,7 +189,6 @@ for file in walkFiles("scenarios/*.books"):
                     let back: Books = scenario.books("")
                     assert back.title == read.title and back.about == read.about and back.currency == read.currency, file
                     assert len(back.accounts) == len(read.accounts) and len(back.entries) == len(read.entries), file
-                    scenario.close()
                     # Closing the year empties the profit and loss accounts into
                     # retained earnings, and leaves what the company owns as it was.
                     # A new Books, not `read` changed: a record is copied on
@@ -201,19 +216,36 @@ for file in walkFiles("scenarios/*.books"):
                     scenarios += 1
 assert scenarios == expected and scenarios > 0, f"{scenarios} of {expected} scenarios"
 
-# A scenario made and deleted: its files gone, and refused the second time.
-removeDir("/tmp/test_ledger_scenarios")
-createDir("/tmp/test_ledger_scenarios")
-let temp: Scenarios = Scenarios(Path("/tmp/test_ledger_scenarios"))
-let made: None | !BookFailure_T = temp.write_books("kept", Books("EUR", [], [], [], "Kept", ""), "a test")
+# A scenario made, changed, kept, opened again as kept, started over and deleted.
+var memory: Store = Store("")
+var temp: Scenarios = Scenarios(memory)
+let made: None | !BookFailure_T = temp.write_books("kept", Books("EUR", [AccountRow("550000", ASSET, "Bank"), AccountRow("100000", EQUITY, "Capital")], [], [], "Kept", ""), "a test")
 assert not (made is BookFailure_T)
+assert temp.names() == ["kept"] and temp.title_of("kept") == "Kept"
 var kept: Ledger = ledger_of(temp, "kept")
-kept.close()
-assert fileExists("/tmp/test_ledger_scenarios/kept.books") and fileExists("/tmp/test_ledger_scenarios/kept.db")
+assert kept.record(Entry("2024-01-01", "Capital paid in", [Posting("Capital", -1000), Posting("Bank", 1000)])) is None
+assert memory.read("kept.kept") is not None
+assert ledger_of(temp, "kept").transaction_count() == 1             # as it was kept
+assert ledger_of_fresh(temp, "kept").transaction_count() == 0       # started over
+assert ledger_of(temp, "kept").transaction_count() == 0
+assert temp.save_as(kept, "kept", "kept_2", "EUR") is None
+assert temp.names() == ["kept", "kept_2"] and ledger_of(temp, "kept_2").transaction_count() == 1
+assert temp.write_books("kept", Books("EUR", [], [], [], "", ""), "again") is BookFailure_T
+# A new kept_2.books: what was kept of the old one is made again from it.
+assert memory.write("kept_2.books", "title\tNew\ncurrency\tEUR\n")
+assert ledger_of(temp, "kept_2").transaction_count() == 0
 let gone: None | !BookFailure_T = temp.delete("kept")
 assert not (gone is BookFailure_T)
-assert not fileExists("/tmp/test_ledger_scenarios/kept.books") and not fileExists("/tmp/test_ledger_scenarios/kept.db")
+assert memory.read("kept.books") is None and memory.read("kept.kept") is None
 let again: None | !BookFailure_T = temp.delete("kept")
 assert again is BookFailure_T
-removeDir("/tmp/test_ledger_scenarios")
+# The scenarios that come with the app go in an empty store only.
+var shipped: Scenarios = Scenarios(Store(""))
+assert shipped.ship(["b", "title\tB\n", "a", "title\tA\n"]) is None
+assert shipped.names() == ["a", "b"]
+assert shipped.ship(["c", "title\tC\n"]) is None and shipped.names() == ["a", "b"]
+# Books that cannot be written are not changed.
+var unwritable: Ledger = Ledger(Store("/nonexistent/place"), "x.kept", "# x")
+assert unwritable.open_account("550000", ASSET, "Bank") is BookFailure_T
+assert unwritable.name_of("Bank") == ""
 print "ledger: all checks passed"

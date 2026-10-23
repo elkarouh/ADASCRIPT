@@ -12,7 +12,14 @@ statements are read off the balances. It started as an example in
 
 ```
 make app            # builds everything, starts server, opens http://127.0.0.1:8802/
+make alone          # the same page with no server: opens frontend/index.html
 ```
+
+`make alone` builds the server into the page (`frontend/frontend_server.ady`, through the stdlib's
+`page_alone.ady`, as in DIJKSTRA_HTMX's tutorial, Step 6). The scenarios and accounting.conf come in
+the script (`frontend/shipped.ady`, which `generators/ship_scenarios.py` writes from them) and go
+into the browser's storage the first time the page is opened; from then on the page keeps them
+there, and opens again on the scenario it last showed. It opens from the file or from any site.
 
 The graph and its controls (scenario picker, replay, date slider, Exercise,
 Close the year) stay at the top; below them four tabs hold the detail views:
@@ -42,7 +49,7 @@ company's books that show one idea, with a few lines saying which.
 | 11. Start from scratch | the whole chart of accounts, no transaction yet |
 
 Change a scenario as you like: Start over brings it back as it was, and
-Save as keeps your version as a scenario of its own; Delete scenario removes the one shown (after asking), with its database.
+Save as keeps your version as a scenario of its own; Delete scenario removes the one shown (after asking), with what was kept of it.
 
 The page draws the scenario's books: the accounts as nodes (drag them
 about), the money that moved between them as arrows, the transactions below
@@ -171,18 +178,21 @@ are replayed with the others, and Delete takes them back.
 ### Scenarios
 
 A scenario is `scenarios/NAME.books`, the books as text (`books_text.ady`:
-a title, about lines, the accounts, the transactions), and `NAME.db`, the
-database the page changes. server makes NAME.db from NAME.books the
+a title, about lines, the accounts, the transactions), and `NAME.kept`, the
+books as the page changed them, in the same text. server makes NAME.kept from NAME.books the
 first time NAME is shown, again on Start over, and again when NAME.books
-is newer than NAME.db (a new version of the scenario came in, with git pull); Save as writes the books
-shown to a new NAME.books. A new scenario is a new .books file: write it by
+changed since (a new version of the scenario came in, with git pull: NAME.kept's first line
+says which NAME.books it was made from); Save as writes the books
+shown to a new NAME.books. Both are texts in a `Store` (the stdlib's `store.ady`), so the page
+alone keeps them in the browser's storage the same way. A new scenario is a new .books file: write it by
 hand, record it in the page and Save as, or start one with `./backend/ledger new
 NAME`. `server --scenario NAME` starts on NAME, else on the first.
 
 | File | What it is |
 |---|---|
 | `backend/` (native, compiled to C) | |
-| `backend/ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
+| `backend/bookkeeping.ady` | the books kept, in plain Adascript: a `Ledger` (the books of a scenario, and opening, recording and deleting, each refused when it does not fit and written to its store when it does), `Scenarios` (each one's NAME.books and NAME.kept, in a `Store`) and the `Config`. Compiled both ways: the page alone keeps its books with it |
+| `backend/ledger.ady` | the command line that keeps the books (`bookkeeping.ady`), and the imports from GnuCash, Beancount, Ledger and ERP files |
 | `backend/server.ady` | HTTP only: hands each request to its `Session` (`accounting_events.ady`), serves the scripts, and tells every open page of each change (`tell`, `GET /events`, server-sent events, through the stdlib's `page_server.ady`) |
 | `backend/accounting_commands.ady` | the one vocabulary of the page and the server, as in DIJKSTRA_HTMX: a `Command` (a `Command_Of` this app's things, from the stdlib's `commands.ady`) is Create, Read, Update or Delete of a transaction, an account, a scenario, or the books (read only). On the wire the verb is the HTTP method and the thing the URL (`method`, `url`, and `command_of` back). Compiled both ways: the page's buttons are drawn from it, and the script makes its reads and drafts with it |
 | `backend/accounting_events.ady` | a `Session`: the books shown, the scenarios and the config. `answer` reads each request back into a command and carries it out: a read answers the page, a change only the paragraph `#told` (what was done, or why not), and what it changed is published on the session's blackboard (`ENTRIES_CHAN`, `ACCOUNTS_CHAN`, `SCENARIOS_CHAN`). No HTTP |
@@ -197,11 +207,12 @@ NAME`. `server --scenario NAME` starts on NAME, else on the first.
 | `frontend/` (compiled to JavaScript) | |
 | `frontend/accounting_js_events.ady` | the events that stay in the browser, built as DIJKSTRA_HTMX's script is (the stdlib's `page_board.ady` gives the changes channel and the liaison): the `Pointer` gesture (dragging accounts, drawing arrows, the shift-click) publishes commands on the page's blackboard; `Liaison_Officer` sends them and brings the server's news back, `Mouse_Follower` draws an account still held, `Page_Refresher` reads the page again on every change, whichever page made it. Everything else is declared in the page and handled on the server |
 | `frontend/htmx.min.js` | htmx, vendored, copied to `build/` |
+| `frontend/frontend_server.ady`, `frontend/index.html` | the server, in the page: `make alone`. index.html loads this script alone; it makes a `Session` on the browser's storage, puts the scenarios it carries there the first time, tells the page of each change, and hands it every request (`serve_in_page`, the stdlib's `page_alone.ady`) |
 | `shared/` (compiled both ways) | |
 | `shared/routes.ady` | how the arrows run between accounts (`routes_of`, on plain names, points and texts, so the model stays in `backend/`): the server draws the page with it, and `accounting_js_events.js` runs the same code to route the arrows again while you drag |
 | `shared/layout.ady` | where each account is drawn (`layout_of_slots`), from the accounts alone, and the limits of a drag (`within_quarter`, an account stays in its quarter and above the bottom edge): the server draws the page with it, and the browser lays the accounts out again while you drag one. The accounts and arrows travel to the browser as text in a hidden `pre#books`, one line each, with each field escaped (`books_text`, read back with `slots_of` and `arrows_of`; a tab, a newline or a `%` in a name becomes `%09`, `%0A` or `%25`). Where you dragged an account is kept in the form field `pos` |
 | `tests/` | the tests, one `test_*.ady` for each part (`make test`) |
-| `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`) |
+| `generators/` | `make_bakery.py` and `make_consultancy.py`, which write scenarios 11 and 12 (run from here: `python3 generators/make_bakery.py`), and `ship_scenarios.py`, which writes `frontend/shipped.ady` for `make alone` |
 | `accounting.conf`, `scenarios/*.books` | the currency and chart a new scenario starts with, and the scenarios the page offers |
 
 **Why `shared/` exists.** Everything in `backend/` runs on the server, everything in `frontend/` in the browser,
@@ -225,7 +236,7 @@ make ledger
 ./backend/ledger 2_vat account 613100 expense Fuel
 ./backend/ledger 2_vat delete-account Fuel     # an account no transaction touches
 ./backend/ledger 2_vat start-over              # back as 2_vat.books has it
-./backend/ledger delete-scenario NAME           # a scenario's .books file and database gone
+./backend/ledger delete-scenario NAME           # a scenario's .books and .kept files gone
 ./backend/ledger 2_vat save-as vat_mine        # a new scenario, from these books
 ./backend/ledger 2_vat export                  # the books as a .books file holds them
 ./backend/ledger new mine                      # a new scenario: the config's chart, no transaction
@@ -338,8 +349,8 @@ over 143 accounts, 1,324 entries here. Its chart of accounts is stored with
 Git LFS, so fetch it from
 https://media.githubusercontent.com/media/meghahonna/erp_data_sample/main/complete-output/chart_of_accounts.json
 
-A scenario's database is made from its `.books` file in a single pass, so
-even this one opens in well under a second.
+A scenario's books are made from its `.books` file in a single pass, so
+even this one opens in well under a second (a few seconds in the page alone).
 
 ### accounting.conf
 
@@ -360,15 +371,6 @@ VAT receivable and VAT payable, Wages and salaries, Change in stock; the kind is
 liability, equity, revenue, expense, and decides the account's colour.
 `ledger new NAME` starts a scenario with these accounts. `--config FILE`
 chooses another config, and with it the scenarios/ beside it.
-
-### The database
-
-| Table | Columns |
-|---|---|
-| `accounts` | `number` (key), `name` (unique), `kind` |
-| `transactions` | `id`, `date` (ISO, 2011-03-07), `what` |
-| `postings` | `tx`, `account` (a number), `amount` (in cents) |
-| `settings` | `key` (title, about, currency), `value` |
 
 ## Next
 

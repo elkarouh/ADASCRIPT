@@ -1915,7 +1915,7 @@ test-part-56:
 	fi
 
 test-part-57:
-	@# BROWSER_EXAMPLES/ACCOUNTING: the model and the ledger it keeps in SQLite, run from
+	@# BROWSER_EXAMPLES/ACCOUNTING: the model and the ledger it keeps (SQLite only for GnuCash), run from
 	@# their directory, where test_ledger.ady reads accounting.conf.
 	@echo "=== BROWSER_EXAMPLES/ACCOUNTING (model, ledger, server, page) ==="
 	@if [ -z "$(call nim_has,db_connector/db_sqlite)" ]; then echo "  SKIPPED, db_connector not installed"; else \
@@ -1932,6 +1932,11 @@ test-part-57:
 	        $(ADY2NIM) js $(BEXDIR)/ACCOUNTING/frontend/accounting_js_events.ady >/dev/null 2>&1 \
 	            && echo OK || { echo FAIL; exit 1; }; \
 	        rm -f $(BEXDIR)/ACCOUNTING/frontend/accounting_js_events.js; \
+	        printf '  %-42s' "ACCOUNTING/frontend/frontend_server.ady (ady2nim js)"; \
+	        (cd $(BEXDIR)/ACCOUNTING && python3 generators/ship_scenarios.py frontend/shipped.ady \
+	            && $(ADY2NIM) js frontend/frontend_server.ady >/dev/null 2>&1) \
+	            && echo OK || { echo FAIL; exit 1; }; \
+	        rm -f $(BEXDIR)/ACCOUNTING/frontend/frontend_server.js; \
 	    fi; \
 	fi
 

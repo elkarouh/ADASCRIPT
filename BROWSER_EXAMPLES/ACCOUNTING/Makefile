@@ -1,11 +1,13 @@
 # BROWSER_EXAMPLES/ACCOUNTING: an app to learn accounting with, after Martin Kleppmann's
 # "Accounting for Computer Scientists". Needs karax >= 1.5.0 for the pages
-# (nimble install karax@1.5.0) and db_connector for the ledger
+# (nimble install karax@1.5.0) and db_connector for the ledger's GnuCash import
 # (nimble install db_connector).
 #
 #   make app        the tool: the books drawn in the browser, kept by clicking
 #                   (server draws the page, backend/accounting_page_gui.ady; each scenario,
-#                   scenarios/NAME.books, gets a database NAME.db there)
+#                   scenarios/NAME.books, is kept as it is changed in NAME.kept there)
+#   make alone      the same with no server: build the scripts, then open frontend/index.html
+#                   (the scenarios kept in the browser's storage)
 #   make ledger     build the ledger's command line (backend/ledger -h, backend/ledger list)
 #   make gui        the example as a static web page      (backend/accounting_gui.ady)
 #   make test       the model and the ledger, no GUI (Nim only)
@@ -28,7 +30,7 @@ OPEN    ?= $(shell command -v xdg-open || command -v open || command -v wslview 
 WINPATH  = $(if $(findstring powershell.exe,$(OPEN)),$(shell echo file:$$(wslpath -m $(1))),$(1))
 PORT    ?= 8802
 
-.PHONY: all app ledger server gui test clean
+.PHONY: all app alone ledger server gui test clean
 
 all: ledger server build/accounting_gui.html build/accounting_js_events.js build/htmx.min.js
 
@@ -63,6 +65,24 @@ build/htmx.min.js: frontend/htmx.min.js
 	@mkdir -p build
 	@cp frontend/htmx.min.js $@
 
+# The scenarios and the config, as texts the page alone carries (it has no files to read).
+frontend/shipped.ady: generators/ship_scenarios.py accounting.conf $(wildcard scenarios/*.books)
+	@echo "building $@"
+	@$(PYTHON) generators/ship_scenarios.py $@
+
+# The server, in the page (frontend/frontend_server.ady): frontend/index.html loads it, and it writes
+# the page, which loads the others. Nothing to start: the page opens from the file.
+frontend/frontend_server.js: frontend/frontend_server.ady frontend/shipped.ady $(wildcard backend/*.ady shared/*.ady)
+	@echo "building $@"
+	@$(ADY2NIM) js frontend/frontend_server.ady > build.log 2>&1 || { cat build.log; exit 1; }
+	@rm -f build.log
+
+frontend/accounting_js_events.js: build/accounting_js_events.js
+	@cp $< $@
+
+alone: frontend/frontend_server.js frontend/accounting_js_events.js
+	$(OPEN) "$(call WINPATH,$(CURDIR)/frontend/index.html)"
+
 gui: build/accounting_gui.html
 	$(OPEN) "$(call WINPATH,$(CURDIR)/$<)"
 
@@ -80,5 +100,5 @@ test:
 	$(ADY2NIM) c -r tests/test_htmx.ady 2>/dev/null
 
 clean:
-	rm -rf build scenarios/*.db $(foreach d,backend shared frontend tests,$(basename $(wildcard $(d)/*.ady)))
+	rm -rf build scenarios/*.db scenarios/*.kept frontend/shipped.ady frontend/frontend_server.js $(foreach d,backend shared frontend tests,$(basename $(wildcard $(d)/*.ady)))
 	rm -f frontend/accounting_js_events.js              # frontend/htmx.min.js is not built here, and stays

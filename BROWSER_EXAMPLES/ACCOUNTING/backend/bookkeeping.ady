@@ -1,0 +1,429 @@
+"""bookkeeping -- the books kept: a Ledger changes them, Scenarios hold them, both in plain Adascript.
+
+A Ledger is the books of one scenario (books_text.ady's Books) with what may be done to them:
+open or delete an account, record or delete a transaction. What does not fit the books is
+refused and changes nothing. After every change the books are written to the Store they are
+kept in (the stdlib's store.ady): the files of a directory for the server and the command line,
+the browser's storage for the page alone, memory for the tests.
+
+A scenario NAME is two texts in that Store: NAME.books, the books as they come (the
+scenarios/*.books files), and NAME.kept, the books as they were changed since, made from
+NAME.books the first time NAME is opened, again when NAME.books has changed, and by Start over.
+
+    var scenarios: Scenarios = Scenarios(Store("scenarios"))
+    let opened: Ledger | !BookFailure_T = scenarios.open("2_vat", False)
+
+Nothing here needs a file, a database or a browser, so the server and the page alone both
+compile it.
+"""
+from store import Store
+from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of
+from backend/books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
+
+# ---------------------------------------------------------------------
+# The config: the currency, and the chart a new scenario starts with
+# ---------------------------------------------------------------------
+
+type Config is record:
+    currency: str
+    accounts: []AccountRow
+
+def is_number(word: str) -> bool:
+    if len(word) == 0:
+        return False
+    for c in word:
+        if not (c >= '0' and c <= '9'):
+            return False
+    return True
+
+# The settings and accounts of the config TEXT, read from WHERE (for what is wrong with it).
+def config_of(text: str, where: str) -> Config | !BookFailure_T:
+    var config: Config = Config("USD", [])
+    var n: int = 0
+    for raw in text.split("\n"):
+        n += 1
+        let line: str = raw.split("#")[0].strip()
+        if line == "":
+            continue
+        let words: []str = line.split()
+        let rest: str = line[len(words[0]):].strip()
+        if is_number(words[0]):
+            if len(words) < 3:
+                return bad(f"{where}:{n}: an account is: number kind name")
+            let kind: Kind_T | !BookFailure_T = kind_named(words[1])
+            if kind is BookFailure_T:
+                return bad(f"{where}:{n}: {kind.detail}")
+            else:
+                config.accounts.append(AccountRow(words[0], kind, rest[len(words[1]):].strip()))
+        elif words[0] == "currency":
+            config.currency = rest
+        else:
+            return bad(f"{where}:{n}: no setting {words[0]}")
+    return config
+
+# ---------------------------------------------------------------------
+# The ledger: the books of a scenario, and what may be done to them
+# ---------------------------------------------------------------------
+
+class Ledger:
+    var b: Books                    # the books: the entries by date, then by number
+    var store: Store                # where they are kept, ...
+    var kept_as: str                # ... under this name; "" when they are not kept
+    var made_from: str              # the line the kept text starts with: what they were made from
+
+    def __init__(self, store: Store, kept_as: str, made_from: str):
+        self.b = Books("", [], [], [], "", "")
+        self.store = store
+        self.kept_as = kept_as
+        self.made_from = made_from
+
+    # The books written to the store: why not, when they could not be.
+    def keep(self) -> None | !BookFailure_T:
+        if self.kept_as == "":
+            return None
+        if not self.store.write(self.kept_as, self.made_from + "\n" + text_of_books(self.b)):
+            return bad(f"could not write {self.kept_as}")
+        return None
+
+    # The books as they are now, apart from them: what a change does to the books is not done to
+    # this copy, on either backend (a record is copied on Nim, shared on Python).
+    def copy(self) -> Books:
+        return Books(self.b.currency, self.b.accounts[:], self.b.entries[:], self.b.ids[:], self.b.title, self.b.about)
+
+    # The change just made kept; when it cannot be, the books as they were, BEFORE it.
+    def kept_or(self, before: Books) -> None | !BookFailure_T:
+        let done: None | !BookFailure_T = self.keep()
+        if done is BookFailure_T:
+            self.b = before
+        return done
+
+    def number_of(self, account: str) -> str:
+        for a in self.b.accounts:
+            if a.name == account:
+                return a.number
+        return ""
+
+    # The account named or numbered WORD, by its name; "" when there is none.
+    def name_of(self, word: str) -> str:
+        for a in self.b.accounts:
+            if a.number == word:
+                return a.name
+        for a in self.b.accounts:
+            if a.name == word:
+                return a.name
+        return ""
+
+    # Why an account NUMBER named NAME cannot be opened; None when it can.
+    def refusal(self, number: str, name: str) -> None | !BookFailure_T:
+        if not is_number(number):
+            return bad(f"{number}: an account number is digits")
+        if name == "":
+            return bad(f"{number}: an account needs a name")
+        for a in self.b.accounts:
+            if a.number == number:
+                return bad(f"there is already an account {number}")
+            if a.name == name:
+                return bad(f"there is already an account named {name}")
+        return None
+
+    def open_account(self, number: str, kind: Kind_T, name: str) -> None | !BookFailure_T:
+        do:
+            self.refusal(number, name)
+        let before: Books = self.copy()
+        self.b.accounts.append(AccountRow(number, kind, name))
+        return self.kept_or(before)
+
+    # Entry E, once the books as they are accept it (Graph.check).
+    def record(self, e: Entry) -> None | !BookFailure_T:
+        do:
+            self.graph().check(e)
+        let before: Books = self.copy()
+        self.insert(e)
+        return self.kept_or(before)
+
+    # The number the next entry gets: one more than the highest.
+    def next_id(self) -> int:
+        var top: int = 0
+        for id in self.b.ids:
+            if id > top:
+                top = id
+        return top + 1
+
+    # Entry E put in, numbered, after every entry of its date or before.
+    def insert(self, e: Entry):
+        var at: int = len(self.b.entries)
+        while at > 0 and self.b.entries[at - 1].date > e.date:
+            at -= 1
+        let id: int = self.next_id()
+        if at == len(self.b.entries):
+            self.b.entries.append(e)
+            self.b.ids.append(id)
+        else:
+            self.b.entries = self.b.entries[:at] + [e] + self.b.entries[at:]
+            self.b.ids = self.b.ids[:at] + [id] + self.b.ids[at:]
+
+    # The entries by date, those of a date in the order they came: what insert keeps them in,
+    # and what the books a scenario starts with may not be in.
+    def in_order(self):
+        var sorted_already: bool = True
+        for i in range(1, len(self.b.entries)):
+            if self.b.entries[i - 1].date > self.b.entries[i].date:
+                sorted_already = False
+        if sorted_already:
+            return
+        var keys: []str = []
+        for i in range(len(self.b.entries)):
+            keys.append(f"{self.b.entries[i].date}\t{i:08}")
+        var entries: []Entry = []
+        var ids: []int = []
+        for k in sorted(keys):
+            let i: int | !ParseFailure_T = parse_int(k.split("\t")[1])
+            if i is int:
+                entries.append(self.b.entries[i])
+                ids.append(self.b.ids[i])
+        self.b.entries = entries
+        self.b.ids = ids
+
+    # The transactions, by date, each with its postings in the order written.
+    def entries(self) -> []Entry:
+        return self.b.entries
+
+    # The transactions, by date, and their numbers.
+    def numbered_entries(self) -> ([]Entry, []int):
+        return (self.b.entries, self.b.ids)
+
+    # Transaction ID, gone, and its postings with it.
+    def delete_entry(self, id: int) -> None | !BookFailure_T:
+        for i in range(len(self.b.ids)):
+            if self.b.ids[i] == id:
+                let before: Books = self.copy()
+                self.b.entries = self.b.entries[:i] + self.b.entries[i + 1:]
+                self.b.ids = self.b.ids[:i] + self.b.ids[i + 1:]
+                return self.kept_or(before)
+        return bad(f"there is no transaction {id}")
+
+    # The account named or numbered WORD, closed: only when no transaction
+    # touches it, for the books keep what was recorded.
+    def delete_account(self, word: str) -> None | !BookFailure_T:
+        let name: str = self.name_of(word)
+        if name == "":
+            return bad(f"there is no account {word}")
+        var used: int = 0
+        for e in self.b.entries:
+            for p in e.postings:
+                if p.account == name:
+                    used += 1
+                    break
+        if used > 0:
+            return bad(f"{name} is in {used} transaction{('' if used == 1 else 's')}: delete {('it' if used == 1 else 'them')} first")
+        let before: Books = self.copy()
+        var left: []AccountRow = []
+        for a in self.b.accounts:
+            if a.name != name:
+                left.append(a)
+        self.b.accounts = left
+        return self.kept_or(before)
+
+    # The accounts by number: each its number, name and kind.
+    def kinds(self) -> [][]str:
+        var keys: []str = []
+        for a in self.b.accounts:
+            keys.append(f"{a.number}\t{a.name}\t{kind_text(a.kind)}")
+        var rows: [][]str = []
+        for k in sorted(keys):
+            rows.append(k.split("\t"))
+        return rows
+
+    # The accounts in the order they were opened, and the entries; the
+    # currency the books keep, or CURRENCY.
+    def books(self, currency: str) -> Books:
+        var b: Books = self.copy()
+        if b.currency == "":
+            b.currency = currency
+        return b
+
+    # Books B (a scenario, books_text.ady) put into an empty ledger: its title, about and
+    # currency, its accounts, then its transactions, each checked against the books before it.
+    def load(self, b: Books) -> None | !BookFailure_T:
+        if len(self.b.entries) > 0:
+            return bad("the ledger has transactions already; books are loaded into an empty one")
+        let before: Books = self.copy()
+        self.b.title = b.title
+        self.b.about = b.about
+        if b.currency != "":
+            self.b.currency = b.currency
+        for a in b.accounts:
+            if self.name_of(a.number) == "":
+                let refused: None | !BookFailure_T = self.refusal(a.number, a.name)
+                if refused is BookFailure_T:
+                    self.b = before
+                    return refused
+                self.b.accounts.append(a)
+        # checked as they come against a graph grown with them, not against the books drawn
+        # afresh each time, which is slow for a year of transactions
+        var g: Graph = Graph()
+        for a in self.b.accounts:
+            g.add_account(a.name, colour_of(a.kind))
+        for e in b.entries:
+            let ok: None | !BookFailure_T = g.check(e)
+            if ok is BookFailure_T:
+                self.b = before
+                return ok
+            g.post(e)
+            self.b.entries.append(e)
+            self.b.ids.append(len(self.b.entries))
+        self.in_order()
+        return self.kept_or(before)
+
+    def graph(self) -> Graph:
+        return graph_of(self.b)
+
+    def transaction_count(self) -> int:
+        return len(self.b.entries)
+
+    def posting_count(self) -> int:
+        var n: int = 0
+        for e in self.b.entries:
+            n += len(e.postings)
+        return n
+
+# The accounts of CONFIG that the ledger does not have yet, opened.
+def open_chart(ledger: Ledger, config: Config) -> int | !BookFailure_T:
+    var opened: int = 0
+    for a in config.accounts:
+        if ledger.name_of(a.number) == "":
+            do:
+                ledger.open_account(a.number, a.kind, a.name)
+            opened += 1
+    return opened
+
+# ---------------------------------------------------------------------
+# Scenarios: NAME.books, the books as they come, and NAME.kept, as they were changed
+# ---------------------------------------------------------------------
+
+# A name a scenario can have: letters, digits, _ and -.
+def good_name(name: str) -> bool:
+    if name == "" or len(name) > 60:
+        return False
+    for c in name:
+        if not (c.isalnum() or c == '_' or c == '-'):
+            return False
+    return True
+
+# A scenario's name with its leading number padded, so names sort by number.
+def sort_key(name: str) -> str:
+    var digits: int = 0
+    while digits < len(name) and name[digits].isdigit():
+        digits += 1
+    return "0" * (6 - digits) + name if digits < 6 else name
+
+# The line a kept text starts with, made from TEXT, NAME's .books: when NAME.books changes,
+# so does the line, and the kept books are made again.
+def made_from(name: str, text: str) -> str:
+    var h: int = 0
+    for c in text:
+        h = (h * 31 + ord(c)) % 1000003
+    return f"# made from {name}.books ({len(text)} characters, {h})"
+
+class Scenarios:
+    var store: Store
+
+    def __init__(self, store: Store):
+        self.store = store
+
+    def books_name(self, name: str) -> str:
+        return name + ".books"
+
+    def kept_name(self, name: str) -> str:
+        return name + ".kept"
+
+    def exists(self, name: str) -> bool:
+        return good_name(name) and self.store.read(self.books_name(name)) is not None
+
+    # The scenarios there are, by name, in the order of their numbers, so 10_blank comes after
+    # 9_accruals.
+    def names(self) -> []str:
+        var keyed: []str = []
+        for file in self.store.names():
+            if file.endswith(".books"):
+                let name: str = file[:len(file) - 6]
+                keyed.append(f"{sort_key(name)}\t{name}")
+        var found: []str = []
+        for k in sorted(keyed):
+            found.append(k.split("\t")[1])
+        return found
+
+    def title_of(self, name: str) -> str:
+        let text: ?str = self.store.read(self.books_name(name))
+        if text is None:
+            return name
+        for line in text.split("\n"):
+            if line.startswith("title\t"):
+                return line[6:]
+        return name
+
+    # SHIPPED, a name and a text, a name and a text...: the scenarios that come with the app, put
+    # in the store when it has none yet.
+    def ship(self, shipped: []str) -> None | !BookFailure_T:
+        if len(self.names()) > 0:
+            return None
+        var i: int = 0
+        while i + 1 < len(shipped):
+            if not self.store.write(self.books_name(shipped[i]), shipped[i + 1]):
+                return bad(f"could not write {self.books_name(shipped[i])}")
+            i += 2
+        return None
+
+    # NAME's ledger: as it was kept, or made from NAME.books when it has not been kept yet,
+    # when NAME.books changed since, or when FRESH (start over).
+    def open(self, name: str, fresh: bool) -> Ledger | !BookFailure_T:
+        if not good_name(name):
+            return bad(f"there is no scenario {name}")
+        let text: ?str = self.store.read(self.books_name(name))
+        if text is None:
+            return bad(f"there is no scenario {name}")
+        let mark: str = made_from(name, text)
+        var ledger: Ledger = Ledger(self.store, self.kept_name(name), mark)
+        let kept: ?str = self.store.read(self.kept_name(name))
+        if not fresh and kept is not None and kept.startswith(mark + "\n"):
+            let read: Books | !BookFailure_T = parse_books(kept)
+            if read is Books:
+                ledger.b = read
+                return ledger
+        let b: Books | !BookFailure_T = parse_books(text)
+        if b is BookFailure_T:
+            return bad(f"{name}.books: {b.detail}")
+        else:
+            let loaded: None | !BookFailure_T = ledger.load(b)
+            if loaded is BookFailure_T:
+                return bad(f"{name}.books: {loaded.detail}")
+        return ledger
+
+    # Books B written as a new scenario NAME, the text starting with NOTE.
+    def write_books(self, name: str, b: Books, note: str) -> None | !BookFailure_T:
+        if not good_name(name):
+            return bad(f"'{name}': a scenario's name is letters, digits, _ and -")
+        if self.store.read(self.books_name(name)) is not None:
+            return bad(f"there is already a scenario {name}")
+        var written: Books = b
+        written.ids = []
+        for e in b.entries:
+            written.ids.append(0)       # a scenario's entries have no number yet
+        if not self.store.write(self.books_name(name), f"# {note}\n" + text_of_books(written)):
+            return bad(f"could not write {self.books_name(name)}")
+        return None
+
+    # Scenario NAME gone: its books, as they come and as they were kept.
+    def delete(self, name: str) -> None | !BookFailure_T:
+        if not self.exists(name):
+            return bad(f"there is no scenario {name}")
+        if not self.store.drop(self.books_name(name)) or not self.store.drop(self.kept_name(name)):
+            return bad(f"could not delete scenario {name}")
+        return None
+
+    # The books KEPT, of scenario FROM_NAME, saved as a new scenario NAME.
+    def save_as(self, kept: Ledger, from_name: str, name: str, currency: str) -> None | !BookFailure_T:
+        var b: Books = kept.books(currency)
+        if b.title == "" or b.title == self.title_of(from_name):
+            b.title = (f"{b.title} ({name})" if b.title != "" else name)
+        return self.write_books(name, b, f"scenarios/{name}.books, saved from {from_name}.")

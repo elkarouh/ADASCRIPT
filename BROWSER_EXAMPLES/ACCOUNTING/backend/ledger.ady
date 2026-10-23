@@ -1,10 +1,10 @@
 #!/usr/bin/env ady2nim
-"""ledger -- the books of accounting_model.ady, kept in an SQLite database,
-one per scenario, and a command line to keep them.
+"""ledger -- the command line that keeps the books of accounting_model.ady, scenario by
+scenario (bookkeeping.ady's Ledger and Scenarios), and reads them in from other programs.
 
     ledger [--config FILE] list                    the scenarios, with their titles
     ledger [--config FILE] new NAME                a new scenario: the config's chart, no transaction
-    ledger [--config FILE] delete-scenario NAME       a scenario's .books file and database gone
+    ledger [--config FILE] delete-scenario NAME       a scenario's .books and .kept files gone
     ledger [--config FILE] import-gnucash NAME FILE   a new scenario NAME, read from a GnuCash sqlite3 file
     ledger [--config FILE] import-beancount NAME FILE  the same, from a Beancount file
     ledger [--config FILE] import-journal NAME FILE    the same, from a Ledger or hledger journal
@@ -25,8 +25,9 @@ one per scenario, and a command line to keep them.
     export                        the books as text, as a .books file holds them
 
 A scenario is scenarios/NAME.books, beside the config file (accounting.conf
-in the current directory, or --config), and NAME.db there, made from it the
-first time NAME is used: the same books the page shows (server.ady).
+in the current directory, or --config), and NAME.kept there, the books as
+they were changed, made from it the first time NAME is used: the same books
+the page shows (server.ady).
 A transaction or an account that does not fit the books is refused, and
 nothing is written.
 
@@ -35,375 +36,31 @@ nothing is written.
     ledger 2_vat add 2011-05-02 "Printer paper" "Bank=-12.10" "Furniture and equipment=10.00" "VAT receivable=2.10"
     ledger 2_vat start-over
 """
-from db import DB
 from math nimport round
-from os nimport walkFiles, removeFile, fileExists, splitFile, getLastModificationTime
-from times nimport toUnix
-from algorithm nimport sort
+from store import Store
 from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Kind_T, Posting, colour_of, example_entries, money_text
 from importers/gnucash import books_of_gnucash
 from importers/beancount import books_of_beancount
 from importers/journal import books_of_journal
 from importers/erp_csv import books_of_erp
 from backend/books_text import AccountRow, Books, bad, graph_of, kind_named, kind_text, parse_books, text_of_books
-
-# ---------------------------------------------------------------------
-# The config file
-# ---------------------------------------------------------------------
-
-type Config is record:
-    currency: str
-    accounts: []AccountRow
-
-def is_number(word: str) -> bool:
-    if len(word) == 0:
-        return False
-    for c in word:
-        if not (c >= '0' and c <= '9'):
-            return False
-    return True
+from backend/bookkeeping import Config, Ledger, Scenarios, config_of, open_chart
 
 # The settings and accounts of the config file at PATH.
 def read_config(path: Path) -> Config | !BookFailure_T:
     let text: str | !PathFailure_T = path.read_text()
     if text is PathFailure_T:
         return bad(f"{text.op} {text.path}: {text.reason}")
-    var config: Config = Config("USD", [])
-    var n: int = 0
-    for raw in text.split("\n"):
-        n += 1
-        let line: str = raw.split("#")[0].strip()
-        if line == "":
-            continue
-        let words: []str = line.split()
-        let rest: str = line[len(words[0]):].strip()
-        if is_number(words[0]):
-            if len(words) < 3:
-                return bad(f"{path}:{n}: an account is: number kind name")
-            let kind: Kind_T | !BookFailure_T = kind_named(words[1])
-            if kind is BookFailure_T:
-                return bad(f"{path}:{n}: {kind.detail}")
-            else:
-                config.accounts.append(AccountRow(words[0], kind, rest[len(words[1]):].strip()))
-        elif words[0] == "currency":
-            config.currency = rest
-        else:
-            return bad(f"{path}:{n}: no setting {words[0]}")
-    return config
-
-# ---------------------------------------------------------------------
-# The database: accounts, transactions, and the postings of each transaction
-# ---------------------------------------------------------------------
-
-const SCHEMA: []str = [
-    """CREATE TABLE IF NOT EXISTS accounts (
-        number TEXT PRIMARY KEY,
-        name   TEXT NOT NULL UNIQUE,
-        kind   TEXT NOT NULL CHECK (kind IN ('asset', 'liability', 'equity', 'revenue', 'expense')))""",
-    """CREATE TABLE IF NOT EXISTS transactions (
-        id   INTEGER PRIMARY KEY,
-        date TEXT NOT NULL,
-        what TEXT NOT NULL)""",
-    """CREATE TABLE IF NOT EXISTS postings (
-        tx      INTEGER NOT NULL REFERENCES transactions(id),
-        account TEXT NOT NULL REFERENCES accounts(number),
-        amount  INTEGER NOT NULL)""",
-    """CREATE TABLE IF NOT EXISTS settings (
-        key   TEXT PRIMARY KEY,
-        value TEXT NOT NULL)"""]
-
-class Ledger:
-    var db: DB
-
-    def __init__(self, path: str):
-        self.db = DB(path)
-        for statement in SCHEMA:
-            self.db.exec(statement)
-
-    def close(self):
-        self.db.close()
-
-    # A setting the books keep: their title, what they are about, their
-    # currency; "" when there is none.
-    def setting(self, key: str) -> str:
-        return self.db.value("SELECT value FROM settings WHERE key IS ?", [key])
-
-    def set_setting(self, key: str, value: str):
-        self.db.exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value])
-
-    def number_of(self, account: str) -> str:
-        return self.db.value("SELECT number FROM accounts WHERE name IS ?", [account])
-
-    # The account named or numbered WORD, by its name; "" when there is none.
-    def name_of(self, word: str) -> str:
-        let name: str = self.db.value("SELECT name FROM accounts WHERE number IS ?", [word])
-        return (name if name != "" else self.db.value("SELECT name FROM accounts WHERE name IS ?", [word]))
-
-    def open_account(self, number: str, kind: Kind_T, name: str) -> None | !BookFailure_T:
-        if not is_number(number):
-            return bad(f"{number}: an account number is digits")
-        if name == "":
-            return bad(f"{number}: an account needs a name")
-        if self.db.value("SELECT name FROM accounts WHERE number IS ?", [number]) != "":
-            return bad(f"there is already an account {number}")
-        if self.number_of(name) != "":
-            return bad(f"there is already an account named {name}")
-        self.db.exec("INSERT INTO accounts (number, name, kind) VALUES (?, ?, ?)",
-                     [number, name, kind_text(kind)])
-
-    # Entry E, once the books as they are accept it (Graph.check), in one
-    # database transaction.
-    def record(self, e: Entry) -> None | !BookFailure_T:
-        do:
-            self.graph().check(e)
-        self.db.exec("BEGIN")
-        try:
-            self.insert(e)
-            self.db.exec("COMMIT")
-        except:                         # the database failed: nothing of the entry stays
-            self.db.exec("ROLLBACK")
-            raise
-
-    # Entry E written, as it is, into the open database transaction.
-    def insert(self, e: Entry):
-        self.db.exec("INSERT INTO transactions (date, what) VALUES (?, ?)", [e.date, e.what])
-        let tx: str = self.db.value("SELECT last_insert_rowid()")
-        for p in e.postings:
-            self.db.exec("INSERT INTO postings (tx, account, amount) VALUES (?, ?, ?)",
-                         [tx, self.number_of(p.account), str(int(p.amount))])
-
-    # The transactions, by date, each with its postings in the order written.
-    def entries(self) -> []Entry:
-        return self.books("").entries
-
-    # The transactions, by date, each with its postings in the order written,
-    # and their numbers.
-    def numbered_entries(self) -> ([]Entry, []int):
-        var found: []Entry = []
-        var ids: []int = []
-        for t in self.db.rows("SELECT id, date, what FROM transactions ORDER BY date, id"):
-            var postings: []Posting = []
-            for p in self.db.rows("""SELECT a.name, p.amount FROM postings p
-                                     JOIN accounts a ON a.number = p.account
-                                     WHERE p.tx IS ? ORDER BY p.rowid""", [t[0]]):
-                postings.append(Posting(p[0], Cents_T(int(p[1]))))
-            found.append(Entry(t[1], t[2], postings))
-            ids.append(int(t[0]))
-        return (found, ids)
-
-    # Transaction ID, gone, and its postings with it.
-    def delete_entry(self, id: int) -> None | !BookFailure_T:
-        if self.db.value("SELECT id FROM transactions WHERE id IS ?", [str(id)]) == "":
-            return bad(f"there is no transaction {id}")
-        self.db.exec("BEGIN")
-        try:
-            self.db.exec("DELETE FROM postings WHERE tx IS ?", [str(id)])
-            self.db.exec("DELETE FROM transactions WHERE id IS ?", [str(id)])
-            self.db.exec("COMMIT")
-        except:
-            self.db.exec("ROLLBACK")
-            raise
-
-    # The account named or numbered WORD, closed: only when no transaction
-    # touches it, for the books keep what was recorded.
-    def delete_account(self, word: str) -> None | !BookFailure_T:
-        let name: str = self.name_of(word)
-        if name == "":
-            return bad(f"there is no account {word}")
-        let used: str = self.db.value("SELECT COUNT(DISTINCT tx) FROM postings WHERE account IS ?", [self.number_of(name)])
-        if used != "0":
-            return bad(f"{name} is in {used} transaction{('' if used == '1' else 's')}: delete {('it' if used == '1' else 'them')} first")
-        self.db.exec("DELETE FROM accounts WHERE name IS ?", [name])
-
-    def kinds(self) -> [][]str:
-        return self.db.rows("SELECT number, name, kind FROM accounts ORDER BY number")
-
-    # The accounts in the order they were opened, and the entries; the
-    # currency the books keep, or CURRENCY.
-    def books(self, currency: str) -> Books:
-        var accounts: []AccountRow = []
-        for row in self.db.rows("SELECT number, kind, name FROM accounts ORDER BY rowid"):
-            let kind: Kind_T | !BookFailure_T = kind_named(row[1])
-            if kind is BookFailure_T:
-                raise ValueError(f"the database has an account of kind {row[1]}")
-            else:
-                accounts.append(AccountRow(row[0], kind, row[2]))
-        let (entries, ids) = self.numbered_entries()
-        let kept: str = self.setting("currency")
-        return Books((kept if kept != "" else currency), accounts, entries, ids,
-                     self.setting("title"), self.setting("about"))
-
-    # Books B (a scenario, books_text.ady) written into an empty ledger: its
-    # title, about and currency, its accounts, then its transactions in order.
-    def load(self, b: Books) -> None | !BookFailure_T:
-        if self.count("transactions") > 0:
-            return bad("the ledger has transactions already; books are loaded into an empty one")
-        self.set_setting("title", b.title)
-        self.set_setting("about", b.about)
-        if b.currency != "":
-            self.set_setting("currency", b.currency)
-        for a in b.accounts:
-            if self.name_of(a.number) == "":
-                do:
-                    self.open_account(a.number, a.kind, a.name)
-        # the entries checked as they come against a graph grown with them (not against the
-        # database read afresh each time, which is slow for a year of transactions), and written
-        # in one database transaction
-        var g: Graph = Graph()
-        for a in b.accounts:
-            g.add_account(a.name, colour_of(a.kind))
-        self.db.exec("BEGIN")
-        for e in b.entries:
-            let ok: None | !BookFailure_T = g.check(e)
-            if ok is BookFailure_T:
-                self.db.exec("ROLLBACK")
-                return ok
-            g.post(e)
-            self.insert(e)
-        self.db.exec("COMMIT")
-
-    def graph(self) -> Graph:
-        return graph_of(self.books(""))
-
-    def count(self, table: str) -> int:
-        return int(self.db.value(f"SELECT COUNT(*) FROM {table}"))
-
-# The accounts of CONFIG that the ledger does not have yet, opened.
-def open_chart(ledger: Ledger, config: Config) -> int | !BookFailure_T:
-    var opened: int = 0
-    for a in config.accounts:
-        if ledger.name_of(a.number) == "":
-            do:
-                ledger.open_account(a.number, a.kind, a.name)
-            opened += 1
-    return opened
+    else:
+        return config_of(text, str(path))
 
 # The example company's year, recorded in an empty ledger.
 def record_example(ledger: Ledger) -> None | !BookFailure_T:
-    if ledger.count("transactions") > 0:
+    if ledger.transaction_count() > 0:
         return bad("the ledger has transactions already; the example goes in an empty one")
     for e in example_entries():
         do:
             ledger.record(e)
-
-# ---------------------------------------------------------------------
-# Scenarios: NAME.books, the books as text, and NAME.db, made from it
-# ---------------------------------------------------------------------
-
-# A name a scenario's files can have: letters, digits, _ and -.
-def good_name(name: str) -> bool:
-    if name == "" or len(name) > 60:
-        return False
-    for c in name:
-        if not (c.isalnum() or c == '_' or c == '-'):
-            return False
-    return True
-
-# A scenario's name with its leading number padded, so names sort by number.
-def sort_key(name: str) -> str:
-    var digits: int = 0
-    while digits < len(name) and name[digits].isdigit():
-        digits += 1
-    return "0" * (6 - digits) + name if digits < 6 else name
-
-class Scenarios:
-    var dir: Path
-
-    def __init__(self, dir: Path):
-        self.dir = dir
-
-    def books_file(self, name: str) -> Path:
-        return self.dir / (name + ".books")
-
-    def db_file(self, name: str) -> Path:
-        return self.dir / (name + ".db")
-
-    def exists(self, name: str) -> bool:
-        return good_name(name) and fileExists(str(self.books_file(name)))
-
-    # The scenarios there are, by name, in order.
-    # In the order of their numbers, so 10_blank comes after 9_accruals.
-    def names(self) -> []str:
-        var keyed: []str = []
-        for f in walkFiles(str(self.dir / "*.books")):
-            let name: str = splitFile(f).name
-            keyed.append(f"{sort_key(name)}\t{name}")
-        keyed.sort()
-        var found: []str = []
-        for k in keyed:
-            found.append(k.split("\t")[1])
-        return found
-
-    def title_of(self, name: str) -> str:
-        let text: str | !PathFailure_T = self.books_file(name).read_text()
-        if text is PathFailure_T:
-            return name
-        for line in text.split("\n"):
-            if line.startswith("title\t"):
-                return line[6:]
-        return name
-
-    # NAME's database made afresh from its .books file.
-    def make_db(self, name: str) -> None | !BookFailure_T:
-        let db: str = str(self.db_file(name))
-        do:
-            text <- self.books_file(name).read_text() else BookFailure_T(f"cannot read {self.books_file(name)}")
-            b <- parse_books(text)
-        if fileExists(db):
-            removeFile(db)
-        var made: Ledger = Ledger(db)
-        let loaded: None | !BookFailure_T = made.load(b)
-        made.close()
-        if loaded is BookFailure_T:
-            removeFile(db)
-            return BookFailure_T(f"{name}.books: {loaded.detail}")
-
-    # Whether NAME's .books file changed after its database was made from it
-    # (a new version of the scenario came in): the database is out of date.
-    def stale(self, name: str) -> bool:
-        let db: str = str(self.db_file(name))
-        return fileExists(db) and getLastModificationTime(str(self.books_file(name))).toUnix() > getLastModificationTime(db).toUnix()
-
-    # NAME's ledger, its database made from its .books file first if it has
-    # none, if the .books file is newer, or if FRESH (start over).
-    def open(self, name: str, fresh: bool) -> Ledger | !BookFailure_T:
-        if not self.exists(name):
-            return BookFailure_T(f"there is no scenario {name}")
-        if fresh or not fileExists(str(self.db_file(name))) or self.stale(name):
-            do:
-                self.make_db(name)
-        return Ledger(str(self.db_file(name)))
-
-    # Books B written as a new scenario NAME, the file starting with NOTE.
-    def write_books(self, name: str, b: Books, note: str) -> None | !BookFailure_T:
-        if not good_name(name):
-            return BookFailure_T(f"'{name}': a scenario's name is letters, digits, _ and -")
-        if fileExists(str(self.books_file(name))):
-            return BookFailure_T(f"there is already a scenario {name}")
-        var written: Books = b
-        written.ids = []
-        for e in b.entries:
-            written.ids.append(0)       # a scenario's entries have no number yet
-        let done: None | !PathFailure_T = self.books_file(name).write_text(f"# {note}\n" + text_of_books(written))
-        if done is PathFailure_T:
-            return BookFailure_T(f"{done.op} {done.path}: {done.reason}")
-
-    # Scenario NAME gone: its .books file and its database.
-    def delete(self, name: str) -> None | !BookFailure_T:
-        if not self.exists(name):
-            return BookFailure_T(f"there is no scenario {name}")
-        removeFile(str(self.books_file(name)))
-        if fileExists(str(self.db_file(name))):
-            removeFile(str(self.db_file(name)))
-        return None
-
-    # The books KEPT, of scenario FROM_NAME, saved as a new scenario NAME.
-    def save_as(self, kept: Ledger, from_name: str, name: str, currency: str) -> None | !BookFailure_T:
-        var books_kept: Ledger = kept
-        var b: Books = books_kept.books(currency)
-        if b.title == "" or b.title == self.title_of(from_name):
-            b.title = (f"{b.title} ({name})" if b.title != "" else name)
-        return self.write_books(name, b, f"scenarios/{name}.books, saved from {from_name}.")
 
 # ---------------------------------------------------------------------
 # The command line
@@ -498,7 +155,7 @@ def run_command(scenarios: Scenarios, config: Config, name: str, words: []str):
             when "journal":
                 journal(ledger)
             when "start-over":
-                print f"{name}: {ledger.count('transactions')} transactions, as {name}.books has them"
+                print f"{name}: {ledger.transaction_count()} transactions, as {name}.books has them"
             when "export":
                 stdout.write(text_of_books(ledger.books(config.currency)))
             when "save-as":
@@ -548,7 +205,6 @@ def run_command(scenarios: Scenarios, config: Config, name: str, words: []str):
                     print "account deleted"
             when others:
                 die(f"no command {command}, see -h")
-        ledger.close()
         if done is BookFailure_T:
             die(done.detail)
 
@@ -574,7 +230,7 @@ def main():
         die(read.detail)
     else:
         let config: Config = read
-        var scenarios: Scenarios = Scenarios(conf_path.parent / "scenarios")
+        var scenarios: Scenarios = Scenarios(Store(str(conf_path.parent / "scenarios")))
         if words[0] == "list":
             for name in scenarios.names():
                 print f"{name:<24} {scenarios.title_of(name)}"

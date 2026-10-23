@@ -1,0 +1,68 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js --overflowChecks:off
+"""frontend_server -- the server, in the page: the accounting app with no server at all.
+
+    make alone          then open frontend/index.html, from the file or from any site
+
+What backend/server.ady does, done in the browser (the stdlib's page_alone.ady): the requests htmx
+and accounting_js_events make are handed to a Session, which keeps the scenarios in the browser's
+storage instead of scenarios/, and each change is told to the page, which then reads itself again.
+The scenarios and the config come in this script (frontend/shipped.ady, which make alone writes
+from accounting.conf and scenarios/*.books), and go into the browser's storage the first time.
+frontend/index.html loads this script only; it writes the page, which loads the others.
+
+Overflow checks are off (the second line): in JavaScript an int is checked against 32 bits, and a
+year of a company's books goes past 21 million in cents; the numbers themselves are exact to 2^53.
+"""
+from page_alone import serve_in_page, tell_page
+from store import Store
+from commands import Change
+from backend/accounting_model import BookFailure_T
+from backend/bookkeeping import Config, config_of
+from backend/accounting_page_gui import shell_text
+from backend/accounting_events import Channel_T, Session
+from frontend/shipped import CONFIG_TEXT, SHIPPED
+
+# The config the scenarios are kept by, as accounting.conf has it.
+def shipped_config() -> Config:
+    let read: Config | !BookFailure_T = config_of(CONFIG_TEXT, "accounting.conf")
+    if read is BookFailure_T:
+        return Config("USD", [])
+    else:
+        return read
+
+# Where the scenarios are kept, in the browser, and the name of the one shown.
+var kept_in: Store = Store("accounting")
+const SHOWN: str = "shown"
+
+# The session the requests are answered from, which keeps the scenarios in the browser.
+var session: Session = Session(shipped_config(), kept_in)
+
+# A change, told to the page: subscribed to the session's channels below.
+def tell(channel: Channel_T, change: Change):
+    tell_page(f"{channel} {change.kind} {change.key}")
+
+# A scenario shown, saved or deleted: the one shown now kept, for the page to show it again when
+# it is opened again (the server has it from its command line).
+def keep_shown(channel: Channel_T, change: Change):
+    if not kept_in.write(SHOWN, session.current):
+        print f"could not keep {SHOWN}"
+
+# What METHOD on PATH, with FIELDS, answers.
+def answer(method: str, path: str, fields: str) -> str:
+    return session.answer(method, path, fields)
+
+let seeded: None | !BookFailure_T = session.scenarios.ship(SHIPPED)      # the first time only
+if seeded is BookFailure_T:
+    print seeded.detail
+let shown: ?str = kept_in.read(SHOWN)
+var failed: str = session.start(shown if shown is not None else "")
+if failed != "":
+    failed = session.start("")          # the one kept is gone: the first there is
+if failed != "":
+    print failed
+session.entries_channel.subscribe(tell)
+session.accounts_channel.subscribe(tell)
+session.scenarios_channel.subscribe(keep_shown)
+session.scenarios_channel.subscribe(tell)
+serve_in_page(answer, shell_text())
