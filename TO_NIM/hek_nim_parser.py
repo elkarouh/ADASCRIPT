@@ -942,6 +942,7 @@ def to_nim(self, indent=0):
         hek_nim_expr.among_exit(_among)
         for _v in _newly:
             hek_nim_expr._narrow_drop(_v)
+    self._nim_cond = cond               # if_stmt reads an `elif x is None` off it, for the clauses after
     return f"{_ind(indent)}elif {cond}:{hc}\n{body}"
 
 
@@ -1042,14 +1043,19 @@ def to_nim(self, indent=0):
     # own body, and proves x has a value in *every* clause after it -- the
     # else, and any elif, which is only reached when the isNone was false.
     # Without this, the else branch read the field off the Option.
-    _m_none = _re_if.match(r'^\(?\s*(' + hek_nim_expr.NARROW_NAME + r')\.('
-                           + hek_nim_expr.NARROW_TESTS + r')\s*\)?$', cond.strip())
+    # An `elif x is None:` does the same for the clauses after it.
     _else_unwrapped = []
-    if _m_none:
-        _n = _m_none.group(1)
-        _sfx = hek_nim_expr.narrow_suffix(_n, _m_none.group(2), False)
-        if _sfx and hek_nim_expr._narrow_add(_n, _sfx):
-            _else_unwrapped.append(_n)
+
+    def _narrow_after(test):
+        _m_none = _re_if.match(r'^\(?\s*(' + hek_nim_expr.NARROW_NAME + r')\.('
+                               + hek_nim_expr.NARROW_TESTS + r')\s*\)?$', test.strip())
+        if _m_none:
+            _n = _m_none.group(1)
+            _sfx = hek_nim_expr.narrow_suffix(_n, _m_none.group(2), False)
+            if _sfx and hek_nim_expr._narrow_add(_n, _sfx):
+                _else_unwrapped.append(_n)
+
+    _narrow_after(cond)
     try:
         for node in self.nodes[2:]:
             if not hasattr(node, "nodes") or not node.nodes:
@@ -1064,6 +1070,8 @@ def to_nim(self, indent=0):
                         result += "\n" + clause.to_nim(indent)
                     except TypeError:
                         result += "\n" + _ind(indent) + clause.to_nim()
+                    if getattr(clause, "_nim_cond", None):
+                        _narrow_after(clause._nim_cond)
     finally:
         for _v in _else_unwrapped:
             hek_nim_expr._narrow_drop(_v)

@@ -1,0 +1,52 @@
+#!/usr/bin/env ady2nim
+# test_union_method.ady -- a method every member of a union has, called on the union: it runs
+# the method of the member the union holds, as Python does, without a `case` to say which.
+#
+#   ady2nim TESTS/test_union_method.ady -r
+#   ady2py  TESTS/test_union_method.ady -c
+
+var said: []str = []
+
+class Node:
+    var name: str
+    def __init__(self, name: str):
+        self.name = name
+    def delete(self) -> str:
+        return "node " + self.name
+    def rename(self, to: str, times: int) -> str:
+        return f"node {to} x{times}"
+    def tell(self):
+        said.append("node " + self.name)
+
+class Edge:
+    var a: str
+    def __init__(self, a: str):
+        self.a = a
+    def delete(self) -> str:
+        return "edge " + self.a
+    def rename(self, to: str, times: int) -> str:
+        return f"edge {to} x{times}"
+    def tell(self):
+        said.append("edge " + self.a)
+
+class Space:
+    def __init__(self):
+        pass
+    def delete(self) -> str:
+        return "space"
+
+def remove(picked: Node | Edge | None) -> str:
+    if picked is not None:
+        picked.tell()
+        return picked.delete()
+    return "nothing"
+
+def anything(x: Node | Edge | Space) -> str:
+    return x.delete()
+
+let ne: Node | Edge = Edge("B")
+assert remove(Node("A")) == "node A" and remove(Edge("B")) == "edge B" and remove(None) == "nothing"
+assert anything(Space()) == "space" and anything(Node("C")) == "node C"
+assert ne.rename("Z", 2) == "edge Z x2"
+assert said == ["node A", "edge B"]
+print remove(Node("A")), anything(Space()), ne.rename("Z", 2), said

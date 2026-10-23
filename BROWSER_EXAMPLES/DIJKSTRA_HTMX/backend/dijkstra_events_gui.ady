@@ -171,10 +171,10 @@ class Session:
                             else:
                                 self.net.put(name, at)
                     when UPDATE:
-                        if at is None:
-                            problem = Refusal_T(message=f"Where should {name} go? There is no place.")
-                        elif name not in self.net.names():
+                        if name not in self.net.names():
                             problem = Refusal_T(message=f"There is no node {name}.")
+                        elif at is None:
+                            problem = Refusal_T(message=f"Where should {name} go? There is no place.")
                         else:
                             self.net.put(name, at)
                     when DELETE:

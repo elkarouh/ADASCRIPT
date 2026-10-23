@@ -1081,6 +1081,47 @@ def _union_type_of(expr_str):
     return ""
 
 
+def _union_method_template(receiver, method_name, nargs):
+    """`picked.delete()` where picked is a NodeView | EdgeView and both
+    classes have delete: Python calls the method of whichever the value is.
+    Nim needs it said, so a template `delete` taking that union (any OneOfN of
+    the same size) is declared once, which calls it on the member held. Only
+    when every member is a class of the program with that method."""
+    info = _union_info(_union_type_of(receiver))
+    if not info or info["kind"] != "plain":
+        return
+    members = [m.strip() for m in info["values"]]
+    methods = getattr(ParserState, "_all_class_methods", None) or {}
+    parents = getattr(ParserState, "_all_class_parents", None) or {}
+
+    def _has(cls):
+        while cls:
+            if method_name in methods.get(cls, ()):
+                return True
+            cls = (parents.get(cls) or "").split("[")[0]
+        return False
+
+    if not all(_has(m) for m in members):
+        return
+    n = len(members)
+    key = f"union-method {method_name} {n} {nargs}"
+    decls = getattr(ParserState, "nim_top_decls", [])
+    if any(d.startswith(f"# {key}\n") for d in decls):
+        return
+    params = "".join(f"; a{i}: untyped" for i in range(nargs))
+    args = ", ".join(f"a{i}" for i in range(nargs))
+    lines = [f"# {key}",
+             f"template {method_name}(adaU: OneOf{n}{params}): untyped =",
+             "  block:",
+             "    let adaV = adaU"]
+    for i in range(n - 1):
+        lines.append(f"    {'if' if i == 0 else 'elif'} adaV.is_m{i}: adaV.m{i}.{method_name}({args})")
+    lines.append(f"    else: adaV.m{n - 1}.{method_name}({args})")
+    decls.append("\n".join(lines))
+    ParserState.nim_top_decls = decls
+    ParserState.nim_imports.add("stdlib")
+
+
 def _opt_union_inner(expr_str):
     """The union an optional EXPR_STR (a name or a field path, not yet
     narrowed) may hold -- `?Sel_T` where Sel_T is a OneOfN -- or ""."""
@@ -4564,6 +4605,11 @@ def to_nim(self, prec=None):
                         and type(next_tr).__name__ == "call_trailer"):
                     from hek_nim_declarations import _ensure_path_relative_to
                     _ensure_path_relative_to()
+                # A method every member of a union has, called on the union:
+                # dispatched to the member it holds (_union_method_template).
+                if (next_tr is not None
+                        and type(next_tr).__name__ == "call_trailer"):
+                    _union_method_template(result, method_name, len(_extract_call_args(next_tr)))
                 # Option-typed field called as proc: insert .get() before call trailer
                 if (next_tr is not None
                         and type(next_tr).__name__ == "call_trailer"

@@ -1341,23 +1341,22 @@ class Selection:
 
     def remove(self):
         let picked: NodeView | EdgeView | None = self.what
-        case picked:
-            when NodeView | EdgeView:
-                picked.delete()
-            when None:
-                pass
+        if picked is not None:
+            picked.delete()
 ```
 
 Only an edge has a cost to change, so `change_cost` asks `picked is EdgeView`, and
 on the next line `picked` is an `EdgeView`, not "maybe an `EdgeView`". Either
-kind can be deleted, so `remove` names both in one `when`; the body is checked
-once for each of them, and it would not compile if one of them had no
-`delete`. The third arm says there is nothing to delete.
+kind can be deleted, so `remove` asks only that something is selected: past
+`picked is not None`, `picked` is a `NodeView | EdgeView`, and `picked.delete()`
+calls the `delete` of whichever it is. It would not compile if one of them had
+no `delete`.
 
 That is how the Dijkstra page deletes what the reader selected. There is no `Selected_T`
 declared for it, no tag field to keep in step with the value, no cast, and no
-branch that can be forgotten: a `case` over a union names every member, or says
-`when others`, as one over an enum does. The same code runs on both backends,
+branch that can be forgotten: a method called on a union is one every member
+has, and a `case` over a union names every member, or says `when others`, as
+one over an enum does. The same code runs on both backends,
 a chain of class tests on Python and a `OneOf` variant on Nim.
 
 The rule behind it is short, and it is why the code reads the way it does:

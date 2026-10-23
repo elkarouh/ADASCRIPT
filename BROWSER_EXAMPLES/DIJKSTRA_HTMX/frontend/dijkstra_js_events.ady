@@ -302,11 +302,8 @@ class Selection:
     # Delete what is selected, after asking.
     def remove(self):
         let picked: NodeView | EdgeView | None = self.what
-        case picked:
-            when NodeView | EdgeView:
-                picked.delete()
-            when None:
-                pass
+        if picked is not None:
+            picked.delete()
 
     # Forget the selection without unmarking it: the page it was on has been drawn again.
     def forget(self):

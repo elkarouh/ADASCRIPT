@@ -1,0 +1,28 @@
+#!/usr/bin/env ady2nim
+# test_elif_none_narrow.ady -- an `elif x is None:` proves x has a value in every clause after
+# it, as an `if x is None:` does: the else reads it as the value, not as the optional.
+#
+#   ady2nim TESTS/test_elif_none_narrow.ady -r
+#   ady2py  TESTS/test_elif_none_narrow.ady -c
+
+def place(name: str, at: ?int) -> str:
+    if name == "":
+        return "no name"
+    elif at is None:
+        return "no place"
+    else:
+        return f"{name} at {at + 1}"
+
+def size(a: ?int, b: ?int) -> int:
+    if a is None:
+        return 0
+    elif b is None:
+        return a                        # a still proved by the if
+    elif a > b:
+        return a - b                    # both proved
+    else:
+        return b - a
+
+assert place("", 1) == "no name" and place("A", None) == "no place" and place("A", 2) == "A at 3"
+assert size(None, 1) == 0 and size(4, None) == 4 and size(5, 2) == 3 and size(2, 5) == 3
+print place("A", 2), size(5, 2)
