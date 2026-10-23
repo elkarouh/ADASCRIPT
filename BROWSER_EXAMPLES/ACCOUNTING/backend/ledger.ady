@@ -574,7 +574,7 @@ def main():
         die(read.detail)
     else:
         let config: Config = read
-        let scenarios: Scenarios = Scenarios(conf_path.parent / "scenarios")
+        var scenarios: Scenarios = Scenarios(conf_path.parent / "scenarios")
         if words[0] == "list":
             for name in scenarios.names():
                 print f"{name:<24} {scenarios.title_of(name)}"
