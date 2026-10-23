@@ -91,10 +91,10 @@ def main():
         else:
             port = n
     session = Session("graph.txt")
-    session.nodes.subscribe(keep)       # kept first, so a page that reads again sees it saved, or why not
-    session.edges.subscribe(keep)
-    session.nodes.subscribe(tell)
-    session.edges.subscribe(tell)
+    session.nodes_channel.subscribe(keep)       # kept first, so a page that reads again sees it saved, or why not
+    session.edges_channel.subscribe(keep)
+    session.nodes_channel.subscribe(tell)
+    session.edges_channel.subscribe(tell)
     print f"http://127.0.0.1:{port}/ (Ctrl-C to stop); the network is kept in graph.txt"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))

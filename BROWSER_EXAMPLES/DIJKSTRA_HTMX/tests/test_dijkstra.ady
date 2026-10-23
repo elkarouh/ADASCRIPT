@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
-from blackboard import PublishChannel      # its subscribe, for session.nodes.subscribe below
+from blackboard import PublishChannel      # its subscribe, for session.nodes_channel.subscribe below
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
 from backend/dijkstra_events_gui import Channel_T, Change, Session
 from backend/dijkstra_commands import Command, command_of, method_of, url_of, create_node, update_node, move_node, is_draft, delete_node, create_edge, update_edge, delete_edge, read_network
@@ -93,8 +93,8 @@ var heard: []str = []
 def hear(channel: Channel_T, change: Change):
     heard.append(f"{channel} {change.kind} {change.key}")
 var told: Session = Session("")
-told.nodes.subscribe(hear)
-told.edges.subscribe(hear)
+told.nodes_channel.subscribe(hear)
+told.edges_channel.subscribe(hear)
 told.answer("GET", "/all", "")
 told.answer("POST", "/nodes", "name=H")
 told.answer("POST", "/nodes", "name=H")                  # refused: nothing is told
@@ -103,8 +103,8 @@ told.answer("PUT", "/edges", "a=A&b=H&cost=2")
 told.answer("PUT", "/nodes", "name=H&x=300&y=100")
 told.answer("DELETE", "/nodes", "name=H")                # its edge first, then the node
 told.answer("POST", "/reset", "")
-assert heard == ["NODES CREATE H", "EDGES CREATE A H", "EDGES UPDATE A H", "NODES UPDATE H",
-                 "EDGES DELETE A H", "NODES DELETE H", "EDGES UPDATE ", "NODES UPDATE "]
+assert heard == ["NODES_CHAN CREATE H", "EDGES_CHAN CREATE A H", "EDGES_CHAN UPDATE A H", "NODES_CHAN UPDATE H",
+                 "EDGES_CHAN DELETE A H", "NODES_CHAN DELETE H", "EDGES_CHAN UPDATE ", "NODES_CHAN UPDATE "]
 
 # a change that could not be kept: every page says so, until one is
 var stuck: Session = Session("/nowhere/graph.txt")

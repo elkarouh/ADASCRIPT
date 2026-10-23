@@ -9,13 +9,13 @@ Commands in, events out. Every request is read back into a Command, the page's o
 (dijkstra_commands.ady): Create, Read, Update or Delete, of a node or an edge. A read answers the whole
 page. A change answers only whether it went through: the paragraph #problem, empty, or saying why not.
 When it went through, what it changed is published with the same verbs, one channel per collection,
-named by Channel_T: NODES and EDGES carry a Change (CREATE, UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which
+named by Channel_T: NODES_CHAN and EDGES_CHAN carry a Change (CREATE, UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which
 keeps the network in its file (`keep`) and tells every open page, which then reads itself again --
 and the Session knows none of them:
 
     def heard(channel: Channel_T, change: Change):
-        print channel, change.kind, change.key          # "NODES CREATE H", "EDGES DELETE A H"
-    session.nodes.subscribe(heard)
+        print channel, change.kind, change.key          # "NODES_CHAN CREATE H", "EDGES_CHAN DELETE A H"
+    session.nodes_channel.subscribe(heard)
 
 Relayout and reset are no command on one node or edge: each is its own route, and what it changed is
 an UPDATE with no key: everything, read it all again.
@@ -29,7 +29,7 @@ from backend/dijkstra_request import fields_of, number_of, params_of
 from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value
 
 # The channels of the server's blackboard: one per collection.
-type Channel_T is enum NODES, EDGES
+type Channel_T is enum NODES_CHAN, EDGES_CHAN
 
 # What a command changed, as the channels carry it, in the commands' verbs: the node's name, or the
 # edge's two ends ("A B"); "" for everything (relayout, reset), which is read again whole.
@@ -43,15 +43,15 @@ class Session:
     var net: Network
     var store: str                      # the file the network is kept in; "" keeps it nowhere
     var unsaved: None | !Refusal_T      # why the last change could not be kept, shown on the page
-    var nodes: PublishChannel[Channel_T, Change]    # what happened to a node
-    var edges: PublishChannel[Channel_T, Change]    # what happened to an edge
+    var nodes_channel: PublishChannel[Channel_T, Change]    # what happened to a node
+    var edges_channel: PublishChannel[Channel_T, Change]    # what happened to an edge
 
     def __init__(self, store: str):
         self.store = store
         let kept: None | !Refusal_T = None
         self.unsaved = kept
-        self.nodes = PublishChannel[Channel_T, Change](NODES)
-        self.edges = PublishChannel[Channel_T, Change](EDGES)
+        self.nodes_channel = PublishChannel[Channel_T, Change](NODES_CHAN)
+        self.edges_channel = PublishChannel[Channel_T, Change](EDGES_CHAN)
         self.net = sample()
         if store != "":
             let text: str | !PathFailure_T = Path(store).read_text()
@@ -93,12 +93,12 @@ class Session:
         case method + " " + path:
             when "POST /relayout":
                 self.net.forget_places()        # no node keeps a place of its own: the layout gives each one
-                self.nodes.publish(Change(UPDATE, ""))
+                self.nodes_channel.publish(Change(UPDATE, ""))
                 return problem_text(went)
             when "POST /reset":
                 self.net = sample()
-                self.edges.publish(Change(UPDATE, ""))
-                self.nodes.publish(Change(UPDATE, ""))
+                self.edges_channel.publish(Change(UPDATE, ""))
+                self.nodes_channel.publish(Change(UPDATE, ""))
                 return problem_text(went)
             when others:
                 pass
@@ -158,9 +158,9 @@ class Session:
                 pass                                    # only read (command_of)
         if problem is None:
             for ch in edge_changes:
-                self.edges.publish(ch)
+                self.edges_channel.publish(ch)
             for ch in node_changes:
-                self.nodes.publish(ch)
+                self.nodes_channel.publish(ch)
         return problem
 
 # An edge as a Change names it: its two ends, as the model keeps them.

@@ -287,9 +287,9 @@ class Session:
                 ...
         if problem is None:
             for ch in edge_changes:
-                self.edges.publish(ch)
+                self.edges_channel.publish(ch)
             for ch in node_changes:
-                self.nodes.publish(ch)
+                self.nodes_channel.publish(ch)
         return problem
 ```
 
@@ -297,7 +297,7 @@ The routes are listed in a comment above `answer`, in the class. **Commands in, 
 out.** The read, `GET /all`, answers the whole page, which htmx swaps into `#all`. A
 command (POST, PUT, DELETE) answers only whether it went through: the paragraph
 `#problem`, empty, or saying why not. When it went through, each change is published
-on a channel (stdlib's `blackboard.ady`): `NODES` or `EDGES` carries a `Change`, such as
+on a channel (stdlib's `blackboard.ady`): `NODES_CHAN` or `EDGES_CHAN` carries a `Change`, such as
 `CREATE H`. The Session does not know who listens. The server does: `keep` writes the
 network to its file, and `tell` writes the change to every open page (`GET /events`,
 server-sent events), which reads itself again. So every page, the one that made the
@@ -402,26 +402,26 @@ in one line, `Channel_T`, and a misspelt channel does not compile.
 ```adascript
 from blackboard import PublishChannel
 
-type Channel_T is enum NODES, EDGES
+type Channel_T is enum NODES_CHAN, EDGES_CHAN
 
 type Change is record:
     kind: Verb_T                        # CREATE, UPDATE or DELETE: the commands' own verbs
     key:  str                           # the node's name, or the edge's two ends; "" for everything
 
 class Session:
-    var nodes: PublishChannel[Channel_T, Change]    # what happened to a node: NODES
-    var edges: PublishChannel[Channel_T, Change]    # what happened to an edge: EDGES
+    var nodes_channel: PublishChannel[Channel_T, Change]    # what happened to a node: NODES_CHAN
+    var edges_channel: PublishChannel[Channel_T, Change]    # what happened to an edge: EDGES_CHAN
     ...
         if problem is None:             # only what went through is told
             for ch in node_changes:
-                self.nodes.publish(ch)
+                self.nodes_channel.publish(ch)
 ```
 
 and the server says who listens, once, at start:
 
 ```adascript
-session.nodes.subscribe(keep)           # kept first, so a page that reads again sees it saved
-session.nodes.subscribe(tell)
+session.nodes_channel.subscribe(keep)           # kept first, so a page that reads again sees it saved
+session.nodes_channel.subscribe(tell)
 ```
 
 Four rules follow from it:

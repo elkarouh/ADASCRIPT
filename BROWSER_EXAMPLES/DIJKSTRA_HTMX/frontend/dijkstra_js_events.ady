@@ -103,7 +103,7 @@ type Page_Channel_T is enum COMMANDS, CHANGES
 
 # What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
 var commands: PublishChannel[Page_Channel_T, Command] = PublishChannel[Page_Channel_T, Command](COMMANDS)
-# What the server says changed ("NODES CREATE H"), whichever page changed it.
+# What the server says changed ("NODES_CHAN CREATE H"), whichever page changed it.
 var changes: PublishChannel[Page_Channel_T, str] = PublishChannel[Page_Channel_T, str](CHANGES)
 commands.raise_errors = True            # a subscriber that fails is a bug: let it show
 changes.raise_errors = True
@@ -547,7 +547,7 @@ var wire: Wire = Wire()
 
 # ---- What the server says changed ----
 
-# The server tells every open page of each change to the network (GET /events, "NODES CREATE H"),
+# The server tells every open page of each change to the network (GET /events, "NODES_CHAN CREATE H"),
 # whichever page made it, this one included; each asks for itself again, keeping what its reader
 # picked (#state). Not while a node or a wire is held: what is let go is a change of its own, and
 # its news draws the page again.
