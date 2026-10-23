@@ -24,7 +24,7 @@ one command: a Delete is the Delete key, Backspace, or the menu's "Delete node".
 know who carries the command out. Two observers do (blackboard's Observer: each is an object that
 subscribes itself as it is made, and its `callback` is what it does with what it hears):
 
-    Liaison_Officer the liaison officer: what is for the server it sends there (`send`), so the
+    Liaison_Officer the liaison officer: what is for the server it sends there, so the
                     model is changed in one place, the server's
     Mouse_Follower  a draft (a node still held: `move_node`) only moves the drawing, here and now,
                     many times a second; the liaison leaves it in the browser
@@ -210,14 +210,12 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
         super().__init__(channel)
         listen_to_server("/events", self.news)
 
+    # Send C, unless it is a draft, with the reader's choice (the form #state): its verb is the
+    # method, its thing the URL. A read's answer is the page, in place of #all; a change's is whether
+    # it went through, in place of #problem (the page is drawn again on the news of the change).
     def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c):
-            self.send(c)
-
-    # Send C, with the reader's choice (the form #state): its verb is the method, its thing the URL.
-    # A read's answer is the page, in place of #all; a change's is whether it went through, in place
-    # of #problem (the page is drawn again on the news of the change).
-    def send(self, c: Command):
+        if is_draft(c):
+            return
         let target: str = ("#all" if c.verb == READ else "#problem")
         send_request(c.method(), c.url(), c.fields, target, "#state")
 

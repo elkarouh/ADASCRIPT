@@ -351,7 +351,7 @@ commands_channel.publish(delete_node(self.name))
 
 `commands_channel` is the page's own blackboard (see "Two blackboards and
 a liaison" below), and the gesture is done: it does not know who carries it out. For
-a command that is the model's, that is `send`, the one place a command meets the
+a command that is the model's, that is the liaison's `callback`, the one place a command meets the
 server: the verb is the HTTP method (POST, GET, PUT, DELETE: `c.method()`), the thing is
 the URL (`/nodes`, `/edges`, `/all`: `c.url()`), the reader's choice (`#state`) goes along, and the
 browser module's `send_request` sends it, as a button with hx-* attributes would. The
@@ -478,7 +478,7 @@ carries it out is decided by subscribing:
 
 | Observer | Hears | Does |
 |---|---|---|
-| `Liaison_Officer` | `commands_channel` | the liaison officer: sends to the server what is the server's (`send`) |
+| `Liaison_Officer` | `commands_channel` | the liaison officer: sends to the server what is the server's |
 | `Mouse_Follower` | `commands_channel` | draws a draft here and now: the node still held, and its edges |
 | `Page_Refresher` | `changes_channel` | asks for the page again (`read_network`), which goes out through the liaison |
 
@@ -501,8 +501,10 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
         listen_to_server("/events", self.news)
 
     def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c):
-            self.send(c)
+        if is_draft(c):
+            return
+        let target: str = ("#all" if c.verb == READ else "#problem")
+        send_request(c.method(), c.url(), c.fields, target, "#state")
 
     def news(self, change: str):
         changes_channel.publish(change)
@@ -513,7 +515,7 @@ let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
 ```
 
 So the two ends have one shape: a blackboard, subscribers that know nothing of each
-other, and between the two blackboards the wire, crossed in one place each way (`send`
+other, and between the two blackboards the wire, crossed in one place each way (`callback`
 out, `news` in). A new thing for the page to do with a command, an undo list, a log,
 drawing a deletion before the server confirms it, is one more observer on `commands_channel`,
 and no gesture changes.
@@ -531,7 +533,7 @@ Read it from the top:
    the page's model takes the new place, and `NetworkView.redraw_edges` draws every edge
    that ends at it. The liaison leaves a draft in the browser: nothing goes to the server yet.
 2. **On release**, `Pointer.dropped` publishes the command `update_node(name, at)`, which
-   is not a draft, and the liaison `send`s it.
+   is not a draft, and the liaison sends it.
 3. **htmx sends** `PUT /nodes`. `Session.answer` puts the place into the model
    and publishes `UPDATE A`; the server keeps the file and tells every page.
 4. **Every page reads itself again** (`GET /all`, into `#all`). For this one the new
