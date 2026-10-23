@@ -1,6 +1,6 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""node_editor_js_events -- what the reader does with the node editor's page, in the browser.
+"""node_editor_js_events -- the drawing's own behaviour, in the browser: what a node editor does.
 
 The server draws the nodes (backend/node_editor_gui.ady) and keeps the diagram. What must follow the
 mouse, or ask the reader a question, is here. The gestures:
@@ -14,137 +14,172 @@ mouse, or ask the reader a question, is here. The gestures:
     Delete, Backspace           removes the selection (a node is asked about first)
     double-click the space      a new node there (asks its title)
     Escape                      clears the selection
+    (another page's change)     the page is drawn again, from GET /all
 
-A change the server must keep is sent to it as a request, and the page the server answers with takes
-the place of #all (see node_editor_gui.ady); this file then builds its View again from it.
+It is built as BROWSER_EXAMPLES/DIJKSTRA_HTMX's script is. A gesture never talks to the server: it
+makes a Command, Create, Read, Update or Delete of a node or a connector
+(backend/node_editor_commands.ady, the server's vocabulary too, which reads each request back into
+one), and publishes it on the page's blackboard, the channel `commands_channel`. The gesture does not
+know who carries the command out. Two observers do (blackboard's Observer: each is an object that
+subscribes itself as it is made, and its `callback` is what it does with what it hears):
+
+    Liaison_Officer the liaison officer: what is for the server it sends there, so the diagram is
+                    changed in one place, the server's; and it brings the server's news back
+    Mouse_Follower  a draft (a node still held: `move_node`) only moves the drawing, here and now,
+                    many times a second; the liaison leaves it in the browser
+
+The answer to C, U or D says only whether it went through (the paragraph #problem). What the server
+says changed, on any page, comes in on the other channel, `changes_channel`; the Page_Refresher hears
+it and asks for the page again (R, which takes the place of #all).
 
 The connectors are drawn here and only here, from the diagram the page carries (pre#diagram): the
-View is built from that text with the same Diagram(text) the server keeps it in, and works out where
-every port is from the model, never from the drawing.
+DiagramView is built from that text with the same Diagram(text) the server keeps it in, and works out
+where every port is from the model, never from the drawing.
+
+What is in this file, in its order (each class keeps one thing):
+    the blackboard  the two channels: commands_channel, every gesture's one way out, and
+                    changes_channel, the server's one way in
+    the view        DiagramView: the model, a Diagram, and the connectors the page draws from it
+                    (the one `diagram`, rebuilt when htmx draws the page)
+    the observers   Liaison_Officer, Mouse_Follower: each subscribes itself to the commands, and the
+                    liaison listens to the server's news (and, after the gestures, whose connector it
+                    asks about, Page_Refresher to the changes)
+    the gestures    one object each, whose __init__ says which event runs which of its methods:
+                      Selection  the node or connector clicked last, the keys, and the page drawn again
+                      Pointer    svg_drag's drag and click of a node, and the double-click
+                      Connector  the connector dragged from a port
+    the start       the other gestures and the observers made
 
 The drag of a node is the standard library's svg_drag, the page (finding elements, reading what the
 page says on them, questions, keys) its browser module, and a connector's curve svg_path's.
 """
-from browser import Element_T, Event_T, Click_T, send_request, page, find, all, data, number, text, attr, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
+from blackboard import PublishChannel, Observer
+from browser import Element_T, Event_T, Click_T, send_request, page, find, all, number, text, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first, listen_to_server
 from drawing import Drawing_Pixel_T, Spot_T
-from svg_drag import Hooks_T, spot_at, clamp, shift, no_click_cb, draggable
+from svg_drag import Hooks_T, holding, spot_of, spot_at, shift, draggable
 from svg_path import SIDEWAYS, connector_d
-from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram
+from backend/node_editor_model import NODE_W, NODE_H, WIDTH, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram, inside
+from backend/node_editor_commands import Command, READ, is_draft, number_value, spot, method, url, create_node, update_node, move_node, delete_node, create_link, delete_link, read_diagram
 
-# The model's sizes are in cm; the mouse and the drawing's coordinates are in pixels.
-const DRAWING_W: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH)
-const DRAWING_H: Drawing_Pixel_T = Drawing_Pixel_T(HEIGHT)
-const BOX_W: Drawing_Pixel_T = Drawing_Pixel_T(NODE_W)           # a node's
-const BOX_H: Drawing_Pixel_T = Drawing_Pixel_T(NODE_H)
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
+# ---- The page's blackboard: what the reader asks, and what the server says changed ----
 
-# ---- The model's values, read off the drawing, and the drawing's values as the model's ----
+# The channels of the page's blackboard.
+type Page_Channel_T is enum COMMANDS, CHANGES
+type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel of Page_Channel_T, carrying a Command
+type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
 
-# The id of the node a <g class="node"> draws.
-def node_id_of(el: Element_T) -> int:
-    return int(el.number("data_node"))
+# What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
+var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
+# What the server says changed ("NODES_CHAN CREATE 4"), whichever page changed it.
+var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
 
-# Send a change: METHOD to URL with FIELDS. The page the server answers with takes the place of #all.
-def send(method: str, url: str, fields: {str}str):
-    send_request(method, url, fields, "#all")
+# ---- The view: the diagram as the page holds it, and the connectors it draws ----
 
-# The fields that name a port, by PREFIX ("out" or "in").
-def port_fields(prefix: str, p: Pin_T) -> {str}str:
-    var fields: {str}str = {:}
-    fields[prefix + "_node"] = str(p.node)
-    fields[prefix + "_row"] = str(p.port.row)
-    return fields
-
-# Send the connector from OUT to IN, or ask for it to be deleted.
-def send_link(method: str, l: Link_T):
-    var fields: {str}str = port_fields("out", l.out_port)
-    for k, v in port_fields("in", l.in_port).items():
-        fields[k] = v
-    send(method, "/links", fields)
-
-# The text the server keeps the diagram in, as the page carries it. Before htmx has drawn the page there is
-# none: an empty diagram.
-def kept_text() -> str:
-    let kept: ?Element_T = page.find("pre#diagram")
-    if kept is None:
-        return ""
-    return kept.text()
-
-# ---- The View: the diagram as the page holds it, the connector being drawn, and the selection ----
-
-class View:
-    var diagram: Diagram                # the model, as the server keeps it, with the nodes where they are now
-    var drawing: bool                   # a connector is being dragged from a port
-    var fixed: Pin_T                   # the port it leaves
-    var free: Spot_T                   # and where its other end is, under the mouse
-    var node: int                       # the node selected: its id, -1 for none
-    var link: int                       # the connector selected: its index, -1 for none
-    var swallow: bool                   # the click after a connector is let go: not a click on a node
+# The diagram as the page holds it: a Diagram, built from the text the server keeps it in, as the page
+# carries it (pre#diagram), with the nodes where they are now; and what it draws of the connectors:
+# every joined one, the selected one outlined, and the one the reader is drawing, not joined yet.
+# Before htmx has drawn the page there is no text: an empty diagram.
+class DiagramView(Diagram):
+    var lit: int                    # the connector drawn outlined (the one selected): its index, -1 for none
+    var loose: bool                 # a connector is being drawn, from loose_a to loose_b
+    var loose_a: Spot_T             # its output end
+    var loose_b: Spot_T             # its input end
 
     def __init__(self):
-        self.diagram = Diagram(kept_text())
-        self.drawing = false
-        self.fixed = Pin_T(0, Port_T(INPUT, 0))
-        self.free = Spot_T(0.0, 0.0)
-        self.node = -1
-        self.link = -1
-        self.swallow = false
+        let kept: ?Element_T = page.find("pre#diagram")
+        super().__init__("" if kept is None else kept.text())
+        self.lit = -1
+        self.loose = false
+        self.loose_a = Spot_T(0.0, 0.0)
+        self.loose_b = Spot_T(0.0, 0.0)
         self.redraw()
 
-    # The connector from A to B as markup, with its two ends marked. A wide invisible path on top is what
-    # the reader clicks.
-    def link_html(self, a: Spot_T, b: Spot_T, index: int, lit: bool) -> str:
+    # The id of the node a <g class="node"> draws.
+    def node_of(self, el: Element_T) -> int:
+        return int(el.number("data_node"))
+
+    # The node with ID, as the page draws it; None when it does not.
+    def node_el(self, id: int) -> ?Element_T:
+        return page.find(f"g.node[data_node=\"{id}\"]")
+
+    # The connector from A to B as markup, with its two ends marked. A wide invisible path on top is
+    # what the reader clicks.
+    def link_html(self, a: Spot_T, b: Spot_T, index: int) -> str:
         let d: str = connector_d(float(a.x), float(a.y), float(b.x), float(b.y), SIDEWAYS, 0.0, BEZIER_WEIGHT)
-        let css: str = ("link selected" if lit else "link")
+        let css: str = ("link selected" if index == self.lit and index >= 0 else "link")
         return f"<g class='{css}' data-index='{index}'><path class='connector-hit' d='{d}'/><path class='connector-outline' d='{d}'/><path class='connector-path' d='{d}'/><circle class='connector-handle' cx='{a.x:.1f}' cy='{a.y:.1f}' r='4'/><circle class='connector-handle' cx='{b.x:.1f}' cy='{b.y:.1f}' r='4'/></g>"
 
-    # Draw every connector again: the joined ones, and the one being dragged.
+    # Draw every connector again: the joined ones, and the one being drawn.
     def redraw(self):
         var markup: str = ""
-        for i in range(len(self.diagram.links)):
-            let l: Link_T = self.diagram.links[i]
-            markup = markup + self.link_html(self.diagram.spot_of(l.out_port), self.diagram.spot_of(l.in_port), i, i == self.link)
-        if self.drawing:
-            if self.fixed.port.side == OUTPUT:
-                markup = markup + self.link_html(self.diagram.spot_of(self.fixed), self.free, -1, false)
-            else:
-                markup = markup + self.link_html(self.free, self.diagram.spot_of(self.fixed), -1, false)
+        for i in range(len(self.links)):
+            let l: Link_T = self.links[i]
+            markup = markup + self.link_html(self.spot_of(l.out_port), self.spot_of(l.in_port), i)
+        if self.loose:
+            markup = markup + self.link_html(self.loose_a, self.loose_b, -1)
         let layer: ?Element_T = page.find("#connections-layer")
         if layer is not None:
             layer.set_html(markup)
 
-    # ---- a drag from a port ----
+var diagram: DiagramView = DiagramView()     # read again each time htmx draws the page (Selection.page_drawn)
 
-    # The press on PORT: a connector starts from it, its free end at SPOT.
-    def start(self, p: Pin_T, spot: Spot_T):
-        self.drawing = true
-        self.fixed = p
-        self.free = spot
-        self.swallow = false
-        self.redraw()
+# ---- The observers of commands: the liaison officer, and the draft's drawer ----
 
-    # The mouse has taken the free end to SPOT.
-    def drag_to(self, spot: Spot_T):
-        self.free = spot
-        self.redraw()
+# It hears every command: one that is for the server goes there; a draft stays in the browser. And
+# it brings the server's news back: what GET /events says changed goes on changes_channel.
+class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def __init__(self, channel: var Command_Channel_T):
+        super().__init__(channel)
+        listen_to_server("/events", self.news)
 
-    # The release at SPOT: on a port that fits, the connector is sent to the server, which keeps it; anywhere
-    # else it is removed.
-    def finish(self, spot: Spot_T):
-        self.drawing = false
-        self.swallow = true
-        let other: Side_T = (INPUT if self.fixed.port.side == OUTPUT else OUTPUT)
-        let hit: ?Pin_T = self.diagram.port_at(spot, other, self.fixed.node)
-        if hit is None:
-            self.redraw()
+    # Send C, unless it is a draft: its verb is the method, its thing the URL. A read's answer is the
+    # page, in place of #all; a change's is whether it went through, in place of #problem (the page
+    # is drawn again on the news of the change).
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if is_draft(c):
             return
-        if self.fixed.port.side == OUTPUT:
-            send_link("POST", Link_T(self.fixed, hit))
-        else:
-            send_link("POST", Link_T(hit, self.fixed))
+        let target: str = ("#all" if c.verb == READ else "#problem")
+        send_request(c.method(), c.url(), c.fields, target)
 
-    # ---- the selection ----
+    # The server says CHANGE ("NODES_CHAN CREATE 4"), whichever page made it.
+    def news(self, change: str):
+        changes_channel.publish(change)
+
+# It draws a draft of a node's move (move_node, the only draft): the node is drawn where it is
+# asked to be, the page's model keeps the place, and the connectors at its ports are drawn again.
+# Nothing goes to the server.
+class Mouse_Follower(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c):
+            return
+        let id: int = c.number_value("id")
+        let el: ?Element_T = diagram.node_el(id)
+        let now: ?Spot_T = c.spot()
+        if el is None or now is None:
+            return
+        shift(el, spot_of(el), now)
+        let moved: None | !Refusal_T = diagram.move(id, now)
+        diagram.redraw()
+
+# ---- The gestures: one object each, with the events it listens to ----
+#
+# Each gesture is an object that keeps its own state; its methods are what the page's events do,
+# and its __init__ says which event runs which (listen), so making it is starting it. A gesture
+# only publishes commands.
+
+# The reader's selection: the node or connector clicked last, what the keys do to it, and the page
+# drawn again by the server.
+class Selection:
+    var node: int                   # the node selected: its id, -1 for none
+    var link: int                   # the connector selected: its index, -1 for none
+
+    def __init__(self):
+        self.node = -1
+        self.link = -1
+        listen("keydown", self.key_pressed)
+        listen("htmx:afterSwap", self.page_drawn)
 
     # Take the outline off what is selected, and forget it.
     def clear(self):
@@ -152,131 +187,193 @@ class View:
             el.set_attr("class", "node")
         self.node = -1
         self.link = -1
-        self.redraw()
+        diagram.lit = -1
+        diagram.redraw()
 
     # Select the node EL, in place of what was selected.
     def select_node(self, el: Element_T):
         self.clear()
-        self.node = node_id_of(el)
+        self.node = diagram.node_of(el)
         el.set_attr("class", "node selected")
 
     # Select the connector with index I, in place of what was selected.
     def select_link(self, i: int):
         self.clear()
         self.link = i
-        self.redraw()
+        diagram.lit = i
+        diagram.redraw()
 
     # Delete what is selected: a node after asking, a connector at once.
     def remove(self):
         if self.node >= 0:
-            let i: int = self.diagram.index_of(self.node)
-            if i >= 0 and ask_yes(f"Delete {self.diagram.nodes[i].title} and its connectors?"):
-                send("DELETE", "/nodes", {"id": str(self.node)})
-        elif self.link >= 0 and self.link < len(self.diagram.links):
-            send_link("DELETE", self.diagram.links[self.link])
+            let i: int = diagram.index_of(self.node)
+            if i >= 0 and ask_yes(f"Delete {diagram.nodes[i].title} and its connectors?"):
+                commands_channel.publish(delete_node(self.node))
+        elif self.link >= 0 and self.link < len(diagram.links):
+            commands_channel.publish(delete_link(diagram.links[self.link]))
 
-var view: View = View()                 # the page is read again each time htmx draws it (page_drawn)
+    # Delete and Backspace remove what is selected; Escape clears the selection.
+    def key_pressed(self, e: Event_T):
+        case key_of(e):
+            when "Escape":
+                self.clear()
+            when "Delete" | "Backspace":
+                self.remove()
+            when others:
+                pass                    # any other key
 
-# ---- Moving a node: svg_drag's hooks ----
+    # The page was drawn again by the server: what was selected is gone with the old drawing
+    # (forgotten, not unmarked), and the diagram is read off the new one.
+    def page_drawn(self, e: Event_T):
+        self.node = -1
+        self.link = -1
+        diagram = DiagramView()
 
-# While NODE is dragged: it goes where the mouse takes it, kept inside the drawing, and the
-# connectors at its ports follow.
-def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let now: Spot_T = Spot_T(x=clamp(wanted.x, 0.0, DRAWING_W - BOX_W), y=clamp(wanted.y, 0.0, DRAWING_H - BOX_H))
-    shift(node, centre, now)
-    let moved: None | !Refusal_T = view.diagram.move(node_id_of(node), now)
-    view.redraw()
-    return now
+let selection: Selection = Selection()     # made here: the other gestures act on it
 
-# NODE let go at AT: the server keeps where it is.
-def dropped_cb(node: Element_T, at: Spot_T):
-    send("PUT", "/nodes", {"id": str(node_id_of(node)), "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+# The pointer on the drawing: svg_drag's drag of a node, which calls moved, dropped or clicked,
+# and the double-click.
+class Pointer:
+    def __init__(self):
+        draggable("g.node", "svg#editor", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=self.moved, dropped_cb=self.dropped, clicked_cb=self.clicked))
+        listen("dblclick", self.double_clicked)
 
-# A click that svg_drag did not take for a drag: on a node or a connector it selects it, anywhere else in
-# the drawing it clears the selection. A click outside the drawing (the toolbar) is none of this.
-def clicked_cb(c: Click_T):
-    if on(c, "svg#editor") is None:
-        return
-    let node: ?Element_T = on(c, "g.node")
-    if node is not None:
-        view.select_node(node)
-        return
-    let link: ?Element_T = on(c, "g.link")
-    if link is not None:
-        view.select_link(int(link.number("data_index")))
-        return
-    view.clear()
+    # While NODE is dragged: it is asked to go where the mouse takes it, kept inside the drawing (a
+    # draft, which the Mouse_Follower draws).
+    def moved(self, node: Element_T, corner: Spot_T, wanted: Spot_T) -> Spot_T:
+        let now: Spot_T = inside(wanted)
+        commands_channel.publish(move_node(diagram.node_of(node), now))
+        return now
 
-# The page was drawn again by the server: the old drawing, and what was selected on it, are gone.
-def page_drawn(e: Event_T):
-    view = View()
+    # NODE let go at AT: it is moved there (U).
+    def dropped(self, node: Element_T, at: Spot_T):
+        commands_channel.publish(update_node(diagram.node_of(node), at))
 
-# ---- A drag from a port: a connector ----
+    # A click that svg_drag did not take for a drag: on a node or a connector it selects it, anywhere
+    # else in the drawing it clears the selection. A click outside the drawing (the toolbar) is none
+    # of this.
+    def clicked(self, c: Click_T):
+        if on(c, "svg#editor") is None:
+            return
+        let node: ?Element_T = on(c, "g.node")
+        if node is not None:
+            selection.select_node(node)
+            return
+        let link: ?Element_T = on(c, "g.link")
+        if link is not None:
+            selection.select_link(int(link.number("data_index")))
+            return
+        selection.clear()
+
+    # A double-click on the space: a new node there, its middle where the mouse is, after its title
+    # is asked.
+    def double_clicked(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        if on(c, "svg#editor") is None or on(c, "g.node") is not None or on(c, "g.link") is not None:
+            return
+        let title: str = ask("Title of the new node?", f"Process {diagram.next_id() + 1}")
+        if title == "":
+            return
+        let at: Spot_T = spot_at(e)
+        commands_channel.publish(create_node(title, inside(Spot_T(at.x - Drawing_Pixel_T(NODE_W) / 2.0, at.y - Drawing_Pixel_T(NODE_H) / 2.0))))
+
+# A drag from a port: a connector, which is made when it is let go on a port that fits.
 #
 # A press on a port holds it for a connector, not for a move of the node: the press is stopped before
 # svg_drag sees it. Which port is under the mouse is asked of the model, not of the page: the end of a
-# connector that is joined to the port lies over it, and would take the press.
+# connector that is joined to the port lies over it, and would take the press. The browser's click
+# after the release belongs to the connector, so it is not a selection.
+class Connector:
+    var drawing: bool               # a connector is being drawn
+    var fixed: Pin_T                # the port it leaves
+    var swallow: bool               # the click after a connector is let go: not a click on a node
 
-def press(e: Event_T):
-    let c: Click_T = click_of(e)
-    if not left(c):
-        return
-    let spot: Spot_T = spot_at(e)
-    var port: ?Pin_T = view.diagram.port_at(spot, OUTPUT, -1)
-    if port is None:
-        port = view.diagram.port_at(spot, INPUT, -1)
-    if port is None:
-        return
-    stop(c)
-    view.start(port, spot)
+    def __init__(self):
+        self.drawing = false
+        self.fixed = Pin_T(0, Port_T(INPUT, 0))
+        self.swallow = false
+        listen_first("mousedown", self.down)
+        listen("mousemove", self.move)
+        listen("mouseup", self.up)
+        listen_first("click", self.swallow_click)
 
-def move(e: Event_T):
-    if view.drawing:
-        view.drag_to(spot_at(e))
+    # Draw the connector from the fixed port to FREE, the mouse: an output's runs from the port, an
+    # input's to it.
+    def draw_to(self, free: Spot_T):
+        diagram.loose = true
+        if self.fixed.port.side == OUTPUT:
+            diagram.loose_a = diagram.spot_of(self.fixed)
+            diagram.loose_b = free
+        else:
+            diagram.loose_a = free
+            diagram.loose_b = diagram.spot_of(self.fixed)
+        diagram.redraw()
 
-def release(e: Event_T):
-    if view.drawing:
-        view.finish(spot_at(e))
-
-# The click after a connector is let go belongs to the connector: it goes no further.
-def swallow_click(e: Event_T):
-    let c: Click_T = click_of(e)
-    if view.swallow and made_by_reader(c):
-        view.swallow = false
+    # The press: on a port, a connector starts from it.
+    def down(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        if not left(c):
+            return
+        let at: Spot_T = spot_at(e)
+        var port: ?Pin_T = diagram.port_at(at, OUTPUT, -1)
+        if port is None:
+            port = diagram.port_at(at, INPUT, -1)
+        if port is None:
+            return
         stop(c)
+        self.drawing = true
+        self.fixed = port
+        self.swallow = false
+        self.draw_to(at)
 
-# ---- A new node: double-click the space ----
+    # The mouse moves: the connector's free end follows it.
+    def move(self, e: Event_T):
+        if self.drawing:
+            self.draw_to(spot_at(e))
 
-def double_click(e: Event_T):
-    let c: Click_T = click_of(e)
-    if on(c, "svg#editor") is None or on(c, "g.node") is not None or on(c, "g.link") is not None:
-        return
-    let title: str = ask("Title of the new node?", f"Process {view.diagram.next_id() + 1}")
-    if title == "":
-        return
-    let at: Spot_T = spot_at(e)
-    let x: Drawing_Pixel_T = clamp(at.x - BOX_W / 2.0, 0.0, DRAWING_W - BOX_W)       # the node's middle goes where the mouse is
-    let y: Drawing_Pixel_T = clamp(at.y - BOX_H / 2.0, 0.0, DRAWING_H - BOX_H)
-    send("POST", "/nodes", {"title": title, "x": f"{x:.0f}", "y": f"{y:.0f}"})
+    # The release: on a port that fits, the connector is asked for; anywhere else it is removed.
+    def up(self, e: Event_T):
+        if not self.drawing:
+            return
+        self.drawing = false
+        self.swallow = true
+        diagram.loose = false
+        diagram.redraw()
+        let other: Side_T = (INPUT if self.fixed.port.side == OUTPUT else OUTPUT)
+        let hit: ?Pin_T = diagram.port_at(spot_at(e), other, self.fixed.node)
+        if hit is None:
+            return
+        if self.fixed.port.side == OUTPUT:
+            commands_channel.publish(create_link(Link_T(self.fixed, hit)))
+        else:
+            commands_channel.publish(create_link(Link_T(hit, self.fixed)))
 
-# Delete and Backspace remove what is selected; Escape clears the selection.
-def key_down(e: Event_T):
-    let key: str = key_of(e)
-    case key:
-        when "Escape":
-            view.clear()
-        when "Delete":
-            view.remove()
-        when "Backspace":
-            view.remove()
-        when others:
-            pass                            # any other key
+    # The click after the release belongs to the connector: it goes no further.
+    def swallow_click(self, e: Event_T):
+        let c: Click_T = click_of(e)
+        if self.swallow and made_by_reader(c):
+            self.swallow = false
+            stop(c)
 
-listen_first("mousedown", press)
-listen("mousemove", move)
-listen("mouseup", release)
-listen_first("click", swallow_click)
-listen("dblclick", double_click)
-listen("keydown", key_down)
-listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg#editor", DRAWING_W, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+let connector: Connector = Connector()     # made here: the Page_Refresher asks whether a connector is held
+
+# ---- The observer of changes ----
+
+# The server tells every open page of each change to the diagram (GET /events, "NODES_CHAN CREATE 4"),
+# whichever page made it, this one included; each asks for itself again. Not while a node or a
+# connector is held: what is let go is a change of its own, and its news draws the page again.
+class Page_Refresher(Observer[Page_Channel_T, str]):
+    def callback(self, channel: Page_Channel_T, change: str):
+        if holding() or connector.drawing:
+            return
+        commands_channel.publish(read_diagram())
+
+# ---- Start: the page's knowledge sources ----
+
+# The gesture nothing else asks about (the selection and the connector are made above).
+let pointer: Pointer = Pointer()
+
+# Each observer subscribes itself to its channel as it is made.
+let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
+let page_refresher: Page_Refresher = Page_Refresher(changes_channel)

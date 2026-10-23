@@ -2,7 +2,7 @@
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_node_editor.ady)"""
 from drawing import Spot_T
 from backend/node_editor_model import Diagram, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot, sample
-from backend/node_editor_events_gui import Session
+from backend/node_editor_events_gui import Channel_T, Change, Session
 
 # ---- the model ----
 var d: Diagram = sample()
@@ -41,24 +41,48 @@ let page: str = session.answer("GET", "/all", "")
 assert page.count("class=\"node\"") == 4 and "Process 4" in page and "Output 12" in page
 assert "<pre id=\"diagram\">node 0 50 50 Process 1\n" in page
 assert "<svg id=\"editor\"" in page and "id=\"connections-layer\"" in page
+assert "<p id=\"problem\" class=\"problem\"></p>" in page               # nothing wrong yet
 assert session.answer("GET", "/nowhere", "") == ""
-assert "Mixer" in session.answer("POST", "/nodes", "title=Mixer&x=300&y=300") and "node 4 300 300 Mixer" in session.answer("GET", "/all", "")
+assert session.answer("PATCH", "/nodes", "") == ""
+
+# A change answers only the paragraph #problem: empty when it went through.
+const DONE: str = "<p id=\"problem\" class=\"problem\"></p>"
+def diagram_now() -> str:
+    return session.answer("GET", "/all", "")
+
+# What the session published, as the server's subscribers hear it.
+var heard: []str = []
+def note(channel: Channel_T, change: Change):
+    heard.append(f"{channel} {change.kind} {change.key}")
+session.nodes_channel.subscribe(note)
+session.links_channel.subscribe(note)
+
+assert session.answer("POST", "/nodes", "title=Mixer&x=300&y=300") == DONE and "node 4 300 300 Mixer" in diagram_now()
 assert "A title is 1 to 24 characters." in session.answer("POST", "/nodes", "title=&x=1&y=1")
-assert "node 4 120 80 Mixer" in session.answer("PUT", "/nodes", "id=4&x=120&y=80")
+assert "There is no place." in session.answer("POST", "/nodes", "title=Lost")
+assert session.answer("PUT", "/nodes", "id=4&x=120&y=80") == DONE and "node 4 120 80 Mixer" in diagram_now()
 assert "There is no node 9." in session.answer("PUT", "/nodes", "id=9&x=1&y=1")
-assert "link 4 1 1 0" in session.answer("POST", "/links", "out_node=4&out_row=1&in_node=1&in_row=0")
+assert session.answer("POST", "/links", "out_node=4&out_row=1&in_node=1&in_row=0") == DONE and "link 4 1 1 0" in diagram_now()
 assert "is joined to" in session.answer("POST", "/links", "out_node=4&out_row=1&in_node=1&in_row=0")
-assert "link 4 1 1 0" not in session.answer("DELETE", "/links", "out_node=4&out_row=1&in_node=1&in_row=0")
+assert "not changed" in session.answer("PUT", "/links", "out_node=4&out_row=1&in_node=1&in_row=0")
+assert session.answer("DELETE", "/links", "out_node=4&out_row=1&in_node=1&in_row=0") == DONE and "link 4 1 1 0" not in diagram_now()
 session.answer("POST", "/links", "out_node=4&out_row=2&in_node=0&in_row=0")
-assert "link 4 2 0 0" not in session.answer("DELETE", "/nodes", "id=4")     # its connector went with it
-assert "node 4" not in session.answer("GET", "/all", "")
-assert "node 0 50 50 Process 1" in session.answer("POST", "/reset", "")
-assert "&lt;b&gt;" in session.answer("POST", "/nodes", "title=%3Cb%3E&x=1&y=1")    # what the reader typed is escaped
+assert session.answer("DELETE", "/nodes", "id=4") == DONE
+assert "node 4" not in diagram_now() and "link 4 2 0 0" not in diagram_now()     # its connector went with it
+assert heard == ["NODES_CHAN CREATE 4", "NODES_CHAN UPDATE 4", "LINKS_CHAN CREATE 4 1 1 0", "LINKS_CHAN DELETE 4 1 1 0", "LINKS_CHAN CREATE 4 2 0 0", "LINKS_CHAN DELETE 4 2 0 0", "NODES_CHAN DELETE 4"]
+assert session.answer("POST", "/reset", "") == DONE and "node 0 50 50 Process 1" in diagram_now()
+assert heard[len(heard) - 2:] == ["LINKS_CHAN UPDATE ", "NODES_CHAN UPDATE "]
+session.answer("POST", "/nodes", "title=%3Cb%3E&x=1&y=1")
+assert "&lt;b&gt;" in diagram_now()                                         # what the reader typed is escaped
 session.answer("POST", "/reset", "")
 
 # ---- kept in a file, and read back by a Session of its own ----
 let store: str = "test_node_editor_store.txt"
 var kept: Session = Session(store)
+def keep(channel: Channel_T, change: Change):           # as the server subscribes it
+    kept.keep()
+kept.nodes_channel.subscribe(keep)
+kept.links_channel.subscribe(keep)
 kept.answer("POST", "/reset", "")
 kept.answer("POST", "/nodes", "title=Kept one&x=7&y=9")
 kept.answer("POST", "/links", "out_node=1&out_row=0&in_node=4&in_row=2")

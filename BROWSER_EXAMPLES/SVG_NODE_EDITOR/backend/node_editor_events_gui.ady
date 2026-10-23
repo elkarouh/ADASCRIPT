@@ -2,29 +2,86 @@
 """node_editor_events_gui -- what each event the page sends does, and the diagram it does it to; no HTTP.
 
 server.ady hands every request to a Session, as a method, a path and its fields, and sends back
-the page that comes out. The tests make a Session of their own and call answer() the same way, with
-no server running. A Session keeps the diagram in a text file (its store), written after every change.
-"""
-from drawing import Drawing_Pixel_T, Spot_T
-from backend/node_editor_model import Diagram, Pin_T, Refusal_T, Side_T, sample
-from backend/node_editor_gui import all_text
-from backend/node_editor_request import field_of, number_of, port_of
+what comes out. The tests make a Session of their own and call answer() the same way, with no server
+running.
 
-# The diagram, and the file it is kept in. The server makes one that keeps it in diagram.txt; the tests
-# make one that keeps it nowhere.
+Commands in, events out, as in DIJKSTRA_HTMX. Every request is read back into a Command, the page's
+own vocabulary (node_editor_commands.ady): Create, Read, Update or Delete, of a node or a connector. A
+read answers the whole page. A change answers only whether it went through: the paragraph #problem,
+empty, or saying why not. When it went through, what it changed is published with the same verbs,
+one channel per collection, named by Channel_T: NODES_CHAN and LINKS_CHAN carry a Change (CREATE,
+UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which keeps the
+diagram in its file (`keep`) and tells every open page, which then reads itself again -- and the
+Session knows none of them:
+
+    def heard(channel: Channel_T, change: Change):
+        print channel, change.kind, change.key          # "NODES_CHAN CREATE 4", "LINKS_CHAN DELETE 0 2 3 2"
+    session.nodes_channel.subscribe(heard)
+
+Reset is no command on one node or connector: it is its own route, and what it changed is an UPDATE
+with no key: everything, read it all again.
+"""
+from uri nimport decodeUrl
+from drawing import Drawing_Pixel_T, Spot_T
+from blackboard import PublishChannel
+from backend/node_editor_model import Diagram, Link_T, Refusal_T, sample
+from backend/node_editor_gui import all_text, problem_text
+from backend/node_editor_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, LINK, DIAGRAM, command_of, value, number_value, spot, link
+
+# ---- A request: its method, its path and its fields ----
+
+class Request:
+    var method: str                 # GET, POST, PUT, DELETE
+    var path:   str                 # /all, /nodes, /links, ...
+    var fields: {str}str            # by name, from the query and the body
+
+    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2").
+    def __init__(self, method: str, path: str, text: str):
+        self.method = method
+        self.path = path
+        self.fields = {:}
+        for pair in text.split("&"):
+            let at: int = pair.find("=")
+            if at > 0:
+                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
+
+    # The command this request is; None when it is none.
+    def command(self) -> ?Command:
+        return command_of(self.method, self.path, self.fields)
+
+# The channels of the server's blackboard: one per collection.
+type Channel_T is enum NODES_CHAN, LINKS_CHAN
+
+# What a command changed, as the channels carry it, in the commands' verbs: the node's id, or the
+# connector's two ports ("0 2 3 2"); "" for everything (reset), which is read again whole.
+type Change is record:
+    kind: Verb_T
+    key:  str
+
+# A channel of the session's: one of Channel_T, carrying a Change.
+type Change_Channel_T is PublishChannel[Channel_T, Change]
+
+# A connector as a Change names it: from output out_row of out_node to input in_row of in_node.
+def link_key(l: Link_T) -> str:
+    return f"{l.out_port.node} {l.out_port.port.row} {l.in_port.node} {l.in_port.port.row}"
+
+# The diagram, and the file it is kept in. The server makes one that keeps it in diagram.txt; the
+# tests make one that keeps it nowhere.
 class Session:
     var diagram: Diagram
     var store: str                      # the file the diagram is kept in; "" keeps it nowhere
+    var unsaved: None | !Refusal_T      # why the last change could not be kept, shown on the page
+    var nodes_channel: Change_Channel_T = Change_Channel_T(NODES_CHAN)    # what happened to a node
+    var links_channel: Change_Channel_T = Change_Channel_T(LINKS_CHAN)    # what happened to a connector
 
     def __init__(self, store: str):
         self.store = store
-        self.diagram = sample()
-        if store != "":
-            let text: str | !PathFailure_T = Path(store).read_text()
-            if text is PathFailure_T:
-                pass                    # no file yet: the sample
-            else:
-                self.diagram = Diagram(text)
+        self.unsaved = None
+        let text: str | !PathFailure_T = Path(store).read_text()
+        if text is PathFailure_T:
+            self.diagram = sample()     # no file yet, or kept nowhere (""): the sample
+        else:
+            self.diagram = Diagram(text)
 
     # The diagram written to the store: refused with why, when it was not.
     def save(self) -> None | !Refusal_T:
@@ -33,43 +90,84 @@ class Session:
             if done is PathFailure_T:
                 return Refusal_T(message=f"Could not write {self.store}.")
 
-    # The routes, all answered by answer below: each is a whole page, sent back to htmx to swap in.
+    # Keep the diagram in the store, after a change: what the server subscribes to the channels.
+    # When it cannot, every page says so, from `unsaved`, until a later change is kept.
+    def keep(self):
+        self.unsaved = self.save()
+
+    # The routes, all answered by answer below. Each but the last is a Command (on the wire, the verb
+    # is the method and the thing the URL); the read answers a whole page for htmx to swap in, the
+    # others the paragraph #problem (empty when the command went through).
     #
-    #     GET    /all          the page again
-    #     POST   /nodes        create a node                       (title, x, y: its top left corner)
-    #     PUT    /nodes        move a node, after a drag           (id, x, y)
-    #     DELETE /nodes        delete a node and its connectors    (id)
-    #     POST   /links        join an output port to an input     (out_node, out_row, in_node, in_row)
-    #     DELETE /links        delete a connector                  (out_node, out_row, in_node, in_row)
+    #     GET    /all          R the page again
+    #     POST   /nodes        C a node                            (title, x, y: its top left corner)
+    #     PUT    /nodes        U a node moved, after a drag        (id, x, y)
+    #     DELETE /nodes        D a node and its connectors         (id)
+    #     POST   /links        C a connector, output to input      (out_node, out_row, in_node, in_row)
+    #     DELETE /links        D a connector                       (out_node, out_row, in_node, in_row)
     #     POST   /reset        put the sample diagram back
 
-    # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): the page to
-    # send back, or "" when there is no such thing.
+    # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
+    # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
+        let r: Request = Request(method, path, fields)
+        if r.method == "POST" and r.path == "/reset":
+            self.diagram = sample()
+            self.links_channel.publish(Change(UPDATE, ""))
+            self.nodes_channel.publish(Change(UPDATE, ""))
+            let went: None | !Refusal_T = None      # a reset cannot be refused
+            return problem_text(went)
+        let c: ?Command = r.command()
+        if c is None:
+            return ""
+        if c.verb == READ:
+            return all_text(self.diagram, self.unsaved)
+        return problem_text(self.carry_out(c))
+
+    # Carry out the change C, and when it went through publish what it changed: why not, when it did not.
+    def carry_out(self, c: Command) -> None | !Refusal_T:
         var problem: None | !Refusal_T = None
-        let id: int = int(number_of(field_of(fields, "id")))
-        let at: Spot_T = Spot_T(Drawing_Pixel_T(number_of(field_of(fields, "x"))), Drawing_Pixel_T(number_of(field_of(fields, "y"))))
-        let out_port: Pin_T = port_of(fields, "out", OUTPUT)
-        let in_port: Pin_T = port_of(fields, "in", INPUT)
-        case method + " " + path:
-            when "GET /all":
-                pass
-            when "POST /nodes":
-                problem = self.diagram.add_node(field_of(fields, "title"), at)
-            when "PUT /nodes":
-                problem = self.diagram.move(id, at)
-            when "DELETE /nodes":
-                problem = self.diagram.remove_node(id)
-            when "POST /links":
-                problem = self.diagram.add_link(out_port, in_port)
-            when "DELETE /links":
-                problem = self.diagram.remove_link(out_port, in_port)
-            when "POST /reset":
-                self.diagram = sample()
-            when others:
-                return ""
-        if method != "GET" and problem is None:
-            let saved: None | !Refusal_T = self.save()
-            if saved is Refusal_T:
-                return all_text(self.diagram, saved)
-        return all_text(self.diagram, problem)
+        var node_changes: []Change = []             # published once the command went through
+        var link_changes: []Change = []
+        case c.thing:
+            when NODE:
+                var id: int = c.number_value("id")
+                let at: ?Spot_T = c.spot()
+                case c.verb:
+                    when CREATE:
+                        id = self.diagram.next_id()
+                        if at is None:
+                            problem = Refusal_T(message="Where should the node go? There is no place.")
+                        else:
+                            problem = self.diagram.add_node(c.value("title"), at)
+                    when UPDATE:
+                        if at is None:
+                            problem = Refusal_T(message=f"Where should node {id} go? There is no place.")
+                        else:
+                            problem = self.diagram.move(id, at)
+                    when DELETE:
+                        for l in self.diagram.links:        # its connectors go with it, and are told first
+                            if l.out_port.node == id or l.in_port.node == id:
+                                link_changes.append(Change(DELETE, link_key(l)))
+                        problem = self.diagram.remove_node(id)
+                    when READ:
+                        pass                                # never: a read is of the diagram (command_of)
+                node_changes.append(Change(c.verb, str(id)))
+            when LINK:
+                let l: Link_T = c.link()
+                case c.verb:
+                    when CREATE:
+                        problem = self.diagram.add_link(l.out_port, l.in_port)
+                    when DELETE:
+                        problem = self.diagram.remove_link(l.out_port, l.in_port)
+                    when others:
+                        problem = Refusal_T(message="A connector is made or deleted, not changed.")
+                link_changes.append(Change(c.verb, link_key(l)))
+            when DIAGRAM:
+                pass                                        # only read (command_of)
+        if problem is None:
+            for ch in link_changes:
+                self.links_channel.publish(ch)
+            for ch in node_changes:
+                self.nodes_channel.publish(ch)
+        return problem

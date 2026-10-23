@@ -20,14 +20,14 @@ PORT    ?= 8802
 all: server frontend/node_editor_js_events.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so this always runs it.
-server: backend/node_editor_model.ady backend/node_editor_request.ady backend/node_editor_gui.ady backend/node_editor_events_gui.ady backend/server.ady
+server: backend/node_editor_model.ady backend/node_editor_commands.ady backend/node_editor_gui.ady backend/node_editor_events_gui.ady backend/server.ady
 	@echo "building backend/server"
 	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 # The one script of our own, Adascript compiled to JavaScript; the server sends it as /node_editor_js_events.js.
 # backend/ is native (C), frontend/ is what the browser runs; the model is compiled both ways.
-frontend/node_editor_js_events.js: frontend/node_editor_js_events.ady backend/node_editor_model.ady
+frontend/node_editor_js_events.js: frontend/node_editor_js_events.ady backend/node_editor_model.ady backend/node_editor_commands.ady
 	@echo "building frontend/node_editor_js_events.js"
 	@$(ADY2NIM) js frontend/node_editor_js_events.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
@@ -41,4 +41,4 @@ test:
 
 clean:
 	rm -rf backend/server tests/test_node_editor test_node_editor frontend/node_editor_js_events.js build.log build \
-	    backend/node_editor_model backend/node_editor_gui backend/node_editor_request backend/node_editor_events_gui
+	    backend/node_editor_model backend/node_editor_gui backend/node_editor_commands backend/node_editor_events_gui

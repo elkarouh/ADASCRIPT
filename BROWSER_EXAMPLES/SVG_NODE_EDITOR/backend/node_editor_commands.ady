@@ -1,0 +1,133 @@
+#!/usr/bin/env ady2nim
+"""node_editor_commands -- the one vocabulary of the page and the server: Create, Read, Update or
+Delete, of a node or a connector. Compiled both ways, like the model: the page makes commands, the
+server reads each request back into one, and both go by the same words.
+
+A Command is its verb (CREATE, READ, UPDATE, DELETE), what it is done to (a NODE, a LINK, or the
+whole DIAGRAM, which is what is read), and its fields by name:
+
+    delete_node(2)                      # D: DELETE /nodes   id=2
+    create_link(Link_T(out, in))        # C: POST   /links   out_node=0 out_row=2 in_node=3 in_row=2
+    update_node(2, at)                  # U: PUT    /nodes   id=2 x=.. y=..
+    move_node(2, at)                    # U, a draft: the node still held; it stays in the browser
+    read_diagram()                      # R: GET    /all
+
+On the wire the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say
+which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a
+command on its own blackboard and its liaison sends it (`Liaison_Officer` in node_editor_js_events.ady),
+unless it is a draft (`is_draft`), which stays in the browser; the server reads it back
+(`Session.answer` in node_editor_events_gui.ady) and carries it out; and what it changed goes out
+with the same verbs (a `Change`, also of this module's Verb_T). No HTML, no HTTP.
+"""
+from drawing import Drawing_Pixel_T, Spot_T
+from backend/node_editor_model import Side_T, Port_T, Pin_T, Link_T
+
+type Verb_T is enum CREATE, READ, UPDATE, DELETE
+type Thing_T is enum NODE, LINK, DIAGRAM
+
+type Command is record:
+    verb:   Verb_T
+    thing:  Thing_T
+    fields: {str}str
+
+# The field NAME of command C, or "" when it has none.
+def value(c: Command, name: str) -> str:
+    if name in c.fields:
+        return c.fields[name]
+    return ""
+
+# The field NAME of command C as a whole number; -1 when it is none, which the model refuses.
+def number_value(c: Command, name: str) -> int:
+    let n: int | !ParseFailure_T = parse_int(c.value(name))
+    if n is ParseFailure_T:
+        return -1
+    return n
+
+# Where command C puts its node: its fields x and y; None when it has none, or they are not numbers.
+def spot(c: Command) -> ?Spot_T:
+    let x: float | !ParseFailure_T = parse_float(c.value("x"))
+    let y: float | !ParseFailure_T = parse_float(c.value("y"))
+    if x is ParseFailure_T:
+        return None
+    if y is ParseFailure_T:
+        return None
+    return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
+
+# The connector command C names: its fields out_node, out_row, in_node and in_row.
+def link(c: Command) -> Link_T:
+    Link_T(Pin_T(c.number_value("out_node"), Port_T(OUTPUT, c.number_value("out_row"))), Pin_T(c.number_value("in_node"), Port_T(INPUT, c.number_value("in_row"))))
+
+# ---- On the wire: the verb is the HTTP method, the thing is the URL ----
+
+# The HTTP method command C goes by: its verb.
+def method(c: Command) -> str:
+    case c.verb:
+        when CREATE:
+            return "POST"
+        when READ:
+            return "GET"
+        when UPDATE:
+            return "PUT"
+        when DELETE:
+            return "DELETE"
+
+# The URL command C goes to: what it is done to.
+def url(c: Command) -> str:
+    case c.thing:
+        when NODE:
+            return "/nodes"
+        when LINK:
+            return "/links"
+        when DIAGRAM:
+            return "/all"
+
+# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. The diagram is
+# only read, and only the diagram is read.
+def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
+    for verb in Verb_T:
+        for thing in Thing_T:
+            let c: Command = Command(verb, thing, fields)
+            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == DIAGRAM):
+                return c
+    return None
+
+# ---- The commands, by name: one each for what the page can ask ----
+
+# C: a node titled TITLE, its top left corner at AT (in the drawing's units).
+def create_node(title: str, at: Spot_T) -> Command:
+    return Command(CREATE, NODE, {"title": title, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+
+# U: the node ID, moved to AT.
+def update_node(id: int, at: Spot_T) -> Command:
+    return Command(UPDATE, NODE, {"id": str(id), "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+
+# U, while the reader still holds the node ID: where it is now. A draft: the change is not made
+# yet, so only the page shows it; when the node is let go, update_node makes it.
+def move_node(id: int, at: Spot_T) -> Command:
+    return Command(UPDATE, NODE, {"id": str(id), "x": f"{at.x:.1f}", "y": f"{at.y:.1f}", "draft": "yes"})
+
+# Whether C is a draft: the reader is still making it, and nothing is to be changed for it but the page.
+def is_draft(c: Command) -> bool:
+    return c.value("draft") == "yes"
+
+# D: the node ID, and its connectors.
+def delete_node(id: int) -> Command:
+    return Command(DELETE, NODE, {"id": str(id)})
+
+# The fields that name the connector L.
+def link_fields(l: Link_T) -> {str}str:
+    let fields: {str}str = {"out_node": str(l.out_port.node), "out_row": str(l.out_port.port.row), "in_node": str(l.in_port.node), "in_row": str(l.in_port.port.row)}
+    return fields
+
+# C: the connector L.
+def create_link(l: Link_T) -> Command:
+    return Command(CREATE, LINK, link_fields(l))
+
+# D: the connector L.
+def delete_link(l: Link_T) -> Command:
+    return Command(DELETE, LINK, link_fields(l))
+
+# R: the diagram, the whole page.
+def read_diagram() -> Command:
+    let no_fields: {str}str = {:}
+    return Command(READ, DIAGRAM, no_fields)

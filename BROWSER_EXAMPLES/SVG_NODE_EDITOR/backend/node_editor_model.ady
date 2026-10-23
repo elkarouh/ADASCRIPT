@@ -93,6 +93,15 @@ def on_port(at: Spot_T, p: Port_T, spot: Spot_T) -> bool:
     let dy: Drawing_Pixel_T = spot.y - c.y
     return dx * dx + dy * dy <= GRAB * GRAB
 
+# Where a node's top left corner goes when it is asked to go to CORNER: as near as it can, with the
+# whole node inside the drawing.
+def inside(corner: Spot_T) -> Spot_T:
+    let right: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH) - Drawing_Pixel_T(NODE_W)
+    let bottom: Drawing_Pixel_T = Drawing_Pixel_T(HEIGHT) - Drawing_Pixel_T(NODE_H)
+    Spot_T(min(max(corner.x, Drawing_Pixel_T(0.0)), right), min(max(corner.y, Drawing_Pixel_T(0.0)), bottom))
+
+# The diagram. The page's DiagramView inherits it, so it is @virtual.
+@virtual
 class Diagram:
     var nodes: []Node_T                 # in the order they were made
     var links: []Link_T                 # each connector once

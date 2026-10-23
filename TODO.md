@@ -51,6 +51,16 @@ it but do:. Not yet:
       the alias's type arguments into `publish`'s generic parameter types.
       DIJKSTRA_HTMX's liaison has a method `news` for it meanwhile.
 
+### Table literals the record or the return gives the type of
+
+- [ ] `Command(READ, DIAGRAM, {:})`: an empty `{:}` as a record's field in
+      its constructor comes out as `initTable()` with no types, and Nim
+      cannot instantiate it. The field's type, `{str}str`, says which.
+- [ ] `return {"a": x}` from a `-> {str}str` routine compiled with
+      `ady2nim js` comes out as `js{...}`, a JsObject, not a Table (C is
+      right). SVG_NODE_EDITOR's node_editor_commands.ady puts both through
+      a typed `let` meanwhile.
+
 ### Narrowing an optional
 
 - [ ] a leaving guard whose `or` mixes other tests with `x is None`:

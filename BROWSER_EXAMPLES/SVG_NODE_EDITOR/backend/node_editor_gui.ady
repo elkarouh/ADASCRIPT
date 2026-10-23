@@ -4,8 +4,9 @@
 What the page shows is a function of the diagram (the model, which the server keeps): the nodes,
 with their ports, and the diagram as text, which the browser's script builds its View from. The
 connectors are not drawn here: the script draws them from that text, so the one place that knows
-how a connector looks is node_editor_js_events.ady. Every request the script sends gets the whole
-#all back, which htmx swaps in.
+how a connector looks is node_editor_js_events.ady. A read (GET /all) gets the whole #all back, which
+htmx swaps in; a change made by the script's gestures, or by Reset, gets only the paragraph #problem,
+empty when it went through, and the page is drawn again on the news of the change.
 
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
@@ -38,6 +39,7 @@ svg#editor { display: block; width: 100%; height: auto; user-select: none; backg
 .link.selected .connector-path { stroke: #ffd479; }
 .connector-handle { fill: #E88802; }
 p.problem { color: #ffb4a8; background: #4a2420; border-radius: 6px; padding: 0.4em 0.7em; margin: 0.5em 0; }
+p.problem:empty { display: none; }
 p.hint { color: #999; font-size: 0.85em; margin: 0.5em 0 1em; }
 div.toolbar { margin: 0.5em 0; }
 button { font: inherit; font-size: 0.9em; border: 1px solid #555; border-radius: 6px; padding: 0.3em 0.8em; background: #2a2a2a; color: #ddd; cursor: pointer; }
@@ -90,14 +92,26 @@ def to_html(n: Node_T) -> Html:
                 for p in n.ports:
                     + p.to_html(n.id)
 
+# The paragraph #problem: why the change was refused, or empty when it went through.
+def problem_html(problem: None | !Refusal_T) -> Html:
+    var message: str = ""
+    if problem is Refusal_T:
+        message = problem.message
+    html:
+        p id="problem" class="problem": message
+
+def problem_text(problem: None | !Refusal_T) -> str:
+    return str(problem_html(problem))
+
+# The whole page: the toolbar, PROBLEM (why the last change could not be kept, if it could not),
+# the drawing, and the diagram as text for the script.
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
     let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
     html:
         div id="all":
             div class="toolbar":
-                button type="button" data_hx_post="/reset" data_hx_confirm="Put the sample diagram back? What you made is lost." data_hx_target="#all" data_hx_swap="outerHTML": "Reset the sample"
-            if problem is Refusal_T:
-                p class="problem": problem.message
+                button type="button" data_hx_post="/reset" data_hx_confirm="Put the sample diagram back? What you made is lost." data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
+            + problem_html(problem)
             svg id="editor" viewBox=box:
                 g id="nodes":
                     for n in d.nodes:
