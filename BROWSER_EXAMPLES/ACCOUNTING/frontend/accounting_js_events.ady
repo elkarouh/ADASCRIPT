@@ -24,7 +24,7 @@ in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`,
 """
 from shared/routes import Route_T, boxes, routes_of
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
-from browser import Element_T, Event_T, Click_T, request, page, text, field, on, stop, listen
+from browser import Element_T, Event_T, Click_T, send_request, page, text, field, on, stop, listen
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, shift, draggable
 
@@ -137,7 +137,7 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
 # Ask the server for the page again with the form #state, FIELDS taking the place of its own
 # fields of the same name; the page it answers with takes the place of #all.
 def redraw(fields: {str}str):
-    request("GET", "/h/all", fields, "#all", "#state")
+    send_request("GET", "/h/all", fields, "#all", "#state")
 
 # NODE let go at AT.
 def dropped_cb(node: Element_T, at: Spot_T):

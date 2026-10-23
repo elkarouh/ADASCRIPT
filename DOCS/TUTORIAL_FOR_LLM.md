@@ -1771,7 +1771,7 @@ are not built.
 page through the standard library's `browser` module, in the page's own words
 rather than JavaScript's: `page.find("#move")`, `page.all("g.node")`,
 `node.data("name")` (what the server wrote in `data_name`), `node.has_class("from")`,
-`form.fill("x", "120")`, `page.press("#redraw")`, and `request("PUT", "/nodes",
+`form.fill("x", "120")`, `page.press("#redraw")`, and `send_request("PUT", "/nodes",
 {"name": "A"}, "#all", "#state")`, which sends a request with no form or button for
 it and puts the answer in the page, as htmx does. Its doc comment lists the rest.
 

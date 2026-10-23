@@ -30,10 +30,10 @@ which sends them (htmx sends the form the button is in):
     change.set("name", "A")                     # a field of it, by name
     change.send("#make_node")                   # its button
 
-A request can also go without a form: `request` sends its fields by name and puts the answer
+A request can also go without a form: `send_request` sends its fields by name and puts the answer
 in the page, as htmx does for a button:
 
-    request("DELETE", "/nodes", {"name": "A"}, "#all", "#state")   # METHOD, URL, fields, target, forms included
+    send_request("DELETE", "/nodes", {"name": "A"}, "#all", "#state")   # METHOD, URL, fields, target, forms included
 
 News the server sends by itself, without being asked (a change another page made), comes to a
 function the page names, as text:
@@ -189,7 +189,7 @@ jsvar htmx: JsObject
 # goes. FIELDS are sent by name, after the fields within INCLUDE, CSS selectors such as "#state,
 # #move" ("" for none), so a field named in both is sent as FIELDS has it. The answer takes the
 # place of TARGET, a CSS selector, the whole element (htmx's outerHTML swap).
-def request(method: str, url: str, fields: {str}str, target: str, include: str = ""):
+def send_request(method: str, url: str, fields: {str}str, target: str, include: str = ""):
     var values: JsObject = newJsObject()
     if include != "":
         for part in include.split(","):

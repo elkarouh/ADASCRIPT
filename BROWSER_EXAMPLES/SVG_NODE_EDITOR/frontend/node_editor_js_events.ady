@@ -25,7 +25,7 @@ every port is from the model, never from the drawing.
 The drag of a node is the standard library's svg_drag, the page (finding elements, reading what the
 page says on them, questions, keys) its browser module, and a connector's curve svg_path's.
 """
-from browser import Element_T, Event_T, Click_T, request, page, find, all, data, number, text, attr, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
+from browser import Element_T, Event_T, Click_T, send_request, page, find, all, data, number, text, attr, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_at, clamp, shift, no_click_cb, draggable
 from svg_path import SIDEWAYS, connector_d
@@ -47,7 +47,7 @@ def node_id_of(el: Element_T) -> int:
 
 # Send a change: METHOD to URL with FIELDS. The page the server answers with takes the place of #all.
 def send(method: str, url: str, fields: {str}str):
-    request(method, url, fields, "#all")
+    send_request(method, url, fields, "#all")
 
 # The fields that name a port, by PREFIX ("out" or "in").
 def port_fields(prefix: str, p: Pin_T) -> {str}str:

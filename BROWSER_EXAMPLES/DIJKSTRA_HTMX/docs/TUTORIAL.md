@@ -346,15 +346,15 @@ A gesture only says which command it means. The Delete key, Backspace and the
 right-click menu's "Delete node" are three gestures and one command:
 
 ```adascript
-ask_for(delete_node(self.name))
+publish_command(delete_node(self.name))
 ```
 
-`ask_for` publishes the command on the page's own blackboard (see "Two blackboards and
+`publish_command` publishes the command on the page's own blackboard (see "Two blackboards and
 a liaison" below), and the gesture is done: it does not know who carries it out. For
 a command that is the model's, that is `send`, the one place a command meets the
 server: the verb is the HTTP method (POST, GET, PUT, DELETE: `c.method()`), the thing is
 the URL (`/nodes`, `/edges`, `/all`: `c.url()`), the reader's choice (`#state`) goes along, and the
-browser module's `request` sends it, as a button with hx-* attributes would. The
+browser module's `send_request` sends it, as a button with hx-* attributes would. The
 answer to C, U or D goes to `#problem` (whether it went through); a read's, the page,
 to `#all`.
 
@@ -473,7 +473,7 @@ var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)  # what th
 var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)      # what the server says changed
 ```
 
-Every gesture publishes a command on `commands_channel` (`ask_for`), and nothing else. Who
+Every gesture publishes a command on `commands_channel` (`publish_command`), and nothing else. Who
 carries it out is decided by subscribing:
 
 | Observer | Hears | Does |
@@ -491,7 +491,7 @@ The liaison decides by what a command *means*, not by which gesture made it or h
 often it comes: a **draft** (`move_node`, a node the reader still holds) changes only
 the page, so it stays in the browser; anything else is the model's, and the model is
 changed in one place, the server's. Speed follows without being the rule: what changes
-only the page is exactly what comes many times a second. `heard` is the liaison's
+only the page is exactly what comes many times a second. `publish_change` is the liaison's
 other half: it puts what `GET /events` says on `changes_channel`.
 
 ```adascript
@@ -503,12 +503,12 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
 let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
 let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
-follow("/events", heard)
+follow("/events", publish_change)
 ```
 
 So the two ends have one shape: a blackboard, subscribers that know nothing of each
 other, and between the two blackboards the wire, crossed in one place each way (`send`
-out, `heard` in). A new thing for the page to do with a command, an undo list, a log,
+out, `publish_change` in). A new thing for the page to do with a command, an undo list, a log,
 drawing a deletion before the server confirms it, is one more observer on `commands_channel`,
 and no gesture changes.
 

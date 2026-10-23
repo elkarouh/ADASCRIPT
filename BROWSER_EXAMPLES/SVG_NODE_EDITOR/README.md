@@ -42,7 +42,7 @@ A node keeps its id for good, so deleting one does not renumber the ports of the
 | `backend/node_editor_gui.ady` | how to draw it: the nodes as SVG with `html:` blocks, the page, the diagram as text for the script. The connectors are not drawn here; the script draws them. |
 | `backend/node_editor_events_gui.ady` | what each request does: `Session.answer(method, path, fields)` calls the model, saves the file, and returns the page. No HTTP, so the tests call it. |
 | `backend/server.ady` | HTTP and nothing else. |
-| `frontend/node_editor_js_events.ady` | the browser side, compiled to JavaScript: a `View` built from the diagram text draws the connectors, follows the mouse, and sends every change to the server (`request`, from the stdlib's `browser`); the page the server answers with takes the place of the old one. |
+| `frontend/node_editor_js_events.ady` | the browser side, compiled to JavaScript: a `View` built from the diagram text draws the connectors, follows the mouse, and sends every change to the server (`send_request`, from the stdlib's `browser`); the page the server answers with takes the place of the old one. |
 | `tests/test_node_editor.ady` | tests of the model, of the page through `Session.answer`, and of the file. |
 | `frontend/htmx.min.js` | htmx, vendored. |
 

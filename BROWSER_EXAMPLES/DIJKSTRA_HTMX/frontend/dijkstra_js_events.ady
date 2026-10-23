@@ -67,7 +67,7 @@ questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only 
 gesture means in this app.
 """
 from blackboard import PublishChannel, Observer
-from browser import Element_T, Event_T, Click_T, request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
+from browser import Element_T, Event_T, Click_T, send_request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside, place_of
@@ -89,7 +89,7 @@ commands_channel.raise_errors = True    # a subscriber that fails is a bug: let 
 changes_channel.raise_errors = True
 
 # Ask for C: the gesture's one way out.
-def ask_for(c: Command):
+def publish_command(c: Command):
     commands_channel.publish(c)
 
 # ---- The liaison officer: between the page's blackboard and the server's ----
@@ -101,7 +101,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
             send(c)
 
 # What the server says changed goes on the page's blackboard.
-def heard(change: str):
+def publish_change(change: str):
     changes_channel.publish(change)
 
 # Send COMMAND, with the reader's choice (the form #state): its verb is the method, its thing the URL.
@@ -109,7 +109,7 @@ def heard(change: str):
 # #problem (the page is drawn again on the news of the change, below).
 def send(c: Command):
     let target: str = ("#all" if c.verb == READ else "#problem")
-    request(c.method(), c.url(), c.fields, target, "#state")
+    send_request(c.method(), c.url(), c.fields, target, "#state")
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
@@ -130,16 +130,16 @@ class NodeView(Node_T):
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        ask_for(read_network(self.name, unpick))
+        publish_command(read_network(self.name, unpick))
 
     # Let it go at AT: it is moved there.
     def drop_at(self, at: Spot_T):
-        ask_for(update_node(self.name, at))
+        publish_command(update_node(self.name, at))
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.name} and its edges?"):
-            ask_for(delete_node(self.name))
+            publish_command(delete_node(self.name))
 
 class EdgeView(Edge_T):
     var el: Element_T
@@ -152,14 +152,14 @@ class EdgeView(Edge_T):
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.a} — {self.b}?"):
-            ask_for(delete_edge(self.a, self.b))
+            publish_command(delete_edge(self.a, self.b))
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.a} — {self.b}?", str(self.cost))
         if cost == "":
             return
-        ask_for(update_edge(self.a, self.b, cost))
+        publish_command(update_edge(self.a, self.b, cost))
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
@@ -227,7 +227,7 @@ var network: NetworkView = NetworkView()     # the page is read again each time 
 # draft, which the Mouse_Follower draws).
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = inside(wanted)
-    ask_for(move_node(NodeView(node).name, now))
+    publish_command(move_node(NodeView(node).name, now))
     return now
 
 # It draws a draft of a node's move: the node is drawn where it is asked to be, the page's model
@@ -365,7 +365,7 @@ def double_click(e: Event_T):
     let name: str = ask_name()
     if name == "":
         return
-    ask_for(create_node(name, inside(spot_at(e))))
+    publish_command(create_node(name, inside(spot_at(e))))
 
 # ---- Right-click: a menu of what can be done to what was clicked ----
 
@@ -429,7 +429,7 @@ def tool_click(e: Event_T):
         when ADD_HERE:
             let name: str = ask_name()
             if name != "":
-                ask_for(create_node(name, menus.at))
+                publish_command(create_node(name, menus.at))
         when CHANGE_COST:
             selection.change_cost()
         when REMOVE:
@@ -513,7 +513,7 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
         if cost == "":
             return
-        ask_for(create_edge(self.from_node.name, to.name, cost))
+        publish_command(create_edge(self.from_node.name, to.name, cost))
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
@@ -534,7 +534,7 @@ class Page_Refresher(Observer[Page_Channel_T, str]):
     def callback(self, channel: Page_Channel_T, change: str):
         if holding() or wire.linking:
             return
-        ask_for(read_network("", False))
+        publish_command(read_network("", False))
 
 # The page's knowledge sources: each subscribes itself to its channel as it is made.
 let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
@@ -551,4 +551,4 @@ listen("contextmenu", context)
 listen("keydown", key_down)
 listen("htmx:afterSwap", page_drawn)
 draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
-follow("/events", heard)
+follow("/events", publish_change)

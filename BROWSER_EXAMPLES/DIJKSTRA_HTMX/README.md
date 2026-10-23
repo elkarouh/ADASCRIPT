@@ -65,12 +65,12 @@ The routes are a small REST interface on two collections. Commands in, events ou
   sends it and swaps in the answer; the page is drawn again on the news of the change.
 * A gesture on the drawing (a click on a node, a drag, a wire, a double-click, a
   menu, the Delete key) has no button: it makes a **command**, Create, Read, Update or
-  Delete of a node or an edge, and publishes it on the page's blackboard: `ask_for(delete_node(n))`
+  Delete of a node or an edge, and publishes it on the page's blackboard: `publish_command(delete_node(n))`
   (`backend/dijkstra_commands.ady`). The liaison sends it on; a draft (a node still held) it
   keeps in the browser. Several gestures make the same command (Delete,
   Backspace and the menu's "Delete node" all make `delete_node`), and nothing after the
   command knows which gesture it was. The verb is the HTTP method, the thing the URL;
-  the browser module's `request` sends it with `#state`, into `#problem` (a read, into
+  the browser module's `send_request` sends it with `#state`, into `#problem` (a read, into
   `#all`). So the page holds no hidden forms or buttons for the script to fill in and press.
 * A mistake (a name taken, an edge that is there already) comes back as a line
   in red on the page that made it; nothing is changed, and no other page hears of it.

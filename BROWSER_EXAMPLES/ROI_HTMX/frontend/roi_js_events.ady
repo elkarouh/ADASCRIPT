@@ -20,7 +20,7 @@ new centre, PUT /move: the server keeps the place and draws the page again.
 Only the rectangle can be taken hold of, not the fields on it, so they can still be clicked.
 The drag itself is the standard library's svg_drag, and the page its browser module.
 """
-from browser import Element_T, page, find, all, data, number, request
+from browser import Element_T, page, find, all, data, number, send_request
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, spot_of, clamp, shift, trace, no_click_cb, draggable
@@ -81,6 +81,6 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
 # NODE let go at AT: tell the server the block's name and new centre (PUT /move, see
 # roi_events.ady); the page the server answers with takes the place of #all.
 def dropped_cb(node: Element_T, at: Spot_T):
-    request("PUT", "/move", {"name": node.data_name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}, "#all")
+    send_request("PUT", "/move", {"name": node.data_name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}, "#all")
 
 draggable("rect.node", "svg.drawing", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=no_click_cb))
