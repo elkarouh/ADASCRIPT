@@ -56,10 +56,12 @@ it but do:. Not yet:
 - [ ] `Command(READ, DIAGRAM, {:})`: an empty `{:}` as a record's field in
       its constructor comes out as `initTable()` with no types, and Nim
       cannot instantiate it. The field's type, `{str}str`, says which.
-- [ ] `return {"a": x}` from a `-> {str}str` routine compiled with
-      `ady2nim js` comes out as `js{...}`, a JsObject, not a Table (C is
-      right). SVG_NODE_EDITOR's node_editor_commands.ady puts both through
-      a typed `let` meanwhile.
+- [ ] with `ady2nim js`, a table literal whose values are calls
+      (`{"pick": node.data("name")}`, `{"a": str(n)}`) comes out as
+      `js{...}`, a JsObject, not a Table, where a `{str}str` is wanted: as
+      a method's argument, or returned (C is right; `{"a": x}` is right).
+      SVG_NODE_EDITOR's node_editor_commands.ady and ACCOUNTING's
+      accounting_js_events.ady put such values in a typed `let` meanwhile.
 
 ### Narrowing an optional
 

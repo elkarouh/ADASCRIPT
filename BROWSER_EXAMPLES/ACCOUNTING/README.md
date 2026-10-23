@@ -183,8 +183,8 @@ NAME`. `server --scenario NAME` starts on NAME, else on the first.
 |---|---|
 | `backend/` (native, compiled to C) | |
 | `backend/ledger.ady` | the books in an SQLite database, the scenarios' files, and a command line to keep them |
-| `backend/server.ady` | HTTP only: hands each request to `accounting_events.ady` and serves the scripts |
-| `backend/accounting_events.ady` | what each event the page sends does to the books (record, delete, open an account, close the year, the scenarios); holds the books shown. No HTTP |
+| `backend/server.ady` | HTTP only: hands each request to its `Session` (`accounting_events.ady`) and serves the scripts |
+| `backend/accounting_events.ady` | a `Session`: the books shown, the scenarios and the config, and what each event the page sends does to them (record, delete, open an account, close the year, the scenarios). No HTTP |
 | `backend/accounting_gui.ady` | `to_html` for the model's objects (boxes, arrows, tables, statements), the page's texts, and the static example (`make gui`) |
 | `backend/accounting_page_gui.ady` | the page, drawn by the server for htmx, and which event each part of it sends (`hx-*` attributes) |
 | `backend/books_text.ady` | the books as text, as the server and the page pass them |

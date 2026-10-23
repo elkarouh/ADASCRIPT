@@ -2,7 +2,7 @@
 #ady2nim-args c -d:release
 """server -- the ledger's books, served to the page that draws them; HTTP only.
 
-What each request does to the books is accounting_events.ady; the page is accounting_page_gui.ady.
+What each request does to the books is accounting_events.ady's Session; the page is accounting_page_gui.ady.
 
     server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
 
@@ -34,7 +34,9 @@ made from NAME.books the first time NAME is shown and again by Start over.
 from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from backend/accounting_page_gui import shell_text
-from backend/accounting_events import books_text, current_scenario, page_all, page_do, page_record, post_text, scenarios_dir, scenarios_text, start
+from backend/accounting_events import Session
+
+var session: Session = Session()     # main starts it on the config file
 
 var www: Path = Path("build")            # where the page is: build/, beside the config file
 
@@ -50,19 +52,19 @@ async def handler(req: Request):
     if req.reqMethod'Image == "GET" and (path == "/h" or path == "/"):
         await req.respond(Http200, shell_text(), html_type)
     elif req.reqMethod'Image == "GET" and path == "/h/all":
-        await req.respond(Http200, page_all(req.url.query), html_type)
+        await req.respond(Http200, session.page_all(req.url.query), html_type)
     elif req.reqMethod'Image == "POST" and path == "/h/record":
-        await req.respond(Http200, page_record(req.body), html_type)
+        await req.respond(Http200, session.page_record(req.body), html_type)
     elif req.reqMethod'Image == "POST" and path == "/h/do":
-        await req.respond(Http200, page_do(req.body), html_type)
+        await req.respond(Http200, session.page_do(req.body), html_type)
     elif req.reqMethod'Image == "GET" and path == "/books":
-        await req.respond(Http200, books_text(), text)
+        await req.respond(Http200, session.books_text(), text)
     elif req.reqMethod'Image == "GET" and path == "/scenarios":
-        await req.respond(Http200, scenarios_text(), text)
+        await req.respond(Http200, session.scenarios_text(), text)
     elif req.reqMethod'Image == "POST":
         var answer: str = ""
         try:
-            answer = post_text(path, req.body)
+            answer = session.post_text(path, req.body)
         except:                         # the database, not the books: say so, and keep serving
             answer = "error\tthe database failed: " + getCurrentExceptionMsg()
         await req.respond(Http200, answer, text)
@@ -100,14 +102,14 @@ def main():
         i += 2
     die(f"unknown option {args[i]}") if i < len(args)
     www = conf_path.parent / "build"
-    let failed: str = start(conf_path, first)
+    let failed: str = session.start(conf_path, first)
     if failed != "":
         die(failed)
     for file in PAGES:
         let found: str | !PathFailure_T = (www / file).read_text()
         if found is PathFailure_T:
             print f"warning: {www / file} is missing: run make app, which builds it"
-    print f"scenario {current_scenario()} of {scenarios_dir()}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
+    print f"scenario {session.current} of {session.scenarios.dir}, at http://127.0.0.1:{port}/ (Ctrl-C to stop)"
     var server: AsyncHttpServer = newAsyncHttpServer()
     waitFor(server.serve(Port(port), handler))
 

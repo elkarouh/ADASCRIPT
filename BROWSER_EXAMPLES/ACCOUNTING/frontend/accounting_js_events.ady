@@ -8,7 +8,7 @@ The accounts and arrows are the page's own text (the JSON in script#books, see a
 read into a BooksView when htmx has drawn the page. Where each account is drawn is computed from
 them (shared/layout.ady), not read off the drawing: while one is dragged, every account is laid
 out again and every arrow routed again, here, by the same code the server uses (shared/routes.ady).
-Letting go asks the server for the page again (`redraw`), with the new centre in the field `pos`
+Letting go asks the server for the page again (`Pointer.redraw`), with the new centre in the field `pos`
 and the rest of the form #state as it is, and the arrows are drawn to the new place.
 A press that does not move is a click, and goes on to htmx; with the shift key
 held it picks the account, to be merged with others (the field `pick`).
@@ -19,21 +19,14 @@ with the same request as the field `target`: the server answers with
 the popup that asks when, what and how much.
 The drag itself (the mouse, when a press becomes a drag, the click after it) is the standard
 library's svg_drag, and the page (finding elements, forms, clicks) its browser module, both
-in TO_NIM/STDLIB. This file says only what a drag means in this app: `moved_cb`, `dropped_cb`, and
-`clicked_cb` for the shift-click.
+in TO_NIM/STDLIB. This file says only what a drag means in this app: the Pointer's `moved`,
+`dropped`, and `clicked` for the shift-click.
 """
 from shared/routes import Route_T, boxes, routes_of
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
-from browser import Element_T, Event_T, Click_T, send_request, page, text, field, on, stop, listen
+from browser import Element_T, Event_T, Click_T, send_request, page, text, field, data, on, stop, listen
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, shift, draggable
-
-# The account the element EL draws: its id (number and kind, as the server names it), and its name.
-def data_id(el: Element_T) -> str:
-    return el.data("id")
-
-def data_name(el: Element_T) -> str:
-    return el.data("name")
 
 # ---- The books as the page holds them ----
 
@@ -114,58 +107,67 @@ class BooksView:
                 if label is not None:
                     label.place_at(routes[k].label)
 
-var books: BooksView = BooksView()       # the page is read again each time htmx draws it (page_drawn)
+var books: BooksView = BooksView()       # the page is read again each time htmx draws it (Pointer.page_drawn)
 
-# The red dashed line of an arrow being drawn, from the frozen account to the mouse ("" hides it).
-def rubber(d: str):
-    page.element("#rubber").trace(d)
+# ---- The gesture: the pointer on the drawing ----
 
-# ---- What a drag means here ----
+# The pointer on the drawing: svg_drag's drag of an account, which calls moved, dropped or clicked.
+# Its __init__ says which event runs which of its methods, so making it is starting it; it also
+# hears htmx draw the page again, and reads the books off the new drawing.
+class Pointer:
+    def __init__(self):
+        draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=self.moved, dropped_cb=self.dropped, clicked_cb=self.clicked))
+        listen("htmx:afterSwap", self.page_drawn)
 
-# While NODE is dragged. The frozen account (class "from") stays where it is: a line runs from
-# it to the mouse, the arrow being drawn. Any other account goes where the mouse takes it,
-# kept clear of the sides and the top, and the arrows follow.
-def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    if node.has_class("from"):
-        rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
-        return wanted                   # the arrow's tip
-    let now: Spot_T = books.within_quarter(data_id(node), wanted)
-    shift(node, centre, now)
-    books.move(data_id(node), now)
-    return now
+    # The red dashed line of an arrow being drawn, from the frozen account to the mouse ("" hides it).
+    def draw_rubber(self, d: str):
+        page.element("#rubber").trace(d)
 
-# Ask the server for the page again with the form #state, FIELDS taking the place of its own
-# fields of the same name; the page it answers with takes the place of #all.
-def redraw(fields: {str}str):
-    send_request("GET", "/h/all", fields, "#all", "#state")
+    # Ask the server for the page again with the form #state, FIELDS taking the place of its own
+    # fields of the same name; the page it answers with takes the place of #all.
+    def redraw(self, fields: {str}str):
+        send_request("GET", "/h/all", fields, "#all", "#state")
 
-# NODE let go at AT.
-def dropped_cb(node: Element_T, at: Spot_T):
-    if node.has_class("from"):
-        # the arrow: let go over another account, its name goes as the field target,
-        # and the server answers with the popup that asks when, what and how much. Let go over
-        # nothing, the arrow is just dropped.
-        rubber("")
-        let over: str = books.account_at(at, data_name(node))
-        if over != "":
-            redraw({"target": over})
-        return
-    # an account moved: its new place goes as the field pos
-    redraw({"pos": with_position(page.field("pos"), data_id(node), at)})
+    # While NODE is dragged. The frozen account (class "from") stays where it is: a line runs from
+    # it to the mouse, the arrow being drawn. Any other account goes where the mouse takes it,
+    # kept inside its quarter, and the arrows follow.
+    def moved(self, node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+        if node.has_class("from"):
+            self.draw_rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
+            return wanted                   # the arrow's tip
+        let now: Spot_T = books.within_quarter(node.data("id"), wanted)
+        shift(node, centre, now)
+        books.move(node.data("id"), now)
+        return now
 
-# A click with shift held picks an account to merge with others, or lets it go: the page is
-# asked for again with its name as the field pick. Other clicks go on to htmx.
-def clicked_cb(c: Click_T):
-    if not c.shift:
-        return
-    let node: ?Element_T = c.on("g.node")
-    if node is not None and not node.has_class("group"):
-        c.stop()                        # not an ordinary click: htmx must not see it
-        redraw({"pick": data_name(node)})
+    # NODE let go at AT.
+    def dropped(self, node: Element_T, at: Spot_T):
+        if node.has_class("from"):
+            # the arrow: let go over another account, its name goes as the field target,
+            # and the server answers with the popup that asks when, what and how much. Let go over
+            # nothing, the arrow is just dropped.
+            self.draw_rubber("")
+            let over: str = books.account_at(at, node.data("name"))
+            if over != "":
+                self.redraw({"target": over})
+            return
+        # an account moved: its new place goes as the field pos
+        let pos: str = with_position(page.field("pos"), node.data("id"), at)
+        self.redraw({"pos": pos})
 
-# The page was drawn again by the server: the books are read off the new drawing's text.
-def page_drawn(e: Event_T):
-    books = BooksView()
+    # A click with shift held picks an account to merge with others, or lets it go: the page is
+    # asked for again with its name as the field pick. Other clicks go on to htmx.
+    def clicked(self, c: Click_T):
+        if not c.shift:
+            return
+        let node: ?Element_T = c.on("g.node")
+        if node is not None and not node.has_class("group"):
+            c.stop()                        # not an ordinary click: htmx must not see it
+            let name: str = node.data("name")
+            self.redraw({"pick": name})
 
-listen("htmx:afterSwap", page_drawn)
-draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=clicked_cb))
+    # The page was drawn again by the server: the books are read off the new drawing's text.
+    def page_drawn(self, e: Event_T):
+        books = BooksView()
+
+let pointer: Pointer = Pointer()
