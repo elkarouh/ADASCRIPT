@@ -13,4 +13,5 @@ var h: Holder = make_holder()
 h.counter.bump(2)
 h.counter.bump(3)
 assert h.counter.total() == 5
+assert h.method == "GET /"
 print h.counter.total()

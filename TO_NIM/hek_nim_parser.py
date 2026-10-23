@@ -647,7 +647,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     line = line[:len(line) - len(stripped)] + stripped[len(kw):]
                     break
             # Capture default value before stripping
-            default_match = _re.search(r'^\s*(\w+)\s*:(.+?)\s*=\s*(.+)$', line.strip(), _re.DOTALL)
+            default_match = _re.search(r'^\s*`?(\w+)`?\s*:(.+?)\s*=\s*(.+)$', line.strip(), _re.DOTALL)
             if default_match:
                 _fann = default_match.group(2).strip()
                 _fval = default_match.group(3).strip()
@@ -658,7 +658,7 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
                     pass
                 field_defaults.append((default_match.group(1), _fval))
             # Register field type in class_field_types for Option-aware attr lookup
-            field_type_match = _re.search(r'^\s*(\w+)\s*:\s*(.+?)(?:\s*=.*)?$', line.strip())
+            field_type_match = _re.search(r'^\s*`?(\w+)`?\s*:\s*(.+?)(?:\s*=.*)?$', line.strip())
             if field_type_match and class_name:
                 fname = field_type_match.group(1)
                 ftype = field_type_match.group(2).strip()
@@ -674,8 +674,9 @@ def to_nim(self, indent=0, is_virtual=False, class_name=None, parent_name=None, 
             # Strip default value: Nim object fields don't support inline defaults
             line = _re.sub(r' = .+$', '', line)
             # Export field with * so subclasses in other modules can access it
+            # (a field named by a Nim keyword is quoted: `method`*)
             if getattr(ParserState, 'export_symbols', False):
-                line = _re.sub(r'^(\s*\w+):', r'\1*:', line, count=1)
+                line = _re.sub(r'^(\s*(?:\w+|`\w+`)):', r'\1*:', line, count=1)
             result_lines.append(line)
 
         # Emit a blank line after fields for readability
@@ -4129,10 +4130,10 @@ def _extract_fields_from_block_inner(block_node, indent, export_fields=False):
                                 # Add or strip export marker from field name
                                 if export_fields:
                                     # ensure * is present
-                                    line = _re.sub(r'^(\s*\w+)\*?:', r'\1*:', line)
+                                    line = _re.sub(r'^(\s*(?:\w+|`\w+`))\*?:', r'\1*:', line)
                                 else:
                                     # strip * (tuple fields can't be exported)
-                                    line = _re.sub(r'^(\s*\w+)\*:', r'\1:', line)
+                                    line = _re.sub(r'^(\s*(?:\w+|`\w+`))\*:', r'\1:', line)
                                 if line.strip():
                                     lines.append(line)
     return lines, defaults

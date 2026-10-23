@@ -1,0 +1,8 @@
+# a module of test_return_optional_call.ady: a routine that returns an optional
+type Thing_T is record:
+    n: int
+
+def find_it(k: int) -> ?Thing_T:
+    if k > 0:
+        return Thing_T(k)
+    return None

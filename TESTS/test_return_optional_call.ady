@@ -1,0 +1,30 @@
+#!/usr/bin/env ady2nim
+# test_return_optional_call.ady -- `return f(x)` in a `-> ?T` routine, where f returns a ?T itself:
+# the optional is handed on, not wrapped again (Nim had some(f(x)), an Option of an Option).
+#
+#   ady2nim TESTS/test_return_optional_call.ady -r
+#   ady2py  TESTS/test_return_optional_call.ady -c
+
+from ro_find import Thing_T, find_it
+
+def local_find(k: int) -> ?Thing_T:
+    if k > 1:
+        return Thing_T(k)
+    return None
+
+class Box:
+    var k: int
+    def __init__(self, k: int):
+        self.k = k
+    def look(self) -> ?Thing_T:
+        return find_it(self.k)
+    def look_here(self) -> ?Thing_T:
+        return local_find(self.k)
+
+def look_free(k: int) -> ?Thing_T:
+    return find_it(k)
+
+assert Box(3).look() is not None and Box(0).look() is None
+assert Box(3).look_here() is not None and Box(1).look_here() is None
+assert look_free(2) is not None
+print "ok"

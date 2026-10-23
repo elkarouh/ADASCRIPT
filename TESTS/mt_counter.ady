@@ -1,4 +1,7 @@
-# a module of test_method_through_module.ady: a class with methods
+# a module of test_method_through_module.ady: a class with methods, and a type mt_holder does not show
+type Request is record:
+    path: str
+
 class Counter:
     var count: int
 

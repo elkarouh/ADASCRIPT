@@ -1,11 +1,14 @@
 # a module of test_method_through_module.ady: holds a Counter, and names nothing of it but the type
-from mt_counter import Counter
+from mt_counter import Counter, Request
 
 class Holder:
     var counter: Counter
+    var method: str                 # a field named like a Nim keyword, read from another module
 
     def __init__(self):
         self.counter = Counter()
+        let r: Request = Request("/")         # used inside only: not shown to who imports Holder
+        self.method = "GET " + r.path
 
 def make_holder() -> Holder:
     return Holder()

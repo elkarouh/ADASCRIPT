@@ -812,16 +812,22 @@ def _resolved_imports(code, search_dir):
 
 
 def _reexports(code, search_dir):
-    """The `export` line of a module that others import: each .ady module it
-    takes a type from (a class, record, enum or distinct type), so that whoever
-    reaches a value of that type through this module can call its methods. In
-    Nim a method is a routine of the module that declares it, and is not seen
-    through a module that only imports it; in Adascript, as in Python, a value
-    brings its methods along. CODE is the module's source, as _resolved_imports
-    leaves it."""
+    """The `export` line of a module that others import: each .ady module whose
+    types it shows (a class, record, enum or distinct type named in a field, a
+    signature or a type of its own), so that whoever reaches a value of that
+    type through this module can call its methods. In Nim a method is a routine
+    of the module that declares it, and is not seen through a module that only
+    imports it; in Adascript, as in Python, a value brings its methods along. A
+    type used only inside a body is not shown, and not exported: a program may
+    have a type of that name of its own. CODE is the module's source, as
+    _resolved_imports leaves it."""
     from ady_modules import import_map, module_dirs, STAR
     import re as _re_rx
     bases = module_dirs(search_dir) + (os.path.join(os.path.dirname(os.path.realpath(__file__)), "STDLIB"),)
+    # what the module shows: its signatures, its fields and its own types
+    shown = set(_re_rx.findall(r"\w+", "\n".join(
+        ln for ln in code.split("\n")
+        if _re_rx.match(r"\s*(?:async\s+)?def\s|\s*var\s+\w+\s*:|\s*\w+\s*:\s*\S|type\s|class\s", ln))))
     out = []
     for mod, listed in import_map(code).items():
         path = next((p for p in (os.path.join(b, mod + ".ady") for b in bases) if os.path.isfile(p)), None)
@@ -830,9 +836,13 @@ def _reexports(code, search_dir):
         with open(path, encoding="utf-8") as f:
             text = f.read()
         types = set(_re_rx.findall(r"^(?:class|type)\s+(\w+)", text, _re_rx.M))
-        if types and (listed is STAR or not listed or types.intersection(listed)):
-            out.append(mod.split("/")[-1])
-    return "export " + ", ".join(sorted(set(out))) if out else ""
+        named = types if listed is STAR or not listed else types.intersection(listed)
+        if named & shown:
+            # the module's other types stay its own: a program that reaches only
+            # Params_T may have a Request of its own, or import another
+            hidden = sorted(types - (named & shown))
+            out.append(mod.split("/")[-1] + (" except " + ", ".join(hidden) if hidden else ""))
+    return "\n".join("export " + m for m in sorted(set(out)))
 
 
 def _nim_import_line():

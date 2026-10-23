@@ -1723,6 +1723,10 @@ def to_nim(self):
                 _sym_type = (_sym.get("type", "") if isinstance(_sym, dict) else "") if _sym else ""
                 if _sym_type.startswith("Option["):
                     return f"return {val}"
+                # nor a call of a routine that returns an optional itself:
+                # `return find(k)` in a `-> ?T` routine hands its Option on
+                if not inner_type.startswith("Option[") and hek_nim_expr._expr_is_option(val):
+                    return f"return {val}"
                 # an optional union takes a member as the union's own
                 if inner_type.startswith("OneOf") and not hek_nim_expr._expr_is_option(val):
                     val = hek_nim_expr._result_wrap(val, inner_type)

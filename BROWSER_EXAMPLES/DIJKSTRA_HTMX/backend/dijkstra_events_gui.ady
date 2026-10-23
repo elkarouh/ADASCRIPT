@@ -25,7 +25,7 @@ from blackboard import PublishChannel
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
 from backend/dijkstra_layout import place_of
 from backend/dijkstra_gui import all_text, problem_text
-from backend/dijkstra_request import fields_of, number_of, params_of
+from backend/dijkstra_request import Request, number_of
 from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value
 
 # The channels of the server's blackboard: one per collection.
@@ -87,8 +87,9 @@ class Session:
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
     # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
+        let r: Request = Request(method, path, fields)
         let went: None | !Refusal_T = None         # what relayout and reset answer: they cannot be refused
-        case method + " " + path:
+        case r.method + " " + r.path:
             when "POST /relayout":
                 self.net.forget_places()        # no node keeps a place of its own: the layout gives each one
                 self.nodes_channel.publish(Change(UPDATE, ""))
@@ -100,11 +101,11 @@ class Session:
                 return problem_text(went)
             when others:
                 pass
-        let c: ?Command = command_of(method, path, fields_of(fields))
+        let c: ?Command = r.command()
         if c is None:
             return ""
         if c.verb == READ:
-            return all_text(self.net, params_of(fields), self.unsaved)
+            return all_text(self.net, r.params(), self.unsaved)
         return problem_text(self.carry_out(c))
 
     # Carry out the change C, and when it went through publish what it changed: why not, when it did not.

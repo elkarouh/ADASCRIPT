@@ -254,20 +254,21 @@ button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put th
 
 **The server reads each request back into a command.** `server.ady` only matches
 the path and hands the request on. `Session.answer` reads it back into the same
-`Command` the page sent (`command_of`, in `backend/dijkstra_commands.ady`, the
-vocabulary both sides share), and `carry_out` does it, one `case` on what it is done
+`Command` the page sent (`r.command()`, a `Request` of `backend/dijkstra_request.ady`,
+which asks `command_of` in `backend/dijkstra_commands.ady`, the vocabulary both sides share), and `carry_out` does it, one `case` on what it is done
 to and one on the verb:
 
 ```adascript
 class Session:
     ...
     def answer(self, method: str, path: str, fields: str) -> str:
+        let r: Request = Request(method, path, fields)
         ...                                     # relayout and reset: routes of their own
-        let c: ?Command = command_of(method, path, fields_of(fields))
+        let c: ?Command = r.command()
         if c is None:
             return ""
         if c.verb == READ:
-            return all_text(self.net, params_of(fields), self.unsaved)
+            return all_text(self.net, r.params(), self.unsaved)
         return problem_text(self.carry_out(c))
 
     def carry_out(self, c: Command) -> None | !Refusal_T:
@@ -565,7 +566,7 @@ Each of these changes one layer, so you can see the others not change.
 2. **Draw the field.** In `to_html(n: Node_T, …)`, use `n.colour` for the
    circle's `fill`, and add its rule to `NODE_STYLE`.
 3. **Add a route.** Add `when "POST /relabel":` to `Session.answer`, read a field
-   with `field_of`, call a new method, and publish `Change(UPDATE, name)` when it went
+   with `r.field("colour")`, call a new method, and publish `Change(UPDATE, name)` when it went
    through. Put a button for it in `node_buttons_html`, with `data_hx_post="/relabel"`
    and `data_hx_target="#problem"`.
 4. **Test it without a server.** In `tests/test_dijkstra.ady`, call
