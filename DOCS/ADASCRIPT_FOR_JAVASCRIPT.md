@@ -146,18 +146,18 @@ record, which is declared with its fields and their types:
 
 <!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-type Node_T is record:
-    name: str
+type Refusal_T is record:
+    message: str
 ```
 
-A node has a name and nothing else. Where it is drawn is decided by the GUI,
-not the model, so the model stays the same whatever the layout does.
+A refusal is the message the page shows the reader and nothing else: a value,
+compared by its fields, with no methods.
 
 A record is built by calling its type with the fields in order, or by name:
 
 <!-- from: BROWSER_EXAMPLES/DIJKSTRA_HTMX/backend/dijkstra_model.ady -->
 ```python
-self.edges.append(Edge_T(a, b, cost))
+return Refusal_T(message=f"There is a node {name} already.")
 ```
 
 Fields are read with a dot, as in JavaScript. A record with one fixed set of
