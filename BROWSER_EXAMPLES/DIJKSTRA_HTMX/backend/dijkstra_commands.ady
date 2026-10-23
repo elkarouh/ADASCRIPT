@@ -4,18 +4,20 @@ of a node or an edge. Compiled both ways, like the model: the page makes command
 each request back into one, and both go by the same words.
 
 A Command (the stdlib's commands.ady) is its verb (CREATE, READ, UPDATE, DELETE), what it is done
-to (a NODE, an EDGE, or the whole NETWORK, which is what is read), and its fields by name:
+to (a NODE, an EDGE, or the whole NETWORK: read, laid out again, or put back), and its fields by name:
 
     delete_node("A")                    # D: DELETE /nodes   name=A
     create_edge("A", "B", "3")          # C: POST   /edges   a=A b=B cost=3
     update_node("A", at)                # U: PUT    /nodes   name=A x=.. y=..
     move_node("A", at)                  # U, a draft: the node still held; it stays in the browser
     read_network("A", False)            # R: GET    /all     pick=A
+    relayout_network()                  # U: PUT    /all     every node where the layout puts it
+    reset_network()                     # D: DELETE /all     the network goes: the sample is back
 
 On the wire the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say
-which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a command
-on its own blackboard and its liaison sends it (`Liaison_Officer.send` in dijkstra_js_events.ady), unless it is a
-draft (`c.is_draft()`), which stays in the browser; the server reads it back (`Session.answer` in
+which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a
+command on its own blackboard and its liaison sends it (`Liaison_Officer` in dijkstra_js_events.ady),
+unless it is a draft (`c.is_draft()`), which stays in the browser; the server reads it back (`Session.answer` in
 dijkstra_events_gui.ady) and carries it out; and what it changed goes out with the same verbs (a
 `Change`, also of commands.ady). No HTML, no HTTP.
 """
@@ -37,13 +39,13 @@ def url(c: Command) -> str:
         when NETWORK:
             return "/all"
 
-# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. The network is
-# only read, and only the network is read.
+# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. Only the network
+# is read, and it is not created: there is always one.
 def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
     for verb in Verb_T:
         for thing in Thing_T:
             let c: Command = Command(verb, thing, fields)
-            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == NETWORK):
+            if c.method() == http_method and c.url() == path and (verb != READ or thing == NETWORK) and (verb != CREATE or thing != NETWORK):
                 return c
     return None
 
@@ -90,3 +92,13 @@ def delete_edge(a: str, b: str) -> Command:
 def read_network(pick: str, unpick: bool) -> Command:
     let fields: {str}str = {"pick": pick, "act": ("unpick" if unpick else "")}
     return Command(READ, NETWORK, fields)
+
+# U: the network laid out again: no node keeps the place the reader put it in.
+def relayout_network() -> Command:
+    let no_fields: {str}str = {:}
+    return Command(UPDATE, NETWORK, no_fields)
+
+# D: the network, which goes: the sample is put back.
+def reset_network() -> Command:
+    let no_fields: {str}str = {:}
+    return Command(DELETE, NETWORK, no_fields)

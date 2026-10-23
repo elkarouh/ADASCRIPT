@@ -1,10 +1,11 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
+from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample
+from backend/dijkstra_gui import Choice, Route
 from commands import Change
 from backend/dijkstra_events_gui import Channel_T, Session
-from backend/dijkstra_commands import Command, command_of, url, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
+from backend/dijkstra_commands import Command, command_of, url, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network, relayout_network, reset_network
 from drawing import Drawing_Pixel_T, Spot_T
 
 # ---- the model ----
@@ -12,7 +13,17 @@ var net: Network = sample()
 let w: (float, []str) = shortest_route[str](net.build_graph(), "A", "E")
 assert w[1] == ["A", "C", "F", "E"] and w[0] == 20.0
 assert shortest_route[str](net.build_graph(), "E", "A")[1] == ["E", "F", "C", "A"]      # the edges go both ways
-assert uses(w[1], Edge_T("C", "F", 2)) and not uses(w[1], Edge_T("A", "B", 7))
+let route: Route = Route(net, Choice("A", "E", net.names()))
+assert route.way == w[1] and route.uses(Edge_T("C", "F", 2)) and not route.uses(Edge_T("A", "B", 7))
+assert route.role_of("A") == "start" and route.role_of("F") == "way" and route.role_of("B") == ""
+var choice: Choice = Choice("A", "Z", net.names())              # Z is no node: not chosen
+assert choice.goal == ""
+choice.click("E", False)
+assert choice.goal == "E"
+choice.click("B", False)                                        # a third click starts again
+assert choice.start == "B" and choice.goal == ""
+choice.click("B", True)                                         # the start clicked again: nothing chosen
+assert choice.start == ""
 
 assert net.add_node("G") is None
 assert net.add_node("G") is Refusal_T
@@ -29,12 +40,13 @@ assert len(net.nodes) == 6 and len(net.edges) == 5               # C's four edge
 
 # ---- the commands: one vocabulary, read back from the wire as the page sent it ----
 for sent in [create_node("H", Spot_T(Drawing_Pixel_T(10.0), Drawing_Pixel_T(20.0))), update_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))),
-             delete_node("H"), create_edge("A", "H", "3"), update_edge("A", "H", "4"), delete_edge("A", "H"), read_network("A", True)]:
+             delete_node("H"), create_edge("A", "H", "3"), update_edge("A", "H", "4"), delete_edge("A", "H"), read_network("A", True),
+             relayout_network(), reset_network()]:
     let back: ?Command = command_of(sent.method(), sent.url(), sent.fields)
     assert back is not None
     assert back == sent
 assert command_of("GET", "/nodes", {:}) is None                  # a node is not read; the network is
-assert command_of("DELETE", "/all", {:}) is None                 # and the network is only read
+assert command_of("POST", "/all", {:}) is None                   # and the network is not created
 assert command_of("PATCH", "/nodes", {:}) is None
 # a node still held is a draft, which the page's liaison keeps in the browser; let go, it is not
 assert move_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))).is_draft()
@@ -76,10 +88,10 @@ assert "A → F → E, cost 23" in after("DELETE", "/nodes", "start=A&goal=E&nam
 assert "Click a node to start from." in after("DELETE", "/nodes", "start=A&goal=E&name=A")
 assert "Click a node to start from." in session.answer("GET", "/all", "start=C&goal=B&pick=C&act=unpick")    # a chosen start clicked again
 assert "From C: click a node to go to." in session.answer("GET", "/all", "start=C&goal=B&pick=B&act=unpick")  # a chosen goal clicked again
-assert "A → C → F → E, cost 20" in after("POST", "/reset", "start=A&goal=E")
-assert "at A " not in after("POST", "/relayout", "")         # no kept places: the layout draws every node
-assert "data-hx-post=\"/relayout\"" in session.answer("GET", "/all", "")
-after("POST", "/reset", "")                                   # the sample again, for the tests that follow
+assert "A → C → F → E, cost 20" in after("DELETE", "/all", "start=A&goal=E")
+assert "at A " not in after("PUT", "/all", "")               # no kept places: the layout draws every node
+assert "data-hx-put=\"/all\"" in session.answer("GET", "/all", "") and "data-hx-delete=\"/all\"" in session.answer("GET", "/all", "")
+after("DELETE", "/all", "")                                   # the sample again, for the tests that follow
 # the drawing's own gestures: a node where it was double-clicked, and the wire
 let placed: str = after("POST", "/nodes", "name=K&x=120&y=200")
 assert "data-x=\"120\"" in placed
@@ -102,7 +114,7 @@ told.answer("POST", "/edges", "a=A&b=H&cost=1")
 told.answer("PUT", "/edges", "a=A&b=H&cost=2")
 told.answer("PUT", "/nodes", "name=H&x=300&y=100")
 told.answer("DELETE", "/nodes", "name=H")                # its edge first, then the node
-told.answer("POST", "/reset", "")
+told.answer("DELETE", "/all", "")
 assert heard == ["NODES_CHAN CREATE H", "EDGES_CHAN CREATE A H", "EDGES_CHAN UPDATE A H", "NODES_CHAN UPDATE H",
                  "EDGES_CHAN DELETE A H", "NODES_CHAN DELETE H", "EDGES_CHAN UPDATE ", "NODES_CHAN UPDATE "]
 

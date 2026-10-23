@@ -26,8 +26,9 @@ says: its `url`. The app's commands module, then:
         let fields: {str}str = {"id": str(id)}
         return Command(DELETE, NODE, fields)
 
-A command's fields are read with `c.value("id")`, a number of them with `c.number_value("id")`,
-and the place it names (its fields x and y: where a node dragged is put) with `c.spot()`. A draft
+A command's fields are read with `c.value("id")`, a number of them with `c.number_value("id")`, all
+of them as a button's hx-vals with `c.vals()`, and the place it names (its fields x and y: where a
+node dragged is put) with `c.spot()`. A draft
 (`c.is_draft()`, made with `draft_fields`) is a command the reader is still making, a node still
 held: it stays in the browser, and nothing is changed for it.
 
@@ -97,6 +98,15 @@ class Command_Of[Thing_T]:
         if y is ParseFailure_T:
             return None
         return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
+
+    # Its fields as hx-vals says them, for a button or a field that sends the command:
+    # {"id": "4", "x": "120"}.
+    def vals(self) -> str:
+        var pairs: []str = []
+        for name, value in self.fields.items():
+            let quoted: str = value.replace("\\", "\\\\").replace("\"", "\\\"")
+            pairs.append(f'"{name}": "{quoted}"')
+        return "{" + ", ".join(pairs) + "}"
 
     # Whether it is a draft: the reader is still making it, and nothing is to be changed for it but the page.
     def is_draft(self) -> bool:

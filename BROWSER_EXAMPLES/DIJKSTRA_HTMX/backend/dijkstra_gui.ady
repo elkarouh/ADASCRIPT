@@ -1,33 +1,95 @@
 #!/usr/bin/env ady2nim
 """dijkstra_gui -- the page as HTML the server draws, for htmx to swap in.
 
-What the page shows is a function of the network (the model, which the server keeps)
-and of what the reader has picked: the start and the goal, the fields of the form
-`#state`. Reading is GET /all, which sends that form along and gets the whole page back, which
-htmx swaps in. A change is a command: POST, PUT or DELETE, from a button here or from the drawing's
-gestures and menus (dijkstra_js_events.ady); its answer is only the paragraph #problem, empty when
-it went through, and every open page then reads itself again (GET /all) when the server tells it of
-the change. `pick` is the node clicked, for the start or the
-goal; `act` is unpick (a chosen node clicked again).
+What the page shows is a function of the network (the model, which the server keeps) and of what
+the reader has chosen, a Choice: the start and the goal, which the page keeps in the form #state and
+sends with every request. A Route is the shortest way between them, worked out once, and what the
+page says of it; the drawing only draws (a to_html for an edge, a node and the network).
+
+Reading is GET /all, which gets the whole page back, for htmx to swap in. A change is a command,
+from a button here (command_button) or from the drawing's gestures and menus
+(dijkstra_js_events.ady): its answer is only the paragraph #problem, empty when it went through, and
+every open page then reads itself again when the server tells it of the change.
 """
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, uses, WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY, place_of
+from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY
+from backend/dijkstra_commands import Command, url, relayout_network, reset_network
 from drawing import Drawing_Pixel_T, Spot_T
 
-# What the page keeps about the reader's choice, sent with every request as the form #state
-# and the gesture form: the start and the goal of the route, the node clicked, and whether it
-# was clicked to be unchosen.
-type Params_T is record:
-    start: str
-    goal:  str
-    pick:  str                      # the node clicked
-    act:   str                      # unpick
+# ---- What the reader chose, and the way it gives ----
 
-# ---- the drawing ----
+# The reader's choice: the start and the goal of the way, which the page keeps between requests in
+# the form #state. A node clicked is the start, then the goal, then the start again; a chosen node
+# clicked again is no longer chosen.
+class Choice:
+    var start: str
+    var goal:  str
+    var names: []str                # the network's nodes: only they can be chosen
 
-# ------------------------------------------------------------
-# The edges: their look, how each is drawn, and the buttons that act on them.
-# ------------------------------------------------------------
+    # START and GOAL, as the page kept them, in a network with the nodes NAMES: a node deleted since
+    # is no longer chosen.
+    def __init__(self, start: str, goal: str, names: []str):
+        self.names = names
+        self.start = (start if start in names else "")
+        self.goal = (goal if goal in names else "")
+
+    # The reader clicked the node NAME ("" for none); UNPICK when it was chosen, to unchoose it.
+    def click(self, name: str, unpick: bool):
+        if unpick:
+            if name == self.start:
+                self.start = ""
+                self.goal = ""
+            elif name == self.goal:
+                self.goal = ""
+        elif name in self.names:
+            if self.start == "" or self.goal != "":
+                self.start = name
+                self.goal = ""
+            elif name != self.start:
+                self.goal = name
+
+# The shortest way from the choice's start to its goal, and what the page says of it.
+class Route:
+    var choice: Choice
+    var way:    []str               # the nodes it passes, from the start to the goal; none when there is no way
+    var cost:   float
+
+    def __init__(self, net: Network, choice: Choice):
+        self.choice = choice
+        let found: (float, []str) = shortest_route[str](net.build_graph(), choice.start, choice.goal)
+        self.cost = found[0]
+        self.way = found[1]
+
+    # Whether the way runs along the edge E, in either direction: it is drawn in orange.
+    def uses(self, e: Edge_T) -> bool:
+        for i in range(len(self.way) - 1):
+            if (self.way[i] == e.a and self.way[i + 1] == e.b) or (self.way[i] == e.b and self.way[i + 1] == e.a):
+                return True
+        return False
+
+    # What the node NAME is to the way: "start", "goal", "way" (a node it passes), or "" (none).
+    def role_of(self, name: str) -> str:
+        if name == self.choice.start:
+            return "start"
+        if name == self.choice.goal:
+            return "goal"
+        if name in self.way:
+            return "way"
+        return ""
+
+    # What the page says under the drawing: where to start, where to go, or the way found and its cost.
+    def said(self) -> str:
+        let start: str = self.choice.start
+        let goal: str = self.choice.goal
+        if start == "":
+            return "Click a node to start from."
+        if goal == "":
+            return f"From {start}: click a node to go to."
+        if len(self.way) == 0:
+            return f"No way from {start} to {goal}."
+        return f"Shortest way from {start} to {goal}: " + " → ".join(self.way) + f", cost {self.cost:.0f}."
+
+# ---- The drawing: an edge, a node, the network ----
 
 # The edge's own look: the line, the wider line to point at, the cost (see to_html).
 const EDGE_STYLE: str = """
@@ -38,9 +100,12 @@ path.hit { stroke: transparent; stroke-width: 14px; fill: none; cursor: pointer;
 text.cost { font-size: 13px; fill: var(--soft); text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 4px; }
 """
 
-def to_html(e: Edge_T, on_way: bool, p1: Spot_T, p2: Spot_T) -> Html:
+# An edge of NET: a line between its nodes, orange when ROUTE runs along it, and its cost over its middle.
+def to_html(e: Edge_T, net: Network, route: Route) -> Html:
+    let p1: Spot_T = net.place_of(e.a)
+    let p2: Spot_T = net.place_of(e.b)
     let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
-    let css: str = ("edge way" if on_way else "edge")
+    let css: str = ("edge way" if route.uses(e) else "edge")
     let lx: str = f"{(p1.x + p2.x) / 2.0:.0f}"
     let ly: str = f"{(p1.y + p2.y) / 2.0 - COST_DY:.0f}"
     let label: str = str(e.cost)
@@ -49,10 +114,6 @@ def to_html(e: Edge_T, on_way: bool, p1: Spot_T, p2: Spot_T) -> Html:
             path class=css d=d
             path class="hit" d=d
             stext class="cost" x=lx y=ly: label
-
-# ------------------------------------------------------------
-# The nodes: their look, how each is drawn, and the buttons that act on them.
-# ------------------------------------------------------------
 
 # The node's own look: its circle, its name, its port (see to_html).
 const NODE_STYLE: str = """
@@ -68,13 +129,15 @@ g.node:hover circle.port, g.node.selected circle.port { opacity: 1; }
 text.name { font-size: 16px; font-weight: 700; text-anchor: middle; pointer-events: none; fill: var(--ink); }
 """
 
-# A node: its circle and name, and a port (the dot on its right) from which a wire is drawn to another.
-def to_html(n: Node_T, at: Spot_T, role: str) -> Html:
+# A node of NET: its circle (coloured by what it is to ROUTE) and name, and a port (the dot on its
+# right) from which a wire is drawn to another.
+def to_html(n: Node_T, net: Network, route: Route) -> Html:
+    let at: Spot_T = net.place_of(n.name)
     let cx: str = f"{at.x:.0f}"
     let cy: str = f"{at.y:.0f}"
     let ty: str = f"{at.y + NAME_DY:.0f}"
     let px: str = f"{at.x + NODE_R:.0f}"
-    let css: str = "node " + role
+    let css: str = "node " + route.role_of(n.name)
     let nr: str = f"{NODE_R:.0f}"
     let pr: str = f"{PORT_R:.0f}"
     html:
@@ -82,6 +145,20 @@ def to_html(n: Node_T, at: Spot_T, role: str) -> Html:
             circle cx=cx cy=cy r=nr
             stext class="name" x=cx y=ty: n.name
             circle class="port" cx=px cy=cy r=pr
+
+# The network: the svg with each edge and each node, and the wire the browser draws while an edge is
+# made (see dijkstra_js_events.ady).
+def to_html(net: Network, route: Route) -> Html:
+    let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
+    html:
+        svg viewBox=box class="graph":
+            for e in net.edges:
+                + to_html(e, net, route)
+            for n in net.nodes:
+                + to_html(n, net, route)
+            path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+
+# ---- Around the drawing: the menus, the buttons, the answer to a command ----
 
 # The menus' own look (see menus_html).
 const MENU_STYLE: str = """
@@ -103,50 +180,19 @@ def menus_html() -> Html:
             div id="menu-space" class="menu":
                 button type="button" data_tool="add-here": "New node here"
 
-# The choice the reader's clicks make of P, in a network with the nodes NAMES: a node clicked is
-# the start, then the goal, then the start again; a chosen node clicked again is no longer chosen.
-def picked(p0: Params_T, names: []str) -> Params_T:
-    var p: Params_T = p0
-    if p.start not in names:            # deleted since
-        p.start = ""
-    if p.goal not in names:
-        p.goal = ""
-    if p.act == "unpick":                   # a chosen node clicked again: it is no longer chosen
-        if p.pick == p.start:
-            p.start = ""
-            p.goal = ""
-        elif p.pick == p.goal:
-            p.goal = ""
-        p.pick = ""
-    if p.pick != "" and p.pick in names:    # a node clicked: the start, then the goal, then the start again
-        if p.start == "" or p.goal != "":
-            p.start = p.pick
-            p.goal = ""
-        elif p.pick != p.start:
-            p.goal = p.pick
-    return p
-
-# What the page says under the drawing: where to start, where to go, or the way found and its cost.
-def said_of(p: Params_T, way: []str, cost: float) -> str:
-    if p.start == "":
-        return "Click a node to start from."
-    if p.goal == "":
-        return f"From {p.start}: click a node to go to."
-    if len(way) == 0:
-        return f"No way from {p.start} to {p.goal}."
-    return f"Shortest way from {p.start} to {p.goal}: " + " → ".join(way) + f", cost {cost:.0f}."
-
-# The drawing of the network: the svg with each edge (the way found in orange) and each node (the start,
-# the goal, the way), and the wire the browser draws while an edge is made (see dijkstra_js_events.ady).
-def to_html(net: Network, p: Params_T, way: []str) -> Html:
-    let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
-    html:
-        svg viewBox=box class="graph":
-            for e in net.edges:
-                + to_html(e, uses(way, e), place_of(net, e.a), place_of(net, e.b))
-            for n in net.nodes:
-                + to_html(n, place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
-            path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
+# A button that sends the command C, after asking ASK: its verb is the method, its thing the URL,
+# and its answer takes the place of #problem.
+def command_button(label: str, c: Command, ask: str) -> Html:
+    case c.method():
+        when "PUT":
+            html:
+                button type="button" class="quiet" data_hx_put=c.url() data_hx_vals=c.vals() data_hx_confirm=ask data_hx_target="#problem" data_hx_swap="outerHTML": label
+        when "DELETE":
+            html:
+                button type="button" class="quiet" data_hx_delete=c.url() data_hx_vals=c.vals() data_hx_confirm=ask data_hx_target="#problem" data_hx_swap="outerHTML": label
+        when others:
+            html:
+                button type="button" class="quiet" data_hx_post=c.url() data_hx_vals=c.vals() data_hx_confirm=ask data_hx_target="#problem" data_hx_swap="outerHTML": label
 
 # Why the last command was refused, where the page shows it: empty (and not shown) when it went through.
 # The answer to a command is this paragraph alone.
@@ -160,23 +206,24 @@ def problem_html(problem: None | !Refusal_T) -> Html:
 def problem_text(problem: None | !Refusal_T) -> str:
     return str(problem_html(problem))
 
-def all_html(net: Network, p0: Params_T, problem: None | !Refusal_T) -> Html:
-    let p: Params_T = picked(p0, net.names())
-    let found: (float, []str) = shortest_route[str](net.build_graph(), p.start, p.goal)
-    let way: []str = found[1]
-    let said: str = said_of(p, way, found[0])
-    let said_css: str = ("said found" if len(way) > 0 else "said")
+# ---- The page ----
+
+# The page as the reader sees it: the reader's choice, kept for the next request (#state), the
+# buttons, what the route is, why the last command was refused, the drawing, and the network as text.
+def all_html(net: Network, choice: Choice, problem: None | !Refusal_T) -> Html:
+    let route: Route = Route(net, choice)
+    let said_css: str = ("said found" if len(route.way) > 0 else "said")
     html:
         div id="all":
             form id="state":
-                input type="hidden" name="start" value=p.start
-                input type="hidden" name="goal" value=p.goal
+                input type="hidden" name="start" value=choice.start
+                input type="hidden" name="goal" value=choice.goal
             div class="toolbar":
-                button type="button" class="quiet" data_hx_post="/relayout" data_hx_confirm="Put every node where the layout puts it? Nodes you moved go back to the layout." data_hx_target="#problem" data_hx_swap="outerHTML": "Relayout"
-                button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
-            p class=said_css: said
+                + command_button("Relayout", relayout_network(), "Put every node where the layout puts it? Nodes you moved go back to the layout.")
+                + command_button("Reset the sample", reset_network(), "Put the sample network back?")
+            p class=said_css: route.said()
             + problem_html(problem)
-            + to_html(net, p, way)
+            + to_html(net, route)
             # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
             pre id="network": net.text()
             p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
@@ -229,5 +276,5 @@ def shell() -> Html:
 def shell_text() -> str:
     return "<!doctype html>" + str(shell())
 
-def all_text(net: Network, p: Params_T, problem: None | !Refusal_T) -> str:
-    return str(all_html(net, p, problem))
+def all_text(net: Network, choice: Choice, problem: None | !Refusal_T) -> str:
+    return str(all_html(net, choice, problem))

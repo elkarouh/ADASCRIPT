@@ -77,7 +77,7 @@ from blackboard import PublishChannel, Observer
 from browser import Element_T, Event_T, Click_T, send_request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, listen_to_server
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
-from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside, place_of
+from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside
 from commands import READ
 from backend/dijkstra_commands import Command, url, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
@@ -177,7 +177,7 @@ class NetworkView(Network):
 
     # Where the node NAME is drawn.
     def spot_of(self, name: str) -> Spot_T:
-        return place_of(self, name)
+        return self.place_of(name)
 
     # The view of the node drawn as EL, or none when the page does not draw it.
     def node_view(self, el: Element_T) -> ?NodeView:
@@ -198,7 +198,7 @@ class NetworkView(Network):
     def redraw_edges(self, name: str):
         for e in self.edge_views.values():
             if e.a == name or e.b == name:
-                e.redraw(place_of(self, e.a), place_of(self, e.b))
+                e.redraw(self.place_of(e.a), self.place_of(e.b))
 
 var network: NetworkView = NetworkView()     # read again each time htmx draws the page (Selection.page_drawn)
 

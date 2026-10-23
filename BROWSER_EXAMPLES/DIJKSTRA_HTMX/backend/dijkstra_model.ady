@@ -5,7 +5,7 @@ where it is kept.
 A node has a name; an edge joins two nodes, both ways, at a cost. The network is a Network,
 a class: it is changed only through its methods (create, update, delete), each of which says
 what was wrong, or "" when it was done. It also keeps where the reader has put each node (put),
-as data; a node without a place is laid out (place_of, at the end: the layout). It is kept in a text file,
+as data; a node without a place is laid out (place_of, and the layout at the end). It is kept in a text file,
 one line a node, an edge or a place (Network.text, and Network(text) to read it back; the file itself is read and
 written by dijkstra_events_gui.ady). The shortest way itself is the library's (TO_NIM/STDLIB/graphs.ady):
 build_graph turns the network into the graph it wants.
@@ -94,6 +94,15 @@ class Network:
     def forget_places(self):
         self.places = {:}
 
+    # Where the node NAME is drawn: where the reader put it, else where the layout puts it.
+    def place_of(self, name: str) -> Spot_T:
+        if name in self.places:
+            return self.places[name]
+        for i in range(len(self.nodes)):
+            if self.nodes[i].name == name:
+                return new_spot(i, len(self.nodes))
+        return Spot_T(0.0, 0.0)
+
     # The names of the nodes, in order.
     def names(self) -> []str:
         [n.name for n in self.nodes]
@@ -146,8 +155,9 @@ class Network:
 
     def remove_edge(self, a: str, b: str) -> None | !Refusal_T:
         let i: int = self.edge_at(a, b)
-        return Refusal_T(message=f"There is no edge {a} - {b}.") if i < 0
-        self.edges = [ self.edges[k] for k in range(len(self.edges)) if k != i]
+        if i < 0:
+            return Refusal_T(message=f"There is no edge {a} - {b}.")
+        self.edges = [self.edges[k] for k in range(len(self.edges)) if k != i]
 
     # ---- kept in a text file: "node A" and "edge A B 7", a line each ----
 
@@ -191,13 +201,6 @@ def sample() -> Network:
     net.put("F", Spot_T(330.0, 320.0))
     return net
 
-# Whether ROUTE runs along the edge E, in either direction: dijkstra_gui.ady draws those edges in orange.
-def uses(route: []str, e: Edge_T) -> bool:
-    for i in range(len(route) - 1):
-        if (route[i] == e.a and route[i + 1] == e.b) or (route[i] == e.b and route[i + 1] == e.a):
-            return True
-    return False
-
 # ---- The layout: where each node is drawn, when nobody has put it ----
 
 const WIDTH: Drawing_cm_T = 15.0        # the drawing's width
@@ -225,12 +228,3 @@ def new_spot(k: int, n: int) -> Spot_T:
     let angle: float = 6.283185307179586 * float(k) / float(max(n, 1))
     let middle: Spot_T = Spot_T(Drawing_Pixel_T(WIDTH) / 2.0, Drawing_Pixel_T(HEIGHT) / 2.0)
     return Spot_T(middle.x + Drawing_Pixel_T(ACROSS) * math.cos(angle), middle.y + Drawing_Pixel_T(UP) * math.sin(angle))
-
-# Where the node NAME of NET is drawn: where the reader put it, else where the layout puts it.
-def place_of(net: Network, name: str) -> Spot_T:
-    if name in net.places:
-        return net.places[name]
-    for i in range(len(net.nodes)):
-        if net.nodes[i].name == name:
-            return new_spot(i, len(net.nodes))
-    return Spot_T(0.0, 0.0)

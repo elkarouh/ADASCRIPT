@@ -155,14 +155,16 @@ without one is placed by the layout, which is a pure function of the
 network, so the server and the browser agree on it without talking.
 
 ```adascript
-# Where the node NAME of NET is drawn: where the reader put it, else where the layout puts it.
-def place_of(net: Network, name: str) -> Spot_T:
-    if name in net.places:
-        return net.places[name]
-    for i in range(len(net.nodes)):
-        if net.nodes[i].name == name:
-            return new_spot(i, len(net.nodes))
-    return Spot_T(0.0, 0.0)
+class Network:
+    ...
+    # Where the node NAME is drawn: where the reader put it, else where the layout puts it.
+    def place_of(self, name: str) -> Spot_T:
+        if name in self.places:
+            return self.places[name]
+        for i in range(len(self.nodes)):
+            if self.nodes[i].name == name:
+                return new_spot(i, len(self.nodes))
+        return Spot_T(0.0, 0.0)
 ```
 
 `new_spot` spreads the nodes evenly round an ellipse. The layout's sizes are
@@ -181,15 +183,17 @@ writes markup as Adascript code, with indentation for nesting, and a
 `+` to insert another piece:
 
 ```adascript
-# A node: its circle and name, and a port (the dot on its right) from which a wire is drawn to another.
-def to_html(n: Node_T, at: Spot_T, role: str) -> Html:
+# A node of NET: its circle (coloured by what it is to ROUTE) and name, and a port (the dot on its
+# right) from which a wire is drawn to another.
+def to_html(n: Node_T, net: Network, route: Route) -> Html:
+    let at: Spot_T = net.place_of(n.name)
     let cx: str = f"{at.x:.0f}"
     let cy: str = f"{at.y:.0f}"
     let ty: str = f"{at.y + NAME_DY:.0f}"
     let px: str = f"{at.x + NODE_R:.0f}"
     let nr: str = f"{NODE_R:.0f}"
     let pr: str = f"{PORT_R:.0f}"
-    let css: str = "node " + role
+    let css: str = "node " + route.role_of(n.name)
     html:
         g class=css data_name=n.name data_x=cx data_y=cy:
             circle cx=cx cy=cy r=nr
@@ -199,8 +203,9 @@ def to_html(n: Node_T, at: Spot_T, role: str) -> Html:
 
 Three things to note:
 
-- **The object is an argument.** `to_html` takes a `Node_T` and the
-  place it is drawn at. It knows nothing else about the network.
+- **The object is an argument.** `to_html` takes a `Node_T`, the network
+  that says where it is, and the route that says what it is to the way.
+  It works nothing out: the route is found once, before the drawing.
 - **Attributes are names.** `class=css` puts the value of the variable
   `css`; `class="name"` puts the text. Attribute names with a dash are
   written with an underscore, `data_name` (see *Why htmx and how* below).
@@ -208,16 +213,23 @@ Three things to note:
   whole network is another, which calls these in turn:
 
 ```adascript
-def to_html(net: Network, p: Params_T, way: []str) -> Html:
+def to_html(net: Network, route: Route) -> Html:
     let box: str = f"0 0 {WIDTH:.0f} {HEIGHT:.0f}"
     html:
         svg viewBox=box class="graph":
             for e in net.edges:
-                + to_html(e, uses(way, e), place_of(net, e.a), place_of(net, e.b))
+                + to_html(e, net, route)
             for n in net.nodes:
-                + to_html(n, place_of(net, n.name), ("start" if n.name == p.start else ("goal" if n.name == p.goal else ("way" if n.name in way else ""))))
+                + to_html(n, net, route)
             path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 ```
+
+What the reader has chosen is a `Choice`: the start and the goal, and `click`, which says
+what a click on a node does to them (the start, then the goal, then the start again; a
+chosen node clicked again is no longer chosen). The way between them is a `Route`, found
+once from the network and the choice: its nodes, its cost, `uses(e)` (an edge on the way,
+drawn in orange), `role_of(name)` (start, goal, way, or nothing) and `said()`, the line under
+the drawing. The functions that draw only ask it.
 
 The edges are drawn first, so each node sits on top of the lines that
 end at it.
@@ -258,53 +270,63 @@ does best.
 attributes. The browser does nothing itself:
 
 ```adascript
-button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put the sample network back?" data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
++ command_button("Reset the sample", reset_network(), "Put the sample network back?")
 ```
 
-`data_hx_post` names the request, and `data_hx_confirm` asks first.
-`data_hx_target` and `data_hx_swap` say where the answer goes.
+which writes
+
+```html
+<button type="button" class="quiet" data-hx-delete="/all" data-hx-vals="{}" data-hx-confirm="Put the sample network back?" data-hx-target="#problem" data-hx-swap="outerHTML">Reset the sample</button>
+```
+
+The button sends a command, `reset_network()` (Delete the network: the sample is put
+back), and the command says the method and the URL (see below): `data_hx_delete`
+names the request, and `data_hx_confirm` asks first. `data_hx_target` and
+`data_hx_swap` say where the answer goes.
 
 **The server reads each request back into a command.** `server.ady` only matches
 the path and hands the request on. `Session.answer` reads it back into the same
 `Command` the page sent (`command_of` in `backend/dijkstra_commands.ady`, the vocabulary both
-sides share, given the request read once: a `Page_Request`, from the standard library's
-`page_server.ady`, with its method, its path and its fields), and `carry_out` does it, one
-`case` on what it is done to and one on the verb:
+sides share, given the fields read once by a `Page_Request`, from the standard library's
+`page_server.ady`). A read answers the page; a change goes to the method for what it is
+done to (`change_node`, `change_edge`, `change_network`), which has one `case` on the verb:
 
 ```adascript
 class Session:
     ...
     def answer(self, method: str, path: str, fields: str) -> str:
-        let r: Page_Request = Page_Request(method, path, fields)
-        ...                                     # relayout and reset: routes of their own
-        let c: ?Command = command_of(r.method, r.path, r.fields)
+        let c: ?Command = command_of(method, path, Page_Request(method, path, fields).fields)
         if c is None:
             return ""
         if c.verb == READ:
-            return all_text(self.net, params_of(r), self.unsaved)
-        return problem_text(self.carry_out(c))
-
-    def carry_out(self, c: Command) -> None | !Refusal_T:
-        ...
+            var choice: Choice = Choice(c.value("start"), c.value("goal"), self.net.names())
+            choice.click(c.value("pick"), c.value("act") == "unpick")
+            return all_text(self.net, choice, self.unsaved)
         case c.thing:
             when NODE:
-                case c.verb:
-                    when CREATE:
-                        problem = self.net.add_node(name)
-                        ...
-                    when DELETE:
-                        ...
-                        problem = self.net.remove_node(name)
-                    ...
-                node_changes.append(Change(c.verb, name))
+                return problem_text(self.change_node(c))
             when EDGE:
-                ...
-        if problem is None:
-            for ch in edge_changes:
-                self.edges_channel.publish(ch)
-            for ch in node_changes:
-                self.nodes_channel.publish(ch)
-        return problem
+                return problem_text(self.change_edge(c))
+            when NETWORK:
+                return problem_text(self.change_network(c))
+
+    def change_edge(self, c: Command) -> None | !Refusal_T:
+        let a: str = c.value("a")
+        let b: str = c.value("b")
+        let cost: int = c.number_value("cost")      # -1 when there is none, which the model refuses
+        var refused: None | !Refusal_T = None
+        case c.verb:
+            when CREATE:
+                refused = self.net.add_edge(a, b, cost)
+            when UPDATE:
+                refused = self.net.set_cost(a, b, cost)
+            when DELETE:
+                refused = self.net.remove_edge(a, b)
+            when others:
+                pass                                # an edge is not read (command_of)
+        if refused is None:
+            self.edges_channel.publish(Change(c.verb, f"{a} {b}"))
+        return refused
 ```
 
 The routes are listed in a comment above `answer`, in the class. **Commands in, events
@@ -314,8 +336,8 @@ command (POST, PUT, DELETE) answers only whether it went through: the paragraph
 on a channel (stdlib's `blackboard.ady`): `NODES_CHAN` or `EDGES_CHAN` carries a `Change`, such as
 `CREATE H`. The Session does not know who listens. The server does: `keep` writes the
 network to its file, and `tell` writes the change to every open page (`GET /events`,
-server-sent events: page_server's `News`), which reads itself again. So every page, the one that made the
-change too, is drawn the same way: from the news. A request with an unknown path returns
+server-sent events: page_server's `News`), which reads itself again. So every page, the one
+that made the change too, is drawn the same way: from the news. A request with an unknown path returns
 `""`, and the server answers 404. The picture at the top, "The whole picture", draws this path.
 
 **Some events stay in the browser.** A drag must follow the mouse many
@@ -391,7 +413,7 @@ the field says so in its type: there is no tag to keep in step with the value.
 once for each, so `picked.delete()` has to exist on both. Every member has to
 be named, `None` included. A `case` over an enum, an int or a
 string compares *values* instead, and a choice that compares different things
-still needs an `if` chain: `picked` in `dijkstra_gui.ady` is one.
+still needs an `if` chain: `Route.role_of` in `dijkstra_gui.ady` is one.
 
 ---
 
@@ -540,7 +562,7 @@ Read it from the top:
    page is the same as the one it was showing, now drawn from the server's copy.
 
 Here the browser and the server both compute the drawing, which is why
-`place_of` is shared: both call the same function on the same network.
+`place_of` is shared: both call the same method on the same network.
 
 ---
 
