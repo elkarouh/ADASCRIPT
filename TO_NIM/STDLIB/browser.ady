@@ -38,7 +38,7 @@ in the page, as htmx does for a button:
 News the server sends by itself, without being asked (a change another page made), comes to a
 function the page names, as text:
 
-    follow("/events", heard)                    # heard(news: str) is called with each message
+    listen_to_server("/events", heard)          # heard(news: str) is called with each message
 
 A CSS selector names elements the way the page's stylesheet does: "g.node" is a <g> of class
 node, "#move" the element with id="move", "g[data_from]" a <g> that has a data_from
@@ -285,8 +285,8 @@ def ask_yes(question: str) -> bool:
 #
 #     def heard(news: str):
 #         print news                    # what the server wrote, "nodes CREATE H"
-#     follow("/events", heard)
-def follow(url: str, handler: (str) -> None):
+#     listen_to_server("/events", heard)
+def listen_to_server(url: str, handler: (str) -> None):
     let source: JsObject = newEventSource(cstring(url))
     def heard(e: Event_T):
         handler(str(toJs(e).data.to(cstring)))

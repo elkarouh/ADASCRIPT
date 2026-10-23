@@ -492,13 +492,13 @@ often it comes: a **draft** (`move_node`, a node the reader still holds) changes
 the page, so it stays in the browser; anything else is the model's, and the model is
 changed in one place, the server's. Speed follows without being the rule: what changes
 only the page is exactly what comes many times a second. Its other half is `news`: the
-liaison follows `GET /events` as it is made, and puts what that says on `changes_channel`.
+liaison listens to `GET /events` as it is made, and puts what that says on `changes_channel`.
 
 ```adascript
 class Liaison_Officer(Observer[Page_Channel_T, Command]):
     def __init__(self, channel: var Command_Channel_T):
         super().__init__(channel)
-        follow("/events", self.news)
+        listen_to_server("/events", self.news)
 
     def callback(self, channel: Page_Channel_T, c: Command):
         if not is_draft(c):

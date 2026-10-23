@@ -60,7 +60,7 @@ What is in this file, in its order (each class keeps one thing):
                     it; NetworkView: the model, a Network, with the view of each node and edge the page
                     draws (the one `network`, rebuilt when htmx draws the page)
     the observers   Liaison_Officer, Mouse_Follower: each subscribes itself to the commands, and the
-                    liaison follows the server's news (and, after the gestures, whose wire it asks
+                    liaison listens to the server's news (and, after the gestures, whose wire it asks
                     about, Page_Refresher to the changes)
     the gestures    one object each, whose __init__ says which event runs which of its methods:
                       Selection  the node or edge clicked last (and the page drawn again)
@@ -74,7 +74,7 @@ questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only 
 gesture means in this app.
 """
 from blackboard import PublishChannel, Observer
-from browser import Element_T, Event_T, Click_T, send_request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, follow
+from browser import Element_T, Event_T, Click_T, send_request, click_of, page, find, all, data, text, fill, press, on, left, made_by_reader, stop, cancel, ask, ask_yes, key_of, show_at, attr, set_attr, has_class, number, listen, listen_first, listen_to_server
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside, place_of
@@ -208,7 +208,7 @@ var network: NetworkView = NetworkView()     # read again each time htmx draws t
 class Liaison_Officer(Observer[Page_Channel_T, Command]):
     def __init__(self, channel: var Command_Channel_T):
         super().__init__(channel)
-        follow("/events", self.news)
+        listen_to_server("/events", self.news)
 
     def callback(self, channel: Page_Channel_T, c: Command):
         if not is_draft(c):

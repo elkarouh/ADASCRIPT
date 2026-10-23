@@ -44,7 +44,7 @@ it but do:. Not yet:
 
 ### A method of a generic class from another module, as a value
 
-- [ ] `follow("/events", changes_channel.publish)`, the channel a
+- [ ] `listen_to_server("/events", changes_channel.publish)`, the channel a
       `PublishChannel[Page_Channel_T, str]` under an alias, comes out as the
       field `changes_channel.publish` ("undeclared field"): `_bare_method_ref`
       knows the methods of this module's classes only, and would have to put
