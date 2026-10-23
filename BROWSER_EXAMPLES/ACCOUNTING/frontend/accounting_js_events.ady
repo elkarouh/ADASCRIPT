@@ -1,14 +1,29 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
 """accounting_js_events -- the events that stay in the browser: an account dragged with
-the mouse, and an arrow drawn from one. Every other event is declared in the HTML (hx-*
-attributes, accounting_page_gui.ady) and handled on the server (accounting_events.ady).
+the mouse, and an arrow drawn from one; and the page drawn again when the books change, on any
+page. Every other event is declared in the HTML (hx-* attributes, accounting_page_gui.ady) and
+handled on the server (accounting_events.ady).
+
+It is built as BROWSER_EXAMPLES/DIJKSTRA_HTMX's script is: a blackboard of its own. The gesture
+never talks to the server: it makes a Command (backend/accounting_commands.ady, the server's
+vocabulary too) and publishes it on the channel `commands_channel`. Two observers carry it out
+(blackboard's Observer: each is an object that subscribes itself as it is made, and its `callback`
+is what it does with what it hears):
+
+    Liaison_Officer the liaison officer: what is for the server it sends there; and it brings the
+                    server's news back, onto the channel `changes_channel`
+    Mouse_Follower  a draft (an account still held: `move_account`) only moves the drawing, here
+                    and now, many times a second; the liaison leaves it in the browser
+
+The Page_Refresher hears the news, a change made to the books on any page, and asks for the page
+again (R, which takes the place of #all).
 
 The accounts and arrows are the page's own text (the JSON in script#books, see accounting_page_gui.ady),
 read into a BooksView when htmx has drawn the page. Where each account is drawn is computed from
 them (shared/layout.ady), not read off the drawing: while one is dragged, every account is laid
 out again and every arrow routed again, here, by the same code the server uses (shared/routes.ady).
-Letting go asks the server for the page again (`Pointer.redraw`), with the new centre in the field `pos`
+Letting go asks the server for the page again, with the new centre in the field `pos`
 and the rest of the form #state as it is, and the arrows are drawn to the new place.
 A press that does not move is a click, and goes on to htmx; with the shift key
 held it picks the account, to be merged with others (the field `pick`).
@@ -17,23 +32,45 @@ The frozen account (class "from") is not moved: dragging from it draws an
 arrow, a red line to the mouse. Let go over another account, and its name goes
 with the same request as the field `target`: the server answers with
 the popup that asks when, what and how much.
+
+What is in this file, in its order:
+    the blackboard  the two channels
+    the view        BooksView: the accounts and arrows, and where each is drawn (the one `books`,
+                    rebuilt when htmx draws the page)
+    the observers   Liaison_Officer, Mouse_Follower, Page_Refresher
+    the gesture     Pointer: svg_drag's drag of an account, the arrow, and the shift-click
+    the start       the observers and the gesture made
+
 The drag itself (the mouse, when a press becomes a drag, the click after it) is the standard
 library's svg_drag, and the page (finding elements, forms, clicks) its browser module, both
-in TO_NIM/STDLIB. This file says only what a drag means in this app: the Pointer's `moved`,
-`dropped`, and `clicked` for the shift-click.
+in TO_NIM/STDLIB.
 """
 from shared/routes import Route_T, boxes, routes_of
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
-from browser import Element_T, Event_T, Click_T, send_request, page, text, field, data, on, stop, listen
+from browser import Element_T, Event_T, Click_T, send_request, page, find, text, field, data, on, stop, listen, listen_to_server
 from drawing import Drawing_Pixel_T, Spot_T
-from svg_drag import Hooks_T, shift, draggable
+from svg_drag import Hooks_T, holding, spot_of, shift, draggable
+from blackboard import PublishChannel, Observer
+from backend/accounting_commands import Command, READ, is_draft, spot, method, url, value, read_books, move_account
+
+# ---- The page's blackboard: what the reader asks, and what the server says changed ----
+
+# The channels of the page's blackboard.
+type Page_Channel_T is enum COMMANDS, CHANGES
+type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel of Page_Channel_T, carrying a Command
+type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
+
+# What the reader asks for, as commands. The gesture publishes here, and nowhere else.
+var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
+# What the server says changed ("ENTRIES_CHAN CREATE a chair"), whichever page changed it.
+var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
 
 # ---- The books as the page holds them ----
 
 # The accounts and arrows as the server keeps them (the JSON in script#books), and where each account
 # is drawn now: the layout of the accounts, with the reader's places (the field pos) and any
 # account dragged since, which is put into pos as the drag goes on. The views are built again each
-# time htmx draws the page (see page_drawn).
+# time htmx draws the page (see Pointer.page_drawn).
 class BooksView:
     var slots: []Slot_T                 # the accounts, in the server's order
     var arrows: []Arrow_T               # the arrows, each from one account to another
@@ -109,11 +146,66 @@ class BooksView:
 
 var books: BooksView = BooksView()       # the page is read again each time htmx draws it (Pointer.page_drawn)
 
+# ---- The observers of commands: the liaison officer, and the draft's drawer ----
+
+# It hears every command: one that is for the server goes there; a draft stays in the browser. And
+# it brings the server's news back: what GET /events says changed goes on changes_channel.
+class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def __init__(self, channel: var Command_Channel_T):
+        super().__init__(channel)
+        listen_to_server("/events", self.news)
+
+    # Send C, unless it is a draft. A read goes with the form #state, C's fields taking the place of
+    # its own of the same name, and its answer, the page, takes the place of #all; a change's answer,
+    # what was done or why not, takes the place of #told.
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if is_draft(c):
+            return
+        if c.verb == READ:
+            send_request(c.method(), c.url(), c.fields, "#all", "#state")
+        else:
+            send_request(c.method(), c.url(), c.fields, "#told")
+
+    # The server says CHANGE ("ENTRIES_CHAN CREATE a chair"), whichever page made it.
+    def news(self, change: str):
+        changes_channel.publish(change)
+
+# It draws a draft of an account's move (move_account, the only draft): the account is drawn where
+# it is asked to be, every account is laid out again and every arrow routed again. Nothing goes to
+# the server.
+class Mouse_Follower(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c):
+            return
+        let id: str = c.value("id")
+        let el: ?Element_T = page.find(f"g.node[data_id=\"{id}\"]")
+        let now: ?Spot_T = c.spot()
+        if el is None or now is None:
+            return
+        shift(el, spot_of(el), now)
+        books.move(id, now)
+
+# The server tells every open page of each change to the books (GET /events), whichever page made it,
+# this one included; each asks for itself again, keeping the reader's settings (the form #state),
+# with the scenario the server shows now (it may be another one) and no popup (the arrow that was
+# recorded is in the books now). Not while an account is held: what is let go asks for the page
+# itself.
+class Page_Refresher(Observer[Page_Channel_T, str]):
+    def callback(self, channel: Page_Channel_T, change: str):
+        if holding():
+            return
+        let fields: {str}str = {"scenario": "", "cancel": "1"}
+        commands_channel.publish(read_books(fields))
+
 # ---- The gesture: the pointer on the drawing ----
+#
+# The gesture is an object that keeps its own state; its methods are what the page's events do,
+# and its __init__ says which event runs which, so making it is starting it.
 
 # The pointer on the drawing: svg_drag's drag of an account, which calls moved, dropped or clicked.
 # Its __init__ says which event runs which of its methods, so making it is starting it; it also
-# hears htmx draw the page again, and reads the books off the new drawing.
+# hears htmx draw the page again, and reads the books off the new drawing. It only publishes
+# commands: reads of the page, with a field changed, and the draft of an account held.
 class Pointer:
     def __init__(self):
         draggable("g.node", "svg.graph", Drawing_Pixel_T(WIDTH), Hooks_T(moved_cb=self.moved, dropped_cb=self.dropped, clicked_cb=self.clicked))
@@ -123,21 +215,15 @@ class Pointer:
     def draw_rubber(self, d: str):
         page.element("#rubber").trace(d)
 
-    # Ask the server for the page again with the form #state, FIELDS taking the place of its own
-    # fields of the same name; the page it answers with takes the place of #all.
-    def redraw(self, fields: {str}str):
-        send_request("GET", "/h/all", fields, "#all", "#state")
-
     # While NODE is dragged. The frozen account (class "from") stays where it is: a line runs from
     # it to the mouse, the arrow being drawn. Any other account goes where the mouse takes it,
-    # kept inside its quarter, and the arrows follow.
+    # kept inside its quarter (a draft, which the Mouse_Follower draws).
     def moved(self, node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
         if node.has_class("from"):
             self.draw_rubber(f"M {centre.x:.1f} {centre.y:.1f} L {wanted.x:.1f} {wanted.y:.1f}")
             return wanted                   # the arrow's tip
         let now: Spot_T = books.within_quarter(node.data("id"), wanted)
-        shift(node, centre, now)
-        books.move(node.data("id"), now)
+        commands_channel.publish(move_account(node.data("id"), now))
         return now
 
     # NODE let go at AT.
@@ -149,11 +235,11 @@ class Pointer:
             self.draw_rubber("")
             let over: str = books.account_at(at, node.data("name"))
             if over != "":
-                self.redraw({"target": over})
+                commands_channel.publish(read_books({"target": over}))
             return
         # an account moved: its new place goes as the field pos
         let pos: str = with_position(page.field("pos"), node.data("id"), at)
-        self.redraw({"pos": pos})
+        commands_channel.publish(read_books({"pos": pos}))
 
     # A click with shift held picks an account to merge with others, or lets it go: the page is
     # asked for again with its name as the field pick. Other clicks go on to htmx.
@@ -164,10 +250,17 @@ class Pointer:
         if node is not None and not node.has_class("group"):
             c.stop()                        # not an ordinary click: htmx must not see it
             let name: str = node.data("name")
-            self.redraw({"pick": name})
+            commands_channel.publish(read_books({"pick": name}))
 
     # The page was drawn again by the server: the books are read off the new drawing's text.
     def page_drawn(self, e: Event_T):
         books = BooksView()
 
+# ---- Start: the page's knowledge sources ----
+
 let pointer: Pointer = Pointer()
+
+# Each observer subscribes itself to its channel as it is made.
+let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
+let page_refresher: Page_Refresher = Page_Refresher(changes_channel)

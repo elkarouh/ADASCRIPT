@@ -180,7 +180,9 @@ let journal: str = all_text(b, ["x"], ["X"], "x", params_of("dc=1"))
 assert "<th>Debit</th>" in journal and "class=\"entry\"" in journal and "Plus and minus" in journal
 assert "Debit and credit" in all_text(b, ["x"], ["X"], "x", params_of(""))
 let books_page: str = all_text(b, ["x"], ["X"], "x", params_of("go=Accounts"))
-assert "data-hx-post=\"/h/do\"" in books_page and "name=\"acctname\"" in books_page and "Delete the account Bank?" in books_page
+assert "data-hx-post=\"/h/accounts\"" in books_page and "name=\"acctname\"" in books_page and "Delete the account Bank?" in books_page
+assert "data-hx-delete=\"/h/accounts\"" in books_page and "data-hx-vals=\"{&quot;name&quot;: &quot;Bank&quot;}\"" in books_page     # a command, by its own method and URL
+assert "data-hx-put=\"/h/scenarios\"" in books_page and "data-hx-target=\"#told\"" in books_page     # Start over; a change answers #told
 assert "Delete the transaction of 2024-01-01, takings?" in all_text(b, ["x"], ["X"], "x", params_of(""))
 assert "Start over" in books_page and "Delete scenario" in books_page and "Save as..." in books_page and "value=\"x_mine\"" in books_page
 assert "Close the year" in books_page                              # the revenue and costs are not zero

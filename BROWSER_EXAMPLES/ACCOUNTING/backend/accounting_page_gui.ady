@@ -4,7 +4,7 @@
     GET /h        the shell: a script tag and a div that loads /h/all
     GET /h/all    the whole page, drawn from the books and the settings in the query
 
-The server keeps no state. The settings (scenario, grouping, tab) are the
+The server keeps no state of the page's. The settings (scenario, grouping, tab) are the
 fields of a form inside the page; a change to one asks /h/all for the page
 again with all of them, and the answer replaces the page. A click on a
 group, or on a tab, adds one more field, `go` or `toggle`, to the request.
@@ -16,8 +16,10 @@ dragged by accounting_js_events.ady, the page's one script of our own. Everythin
 JavaScript page does, this one does: it records a transaction by an arrow
 drawn from one account to another, replays, runs the exercise, closes the
 year, opens and deletes accounts and transactions, starts a scenario over,
-saves it and deletes it. What changes the books is POSTed to /h/do and
-/h/record; the rest is GET /h/all.
+saves it and deletes it. What changes the books is a command (accounting_commands.ady): each button
+that makes one sends it by its own method and URL, and its answer is only the paragraph #told,
+above the page: what was done, or why not. The page is drawn again on the news of the change
+(accounting_js_events.ady), on every page that shows the books; the rest is GET /h/all.
 """
 from uri nimport decodeUrl
 from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
@@ -26,6 +28,7 @@ from shared/routes import Shape, boxes, px, Route_T
 from shared/layout import WIDTH, GAP, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
 from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
+from backend/accounting_commands import Command, method, url, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario
 
 # The settings, as the query gives them.
 type Params is record:
@@ -62,15 +65,9 @@ type Params is record:
     score:    int                   # ... right at the first try
     tries:    int                   # ... wrong answers to this transaction
     bad:      bool                  # the note is a refusal
-    op:       str                   # what is done to the books: delentry, delaccount, openaccount, closeyear, startover, saveas, delete
-    arg:      str                   # ... to what
-    number:   str                   # a new account's number, name and kind
-    acctname: str
-    akind:    str
-    newname:  str                   # a scenario saved under this name
 
 def fresh_params(tab: str) -> Params:
-    return Params("", tab, "", 0, [], "", "", "", False, "", "", "", False, "", "", "", "", "", -1, False, "", "", "", False, False, [], [], "", "", -1, 0, 0, False, "", "", "", "", "", "")
+    return Params("", tab, "", 0, [], "", "", "", False, "", "", "", False, "", "", "", "", "", -1, False, "", "", "", False, False, [], [], "", "", -1, 0, 0, False)
 
 def int_of(text: str, otherwise: int) -> int:
     let n: int | !ParseFailure_T = parse_int(text)
@@ -163,18 +160,6 @@ def params_of(query: str) -> Params:
             p.score = int_of(value, 0)
         elif key == "tries":
             p.tries = int_of(value, 0)
-        elif key == "op":
-            p.op = value
-        elif key == "arg":
-            p.arg = value
-        elif key == "number":
-            p.number = value
-        elif key == "acctname":
-            p.acctname = value
-        elif key == "akind":
-            p.akind = value
-        elif key == "newname":
-            p.newname = value
     return p
 
 # ---------------------------------------------------------------------
@@ -605,7 +590,7 @@ def popup_html(b: Books, p: Params) -> Html:
     let date: str = (p.date if p.date != "" else last_date(b))
     let cancel_vals: str = "{\"cancel\": \"1\"}"
     html:
-        form id="popup" class="popup" data_hx_post="/h/record" data_hx_include="#state" data_hx_target="#all" data_hx_swap="outerHTML":
+        form id="popup" class="popup" data_hx_post=create_entry().url() data_hx_include="#state" data_hx_target="#told" data_hx_swap="outerHTML":
             h3: title
             label: "Date"
             input name="date" value=date placeholder="2012-01-31"
@@ -617,8 +602,6 @@ def popup_html(b: Books, p: Params) -> Html:
             select name="vat":
                 for rate in VatRate_T:
                     + vat_option_html(rate, p.vat)
-            if p.note != "":
-                p class="refused": p.note
             button type="submit": "Record"
             button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=cancel_vals data_hx_target="#all" data_hx_swap="outerHTML": "Cancel"
 
@@ -634,21 +617,30 @@ def posting_text(e: Entry) -> str:
         parts.append(f"{p.account} {signed(p.amount)}")
     return ", ".join(parts)
 
-# A button that asks the server to change the books (POST /h/do): OP to ARG, after ASK is confirmed.
-def do_button(label: str, op: str, arg: str, ask: str, css: str) -> Html:
-    let vals: str = "{\"op\": " + json_quote(op) + ", \"arg\": " + json_quote(arg) + "}"
-    if ask == "":
-        html:
-            button type="button" class=css data_hx_post="/h/do" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": label
-    else:
-        html:
-            button type="button" class=css data_hx_post="/h/do" data_hx_include="#state" data_hx_vals=vals data_hx_confirm=ask data_hx_target="#all" data_hx_swap="outerHTML": label
+# A button that sends the command C, with the fields within INCLUDE (CSS selectors, "" for none),
+# after ASK is confirmed ("" asks nothing): by C's own method to C's URL. Its answer, what was done
+# or why not, takes the place of the paragraph #told.
+def command_button(label: str, c: Command, include: str, ask: str, css: str) -> Html:
+    var vals: str = "{"
+    for name, value in c.fields.items():
+        vals += ("" if vals == "{" else ", ") + json_quote(name) + ": " + json_quote(value)
+    vals += "}"
+    case c.method():
+        when "POST":
+            html:
+                button type="button" class=css data_hx_post=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
+        when "PUT":
+            html:
+                button type="button" class=css data_hx_put=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
+        when others:
+            html:
+                button type="button" class=css data_hx_delete=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
 
 def delete_entry_button(b: Books, i: int) -> Html:
     let ask: str = f"Delete the transaction of {b.entries[i].date}, {b.entries[i].what}?"
     html:
         td:
-            + do_button("Delete", "delentry", str(b.ids[i]), ask, "delete")
+            + command_button("Delete", delete_entry(b.ids[i]), "", ask, "delete")
 
 def row_html(b: Books, i: int, step: int) -> Html:
     let e: Entry = b.entries[i]
@@ -735,14 +727,13 @@ def account_row_html(b: Books, r: AccountRow, g: Graph, dc: bool) -> Html:
             else:
                 td class="num": money(balance)
             td:
-                + do_button("Delete", "delaccount", r.name, ask, "delete")
+                + command_button("Delete", delete_account(r.name), "", ask, "delete")
 
 def kind_option_html(word: str) -> Html:
     html:
         option value=word: word
 
 def accounts_html(b: Books, g: Graph, dc: bool) -> Html:
-    let open_vals: str = "{\"op\": \"openaccount\"}"
     html:
         table class="accounts":
             tr:
@@ -770,7 +761,7 @@ def accounts_html(b: Books, g: Graph, dc: bool) -> Html:
                 if dc:
                     td: ""
                 td:
-                    button type="button" data_hx_post="/h/do" data_hx_include="#state, tr.new" data_hx_vals=open_vals data_hx_target="#all" data_hx_swap="outerHTML": "Open"
+                    + command_button("Open", create_account(), "tr.new", "", "")
 
 def ratio_row_html(r: Ratio) -> Html:
     html:
@@ -935,18 +926,17 @@ def hint_of(source: str, exercising: bool, help: bool) -> str:
 # The buttons that change the books or the scenario, and the merge of the picked accounts.
 def tools_html(current: str, picked: []str, can_close: bool) -> Html:
     let saved: str = current + "_mine"
-    let save_vals: str = "{\"op\": \"saveas\"}"
     let merge_vals: str = "{\"act\": \"merge\"}"
     let picked_text: str = "Picked: " + ", ".join(picked)
     html:
         p class="tools":
-            + do_button("Start over", "startover", "", "Start this scenario over? What you changed in it is lost.", "")
+            + command_button("Start over", update_scenario(), "", "Start this scenario over? What you changed in it is lost.", "")
             span: " "
             input id="newname" name="newname" value=saved size="16" title="Letters, digits, _ and -"
-            button type="button" data_hx_post="/h/do" data_hx_include="#state, #newname" data_hx_vals=save_vals data_hx_target="#all" data_hx_swap="outerHTML": "Save as..."
-            + do_button("Delete scenario", "delete", "", "Delete this scenario, and the changes you made in it? It cannot be undone.", "")
+            + command_button("Save as...", create_scenario(), "#newname", "", "")
+            + command_button("Delete scenario", delete_scenario(), "", "Delete this scenario, and the changes you made in it? It cannot be undone.", "")
             if can_close:
-                + do_button("Close the year", "closeyear", "", "Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero.", "")
+                button type="button" data_hx_post="/h/close-year" data_hx_confirm="Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero." data_hx_target="#told" data_hx_swap="outerHTML": "Close the year"
             if len(picked) > 0:
                 span class="picked": " " + picked_text
             if len(picked) >= 2:
@@ -1249,6 +1239,7 @@ form.popup input, form.popup select { width: 100%; box-sizing: border-box; }
 form.popup button { margin: 1em 0.5em 0 0; }
 p.refused { color: #b71c1c; font-weight: bold; }
 p.note { background: #e8f5e9; padding: 0.3em 0.8em; border-radius: 4px; }
+p#told:empty { display: none; }
 tr.now td { background: #ffe0b2; font-weight: bold; }
 p.replay { margin: 0.5em 0 0 0; }
 p.caption { margin: 0.3em 0 0 0; }
@@ -1278,6 +1269,20 @@ div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4
 div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }
 """
 
+# The paragraph #told, the answer to a change: what was done (DONE), or why not; empty, and not
+# shown, before the first. It is outside #all, so the page drawn again on the news keeps it.
+def told_html(done: str | !BookFailure_T) -> Html:
+    if done is BookFailure_T:
+        html:
+            p id="told" class="refused": done.detail
+    else:
+        let text: str = done
+        html:
+            p id="told" class="note": text
+
+def told_text(done: str | !BookFailure_T) -> str:
+    return str(told_html(done))
+
 def shell() -> Html:
     html:
         html lang="en":
@@ -1289,6 +1294,7 @@ def shell() -> Html:
                 script src="/accounting_js_events.js"
             body:
                 h1: "Accounting, as graph theory"
+                + told_html("")
                 div id="all" data_hx_get="/h/all" data_hx_trigger="load": "Loading..."
 
 # The pages as text, for the server.

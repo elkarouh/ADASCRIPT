@@ -7,36 +7,53 @@ What each request does to the books is accounting_events.ady's Session; the page
     server [--config FILE] [--scenario NAME] [--port N]     (or: make app)
 
 Serves the page (drawn by accounting_page_gui.ady, with build/htmx.min.js and
-build/accounting_js_events.js beside the config file) and, as text (books_text.ady), the books of one scenario and
-what the page does to them:
+build/accounting_js_events.js beside the config file) and the books of one scenario:
 
-    GET  /books            the accounts and every transaction
     GET  /, /h             the page, drawn by the server for htmx (accounting_page_gui.ady)
-    GET  /h/all            the page again, from the settings in the query
-    POST /h/record, /h/do  what the page changes in the books
+    GET  /events           the changes, as they are made, for every open page (server-sent events)
+    GET  /books            the accounts and every transaction, as text (books_text.ady)
     GET  /scenarios        "current", a tab and the scenario shown, then
                            "scenario", NAME and TITLE for each one there is
-    POST /scenario         a scenario's name: shows that one from now on
-    POST /start-over       the scenario shown, back as its .books file has it
-    POST /save-as          a name: the books shown, saved as a new scenario, shown
-    POST /delete-scenario  the scenario shown, gone with its database; the first one left is shown
-    POST /account          one account line: opens it
-    POST /entry            one entry and its postings: records it
-    POST /delete-entry     a transaction's number: deletes it
-    POST /delete-account   an account's name: deletes it, if no transaction touches it
 
-A POST answers "ok", or "error", a tab, and why it is refused.
+Every other request (GET /h/all, and the commands on transactions, accounts and scenarios) is
+answered by Session.answer in accounting_events.ady, which lists them. A read answers the whole
+page, which htmx swaps in; a command only what was done, or why not. Each change it made is
+published, and `tell`, here, tells every open page, which then reads itself again.
 
 A scenario is a pair of files in scenarios/, beside the config file:
 NAME.books, the books as text, and NAME.db, the database the page changes,
 made from NAME.books the first time NAME is shown and again by Start over.
 """
-from asyncdispatch nimport complete, newFuture, Port, waitFor
+from asyncdispatch nimport asyncCheck, complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
+from asyncnet nimport AsyncSocket, send, close, isClosed
 from backend/accounting_page_gui import shell_text
-from backend/accounting_events import Session
+from backend/accounting_events import Channel_T, Change, Session
 
 var session: Session = Session()     # main starts it on the config file
+
+# The pages following GET /events: the answer to each is kept open, and every change is written to it.
+var followers: []AsyncSocket = []
+
+# The first lines of the answer to GET /events, which never ends: a stream of messages.
+const EVENTS_HEAD: str = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n"
+
+# MESSAGE to one page; a page that has gone is closed, and dropped at the next change.
+async def send_news(client: AsyncSocket, message: str):
+    try:
+        await client.send(message)
+    except Exception:
+        client.close()
+
+# A change, told to every page that follows: subscribed to the session's channels in main.
+def tell(channel: Channel_T, change: Change):
+    let message: str = f"data: {channel} {change.kind} {change.key}\n\n"
+    var still: []AsyncSocket = []
+    for client in followers:
+        if not client.isClosed():
+            asyncCheck(send_news(client, message))   # its failure is handled there
+            still.append(client)
+    followers = still
 
 var www: Path = Path("build")            # where the page is: build/, beside the config file
 
@@ -49,35 +66,29 @@ async def handler(req: Request):
     let path: str = req.url.path
     let text: HttpHeaders = newHttpHeaders([("Content-Type", "text/plain; charset=utf-8")])
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
-    if req.reqMethod'Image == "GET" and (path == "/h" or path == "/"):
+    let get: bool = req.reqMethod'Image == "GET"
+    if get and (path == "/h" or path == "/"):
         await req.respond(Http200, shell_text(), html_type)
-    elif req.reqMethod'Image == "GET" and path == "/h/all":
-        await req.respond(Http200, session.page_all(req.url.query), html_type)
-    elif req.reqMethod'Image == "POST" and path == "/h/record":
-        await req.respond(Http200, session.page_record(req.body), html_type)
-    elif req.reqMethod'Image == "POST" and path == "/h/do":
-        await req.respond(Http200, session.page_do(req.body), html_type)
-    elif req.reqMethod'Image == "GET" and path == "/books":
+    elif get and path == "/events":
+        await req.client.send(EVENTS_HEAD)  # and no end: the changes follow, from tell
+        followers.append(req.client)
+    elif get and path == "/books":
         await req.respond(Http200, session.books_text(), text)
-    elif req.reqMethod'Image == "GET" and path == "/scenarios":
+    elif get and path == "/scenarios":
         await req.respond(Http200, session.scenarios_text(), text)
-    elif req.reqMethod'Image == "POST":
-        var answer: str = ""
-        try:
-            answer = session.post_text(path, req.body)
-        except:                         # the database, not the books: say so, and keep serving
-            answer = "error\tthe database failed: " + getCurrentExceptionMsg()
-        await req.respond(Http200, answer, text)
-    else:
+    elif get and path[1:] in PAGES:
         let file: str = path[1:]
-        if file in PAGES:
-            let page: str | !PathFailure_T = (www / file).read_text()
-            if page is PathFailure_T:
-                await req.respond(Http404, f"{file} is not built: make app")
-            else:
-                await req.respond(Http200, page, newHttpHeaders([("Content-Type", content_type(file))]))
+        let page: str | !PathFailure_T = (www / file).read_text()
+        if page is PathFailure_T:
+            await req.respond(Http404, f"{file} is not built: make app")
         else:
+            await req.respond(Http200, page, newHttpHeaders([("Content-Type", content_type(file))]))
+    else:
+        let page: str = session.answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
+        if page == "":
             await req.respond(Http404, "not found")
+        else:
+            await req.respond(Http200, page, html_type)
 
 def main():
     var conf_path: Path = Path("accounting.conf")
@@ -105,6 +116,9 @@ def main():
     let failed: str = session.start(conf_path, first)
     if failed != "":
         die(failed)
+    session.entries_channel.subscribe(tell)
+    session.accounts_channel.subscribe(tell)
+    session.scenarios_channel.subscribe(tell)
     for file in PAGES:
         let found: str | !PathFailure_T = (www / file).read_text()
         if found is PathFailure_T:
