@@ -70,7 +70,7 @@ assert "data-name=\"gold\"" in first and "data-x=\"360.0\"" in first            
 session.answer("PUT", "/blocks", "name=gold&x=200&y=300")                                                    # a drop moves it
 assert "data-x=\"200.0\"" in session.answer("GET", "/all", "") and "data-y=\"300.0\"" in session.answer("GET", "/all", "")
 assert heard[len(heard) - 1] == "LAYOUT_CHAN UPDATE gold"
-session.answer("POST", "/reset", "")
+session.answer("DELETE", "/all", "")
 assert "data-x=\"360.0\"" in session.answer("GET", "/all", "") and "value=\"25\"" in session.answer("GET", "/all", "")
 assert heard[len(heard) - 2:] == ["PORTFOLIO_CHAN UPDATE ", "LAYOUT_CHAN UPDATE "]
 assert session.answer("GET", "/nowhere", "") == ""

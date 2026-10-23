@@ -4,7 +4,7 @@ investment, a product's share, or where a block is. Compiled both ways: the page
 script make commands, the server reads each request back into one, and both go by the same words,
 as BROWSER_EXAMPLES/DIJKSTRA_HTMX's do.
 
-A Command (the stdlib's commands.ady) is its verb (here READ or UPDATE), what it is done to
+A Command (the stdlib's commands.ady) is its verb (here READ, UPDATE or DELETE), what it is done to
 (THE_INVESTMENT, A_SHARE, A_BLOCK, or THE_PORTFOLIO, which is what is read: named so, and not
 INVESTMENT, for Nim, which would take it for the model's Investment), and its fields by name:
 
@@ -13,13 +13,14 @@ INVESTMENT, for Nim, which would take it for the model's Investment), and its fi
     update_block("gold", at)        # U: PUT /blocks       name=gold x=.. y=..: where it was let go
     move_block("gold", at)          # U, a draft: the block still held; it stays in the browser
     read_portfolio()                # R: GET /all          the drawing
+    reset_portfolio()               # D: DELETE /all       the portfolio and layout as they start
 
 The field the reader changed is not in the command: the field sends itself with it. On the wire
 the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say which, and
 `command_of` reads them back, so the mapping is written once, here. No HTML, no HTTP.
 """
 from drawing import Spot_T
-from commands import Verb_T, READ, UPDATE, Command_Of, draft_fields
+from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Command_Of, draft_fields
 
 type Thing_T is enum THE_INVESTMENT, A_SHARE, A_BLOCK, THE_PORTFOLIO
 type Command is Command_Of[Thing_T]        # a command (the stdlib's commands.ady), of this app's things
@@ -36,13 +37,13 @@ def url(c: Command) -> str:
         when THE_PORTFOLIO:
             return "/all"
 
-# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. The portfolio
-# is only read, and only the portfolio is read; nothing is created or deleted.
+# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. Only the
+# portfolio is read, and it is only read or put back as it starts; the rest is only updated.
 def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
     for verb in Verb_T:
         for thing in Thing_T:
             let c: Command = Command(verb, thing, fields)
-            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == THE_PORTFOLIO) and verb in [READ, UPDATE]:
+            if c.method() == http_method and c.url() == path and (verb == UPDATE) == (thing != THE_PORTFOLIO) and verb != CREATE:
                 return c
     return None
 
@@ -73,3 +74,8 @@ def move_block(name: str, at: Spot_T) -> Command:
 def read_portfolio() -> Command:
     let no_fields: {str}str = {:}
     return Command(READ, THE_PORTFOLIO, no_fields)
+
+# D: the portfolio, which goes: the one it starts with is put back, and the blocks where they start.
+def reset_portfolio() -> Command:
+    let no_fields: {str}str = {:}
+    return Command(DELETE, THE_PORTFOLIO, no_fields)

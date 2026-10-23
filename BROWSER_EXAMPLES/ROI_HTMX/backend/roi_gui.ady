@@ -103,13 +103,6 @@ def box_html(block: str, x: Drawing_Pixel_T, y: Drawing_Pixel_T, w: Drawing_Pixe
                 div class="jj-form":
                     + inside
 
-# What a field that is changed sends with its own value: the fields of its command C, as hx-vals.
-def vals_of(c: Command) -> str:
-    var pairs: []str = []
-    for name, value in c.fields.items():
-        pairs.append(f'"{name}": "{value}"')
-    return "{" + ", ".join(pairs) + "}"
-
 # What the Investment looks like inside its box: the money, and the year it was put in.
 def to_html(investment: Investment) -> Html:
     var years: []int = []
@@ -143,7 +136,7 @@ def to_html(share: InvestmentPercentage) -> Html:
                 strong: label_of(share.kind)
                 "?"
                 span class="jj-input-container":
-                    input class="jj-input" type="number" name="percentage" value=plain(share.percentage) min="0" max="100" step="1" data_hx_put=update_share(name_of(share.kind)).url() data_hx_trigger="change" data_hx_vals=vals_of(update_share(name_of(share.kind))) data_hx_target="#problem" data_hx_swap="outerHTML"
+                    input class="jj-input" type="number" name="percentage" value=plain(share.percentage) min="0" max="100" step="1" data_hx_put=update_share(name_of(share.kind)).url() data_hx_trigger="change" data_hx_vals=update_share(name_of(share.kind)).vals() data_hx_target="#problem" data_hx_swap="outerHTML"
                     span class="jj-input-unit": "%"
 
 # A line of a results box: what it is, and its value, which cannot be edited.

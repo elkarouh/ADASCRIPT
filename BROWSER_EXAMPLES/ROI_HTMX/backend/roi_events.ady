@@ -18,10 +18,10 @@ every open page, which then reads itself again -- and the Session knows none of 
         print channel, change.kind, change.key          # "PORTFOLIO_CHAN UPDATE gold", "LAYOUT_CHAN UPDATE overall"
     session.portfolio_channel.subscribe(heard)
 
-Reset is no command on one thing: it is its own route, and what it changed is an UPDATE with no key:
-everything, read it all again.
+Reset is a command on the whole portfolio (DELETE /all: it starts again), and what it changes is
+an UPDATE with no key: everything, read it all again.
 """
-from drawing import Drawing_Pixel_T, Spot_T
+from drawing import Spot_T
 from blackboard import PublishChannel
 from page_server import Page_Request
 from backend/roi_model import Portfolio, Product_T, new_portfolio, set_share, set_year
@@ -54,66 +54,79 @@ class Session:
         self.portfolio = new_portfolio()
         self.layout = new_layout()
 
-    # The routes, all answered by answer below. Each but the last is a Command (on the wire, the verb
-    # is the method and the thing the URL); the read answers the whole drawing for htmx to swap in,
-    # the others the paragraph #problem (empty when the command went through).
+    # The routes, all answered by answer below, each a Command (on the wire, the verb is the method
+    # and the thing the URL). The read answers the whole drawing for htmx to swap in; the others the
+    # paragraph #problem (empty when the command went through).
     #
-    #     GET  /all          R the drawing
-    #     PUT  /investment   U the money invested, or the year      (funds, or year)
-    #     PUT  /shares       U a product's share; the others adjust (product, percentage)
-    #     PUT  /blocks       U a block dragged                      (name, x, y: its centre)
-    #     POST /reset        the starting portfolio and layout again
+    #     GET    /all          R the drawing
+    #     DELETE /all          D the portfolio and layout put back as they start
+    #     PUT    /investment   U the money invested, or the year      (funds, or year)
+    #     PUT    /shares       U a product's share; the others adjust (product, percentage)
+    #     PUT    /blocks       U a block dragged                      (name, x, y: its centre)
 
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
     # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
-        let r: Page_Request = Page_Request(method, path, fields)
-        if r.method == "POST" and r.path == "/reset":
-            self.portfolio = new_portfolio()
-            self.layout = new_layout()
-            self.portfolio_channel.publish(Change(UPDATE, ""))
-            self.layout_channel.publish(Change(UPDATE, ""))
-            return problem_text("")
-        let c: ?Command = command_of(r.method, r.path, r.fields)
+        let c: ?Command = command_of(method, path, Page_Request(method, path, fields).fields)
         if c is None:
             return ""
         if c.verb == READ:
             return all_text(self.portfolio, self.layout)
-        return problem_text(self.carry_out(c))
-
-    # Carry out the change C, and when it went through publish what it changed: "", or why not.
-    def carry_out(self, c: Command) -> str:
         case c.thing:
             when THE_INVESTMENT:
-                if "funds" in c.fields:
-                    let funds: float = number_of(c.value("funds"))
-                    if funds < 0.0:
-                        return "The money invested is a number, 0 or more."
-                    self.portfolio.investment.funds = funds
-                    self.portfolio_channel.publish(Change(UPDATE, "funds"))
-                    return ""
-                let refused: str = set_year(self.portfolio, int(number_of(c.value("year"))))
-                if refused == "":
-                    self.portfolio_channel.publish(Change(UPDATE, "year"))
-                return refused
+                return problem_text(self.change_investment(c))
             when A_SHARE:
-                let share: float = number_of(c.value("percentage"))
-                if share < 0.0:
-                    return "A share is a number, 0 to 100."
-                let product: str = c.value("product")
-                for kind in Product_T:
-                    if name_of(kind) == product:
-                        set_share(self.portfolio, kind, min(share, 100.0))
-                        self.portfolio_channel.publish(Change(UPDATE, product))
-                        return ""
-                return f"There is no product {product}."
+                return problem_text(self.change_share(c))
             when A_BLOCK:
-                let at: ?Spot_T = c.spot()
-                if at is None:
-                    return "Where should the block go? There is no place."
-                let refused: str = move_block(self.layout, c.value("name"), at)
-                if refused == "":
-                    self.layout_channel.publish(Change(UPDATE, c.value("name")))
-                return refused
+                return problem_text(self.change_block(c))
             when THE_PORTFOLIO:
-                return ""                               # only read (command_of)
+                return problem_text(self.change_portfolio(c))
+
+    # The money invested (the field funds), or the year (year): "", or why not. When it went
+    # through, the field is published.
+    def change_investment(self, c: Command) -> str:
+        if "funds" in c.fields:
+            let funds: float = number_of(c.value("funds"))
+            if funds < 0.0:
+                return "The money invested is a number, 0 or more."
+            self.portfolio.investment.funds = funds
+            self.portfolio_channel.publish(Change(UPDATE, "funds"))
+            return ""
+        let refused: str = set_year(self.portfolio, c.number_value("year"))
+        if refused == "":
+            self.portfolio_channel.publish(Change(UPDATE, "year"))
+        return refused
+
+    # The share of the product C names (product) set to its percentage; the others adjust: "", or
+    # why not. When it went through, the product is published.
+    def change_share(self, c: Command) -> str:
+        let share: float = number_of(c.value("percentage"))
+        if share < 0.0:
+            return "A share is a number, 0 to 100."
+        let product: str = c.value("product")
+        for kind in Product_T:
+            if name_of(kind) == product:
+                set_share(self.portfolio, kind, min(share, 100.0))
+                self.portfolio_channel.publish(Change(UPDATE, product))
+                return ""
+        return f"There is no product {product}."
+
+    # The block C names (name) put with its centre at x, y: "", or why not. When it went through,
+    # the block is published.
+    def change_block(self, c: Command) -> str:
+        let at: ?Spot_T = c.spot()
+        if at is None:
+            return "Where should the block go? There is no place."
+        let refused: str = move_block(self.layout, c.value("name"), at)
+        if refused == "":
+            self.layout_channel.publish(Change(UPDATE, c.value("name")))
+        return refused
+
+    # The portfolio and the layout put back as they start (D): it cannot be refused, and what
+    # changed is everything, an UPDATE with no key, for every page to read again.
+    def change_portfolio(self, c: Command) -> str:
+        self.portfolio = new_portfolio()            # the one change of the portfolio: DELETE (command_of)
+        self.layout = new_layout()
+        self.portfolio_channel.publish(Change(UPDATE, ""))
+        self.layout_channel.publish(Change(UPDATE, ""))
+        return ""

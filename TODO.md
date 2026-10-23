@@ -93,7 +93,7 @@ it but do:. Not yet:
 - [ ] `vals += ("" if done else ", ") + '"' + name`: a conditional
       expression in parentheses, then `+` a char, comes out as Nim's `+`,
       which strings and chars do not have (`&` is wanted). ROI_HTMX's
-      `vals_of` (roi_gui.ady) builds its pairs with an f-string meanwhile.
+      `vals_of` built its pairs with an f-string, as commands.ady's `vals` does.
 
 ### Narrowing an optional
 
