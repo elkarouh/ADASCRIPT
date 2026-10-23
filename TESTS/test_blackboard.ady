@@ -27,13 +27,14 @@ def broken(channel: Channel_T, event: Change):
 var nodes: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](NODES)
 assert nodes.name == NODES
 assert nodes.subscriber_count() == 0
-assert nodes.publish(Change("create", "A")) == 0     # nobody listening
+nodes.publish(Change("create", "A"))     # nobody listening
+assert log == []
 
 let id1: int = nodes.subscribe(first)
 let id2: int = nodes.subscribe(second)
 assert id1 != id2
 assert nodes.subscriber_count() == 2
-assert nodes.publish(Change("create", "A")) == 2
+nodes.publish(Change("create", "A"))
 assert log == ["first NODES create A", "second NODES create A"]     # subscription order
 
 # unsubscribe by id; a second try, or an unknown id, is False
@@ -41,28 +42,31 @@ assert nodes.unsubscribe(id1)
 assert not nodes.unsubscribe(id1)
 assert not nodes.unsubscribe(99)
 log = []
-assert nodes.publish(Change("delete", "A")) == 1
+nodes.publish(Change("delete", "A"))
 assert log == ["second NODES delete A"]
 
-# a callback that fails is skipped; the others still run and only the ones that returned count
+# a callback that fails stops publish: the failure reaches the publisher
 nodes.clear_subscribers()
 assert nodes.subscriber_count() == 0
 log = []
 nodes.subscribe(first)
-nodes.subscribe(broken)
+let id_broken: int = nodes.subscribe(broken)
 nodes.subscribe(second)
-assert nodes.publish(Change("update", "B")) == 2
-assert log == ["first NODES update B", "second NODES update B"]
-
-# raise_errors: the failure of a subscriber reaches the publisher
-nodes.raise_errors = True
 var raised: bool = False
 try:
     nodes.publish(Change("update", "B"))
 except Exception:
     raised = True
 assert raised
+assert log == ["first NODES update B"]
+
+# raise_errors = False: a callback that fails is skipped; the others still run
 nodes.raise_errors = False
+log = []
+nodes.publish(Change("update", "B"))
+assert log == ["first NODES update B", "second NODES update B"]
+nodes.raise_errors = True
+assert nodes.unsubscribe(id_broken)
 
 # history: off by default, then bounded, oldest dropped first
 assert len(nodes.history) == 0

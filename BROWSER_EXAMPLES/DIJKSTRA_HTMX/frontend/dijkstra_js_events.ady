@@ -54,18 +54,20 @@ the same modules the server draws the page with. The page carries the network as
 never from where the page happens to draw it.
 
 What is in this file, in its order (each class keeps one thing):
-    the blackboard  the two channels, and publish_command and publish_change, the only ways onto them
+    the blackboard  the two channels: commands_channel, every gesture's one way out, and
+                    changes_channel, the server's one way in
     the views       NodeView, EdgeView: one node or edge as the page draws it, and what can be done to
                     it; NetworkView: the model, a Network, with the view of each node and edge the page
                     draws (the one `network`, rebuilt when htmx draws the page)
-    the observers   Liaison_Officer, Mouse_Follower: each subscribes itself to the commands (and, after
-                    the gestures, whose wire it asks about, Page_Refresher to the changes)
+    the observers   Liaison_Officer, Mouse_Follower: each subscribes itself to the commands, and the
+                    liaison follows the server's news (and, after the gestures, whose wire it asks
+                    about, Page_Refresher to the changes)
     the gestures    one object each, whose __init__ says which event runs which of its methods:
                       Selection  the node or edge clicked last (and the page drawn again)
                       Pointer    svg_drag's drag and click of a node, and the double-click
                       Menus      the right-click menus, the buttons with data_tool, and the keys
                       Wire       the wire dragged from a node's dot to make an edge
-    the start       the other gestures and the observers made, and the server's news followed
+    the start       the other gestures and the observers made
 
 The drag itself is the standard library's svg_drag; the page (finding elements, forms, menus,
 questions, keys) its browser module, both in TO_NIM/STDLIB. This file says only what each
@@ -90,17 +92,6 @@ type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one c
 var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
 # What the server says changed ("NODES_CHAN CREATE H"), whichever page changed it.
 var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
-commands_channel.raise_errors = True    # a subscriber that fails is a bug: let it show
-changes_channel.raise_errors = True
-
-# What goes on the page's blackboard, and only through these two.
-# Ask for C: the gesture's one way out.
-def publish_command(c: Command):
-    commands_channel.publish(c)
-
-# What the server says changed (GET /events): the server's one way in.
-def publish_change(change: str):
-    changes_channel.publish(change)
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
@@ -121,16 +112,16 @@ class NodeView(Node_T):
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
     def choose(self, unpick: bool):
-        publish_command(read_network(self.name, unpick))
+        commands_channel.publish(read_network(self.name, unpick))
 
     # Let it go at AT: it is moved there.
     def drop_at(self, at: Spot_T):
-        publish_command(update_node(self.name, at))
+        commands_channel.publish(update_node(self.name, at))
 
     # Ask whether to delete this node and its edges, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the node {self.name} and its edges?"):
-            publish_command(delete_node(self.name))
+            commands_channel.publish(delete_node(self.name))
 
 class EdgeView(Edge_T):
     var el: Element_T
@@ -143,28 +134,20 @@ class EdgeView(Edge_T):
     # Ask whether to delete this edge, and if so send it.
     def delete(self):
         if ask_yes(f"Delete the edge {self.a} — {self.b}?"):
-            publish_command(delete_edge(self.a, self.b))
+            commands_channel.publish(delete_edge(self.a, self.b))
 
     # Ask the cost of this edge, and send it.
     def change_cost(self):
         let cost: str = ask(f"Cost of the edge {self.a} — {self.b}?", str(self.cost))
         if cost == "":
             return
-        publish_command(update_edge(self.a, self.b, cost))
+        commands_channel.publish(update_edge(self.a, self.b, cost))
 
     # Draw the edge again, from A to B: its lines, and its cost just above the middle.
     def redraw(self, a: Spot_T, b: Spot_T):
         for line in self.el.all("path"):
             line.draw_line(a, b)
         self.el.element("text.cost").place_at(Spot_T(x=(a.x + b.x) / 2.0, y=(a.y + b.y) / 2.0 - COST_DY))
-
-# The text the server keeps the network in, as the page carries it: its node, edge and "at" lines
-# (see dijkstra_gui.ady). Before htmx has drawn the page there is none: an empty network.
-def kept_text() -> str:
-    let kept: ?Element_T = page.find("pre#network")
-    if kept is None:
-        return ""
-    return kept.text()
 
 # The network as the page holds it: a Network, its places included, built from the kept text, and
 # the views of what the page draws of it, by name, each found on the page. A node or edge the
@@ -174,8 +157,12 @@ class NetworkView(Network):
     var node_views: {str}NodeView       # by name
     var edge_views: {str}EdgeView       # by "A-B", the ends as the model names them
 
+    # Built from the text the server keeps the network in, as the page carries it (pre#network):
+    # its node, edge and "at" lines (see dijkstra_gui.ady). Before htmx has drawn the page there is
+    # none: an empty network.
     def __init__(self):
-        super().__init__(kept_text())
+        let kept: ?Element_T = page.find("pre#network")
+        super().__init__("" if kept is None else kept.text())
         self.node_views = {:}
         self.edge_views = {:}
         for n in self.nodes:
@@ -216,8 +203,13 @@ var network: NetworkView = NetworkView()     # read again each time htmx draws t
 
 # ---- The observers of commands: the liaison officer, and the draft's drawer ----
 
-# It hears every command: one that is for the server goes there; a draft stays in the browser.
+# It hears every command: one that is for the server goes there; a draft stays in the browser. And
+# it brings the server's news back: what GET /events says changed goes on changes_channel.
 class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def __init__(self, channel: var Command_Channel_T):
+        super().__init__(channel)
+        follow("/events", self.news)
+
     def callback(self, channel: Page_Channel_T, c: Command):
         if not is_draft(c):
             self.send(c)
@@ -228,6 +220,10 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
     def send(self, c: Command):
         let target: str = ("#all" if c.verb == READ else "#problem")
         send_request(c.method(), c.url(), c.fields, target, "#state")
+
+    # The server says CHANGE ("NODES_CHAN CREATE H"), whichever page made it.
+    def news(self, change: str):
+        changes_channel.publish(change)
 
 # It draws a draft of a node's move (move_node, the only draft): the node is drawn where it is
 # asked to be, the page's model keeps the place, and the edges that end at it are drawn again.
@@ -308,11 +304,10 @@ class Selection:
         self.what = None
         network = NetworkView()
 
-var selection: Selection = Selection()     # made here: the other gestures act on it
+let selection: Selection = Selection()     # made here: the other gestures act on it
 
-# Ask the reader the name of a new node; "" when they cancel.
-def ask_name() -> str:
-    return ask("Name of the new node (letters and digits)?", "")
+# What the reader is asked for a new node ("" back when they cancel).
+let NAME_QUESTION: str = "Name of the new node (letters and digits)?"
 
 # The pointer on the drawing: svg_drag's drag of a node, which calls moved, dropped or clicked,
 # and the double-click.
@@ -325,7 +320,7 @@ class Pointer:
     # draft, which the Mouse_Follower draws).
     def moved(self, node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
         let now: Spot_T = inside(wanted)
-        publish_command(move_node(NodeView(node).name, now))
+        commands_channel.publish(move_node(NodeView(node).name, now))
         return now
 
     # NODE let go at AT: it is moved there (U).
@@ -365,10 +360,10 @@ class Pointer:
             return
         if on(c, "svg.graph") is None or on(c, "g.node") is not None:
             return                      # outside the drawing, or on a node (which has no double-click)
-        let name: str = ask_name()
+        let name: str = ask(NAME_QUESTION, "")
         if name == "":
             return
-        publish_command(create_node(name, inside(spot_at(e))))
+        commands_channel.publish(create_node(name, inside(spot_at(e))))
 
 
 # The menus: the right-click menu of what can be done to what was clicked, the buttons with
@@ -417,9 +412,9 @@ class Menus:
             return
         case b.data("tool"):
             when "add-here":
-                let name: str = ask_name()
+                let name: str = ask(NAME_QUESTION, "")
                 if name != "":
-                    publish_command(create_node(name, self.at))
+                    commands_channel.publish(create_node(name, self.at))
             when "cost":
                 selection.change_cost()
             when "delete":
@@ -506,7 +501,7 @@ class Wire:
         let cost: str = ask(f"Cost of the edge {self.from_name} — {to.name}?", "1")
         if cost == "":
             return
-        publish_command(create_edge(self.from_name, to.name, cost))
+        commands_channel.publish(create_edge(self.from_name, to.name, cost))
 
     # The click after the release belongs to the wire: it goes no further.
     def swallow_click(self, e: Event_T):
@@ -515,7 +510,7 @@ class Wire:
             self.swallow = false
             stop(c)
 
-var wire: Wire = Wire()     # made here: the Page_Refresher asks whether a wire is held
+let wire: Wire = Wire()     # made here: the Page_Refresher asks whether a wire is held
 
 # ---- The observer of changes ----
 
@@ -527,9 +522,9 @@ class Page_Refresher(Observer[Page_Channel_T, str]):
     def callback(self, channel: Page_Channel_T, change: str):
         if holding() or wire.linking:
             return
-        publish_command(read_network("", False))
+        commands_channel.publish(read_network("", False))
 
-# ---- Start: the page's knowledge sources, and the server's news ----
+# ---- Start: the page's knowledge sources ----
 
 # The two gestures nothing else asks about (the selection and the wire are made above).
 let pointer: Pointer = Pointer()
@@ -539,4 +534,3 @@ let menus: Menus = Menus()
 let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
 let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
-follow("/events", publish_change)

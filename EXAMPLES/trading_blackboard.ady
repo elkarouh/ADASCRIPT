@@ -4,7 +4,7 @@
 A Blackboard for one symbol holds a PublishChannel for every EventType, indexed and named by the enum.
 `board.publish(kind, ...)` builds the Event (symbol, source, sequence number) and sends it down
 the channel of its kind; `board.subscribe(kind, callback)` listens to one kind. A subscriber
-that fails stops the publisher (raise_errors), so a driving loop fails loudly. Every channel
+that fails stops the publisher, so a driving loop fails loudly. Every channel
 keeps its history except PRICE_UPDATE, which fires on every bar and is never read back.
 
 The event's payload is a table of strings, which is what every backend can carry; a fixed
@@ -35,7 +35,6 @@ class Blackboard:
         self.published = 0
         for kind in EventType:
             self.channels[kind] = Event_Channel_T(kind)
-            self.channels[kind].raise_errors = True
             self.channels[kind].keep_history = keep_history and kind != PRICE_UPDATE
 
     def subscribe(self, kind: EventType, callback: (EventType, Event) -> None) -> int:
@@ -47,7 +46,7 @@ class Blackboard:
     def publish(self, kind: EventType, source: str, data: {str}str) -> Event:
         self.published += 1
         let event: Event = Event(kind, self.symbol, source, self.published, data)
-        let notified: int = self.channels[kind].publish(event)
+        self.channels[kind].publish(event)
         return event
 
     def subscriber_count(self, kind: EventType) -> int:

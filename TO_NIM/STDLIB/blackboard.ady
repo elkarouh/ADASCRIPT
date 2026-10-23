@@ -10,8 +10,7 @@ log, undo, telling other pages) is then a new subscriber, and the control is not
 BROWSER_EXAMPLES/DIJKSTRA_HTMX is built so (its docs/TUTORIAL.md, "The blackboard").
 
 A PublishChannel is a named channel. Subscribers register a callback; `publish` hands one
-event to every subscriber, in the order they subscribed, and returns how many took it
-without failing. Nothing is queued: when `publish` returns, every subscriber has run.
+event to every subscriber, in the order they subscribed. Nothing is queued: when `publish` returns, every subscriber has run.
 
 The channel is generic in two types: the name of the channel, and the event it carries.
 A blackboard has a handful of channels, all known when it is written, so a channel is named
@@ -39,9 +38,9 @@ is a record or an enum, checked at compile time, not a bag of keyword arguments:
 A callback takes the channel's name (the enum's value) and the event. `subscribe` answers a number, the
 subscription's id, and `unsubscribe` takes that number back: functions are not compared,
 so the id is what names a subscription (the same callback subscribed twice is called twice,
-under two ids). A callback that raises is skipped and does not stop the others; `publish`
-counts only those that returned. Set `raise_errors = True` to have the failure propagate
-instead, so a loop driving the channel stops loudly.
+under two ids). A callback that raises stops `publish`, and the failure reaches the publisher:
+a subscriber that fails is a bug, and it shows. Set `raise_errors = False` to have a failing
+callback skipped instead, the others still run.
 
 History is off by default. `keep_history = True` keeps the last `max_history` events
 (1000 unless set), oldest dropped first; `history` is read in publish order.
@@ -66,7 +65,7 @@ class PublishChannel[Channel_T, Event_T]:
         self.history = []
         self.keep_history = False
         self.max_history = 1000
-        self.raise_errors = False
+        self.raise_errors = True
 
     def subscribe(self, callback: (Channel_T, Event_T) -> None) -> int:
         let id: int = self.next_id
@@ -83,22 +82,19 @@ class PublishChannel[Channel_T, Event_T]:
                 return True
         return False
 
-    def publish(self, event: Event_T) -> int:
+    def publish(self, event: Event_T):
         if self.keep_history:
             self.history.append(event)
             while len(self.history) > self.max_history:
                 self.history = self.history[1:]
-        var notified: int = 0
         # a copy, so a callback may unsubscribe itself while it runs
         let current: [](Channel_T, Event_T) -> None = self.callbacks[:]
         for callback in current:
             try:
                 callback(self.name, event)
-                notified += 1
             except Exception:
                 if self.raise_errors:
                     raise
-        return notified
 
     def clear_subscribers(self):
         self.ids = []

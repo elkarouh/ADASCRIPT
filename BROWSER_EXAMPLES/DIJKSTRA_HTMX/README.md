@@ -65,7 +65,7 @@ The routes are a small REST interface on two collections. Commands in, events ou
   sends it and swaps in the answer; the page is drawn again on the news of the change.
 * A gesture on the drawing (a click on a node, a drag, a wire, a double-click, a
   menu, the Delete key) has no button: it makes a **command**, Create, Read, Update or
-  Delete of a node or an edge, and publishes it on the page's blackboard: `publish_command(delete_node(n))`
+  Delete of a node or an edge, and publishes it on the page's blackboard: `commands_channel.publish(delete_node(n))`
   (`backend/dijkstra_commands.ady`). The liaison sends it on; a draft (a node still held) it
   keeps in the browser. Several gestures make the same command (Delete,
   Backspace and the menu's "Delete node" all make `delete_node`), and nothing after the

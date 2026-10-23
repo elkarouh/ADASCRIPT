@@ -33,6 +33,24 @@ it but do:. Not yet:
       (`_method_value_classes`, ady2nim.py); for the rest `@virtual` is the
       workaround today.
 
+### A module's cached Nim outlives a change to what it imports
+
+- [ ] the cache keeps each imported module's .nim and makes it again only
+      when that module's own source changes. When a stdlib module it imports
+      changes a signature (blackboard's `publish` stopped returning an int),
+      the cached .nim still has `discard x.publish(...)`, and Nim refuses
+      it until the cache entry is removed. The key should take in the
+      sources of what the module imports.
+
+### A method of a generic class from another module, as a value
+
+- [ ] `follow("/events", changes_channel.publish)`, the channel a
+      `PublishChannel[Page_Channel_T, str]` under an alias, comes out as the
+      field `changes_channel.publish` ("undeclared field"): `_bare_method_ref`
+      knows the methods of this module's classes only, and would have to put
+      the alias's type arguments into `publish`'s generic parameter types.
+      DIJKSTRA_HTMX's liaison has a method `news` for it meanwhile.
+
 ### Narrowing an optional
 
 - [ ] a leaving guard whose `or` mixes other tests with `x is None`:

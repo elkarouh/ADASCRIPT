@@ -49,11 +49,11 @@ class Shouter(Watcher[str]):
 let logger: Logger = Logger(alarms_channel)
 let counter: Counter = Counter(alarms_channel)
 let shouter: Shouter = Shouter(news_channel)
-assert alarms_channel.publish("fire") == 2
-assert news_channel.publish("rain") == 1
+alarms_channel.publish("fire")
+news_channel.publish("rain")
 assert counter.count == 1
 assert alarms_channel.unsubscribe(logger.id)            # the id is the subscription's
-assert alarms_channel.publish("flood") == 1
+alarms_channel.publish("flood")
 assert counter.count == 2
 assert heard == ["log ALARMS fire", "shout rain"]
 print heard, counter.count, logger.id, counter.id, shouter.seen
