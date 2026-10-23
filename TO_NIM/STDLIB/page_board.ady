@@ -1,0 +1,72 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""
+page_board.ady -- the blackboard of a page that htmx draws: the reader's commands go out, the
+server's news comes in
+
+A script of BROWSER_EXAMPLES (DIJKSTRA_HTMX, SVG_NODE_EDITOR, ACCOUNTING, ROI_HTMX) is built on two
+channels (blackboard.ady). Every gesture publishes a command (commands.ady) on the commands channel,
+and does not know who carries it out. What the server says changed, on any page, comes in on the
+changes channel. What is the same in every such script is here:
+
+    Page_Channel_T      the two channels' names, COMMANDS and CHANGES
+    changes_channel     what the server says changed ("NODES_CHAN CREATE H"), as text
+    Liaison_Officer     the observer of the commands that sends each to the server (but a draft,
+                        which stays in the browser), and puts the server's news on changes_channel
+
+The app says the rest: its commands channel, which carries its own kind of command, and the
+observers of its own (one that draws a draft; one that reads the page again on the news):
+
+    from page_board import Page_Channel_T, COMMANDS, changes_channel, Liaison_Officer
+
+    type Command_Channel_T is PublishChannel[Page_Channel_T, Command]
+    var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
+
+    let liaison: Liaison_Officer[Thing_T] = Liaison_Officer[Thing_T](commands_channel, url, "#problem", "#state")
+
+`url` is the app's: the URL a command goes to. A read goes with the form the app names (#state, the
+reader's choice), and its answer is the page, in place of #all; a change's answer is whether it went
+through, in place of the paragraph the app names (#problem).
+"""
+from blackboard import PublishChannel, Observer
+from browser import send_request, listen_to_server
+from commands import READ, Command_Of
+
+# The channels of a page's blackboard: what the reader asks for, and what the server says changed.
+type Page_Channel_T is enum COMMANDS, CHANGES
+
+# A channel of the page's carrying a change, as the server tells it.
+type Change_Channel_T is PublishChannel[Page_Channel_T, str]
+
+# What the server says changed ("NODES_CHAN CREATE H"), whichever page changed it.
+var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
+
+# The server says CHANGE: it goes on changes_channel.
+def heard(change: str):
+    changes_channel.publish(change)
+
+# It hears every command: one that is for the server goes there; a draft stays in the browser. And
+# it brings the server's news back: what GET /events says changed goes on changes_channel.
+class Liaison_Officer[Thing_T](Observer[Page_Channel_T, Command_Of[Thing_T]]):
+    var url_of:  (Command_Of[Thing_T]) -> str     # the URL a command goes to: the app's
+    var answers: str                                # where a change's answer goes: "#problem"
+    var include: str                                # what goes along with a read: "#state", or ""
+
+    def __init__(self, channel: var PublishChannel[Page_Channel_T, Command_Of[Thing_T]], url_of: (Command_Of[Thing_T]) -> str, answers: str, include: str):
+        super().__init__(channel)
+        self.url_of = url_of
+        self.answers = answers
+        self.include = include
+        listen_to_server("/events", heard)
+
+    # Send C, unless it is a draft: its verb is the method, its thing the URL. A read goes with the
+    # form `include` names (C's fields taking the place of its own of the same name), and its answer,
+    # the page, takes the place of #all; a change's answer is whether it went through, in place of
+    # `answers` (the page is drawn again on the news of the change).
+    def callback(self, channel: Page_Channel_T, c: Command_Of[Thing_T]):
+        if c.is_draft():
+            return
+        if c.verb == READ:
+            send_request(c.method(), self.url_of(c), c.fields, "#all", self.include)
+        else:
+            send_request(c.method(), self.url_of(c), c.fields, self.answers)

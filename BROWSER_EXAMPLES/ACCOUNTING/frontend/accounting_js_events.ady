@@ -11,7 +11,7 @@ vocabulary too) and publishes it on the channel `commands_channel`. Two observer
 (blackboard's Observer: each is an object that subscribes itself as it is made, and its `callback`
 is what it does with what it hears):
 
-    Liaison_Officer the liaison officer: what is for the server it sends there; and it brings the
+    Liaison_Officer page_board's liaison officer: what is for the server it sends there; and it brings the
                     server's news back, onto the channel `changes_channel`
     Mouse_Follower  a draft (an account still held: `move_account`) only moves the drawing, here
                     and now, many times a second; the liaison leaves it in the browser
@@ -47,24 +47,19 @@ in TO_NIM/STDLIB.
 """
 from shared/routes import Route_T, boxes, routes_of
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, arrows_of, layout_of_slots, slots_of, with_position, within_quarter
-from browser import Element_T, Event_T, Click_T, send_request, page, find, text, field, data, on, stop, listen, listen_to_server
+from browser import Element_T, Event_T, Click_T, page, find, text, field, data, on, stop, listen
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, shift, draggable
 from blackboard import PublishChannel, Observer
-from commands import READ
-from backend/accounting_commands import Command, url, read_books, move_account
+from page_board import Page_Channel_T, COMMANDS, changes_channel, Liaison_Officer
+from backend/accounting_commands import Command, Thing_T, url, read_books, move_account
 
-# ---- The page's blackboard: what the reader asks, and what the server says changed ----
+# ---- The page's blackboard: what the reader asks (what the server says changed is page_board's) ----
 
-# The channels of the page's blackboard.
-type Page_Channel_T is enum COMMANDS, CHANGES
 type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel of Page_Channel_T, carrying a Command
-type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
 
 # What the reader asks for, as commands. The gesture publishes here, and nowhere else.
 var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
-# What the server says changed ("ENTRIES_CHAN CREATE a chair"), whichever page changed it.
-var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
 
 # ---- The books as the page holds them ----
 
@@ -147,29 +142,7 @@ class BooksView:
 
 var books: BooksView = BooksView()       # the page is read again each time htmx draws it (Pointer.page_drawn)
 
-# ---- The observers of commands: the liaison officer, and the draft's drawer ----
-
-# It hears every command: one that is for the server goes there; a draft stays in the browser. And
-# it brings the server's news back: what GET /events says changed goes on changes_channel.
-class Liaison_Officer(Observer[Page_Channel_T, Command]):
-    def __init__(self, channel: var Command_Channel_T):
-        super().__init__(channel)
-        listen_to_server("/events", self.news)
-
-    # Send C, unless it is a draft. A read goes with the form #state, C's fields taking the place of
-    # its own of the same name, and its answer, the page, takes the place of #all; a change's answer,
-    # what was done or why not, takes the place of #told.
-    def callback(self, channel: Page_Channel_T, c: Command):
-        if c.is_draft():
-            return
-        if c.verb == READ:
-            send_request(c.method(), c.url(), c.fields, "#all", "#state")
-        else:
-            send_request(c.method(), c.url(), c.fields, "#told")
-
-    # The server says CHANGE ("ENTRIES_CHAN CREATE a chair"), whichever page made it.
-    def news(self, change: str):
-        changes_channel.publish(change)
+# ---- The observer of commands that draws a draft (the liaison officer is page_board's) ----
 
 # It draws a draft of an account's move (move_account, the only draft): the account is drawn where
 # it is asked to be, every account is laid out again and every arrow routed again. Nothing goes to
@@ -262,6 +235,6 @@ class Pointer:
 let pointer: Pointer = Pointer()
 
 # Each observer subscribes itself to its channel as it is made.
-let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let liaison: Liaison_Officer[Thing_T] = Liaison_Officer[Thing_T](commands_channel, url, "#told", "#state")
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
 let page_refresher: Page_Refresher = Page_Refresher(changes_channel)

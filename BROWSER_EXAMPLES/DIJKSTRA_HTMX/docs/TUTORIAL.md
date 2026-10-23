@@ -483,16 +483,16 @@ needs (the session, the open pages) it finds at module level, as `keep` and `tel
 
 ### Two blackboards and a liaison
 
-The page is built the same way. Its blackboard has two channels, in
-`frontend/dijkstra_js_events.ady`:
+The page is built the same way. Its blackboard has two channels. What every such page
+has is the standard library's `page_board.ady`: the channels' names (`Page_Channel_T`:
+`COMMANDS`, `CHANGES`), `changes_channel`, what the server says changed, and the liaison.
+What carries this app's own commands is in `frontend/dijkstra_js_events.ady`:
 
 ```adascript
-type Page_Channel_T is enum COMMANDS, CHANGES
-type Command_Channel_T is PublishChannel[Page_Channel_T, Command]
-type Change_Channel_T is PublishChannel[Page_Channel_T, str]
+from page_board import Page_Channel_T, COMMANDS, changes_channel, Liaison_Officer
 
+type Command_Channel_T is PublishChannel[Page_Channel_T, Command]
 var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)  # what the reader asks
-var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)      # what the server says changed
 ```
 
 Every gesture publishes a command on `commands_channel`, and nothing else. Who
@@ -500,7 +500,7 @@ carries it out is decided by subscribing:
 
 | Observer | Hears | Does |
 |---|---|---|
-| `Liaison_Officer` | `commands_channel` | the liaison officer: sends to the server what is the server's |
+| `Liaison_Officer` (page_board's) | `commands_channel` | the liaison officer: sends to the server what is the server's |
 | `Mouse_Follower` | `commands_channel` | draws a draft here and now: the node still held, and its edges |
 | `Page_Refresher` | `changes_channel` | asks for the page again (`read_network`), which goes out through the liaison |
 
@@ -513,25 +513,16 @@ The liaison decides by what a command *means*, not by which gesture made it or h
 often it comes: a **draft** (`move_node`, a node the reader still holds) changes only
 the page, so it stays in the browser; anything else is the model's, and the model is
 changed in one place, the server's. Speed follows without being the rule: what changes
-only the page is exactly what comes many times a second. Its other half is `news`: the
-liaison listens to `GET /events` as it is made, and puts what that says on `changes_channel`.
+only the page is exactly what comes many times a second. Its other half: the liaison
+listens to `GET /events` as it is made, and puts what that says on `changes_channel`.
+
+The liaison is the same in every such page but for three things, which the app gives it
+when it makes it: the URL a command goes to (the app's `url`), where a change's answer goes
+(`#problem`), and the form a read takes along (`#state`, the reader's choice). It works
+for any kind of command, so it is generic in the app's things, `Thing_T`:
 
 ```adascript
-class Liaison_Officer(Observer[Page_Channel_T, Command]):
-    def __init__(self, channel: var Command_Channel_T):
-        super().__init__(channel)
-        listen_to_server("/events", self.news)
-
-    def callback(self, channel: Page_Channel_T, c: Command):
-        if c.is_draft():
-            return
-        let target: str = ("#all" if c.verb == READ else "#problem")
-        send_request(c.method(), c.url(), c.fields, target, "#state")
-
-    def news(self, change: str):
-        changes_channel.publish(change)
-
-let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let liaison: Liaison_Officer[Thing_T] = Liaison_Officer[Thing_T](commands_channel, url, "#problem", "#state")
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
 let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
 ```

@@ -35,7 +35,7 @@ How a box and an arrow are drawn, without JointJS:
   every open page, which reads itself again: a second tab follows every change.
 
 The script is built as `BROWSER_EXAMPLES/DIJKSTRA_HTMX`'s is: the drag publishes commands on the
-page's blackboard, and observers carry them out (the liaison officer sends them, the mouse follower
+page's blackboard, and observers carry them out (the liaison officer, the stdlib's `page_board.ady`, sends them, the mouse follower
 draws a block still held, the page refresher reads the page again on the server's news).
 
 Drag a box (the investment, a product, or the big box of the results, which takes its three

@@ -23,7 +23,7 @@ one), and publishes it on the page's blackboard, the channel `commands_channel`.
 know who carries the command out. Two observers do (blackboard's Observer: each is an object that
 subscribes itself as it is made, and its `callback` is what it does with what it hears):
 
-    Liaison_Officer the liaison officer: what is for the server it sends there, so the diagram is
+    Liaison_Officer page_board's liaison officer: what is for the server it sends there, so the diagram is
                     changed in one place, the server's; and it brings the server's news back
     Mouse_Follower  a draft (a node still held: `move_node`) only moves the drawing, here and now,
                     many times a second; the liaison leaves it in the browser
@@ -54,27 +54,22 @@ The drag of a node is the standard library's svg_drag, the page (finding element
 page says on them, questions, keys) its browser module, and a connector's curve svg_path's.
 """
 from blackboard import PublishChannel, Observer
-from browser import Element_T, Event_T, Click_T, send_request, page, find, all, number, text, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first, listen_to_server
+from page_board import Page_Channel_T, COMMANDS, changes_channel, Liaison_Officer
+from browser import Element_T, Event_T, Click_T, page, find, all, number, text, set_attr, set_html, click_of, on, left, made_by_reader, stop, ask, ask_yes, key_of, listen, listen_first
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, shift, draggable
 from svg_path import SIDEWAYS, connector_d
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram, inside
-from commands import READ
-from backend/node_editor_commands import Command, url, create_node, update_node, move_node, delete_node, create_link, delete_link, read_diagram
+from backend/node_editor_commands import Command, Thing_T, url, create_node, update_node, move_node, delete_node, create_link, delete_link, read_diagram
 
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
-# ---- The page's blackboard: what the reader asks, and what the server says changed ----
+# ---- The page's blackboard: what the reader asks (what the server says changed is page_board's) ----
 
-# The channels of the page's blackboard.
-type Page_Channel_T is enum COMMANDS, CHANGES
 type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel of Page_Channel_T, carrying a Command
-type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
 
 # What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
 var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
-# What the server says changed ("NODES_CHAN CREATE 4"), whichever page changed it.
-var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
 
 # ---- The view: the diagram as the page holds it, and the connectors it draws ----
 
@@ -126,27 +121,7 @@ class DiagramView(Diagram):
 
 var diagram: DiagramView = DiagramView()     # read again each time htmx draws the page (Selection.page_drawn)
 
-# ---- The observers of commands: the liaison officer, and the draft's drawer ----
-
-# It hears every command: one that is for the server goes there; a draft stays in the browser. And
-# it brings the server's news back: what GET /events says changed goes on changes_channel.
-class Liaison_Officer(Observer[Page_Channel_T, Command]):
-    def __init__(self, channel: var Command_Channel_T):
-        super().__init__(channel)
-        listen_to_server("/events", self.news)
-
-    # Send C, unless it is a draft: its verb is the method, its thing the URL. A read's answer is the
-    # page, in place of #all; a change's is whether it went through, in place of #problem (the page
-    # is drawn again on the news of the change).
-    def callback(self, channel: Page_Channel_T, c: Command):
-        if c.is_draft():
-            return
-        let target: str = ("#all" if c.verb == READ else "#problem")
-        send_request(c.method(), c.url(), c.fields, target)
-
-    # The server says CHANGE ("NODES_CHAN CREATE 4"), whichever page made it.
-    def news(self, change: str):
-        changes_channel.publish(change)
+# ---- The observer of commands that draws a draft (the liaison officer is page_board's) ----
 
 # It draws a draft of a node's move (move_node, the only draft): the node is drawn where it is
 # asked to be, the page's model keeps the place, and the connectors at its ports are drawn again.
@@ -375,6 +350,6 @@ class Page_Refresher(Observer[Page_Channel_T, str]):
 let pointer: Pointer = Pointer()
 
 # Each observer subscribes itself to its channel as it is made.
-let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let liaison: Liaison_Officer[Thing_T] = Liaison_Officer[Thing_T](commands_channel, url, "#problem", "")
 let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
 let page_refresher: Page_Refresher = Page_Refresher(changes_channel)
