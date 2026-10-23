@@ -15,6 +15,7 @@ Needs karax: `nimble install karax@1.5.0`.
 """
 from math nimport sqrt
 from drawing import Drawing_Pixel_T, Drawing_cm_T, Spot_T
+from style import Look, Rule, Style
 from shared/routes import NODE_RADIUS, Route_T, Shape, boxes, circles, covers, px, rim, routes_of, toward
 from backend/accounting_model import Account, Cents_T, Colour_T, Dollars_T, Flow, Graph, Line, Transaction, kleppmann
 
@@ -141,49 +142,6 @@ def label_lines(name: str) -> []str:
         return [name]
     return [name[:best], name[best + 1:]]
 
-# The look of an account as a node (see to_html and box_html): its colour by kind, its name and balance,
-# and how it looks when it is frozen, picked, grouped or on the way of a transaction.
-const NODE_STYLE: str = """
-circle.green, rect.green { fill: #d6f0d6; stroke: #5a9a5a; stroke-width: 1.5; }
-circle.liability, rect.liability { fill: #e3d6f5; stroke: #7a52b0; stroke-width: 1.5; }
-circle.revenue, rect.revenue { fill: #a9cdf5; stroke: #1f5fa8; stroke-width: 1.5; }
-circle.expense, rect.expense { fill: #fbd29c; stroke: #c06a00; stroke-width: 1.5; }
-circle.untouched, rect.untouched { fill: #fff; stroke: #999; stroke-width: 1.5; }
-circle.pink, rect.pink { fill: #f8d6e6; stroke: #b05a85; stroke-width: 1.5; }
-text.label { text-anchor: middle; dominant-baseline: middle; font-size: 11px; }
-text.boxname { text-anchor: start; dominant-baseline: middle; font-size: 12px; }
-text.boxbalance { text-anchor: end; dominant-baseline: middle; font-size: 12px; font-variant-numeric: tabular-nums; }
-g.node { cursor: grab; }
-g.from rect { stroke: #c62828; stroke-width: 5; stroke-dasharray: 8 4; }
-g.from { cursor: crosshair; }
-g.group { cursor: pointer; }
-g.picked rect, g.picked circle { stroke: #1565c0; stroke-width: 6; stroke-dasharray: 3 3; }
-g.now circle, g.now rect { stroke: #e65100; stroke-width: 6; }
-"""
-
-# An account as a node at P: a circle with its name in it. TIP shows when the
-# mouse is over it, as for an arrow below.
-def to_html(a: Account, p: Spot_T, tip: str) -> Html:
-    let cx: str = px(p.x)
-    let cy: str = px(p.y)
-    let css: str = css_of(a)
-    let lines: []str = label_lines(a.name)
-    let first: str = lines[0]
-    let second: str = (lines[1] if len(lines) == 2 else "")
-    let y1: str = (px(p.y - 7.0) if second != "" else cy)
-    let y2: str = px(p.y + 7.0)
-    html:
-        g:
-            if tip != "":
-                title: tip
-            circle class=css cx=cx cy=cy r="42"
-            stext class="label" x=cx y=y1: first
-            if second != "":
-                stext class="label" x=cx y=y2: second
-
-# An account as a box at P, its name on the left and its balance on the
-# right, as on a line of a balance sheet (without its sign: the colour, and
-# the side of the drawing, say whether it is owned or owed).
 # NAME cut to fit ROOM pixels of the box's 12px text, ending in "..." when it is cut.
 def fit_name(name: str, room: Drawing_Pixel_T) -> str:
     let chars: int = int(float(room) / 7.3)
@@ -191,35 +149,78 @@ def fit_name(name: str, room: Drawing_Pixel_T) -> str:
         return name
     return name[:chars - 1] + "\u2026"
 
-def box_html(a: Account, p: Spot_T, shape: Shape) -> Html:
-    let left: str = px(p.x - shape.half_w)
-    let top: str = px(p.y - shape.half_h)
-    let w: str = px(shape.half_w * 2.0)
-    let h: str = px(shape.half_h * 2.0)
-    let css: str = css_of(a)
-    let nx: str = px(p.x - shape.half_w + 8.0)
-    let bx: str = px(p.x + shape.half_w - 8.0)
-    let cy: str = px(p.y)
-    let balance: str = money(a.balance if a.balance >= 0 else -a.balance)
-    let shown_name: str = fit_name(a.name, shape.half_w * 2.0 - 16.0 - 10.0 - Drawing_Pixel_T(6.7 * float(len(balance))))
-    html:
-        g:
-            rect class=css x=left y=top width=w height=h rx="5"
-            stext class="boxname" x=nx y=cy: shown_name
-            stext class="boxbalance" x=bx y=cy: balance
+# An account drawn: as a node (a circle, the example's drawing) or as a box (the app's), its colour
+# by kind, its name and balance, and how it looks when it is frozen, picked, grouped or on the way
+# of a transaction.
+class Account_View:
+    style "svg.graph":
+        circle.green:           fill="#d6f0d6" stroke="#5a9a5a" stroke_width=1.5
+        rect.green:             fill="#d6f0d6" stroke="#5a9a5a" stroke_width=1.5
+        circle.liability:       fill="#e3d6f5" stroke="#7a52b0" stroke_width=1.5
+        rect.liability:         fill="#e3d6f5" stroke="#7a52b0" stroke_width=1.5
+        circle.revenue:         fill="#a9cdf5" stroke="#1f5fa8" stroke_width=1.5
+        rect.revenue:           fill="#a9cdf5" stroke="#1f5fa8" stroke_width=1.5
+        circle.expense:         fill="#fbd29c" stroke="#c06a00" stroke_width=1.5
+        rect.expense:           fill="#fbd29c" stroke="#c06a00" stroke_width=1.5
+        circle.untouched:       fill="#fff" stroke="#999" stroke_width=1.5
+        rect.untouched:         fill="#fff" stroke="#999" stroke_width=1.5
+        circle.pink:            fill="#f8d6e6" stroke="#b05a85" stroke_width=1.5
+        rect.pink:              fill="#f8d6e6" stroke="#b05a85" stroke_width=1.5
+        text.label:             text_anchor="middle" dominant_baseline="middle" font_size=11
+        text.boxname:           text_anchor="start" dominant_baseline="middle" font_size=12
+        text.boxbalance:        text_anchor="end" dominant_baseline="middle" font_size=12 font_variant_numeric="tabular-nums"
+        g.node:                 cursor="grab"
+        g.from rect:            stroke="#c62828" stroke_width=5 stroke_dasharray="8 4"
+        g.from:                 cursor="crosshair"
+        g.group:                cursor="pointer"
+        g.picked rect:          stroke="#1565c0" stroke_width=6 stroke_dasharray="3 3"
+        g.picked circle:        stroke="#1565c0" stroke_width=6 stroke_dasharray="3 3"
+        g.now circle:           stroke="#e65100" stroke_width=6
+        g.now rect:             stroke="#e65100" stroke_width=6
 
-# The look of an arrow (see to_html): its line, its head, its amount, and the one of a transaction being drawn.
-const EDGE_STYLE: str = """
-path.edge { fill: none; stroke: #555; stroke-width: 1.5; marker-end: url(#arrow); }
-path.hit { fill: none; stroke: transparent; stroke-width: 12; }
-g.arrow:hover path.edge { stroke: #000; stroke-width: 2.5; }
-polygon { fill: #555; }
-text.amount { text-anchor: middle; font-size: 11px; font-weight: bold; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
-path.rubber { stroke: #c62828; stroke-width: 3; stroke-dasharray: 8 4; fill: none; marker-end: url(#arrow); }
-g.now path.edge { stroke: #e65100; stroke-width: 3.5; marker-end: url(#arrow-now); }
-polygon.now { fill: #e65100; }
-g.now text.amount { fill: #e65100; font-weight: bold; font-size: 13px; }
-"""
+    # An account as a node at P: a circle with its name in it. TIP shows when the
+    # mouse is over it, as for an arrow below.
+    def to_html(self, a: Account, p: Spot_T, tip: str) -> Html:
+        let cx: str = px(p.x)
+        let cy: str = px(p.y)
+        let css: str = css_of(a)
+        let lines: []str = label_lines(a.name)
+        let first: str = lines[0]
+        let second: str = (lines[1] if len(lines) == 2 else "")
+        let y1: str = (px(p.y - 7.0) if second != "" else cy)
+        let y2: str = px(p.y + 7.0)
+        html:
+            g:
+                if tip != "":
+                    title: tip
+                circle class=css cx=cx cy=cy r="42"
+                stext class="label" x=cx y=y1: first
+                if second != "":
+                    stext class="label" x=cx y=y2: second
+
+    # An account as a box at P, its name on the left and its balance on the
+    # right, as on a line of a balance sheet (without its sign: the colour, and
+    # the side of the drawing, say whether it is owned or owed).
+
+    # An account as a box at P, its name on the left and its balance on the
+    # right, as on a line of a balance sheet (without its sign: the colour, and
+    # the side of the drawing, say whether it is owned or owed).
+    def box_to_html(self, a: Account, p: Spot_T, shape: Shape) -> Html:
+        let left: str = px(p.x - shape.half_w)
+        let top: str = px(p.y - shape.half_h)
+        let w: str = px(shape.half_w * 2.0)
+        let h: str = px(shape.half_h * 2.0)
+        let css: str = css_of(a)
+        let nx: str = px(p.x - shape.half_w + 8.0)
+        let bx: str = px(p.x + shape.half_w - 8.0)
+        let cy: str = px(p.y)
+        let balance: str = money(a.balance if a.balance >= 0 else -a.balance)
+        let shown_name: str = fit_name(a.name, shape.half_w * 2.0 - 16.0 - 10.0 - Drawing_Pixel_T(6.7 * float(len(balance))))
+        html:
+            g:
+                rect class=css x=left y=top width=w height=h rx="5"
+                stext class="boxname" x=nx y=cy: shown_name
+                stext class="boxbalance" x=bx y=cy: balance
 
 # What hovering over F's arrow shows: each of its transactions, one a line,
 # with its date and amount.
@@ -229,21 +230,38 @@ def tip_of(g: Graph, f: Flow) -> str:
         tip += f"\n{t.date}   {money(t.amount)}   {t.what}"
     return tip
 
-# A flow as an arrow along ROUTE, with its amount where the route says. TIP
-# shows when the mouse is over it, as the browser's tooltip (the live page,
-# which cannot, passes "" and shows its own): a wider invisible path under
-# the arrow makes it easy to point at.
-def to_html(f: Flow, route: Route_T, tip: str) -> Html:
-    let d: str = route.d
-    let lx: str = px(route.label.x)
-    let ly: str = px(route.label.y)
-    html:
-        g class="arrow":
-            if tip != "":
-                title: tip
-            path class="hit" d=d
-            path class="edge" d=d
-            stext class="amount" x=lx y=ly: money(f.amount)
+# A flow drawn: an arrow, its head, its amount, and the one of a transaction being drawn.
+class Flow_View:
+    style "svg.graph":
+        path.edge:              fill="none" stroke="#555" stroke_width=1.5 marker_end="url(#arrow)"
+        path.hit:               fill="none" stroke="transparent" stroke_width=12
+        g.arrow:hover path.edge: stroke="#000" stroke_width=2.5
+        polygon:                fill="#555"
+        text.amount:            text_anchor="middle" font_size=11 font_weight=700 paint_order="stroke" stroke="#fff" stroke_width=3
+        path.rubber:            stroke="#c62828" stroke_width=3 stroke_dasharray="8 4" fill="none" marker_end="url(#arrow)"
+        g.now path.edge:        stroke="#e65100" stroke_width=3.5 marker_end="url(#arrow-now)"
+        polygon.now:            fill="#e65100"
+        g.now text.amount:      fill="#e65100" font_weight=700 font_size=13
+
+    # A flow as an arrow along ROUTE, with its amount where the route says. TIP
+    # shows when the mouse is over it, as the browser's tooltip (the live page,
+    # which cannot, passes "" and shows its own): a wider invisible path under
+    # the arrow makes it easy to point at.
+    def to_html(self, f: Flow, route: Route_T, tip: str) -> Html:
+        let d: str = route.d
+        let lx: str = px(route.label.x)
+        let ly: str = px(route.label.y)
+        html:
+            g class="arrow":
+                if tip != "":
+                    title: tip
+                path class="hit" d=d
+                path class="edge" d=d
+                stext class="amount" x=lx y=ly: money(f.amount)
+
+# The accounts and the arrows, as every drawing draws them.
+let account_view: Account_View = Account_View()
+let flow_view: Flow_View = Flow_View()
 
 def to_html(g: Graph) -> Html:
     var names: []str = []
@@ -260,9 +278,9 @@ def to_html(g: Graph) -> Html:
                 marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
                     polygon points="0 0, 10 3.5, 0 7"
             for i in range(len(g.flows)):
-                + to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
+                + flow_view.to_html(g.flows[i], routes[i], tip_of(g, g.flows[i]))
             for a in g.accounts:
-                + a.to_html(place(a), account_tip(g, a))
+                + account_view.to_html(a, place(a), account_tip(g, a))
 
 def to_html(edges: []Transaction) -> Html:
     html:
@@ -317,7 +335,7 @@ def page_html(title: str, text: str, sections: []Html) -> Html:
             head:
                 meta charset="utf-8"
                 title: title
-                style: STYLE + NODE_STYLE + EDGE_STYLE
+                style: STYLE + account_view.style.css() + flow_view.style.css()
             body:
                 h1: title
                 p: text

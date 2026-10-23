@@ -30,6 +30,8 @@ type Look is record:
     stroke:           str = ""
     stroke_width:     float = -1.0      # in pixels
     stroke_dasharray: str = ""          # "6 4"
+    stroke_linejoin:  str = ""          # round
+    marker_end:       str = ""          # "url(#arrow)"
     opacity:          float = -1.0
     cursor:           str = ""
     font_size:        float = -1.0      # in pixels
@@ -37,6 +39,8 @@ type Look is record:
     text_anchor:      str = ""          # start, middle, end
     pointer_events:   str = ""          # none
     paint_order:      str = ""          # stroke: the outline under the fill, as a halo
+    dominant_baseline: str = ""         # middle: the text centred on its y
+    font_variant_numeric: str = ""      # tabular-nums: figures of one width, in columns
 
 # A rule of a Style: what follows the scope (" circle", ":hover circle", ".way circle"), and its look.
 type Rule is record:
@@ -70,6 +74,10 @@ class Style:
             d.append(f"stroke-width: {self.number(look.stroke_width)}px;")
         if look.stroke_dasharray != "":
             d.append(f"stroke-dasharray: {look.stroke_dasharray};")
+        if look.stroke_linejoin != "":
+            d.append(f"stroke-linejoin: {look.stroke_linejoin};")
+        if look.marker_end != "":
+            d.append(f"marker-end: {look.marker_end};")
         if look.opacity >= 0.0:
             d.append(f"opacity: {self.number(look.opacity)};")
         if look.cursor != "":
@@ -84,6 +92,10 @@ class Style:
             d.append(f"pointer-events: {look.pointer_events};")
         if look.paint_order != "":
             d.append(f"paint-order: {look.paint_order};")
+        if look.dominant_baseline != "":
+            d.append(f"dominant-baseline: {look.dominant_baseline};")
+        if look.font_variant_numeric != "":
+            d.append(f"font-variant-numeric: {look.font_variant_numeric};")
         return " ".join(d)
 
     # LOOK for the scope followed by PART: "" the element itself, " circle" a circle in it,

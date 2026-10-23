@@ -13,6 +13,7 @@ The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original
 from drawing import Drawing_Pixel_T, Spot_T
 from backend/node_editor_commands import Thing_T, url, read_diagram, reset_diagram
 from server_page import Page_Of
+from style import Look, Rule, Style
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, PORTS, PORT_R, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot
 
 # The page: a command goes to its URL, and a change's answer takes the place of #problem.
@@ -20,30 +21,14 @@ type Page is Page_Of[Thing_T]
 let page: Page = Page(url, "#problem", "")
 
 
+# The page's own look: the body, the header, the buttons (the drawing's parts have their own, in
+# their classes below).
 const STYLE: str = """
 body { margin: 0; background: #1a1a1a; color: #ddd; font-family: Arial, sans-serif; }
 header, #all { max-width: 1100px; margin: 0 auto; padding: 0 12px; }
 header h1 { font-size: 1.3em; margin: 0.8em 0 0.1em; }
 header p { color: #999; margin: 0 0 0.8em; }
 svg#editor { display: block; width: 100%; height: auto; user-select: none; background: #1a1a1a; border: 1px solid #333; }
-.node { cursor: move; }
-.node-background { fill: #1a1c1d; }
-.node.selected .node-background { stroke: #E88802; stroke-width: 2; }
-.node-header { fill: #426D92; }
-.node-content { fill: #3C3C3C; }
-.header-title { font-size: 20px; fill: #fff; text-anchor: middle; }
-.port-outer { fill: #777777; }
-.port-inner { fill: #202020; }
-.port-scrim { fill: transparent; cursor: pointer; }
-.port-label { font-size: 12px; fill: #fff; }
-.input-field .port-label { text-anchor: start; }
-.output-field .port-label { text-anchor: end; }
-#connections-layer { pointer-events: none; }
-.connector-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
-.connector-outline { stroke: #333; stroke-width: 6; fill: none; }
-.connector-path { stroke: #E88802; stroke-width: 4; fill: none; }
-.link.selected .connector-path { stroke: #ffd479; }
-.connector-handle { fill: #E88802; }
 p.problem { color: #ffb4a8; background: #4a2420; border-radius: 6px; padding: 0.4em 0.7em; margin: 0.5em 0; }
 p.problem:empty { display: none; }
 p.hint { color: #999; font-size: 0.85em; margin: 0.5em 0 1em; }
@@ -53,50 +38,112 @@ button:hover { background: #333; }
 pre#diagram { display: none; }
 """
 
-# One port of the node NODE: its dot, over which the reader presses to start a connector, and its label.
-def to_html(p: Port_T, node: int) -> Html:
-    let at: Spot_T = port_spot(Spot_T(0.0, 0.0), p)         # from the node's top left corner
-    let cx: str = f"{at.x:.1f}"
-    let cy: str = f"{at.y:.1f}"
-    let gap: Drawing_Pixel_T = (Drawing_Pixel_T(13.0) if p.side == INPUT else Drawing_Pixel_T(-13.0))       # the label's from the dot
-    let lx: str = f"{at.x + gap:.1f}"
-    let ly: str = f"{at.y + 4.0:.1f}"
-    let r: str = f"{PORT_R:.1f}"
-    let r_inner: str = f"{PORT_R - 2.5:.1f}"
-    let field: str = ("input-field" if p.side == INPUT else "output-field")
-    let side: str = ("input" if p.side == INPUT else "output")
-    html:
-        g class=field:
-            circle class="port-outer" cx=cx cy=cy r=r
-            circle class="port-inner" cx=cx cy=cy r=r_inner
-            circle class="port-scrim" cx=cx cy=cy r=r data_node=str(node) data_side=side data_row=str(p.row)
-            stext class="port-label" x=lx y=ly: label_of(Pin_T(node, p))
+# The colours, the original's.
+const ORANGE: str = "#E88802"       # a connector, and what is selected
+const PALE_ORANGE: str = "#ffd479"  # a connector selected
+const SLATE: str = "#426D92"        # a node's header
+const COAL: str = "#1a1c1d"         # a node's background
+const GRAPHITE: str = "#3C3C3C"     # a node's body
+const ASH: str = "#777777"          # a port's rim
+const SOOT: str = "#202020"         # a port's middle
+const SHADOW: str = "#333"          # a connector's outline
+const WHITE: str = "#fff"
+
+# One port of a node: its dot, over which the reader presses to start a connector, and its label.
+class Port_View:
+    style "g.node":
+        .port-outer:                fill=ASH
+        .port-inner:                fill=SOOT
+        .port-scrim:                fill="transparent" cursor="pointer"
+        .port-label:                font_size=12 fill=WHITE
+        .input-field .port-label:   text_anchor="start"
+        .output-field .port-label:  text_anchor="end"
+
+    # Port P of the node NODE.
+    def to_html(self, p: Port_T, node: int) -> Html:
+        let at: Spot_T = port_spot(Spot_T(0.0, 0.0), p)         # from the node's top left corner
+        let cx: str = f"{at.x:.1f}"
+        let cy: str = f"{at.y:.1f}"
+        let gap: Drawing_Pixel_T = (Drawing_Pixel_T(13.0) if p.side == INPUT else Drawing_Pixel_T(-13.0))       # the label's from the dot
+        let lx: str = f"{at.x + gap:.1f}"
+        let ly: str = f"{at.y + 4.0:.1f}"
+        let r: str = f"{PORT_R:.1f}"
+        let r_inner: str = f"{PORT_R - 2.5:.1f}"
+        let field: str = ("input-field" if p.side == INPUT else "output-field")
+        let side: str = ("input" if p.side == INPUT else "output")
+        html:
+            g class=field:
+                circle class="port-outer" cx=cx cy=cy r=r
+                circle class="port-inner" cx=cx cy=cy r=r_inner
+                circle class="port-scrim" cx=cx cy=cy r=r data_node=str(node) data_side=side data_row=str(p.row)
+                stext class="port-label" x=lx y=ly: label_of(Pin_T(node, p))
 
 # A node: its box, its title, its inputs and its outputs. The outer <g> carries where the node is
 # (data_x, data_y: its top left corner), which the script's drag starts from.
-def to_html(n: Node_T) -> Html:
-    let x: str = f"{n.at.x:.0f}"
-    let y: str = f"{n.at.y:.0f}"
-    let w: str = f"{Drawing_Pixel_T(NODE_W):.1f}"
-    let h: str = f"{Drawing_Pixel_T(NODE_H):.1f}"
-    let inner_w: str = f"{Drawing_Pixel_T(NODE_W) - 4.0:.1f}"                # inside the 2 pixels of margin
-    let title_x: str = f"{Drawing_Pixel_T(NODE_W) / 2.0:.1f}"
-    let body_h: str = f"{Drawing_Pixel_T(NODE_H) - 46.0:.1f}"                # under the header
-    let body_h_square: str = f"{Drawing_Pixel_T(NODE_H) - 51.0:.1f}"        # the same without the rounded bottom
-    let place: str = f"translate({x},{y})"
-    html:
-        g class="node" data_node=str(n.id) data_x=x data_y=y:
-            g transform=place:
-                rect class="node-background" x="0" y="0" width=w height=h rx="6" ry="6"
-                g class="node-header":
-                    rect x="2" y="2" width=inner_w height="40" rx="4" ry="4"
-                    rect x="2" y="6" width=inner_w height="36"
-                    stext class="header-title" x=title_x y="30": n.title
-                g class="node-content":
-                    rect x="2" y="44" width=inner_w height=body_h rx="4" ry="4"
-                    rect x="2" y="44" width=inner_w height=body_h_square
-                for p in n.ports:
-                    + p.to_html(n.id)
+class Node_View:
+    var ports: Port_View = Port_View()
+    style "g.node":
+        &:                          cursor="move"
+        .node-background:           fill=COAL
+        &.selected .node-background: stroke=ORANGE stroke_width=2
+        .node-header:               fill=SLATE
+        .node-content:              fill=GRAPHITE
+        .header-title:              font_size=20 fill=WHITE text_anchor="middle"
+
+    def to_html(self, n: Node_T) -> Html:
+        let x: str = f"{n.at.x:.0f}"
+        let y: str = f"{n.at.y:.0f}"
+        let w: str = f"{Drawing_Pixel_T(NODE_W):.1f}"
+        let h: str = f"{Drawing_Pixel_T(NODE_H):.1f}"
+        let inner_w: str = f"{Drawing_Pixel_T(NODE_W) - 4.0:.1f}"                # inside the 2 pixels of margin
+        let title_x: str = f"{Drawing_Pixel_T(NODE_W) / 2.0:.1f}"
+        let body_h: str = f"{Drawing_Pixel_T(NODE_H) - 46.0:.1f}"                # under the header
+        let body_h_square: str = f"{Drawing_Pixel_T(NODE_H) - 51.0:.1f}"        # the same without the rounded bottom
+        let place: str = f"translate({x},{y})"
+        html:
+            g class="node" data_node=str(n.id) data_x=x data_y=y:
+                g transform=place:
+                    rect class="node-background" x="0" y="0" width=w height=h rx="6" ry="6"
+                    g class="node-header":
+                        rect x="2" y="2" width=inner_w height="40" rx="4" ry="4"
+                        rect x="2" y="6" width=inner_w height="36"
+                        stext class="header-title" x=title_x y="30": n.title
+                    g class="node-content":
+                        rect x="2" y="44" width=inner_w height=body_h rx="4" ry="4"
+                        rect x="2" y="44" width=inner_w height=body_h_square
+                    for p in n.ports:
+                        + self.ports.to_html(p, n.id)
+
+# A connector's look: the script draws it, in #connections-layer (node_editor_js_events.ady).
+class Link_View:
+    style "#connections-layer":
+        &:                          pointer_events="none"
+        .connector-hit:             stroke="transparent" stroke_width=14 fill="none" pointer_events="stroke" cursor="pointer"
+        .connector-outline:         stroke=SHADOW stroke_width=6 fill="none"
+        .connector-path:            stroke=ORANGE stroke_width=4 fill="none"
+        .link.selected .connector-path: stroke=PALE_ORANGE
+        .connector-handle:          fill=ORANGE
+
+# The drawing: the nodes, and the layer the script draws the connectors in.
+class Diagram_View:
+    var nodes: Node_View = Node_View()
+    var links: Link_View = Link_View()
+
+    def to_html(self, d: Diagram) -> Html:
+        let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
+        html:
+            svg id="editor" viewBox=box:
+                g id="nodes":
+                    for n in d.nodes:
+                        + self.nodes.to_html(n)
+                g id="connections-layer"
+
+    # The rules of the drawing, for the page's <style>.
+    def css(self) -> str:
+        return self.nodes.style.css() + self.nodes.ports.style.css() + self.links.style.css()
+
+# The drawing, as every page draws it.
+let diagram_view: Diagram_View = Diagram_View()
 
 # The paragraph #problem: why the change was refused, or empty when it went through.
 def problem_html(problem: None | !Refusal_T) -> Html:
@@ -112,17 +159,12 @@ def problem_text(problem: None | !Refusal_T) -> str:
 # The whole page: the toolbar, PROBLEM (why the last change could not be kept, if it could not),
 # the drawing, and the diagram as text for the script.
 def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
-    let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
     html:
         div id="all":
             div class="toolbar":
                 + page.button("Reset the sample", reset_diagram(), "Put the sample diagram back? What you made is lost.", "")
             + problem_html(problem)
-            svg id="editor" viewBox=box:
-                g id="nodes":
-                    for n in d.nodes:
-                        + n.to_html()
-                g id="connections-layer"
+            + diagram_view.to_html(d)
             # the diagram as the server keeps it: for the browser's View to draw the connectors from
             pre id="diagram": d.text()
             p class="hint": "Double-click the space for a new node. Drag a node to move it, or from a port to a port of another node to join them. Click a node or a connector to select it, then Delete removes it."
@@ -135,7 +177,7 @@ def header_html() -> Html:
             p: "Nodes and connectors, kept in diagram.txt by the server."
 
 def shell_text() -> str:
-    return page.shell_text("SVG node editor", STYLE, ["node_editor_js_events.js"], [header_html()], read_diagram())
+    return page.shell_text("SVG node editor", STYLE + diagram_view.css(), ["node_editor_js_events.js"], [header_html()], read_diagram())
 
 def all_text(d: Diagram, problem: None | !Refusal_T) -> str:
     return str(all_html(d, problem))

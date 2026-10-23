@@ -17,6 +17,7 @@ from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
 from backend/roi_commands import Thing_T, Command, url, read_portfolio, update_investment, update_share
 from server_page import Page_Of
+from style import Look, Rule, Style
 
 # The page: a command goes to its URL, and a change's answer takes the place of #problem.
 type Page is Page_Of[Thing_T]
@@ -72,41 +73,65 @@ def money(v: float) -> str:
     return f"{v:.2f}"
 
 # How much room an arrow's head takes: the arrow stops this short of its box, where the head
-# (head_html, below) begins, so that the tip of the head is at the box.
+# (Arrow_View.head_to_html, below) begins, so that the tip of the head is at the box.
 const HEAD: Drawing_Pixel_T = 13.0
 
-# The name of the head (a <marker>) for arrows of COLOR, and how an arrow refers to it.
-def head_id(color: str) -> str:
-    return "head" + color[1:]
+# An arrow from one block to another: a dark outline, the colour on it, and its head.
+class Arrow_View:
+    style "g.arrow":
+        path.outline:       fill="none" stroke="#000" stroke_width=8 stroke_linejoin="round"
+        path.line:          fill="none" stroke_width=4 stroke_linejoin="round"
 
-def head_url(color: str) -> str:
-    return "url(#" + head_id(color) + ")"
+    # The name of the head (a <marker>) for arrows of COLOR, and how an arrow refers to it.
+    def head_id(self, color: str) -> str:
+        return "head" + color[1:]
 
-# The arrow from the block called FROM to the block called TO: a dark outline, the colour on it,
-# and the head. It starts at (FX, FY) from FROM's top left corner and ends at (TX, TY) from TO's.
-# The page writes those on it (data_*), and how it leaves and how short it stops, for the script
-# that redraws it while a block is dragged.
-def arrow_html(layout: Layout, from_block: str, fx: Drawing_Pixel_T, fy: Drawing_Pixel_T, to_block: str, tx: Drawing_Pixel_T, ty: Drawing_Pixel_T, color: str, leave: Leave_T) -> Html:
-    let d: str = connector_d(float(left_of(layout, from_block) + fx), float(top_of(layout, from_block) + fy),
-                             float(left_of(layout, to_block) + tx), float(top_of(layout, to_block) + ty), leave, float(HEAD))
-    let leaves: str = ("vertical" if leave == VERTICAL else "sideways")
-    html:
-        g class="arrow" data_a=from_block data_ax=f"{fx:.1f}" data_ay=f"{fy:.1f}" data_b=to_block data_bx=f"{tx:.1f}" data_by=f"{ty:.1f}" data_leave=leaves data_stop=f"{HEAD:.1f}":
-            path class="outline" d=d
-            path class="line" d=d stroke=color marker_end=head_url(color)
+    def head_url(self, color: str) -> str:
+        return "url(#" + self.head_id(color) + ")"
 
-# A box at (X, Y), W by H, filled with COLOR, with what is in it written as HTML. It belongs
-# to the block called BLOCK, and moves with it. A box that is a block of its own, FOR_DRAG,
-# is the grip: the script lets the mouse take hold of its rectangle and nothing else, so the
-# fields in it can still be clicked.
-def box_html(block: str, x: Drawing_Pixel_T, y: Drawing_Pixel_T, w: Drawing_Pixel_T, h: Drawing_Pixel_T, color: str, inside: Html, grip: bool) -> Html:
-    let css: str = ("node" if grip else "body")
-    html:
-        g class="box":
-            rect class=css x=f"{x:.1f}" y=f"{y:.1f}" rx="10" ry="10" width=f"{w:.1f}" height=f"{h:.1f}" fill=color data_block=block data_name=block data_x=f"{x+w/2.0:.1f}" data_y=f"{y+h/2.0:.1f}"
-            foreignObject x=f"{x:.1f}" y=f"{y:.1f}" width=f"{w:.1f}" height=f"{h:.1f}" data_block=block:
-                div class="jj-form":
-                    + inside
+    # The arrow from the block called FROM to the block called TO. It starts at (FX, FY) from
+    # FROM's top left corner and ends at (TX, TY) from TO's. The page writes those on it (data_*),
+    # and how it leaves and how short it stops, for the script that redraws it while a block is
+    # dragged.
+    def to_html(self, layout: Layout, from_block: str, fx: Drawing_Pixel_T, fy: Drawing_Pixel_T, to_block: str, tx: Drawing_Pixel_T, ty: Drawing_Pixel_T, color: str, leave: Leave_T) -> Html:
+        let d: str = connector_d(float(left_of(layout, from_block) + fx), float(top_of(layout, from_block) + fy),
+                                 float(left_of(layout, to_block) + tx), float(top_of(layout, to_block) + ty), leave, float(HEAD))
+        let leaves: str = ("vertical" if leave == VERTICAL else "sideways")
+        html:
+            g class="arrow" data_a=from_block data_ax=f"{fx:.1f}" data_ay=f"{fy:.1f}" data_b=to_block data_bx=f"{tx:.1f}" data_by=f"{ty:.1f}" data_leave=leaves data_stop=f"{HEAD:.1f}":
+                path class="outline" d=d
+                path class="line" d=d stroke=color marker_end=self.head_url(color)
+
+    # The head of arrows of COLOR: the colour, outlined in black, with a notch at the back where
+    # the arrow's band runs into it, as in JointJS. The arrow's line stops where it starts (HEAD long).
+    def head_to_html(self, color: str) -> Html:
+        html:
+            marker id=self.head_id(color) viewBox="-2 -12 17 24" refX="0" refY="0" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="24" orient="auto":
+                path d="M 0 4 L 0 10 L 13 0 L 0 -10 L 0 -4" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
+
+# A box of a block: a rectangle, with what is in it written as HTML.
+class Box_View:
+    style "g.box":
+        rect.body:          stroke="#333" stroke_width=2
+        rect.node:          stroke="#333" stroke_width=2 cursor="grab"
+        foreignObject:      pointer_events="none"
+
+    # The box at (LEFT, TOP), W by H, filled with COLOR, with INSIDE in it. It belongs to the block
+    # called BLOCK, and moves with it. A box that is a block of its own, GRIP, is what the script
+    # lets the mouse take hold of (its rectangle and nothing else, so the fields in it can still be
+    # clicked).
+    def to_html(self, block: str, left: Drawing_Pixel_T, top: Drawing_Pixel_T, w: Drawing_Pixel_T, h: Drawing_Pixel_T, color: str, inside: Html, grip: bool) -> Html:
+        let css: str = ("node" if grip else "body")
+        html:
+            g class="box":
+                rect class=css x=f"{left:.1f}" y=f"{top:.1f}" rx="10" ry="10" width=f"{w:.1f}" height=f"{h:.1f}" fill=color data_block=block data_name=block data_x=f"{left+w/2.0:.1f}" data_y=f"{top+h/2.0:.1f}"
+                foreignObject x=f"{left:.1f}" y=f"{top:.1f}" width=f"{w:.1f}" height=f"{h:.1f}" data_block=block:
+                    div class="jj-form":
+                        + inside
+
+# The boxes and the arrows of the drawing, as every page draws them.
+let boxes: Box_View = Box_View()
+let arrows: Arrow_View = Arrow_View()
 
 # The fields of the boxes, bare: what each sends when it is changed is said where it is drawn.
 
@@ -188,13 +213,6 @@ def to_html(outcome: Outcome) -> Html:
                 + line_html("Value", outcome.overall_performance.value)
                 + line_html("ROI", outcome.overall_performance.roi)
 
-# The head of an arrow of COLOR: the colour, outlined in black, with a notch at the back where
-# the arrow's band runs into it, as in JointJS. The arrow's line stops where it starts (HEAD long).
-def head_html(color: str) -> Html:
-    html:
-        marker id=head_id(color) viewBox="-2 -12 17 24" refX="0" refY="0" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="24" orient="auto":
-            path d="M 0 4 L 0 10 L 13 0 L 0 -10 L 0 -4" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
-
 # The paragraph #problem: why the change was refused (PROBLEM), or empty when it went through.
 def problem_html(problem: str) -> Html:
     html:
@@ -211,30 +229,27 @@ def all_html(portfolio: Portfolio, layout: Layout) -> Html:
             + problem_html("")
             svg viewBox=box width=f"{Drawing_Pixel_T(WIDE):.0f}" height=f"{Drawing_Pixel_T(HIGH):.0f}" class="drawing":
                 defs:
-                    + head_html(INVEST_COLOR)
+                    + arrows.head_to_html(INVEST_COLOR)
                     for share in portfolio.shares:
-                        + head_html(color_of(share.kind))
-                + box_html("investment", left_of(layout, "investment"), top_of(layout, "investment"), width_of("investment"), height_of("investment"), INVEST_COLOR, to_html(portfolio.investment), True)
+                        + arrows.head_to_html(color_of(share.kind))
+                + boxes.to_html("investment", left_of(layout, "investment"), top_of(layout, "investment"), width_of("investment"), height_of("investment"), INVEST_COLOR, to_html(portfolio.investment), True)
                 for share in portfolio.shares:
-                    + box_html(name_of(share.kind), left_of(layout, name_of(share.kind)), top_of(layout, name_of(share.kind)), width_of(name_of(share.kind)), height_of(name_of(share.kind)), color_of(share.kind), to_html(share), True)
-                + box_html("overall", left_of(layout, "overall"), top_of(layout, "overall"), width_of("overall"), height_of("overall"), OVERALL_COLOR, to_html(outcome), True)
+                    + boxes.to_html(name_of(share.kind), left_of(layout, name_of(share.kind)), top_of(layout, name_of(share.kind)), width_of(name_of(share.kind)), height_of(name_of(share.kind)), color_of(share.kind), to_html(share), True)
+                + boxes.to_html("overall", left_of(layout, "overall"), top_of(layout, "overall"), width_of("overall"), height_of("overall"), OVERALL_COLOR, to_html(outcome), True)
                 for i in 0 ..< len(outcome.list_of_outcomes):
-                    + box_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], PERF_W, PERF_H, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
+                    + boxes.to_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], PERF_W, PERF_H, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
                 for i in 0 ..< len(outcome.list_of_outcomes):
-                    + arrow_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Drawing_Pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
-                    + arrow_html(layout, name_of(outcome.list_of_outcomes[i].kind), width_of(name_of(outcome.list_of_outcomes[i].kind)), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
+                    + arrows.to_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Drawing_Pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
+                    + arrows.to_html(layout, name_of(outcome.list_of_outcomes[i].kind), width_of(name_of(outcome.list_of_outcomes[i].kind)), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
 
+# The page's own look, and that of the forms in the boxes (the boxes and the arrows have their own,
+# in their classes above).
 const STYLE: str = """
 * { font-family: sans-serif; }
 body { margin: 0; padding: 0; background-color: #f6f4f4; }
 svg.drawing { display: block; user-select: none; }
 p.problem { position: fixed; top: 0.5em; left: 0.5em; margin: 0; color: #b71c1c; background: #fdecea; border-radius: 6px; padding: 0.4em 0.7em; }
 p.problem:empty { display: none; }
-rect.body, rect.node { stroke: #333; stroke-width: 2; }
-rect.node { cursor: grab; }
-foreignObject { pointer-events: none; }
-path.outline { fill: none; stroke: #000; stroke-width: 8; stroke-linejoin: round; }
-path.line { fill: none; stroke-width: 4; stroke-linejoin: round; }
 fieldset { border: none; margin: 0; padding: 0; }
 input:invalid { background-color: ivory; border: 2px solid lightgray; outline: 2px solid red; }
 .jj-form { position: static; font-size: 14px; text-align: center; padding: 10px; display: flex; flex-direction: column;
@@ -258,7 +273,7 @@ input:invalid { background-color: ivory; border: 2px solid lightgray; outline: 2
 """
 
 def shell_text() -> str:
-    return page.shell_text("Return of investment", STYLE, ["roi_js_events.js"], [], read_portfolio())
+    return page.shell_text("Return of investment", STYLE + boxes.style.css() + arrows.style.css(), ["roi_js_events.js"], [], read_portfolio())
 
 def all_text(portfolio: Portfolio, layout: Layout) -> str:
     return str(all_html(portfolio, layout))
