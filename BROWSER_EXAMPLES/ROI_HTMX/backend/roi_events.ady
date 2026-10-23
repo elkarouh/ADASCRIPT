@@ -21,43 +21,17 @@ every open page, which then reads itself again -- and the Session knows none of 
 Reset is no command on one thing: it is its own route, and what it changed is an UPDATE with no key:
 everything, read it all again.
 """
-from uri nimport decodeUrl
 from drawing import Drawing_Pixel_T, Spot_T
 from blackboard import PublishChannel
+from page_server import Page_Request
 from backend/roi_model import Portfolio, Product_T, new_portfolio, set_share, set_year
 from backend/roi_layout import Layout, new_layout, move_block
 from backend/roi_gui import all_text, problem_text, name_of
-from backend/roi_commands import Command, Verb_T, READ, UPDATE, THE_INVESTMENT, A_SHARE, A_BLOCK, THE_PORTFOLIO, command_of, value, spot
-
-# ---- A request: its method, its path and its fields ----
-
-class Request:
-    var method: str                 # GET, PUT, POST
-    var path:   str                 # /all, /investment, /shares, /blocks, /reset
-    var fields: {str}str            # by name, from the query and the body
-
-    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2").
-    def __init__(self, method: str, path: str, text: str):
-        self.method = method
-        self.path = path
-        self.fields = {:}
-        for pair in text.split("&"):
-            let at: int = pair.find("=")
-            if at > 0:
-                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
-
-    # The command this request is; None when it is none.
-    def command(self) -> ?Command:
-        return command_of(self.method, self.path, self.fields)
+from commands import READ, UPDATE, Change
+from backend/roi_commands import Command, THE_INVESTMENT, A_SHARE, A_BLOCK, THE_PORTFOLIO, command_of
 
 # The channels of the server's blackboard: the portfolio, and where its blocks are drawn.
 type Channel_T is enum PORTFOLIO_CHAN, LAYOUT_CHAN
-
-# What a command changed, as the channels carry it, in the commands' verbs: which field ("funds",
-# "year", a product) or block; "" for everything (reset), which is read again whole.
-type Change is record:
-    kind: Verb_T
-    key:  str
 
 # A channel of the session's: one of Channel_T, carrying a Change.
 type Change_Channel_T is PublishChannel[Channel_T, Change]
@@ -93,14 +67,14 @@ class Session:
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
     # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
-        let r: Request = Request(method, path, fields)
+        let r: Page_Request = Page_Request(method, path, fields)
         if r.method == "POST" and r.path == "/reset":
             self.portfolio = new_portfolio()
             self.layout = new_layout()
             self.portfolio_channel.publish(Change(UPDATE, ""))
             self.layout_channel.publish(Change(UPDATE, ""))
             return problem_text("")
-        let c: ?Command = r.command()
+        let c: ?Command = command_of(r.method, r.path, r.fields)
         if c is None:
             return ""
         if c.verb == READ:

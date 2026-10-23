@@ -4,9 +4,9 @@ investment, a product's share, or where a block is. Compiled both ways: the page
 script make commands, the server reads each request back into one, and both go by the same words,
 as BROWSER_EXAMPLES/DIJKSTRA_HTMX's do.
 
-A Command is its verb (READ, UPDATE), what it is done to (THE_INVESTMENT, A_SHARE, A_BLOCK, or
-THE_PORTFOLIO, which is what is read: named so, and not INVESTMENT, for Nim, which would take it
-for the model's Investment), and its fields by name:
+A Command (the stdlib's commands.ady) is its verb (here READ or UPDATE), what it is done to
+(THE_INVESTMENT, A_SHARE, A_BLOCK, or THE_PORTFOLIO, which is what is read: named so, and not
+INVESTMENT, for Nim, which would take it for the model's Investment), and its fields by name:
 
     update_investment()             # U: PUT /investment   funds, or year: the field the reader changed
     update_share("gold")            # U: PUT /shares       product=gold, and percentage, the field
@@ -18,37 +18,11 @@ The field the reader changed is not in the command: the field sends itself with 
 the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say which, and
 `command_of` reads them back, so the mapping is written once, here. No HTML, no HTTP.
 """
-from drawing import Drawing_Pixel_T, Spot_T
+from drawing import Spot_T
+from commands import Verb_T, READ, UPDATE, Command_Of, draft_fields
 
-type Verb_T is enum READ, UPDATE
 type Thing_T is enum THE_INVESTMENT, A_SHARE, A_BLOCK, THE_PORTFOLIO
-
-type Command is record:
-    verb:   Verb_T
-    thing:  Thing_T
-    fields: {str}str
-
-# The field NAME of command C, or "" when it has none.
-def value(c: Command, name: str) -> str:
-    if name in c.fields:
-        return c.fields[name]
-    return ""
-
-# Where command C puts its block: its fields x and y; None when it has none, or they are not numbers.
-def spot(c: Command) -> ?Spot_T:
-    let x: float | !ParseFailure_T = parse_float(c.value("x"))
-    let y: float | !ParseFailure_T = parse_float(c.value("y"))
-    if x is ParseFailure_T:
-        return None
-    if y is ParseFailure_T:
-        return None
-    return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
-
-# ---- On the wire: the verb is the HTTP method, the thing is the URL ----
-
-# The HTTP method command C goes by: its verb.
-def method(c: Command) -> str:
-    return ("GET" if c.verb == READ else "PUT")
+type Command is Command_Of[Thing_T]        # a command (the stdlib's commands.ady), of this app's things
 
 # The URL command C goes to: what it is done to.
 def url(c: Command) -> str:
@@ -63,12 +37,12 @@ def url(c: Command) -> str:
             return "/all"
 
 # The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. The portfolio
-# is only read, and only the portfolio is read.
+# is only read, and only the portfolio is read; nothing is created or deleted.
 def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
     for verb in Verb_T:
         for thing in Thing_T:
             let c: Command = Command(verb, thing, fields)
-            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == THE_PORTFOLIO):
+            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == THE_PORTFOLIO) and verb in [READ, UPDATE]:
                 return c
     return None
 
@@ -81,7 +55,8 @@ def update_investment() -> Command:
 
 # U: the share of PRODUCT ("gold"), by the field percentage, which sends itself.
 def update_share(product: str) -> Command:
-    return Command(UPDATE, A_SHARE, {"product": product})
+    let fields: {str}str = {"product": product}
+    return Command(UPDATE, A_SHARE, fields)
 
 # U: the block NAME, let go with its centre at AT.
 def update_block(name: str, at: Spot_T) -> Command:
@@ -91,12 +66,8 @@ def update_block(name: str, at: Spot_T) -> Command:
 # U, while the reader still holds the block NAME: where its centre is now. A draft: the change is
 # not made yet, so only the page shows it; when the block is let go, update_block makes it.
 def move_block(name: str, at: Spot_T) -> Command:
-    let fields: {str}str = {"name": name, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}", "draft": "yes"}
-    return Command(UPDATE, A_BLOCK, fields)
-
-# Whether C is a draft: the reader is still making it, and nothing is to be changed for it but the page.
-def is_draft(c: Command) -> bool:
-    return c.value("draft") == "yes"
+    let fields: {str}str = {"name": name, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}"}
+    return Command(UPDATE, A_BLOCK, draft_fields(fields))
 
 # R: the portfolio, the whole drawing.
 def read_portfolio() -> Command:

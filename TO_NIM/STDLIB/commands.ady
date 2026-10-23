@@ -1,0 +1,109 @@
+#!/usr/bin/env ady2nim
+"""
+commands.ady -- the vocabulary a page and its server share: Create, Read, Update or Delete, of a thing
+
+A page that htmx draws asks its server for one of four things, done to one of the app's things:
+a Command is its verb, what it is done to (a value of the app's own enum: NODE, LINK, DIAGRAM),
+and its fields by name. Compiled both ways: the page makes commands, the server reads each request
+back into one, and both go by the same words. BROWSER_EXAMPLES/DIJKSTRA_HTMX is built so (its
+docs/TUTORIAL.md, "Commands").
+
+On the wire the verb is the HTTP method (`c.method()`), and the thing is the URL, which the app
+says: its `url`. The app's commands module, then:
+
+    from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Command_Of
+
+    type Thing_T is enum NODE, LINK, DIAGRAM
+    type Command is Command_Of[Thing_T]            # a command, of the app's things
+
+    def url(c: Command) -> str:
+        case c.thing:
+            when NODE:
+                return "/nodes"
+            ...
+
+    def delete_node(id: int) -> Command:
+        let fields: {str}str = {"id": str(id)}
+        return Command(DELETE, NODE, fields)
+
+A command's fields are read with `c.value("id")`, a number of them with `c.number_value("id")`,
+and the place it names (its fields x and y: where a node dragged is put) with `c.spot()`. A draft
+(`c.is_draft()`, made with `draft_fields`) is a command the reader is still making, a node still
+held: it stays in the browser, and nothing is changed for it.
+
+What a command changed, the server publishes as a Change, in the same verbs: a Change_Channel_T
+of the app's own enum of channels carries it (blackboard.ady).
+"""
+from drawing import Drawing_Pixel_T, Spot_T
+
+type Verb_T is enum CREATE, READ, UPDATE, DELETE
+
+# What a command changed, as the server's channels carry it: which verb, and which key ("4",
+# "funds"); "" for everything, to be read again whole.
+type Change is record:
+    kind: Verb_T
+    key:  str
+
+# The HTTP method VERB goes by.
+def method_of(verb: Verb_T) -> str:
+    case verb:
+        when CREATE:
+            return "POST"
+        when READ:
+            return "GET"
+        when UPDATE:
+            return "PUT"
+        when DELETE:
+            return "DELETE"
+
+# VERB, done to THING (a value of the app's enum), with FIELDS by name.
+class Command_Of[Thing_T]:
+    var verb:   Verb_T
+    var thing:  Thing_T
+    var fields: {str}str
+
+    def __init__(self, verb: Verb_T, thing: Thing_T, fields: {str}str):
+        self.verb = verb
+        self.thing = thing
+        self.fields = fields
+
+    # The HTTP method the command goes by: its verb's.
+    def method(self) -> str:
+        return method_of(self.verb)
+
+    # The field NAME, or "" when the command has none.
+    def value(self, name: str) -> str:
+        if name in self.fields:
+            return self.fields[name]
+        return ""
+
+    # The field NAME as a whole number; -1 when it is none.
+    def number_value(self, name: str) -> int:
+        let text: str = self.value(name)
+        let n: int | !ParseFailure_T = parse_int(text)
+        if n is ParseFailure_T:
+            return -1
+        return n
+
+    # Where the command puts what it moves (a node dragged): its fields x and y; None when it has
+    # none, or they are not numbers.
+    def spot(self) -> ?Spot_T:
+        let x_text: str = self.value("x")
+        let y_text: str = self.value("y")
+        let x: float | !ParseFailure_T = parse_float(x_text)
+        let y: float | !ParseFailure_T = parse_float(y_text)
+        if x is ParseFailure_T:
+            return None
+        if y is ParseFailure_T:
+            return None
+        return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
+
+    # Whether it is a draft: the reader is still making it, and nothing is to be changed for it but the page.
+    def is_draft(self) -> bool:
+        return self.value("draft") == "yes"
+
+# FIELDS, with the field draft that makes a command of them a draft.
+def draft_fields(fields: {str}str) -> {str}str:
+    var marked: {str}str = fields
+    marked["draft"] = "yes"
+    return marked

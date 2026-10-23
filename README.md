@@ -3803,6 +3803,8 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import browser`  | (js) the page in plain words, for a script in the browser: `page.find(css)`, `page.all(css)`, `node.data("name")`, `node.has_class(c)`, `form.fill(name, value)`, `page.press(css)`, `send_request(method, url, fields, target, include)`, a `Click` |
 | `import svg_drag` | (js) drag the shapes of a server-drawn SVG with the mouse: `draggable(shapes, svg, width, moved, dropped, clicked)`, pixels and drawing units as distinct types; `BROWSER_EXAMPLES/DIJKSTRA_HTMX` and `BROWSER_EXAMPLES/ACCOUNTING` use it |
 | `import svg_path` | paths for an SVG drawing, as the `d` of a `<path>`; plain arithmetic, so it compiles both to C and to JavaScript: `connector_d(x1, y1, x2, y2, leave, stop_short)`, an S-shaped curve between two boxes; `BROWSER_EXAMPLES/ROI_HTMX` uses it |
+| `import commands` | the vocabulary a page and its server share, compiled both ways: the verbs `CREATE`, `READ`, `UPDATE`, `DELETE`, a `Command_Of[Thing_T]` the app's things (its fields: `c.value(name)`, `c.method()`, `c.is_draft()`, `c.spot()`), and the `Change` a server publishes; the four htmx apps of `BROWSER_EXAMPLES` use it |
+| `import page_server` | (c) what every server of an htmx page does the same: `Page_Request` (a request's method, path and fields), `News` (the pages following `GET /events`: `follow`, `tell`), `send_script`, `port_of` |
 | `nimport illwill` | [illwill](https://github.com/johnnovak/illwill), a curses-like terminal library in pure Nim (one file, WTFPL): non-blocking keys, a screen buffer that writes what changed; `EDITORS/VI/vi_curses.ady` uses it |
 | `nimport expect`  | `Spawn`, `send`, `expect` PTY automation                   |
 
@@ -5874,7 +5876,7 @@ ADASCRIPT/
 │       ├── graphs.ady         Shortest paths, generic in the node type
 │       ├── iters.ady          Iterator toolkit (take, chunks, pairwise, …)
 │       ├── illwill.nim        Curses-like terminal library, pure Nim (one file)
-│       └── db.ady, jointjs.ady, browser.ady, svg_drag.ady, svg_path.ady, expect.nim
+│       └── db.ady, jointjs.ady, browser.ady, svg_drag.ady, svg_path.ady, commands.ady, page_server.ady, expect.nim
 │
 ├── EXAMPLES/                  End-to-end example programs (`*.ady`)
 │                              Transpiled output is not kept here — it goes to

@@ -18,44 +18,17 @@ reads itself again -- and the Session knows none of them:
 
 Nothing has to be kept on a change: the ledger writes each one to the scenario's database as it is made.
 """
-from uri nimport decodeUrl
 from blackboard import PublishChannel
 from backend/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
 from backend/books_text import Books, closing_entries, kind_named, text_of_books
 from backend/accounting_page_gui import Params, account_numbered, all_text, told_text, entry_of, fresh_params, int_of, params_of, year_end, retained_account
-from backend/accounting_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, THE_BOOKS, command_of, value
+from page_server import Page_Request
+from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
+from backend/accounting_commands import Command, A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, THE_BOOKS, command_of
 from backend/ledger import Config, Ledger, Scenarios, read_config
-
-# ---- A request: its method, its path and its fields ----
-
-class Request:
-    var method: str                 # GET, POST, PUT, DELETE
-    var path:   str                 # /h/all, /h/entries, ...
-    var fields: {str}str            # by name, from the query and the body
-
-    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2").
-    def __init__(self, method: str, path: str, text: str):
-        self.method = method
-        self.path = path
-        self.fields = {:}
-        for pair in text.split("&"):
-            let at: int = pair.find("=")
-            if at > 0:
-                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
-
-    # The command this request is; None when it is none.
-    def command(self) -> ?Command:
-        return command_of(self.method, self.path, self.fields)
 
 # The channels of the server's blackboard: one per thing that changes.
 type Channel_T is enum ENTRIES_CHAN, ACCOUNTS_CHAN, SCENARIOS_CHAN
-
-# What a command changed, as the channels carry it, in the commands' verbs: which one (the
-# transaction's number or what it says, the account's name, the scenario's name); "" for many at
-# once (the year closed).
-type Change is record:
-    kind: Verb_T
-    key:  str
 
 # A channel of the session's: one of Channel_T, carrying a Change.
 type Change_Channel_T is PublishChannel[Channel_T, Change]
@@ -202,8 +175,8 @@ class Session:
             except:
                 done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
             return told_text(done)
-        let r: Request = Request(method, path, fields)
-        let c: ?Command = r.command()
+        let r: Page_Request = Page_Request(method, path, fields)
+        let c: ?Command = command_of(r.method, r.path, r.fields)
         if c is None:
             return ""
         if c.verb == READ:

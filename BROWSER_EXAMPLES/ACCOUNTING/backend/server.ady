@@ -24,43 +24,25 @@ A scenario is a pair of files in scenarios/, beside the config file:
 NAME.books, the books as text, and NAME.db, the database the page changes,
 made from NAME.books the first time NAME is shown and again by Start over.
 """
-from asyncdispatch nimport asyncCheck, complete, newFuture, Port, waitFor
+from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from asyncnet nimport AsyncSocket, send, close, isClosed
 from backend/accounting_page_gui import shell_text
-from backend/accounting_events import Channel_T, Change, Session
+from page_server import News, send_script
+from commands import Change
+from backend/accounting_events import Channel_T, Session
 
 var session: Session = Session()     # main starts it on the config file
 
-# The pages following GET /events: the answer to each is kept open, and every change is written to it.
-var followers: []AsyncSocket = []
-
-# The first lines of the answer to GET /events, which never ends: a stream of messages.
-const EVENTS_HEAD: str = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n"
-
-# MESSAGE to one page; a page that has gone is closed, and dropped at the next change.
-async def send_news(client: AsyncSocket, message: str):
-    try:
-        await client.send(message)
-    except Exception:
-        client.close()
+# The pages following GET /events.
+var news: News = News()
 
 # A change, told to every page that follows: subscribed to the session's channels in main.
 def tell(channel: Channel_T, change: Change):
-    let message: str = f"data: {channel} {change.kind} {change.key}\n\n"
-    var still: []AsyncSocket = []
-    for client in followers:
-        if not client.isClosed():
-            asyncCheck(send_news(client, message))   # its failure is handled there
-            still.append(client)
-    followers = still
+    news.tell(f"{channel} {change.kind} {change.key}")
 
 var www: Path = Path("build")            # where the page is: build/, beside the config file
 
 const PAGES: []str = ["htmx.min.js", "accounting_js_events.js"]
-
-def content_type(file: str) -> str:
-    return ("text/javascript" if file.endswith(".js") else "text/html; charset=utf-8")
 
 async def handler(req: Request):
     let path: str = req.url.path
@@ -70,19 +52,13 @@ async def handler(req: Request):
     if get and (path == "/h" or path == "/"):
         await req.respond(Http200, shell_text(), html_type)
     elif get and path == "/events":
-        await req.client.send(EVENTS_HEAD)  # and no end: the changes follow, from tell
-        followers.append(req.client)
+        news.follow(req.client)             # and no end: the changes follow, from tell
     elif get and path == "/books":
         await req.respond(Http200, session.books_text(), text)
     elif get and path == "/scenarios":
         await req.respond(Http200, session.scenarios_text(), text)
     elif get and path[1:] in PAGES:
-        let file: str = path[1:]
-        let page: str | !PathFailure_T = (www / file).read_text()
-        if page is PathFailure_T:
-            await req.respond(Http404, f"{file} is not built: make app")
-        else:
-            await req.respond(Http200, page, newHttpHeaders([("Content-Type", content_type(file))]))
+        await send_script(req, www)
     else:
         let page: str = session.answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
         if page == "":

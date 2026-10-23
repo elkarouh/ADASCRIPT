@@ -70,6 +70,14 @@ it but do:. Not yet:
       SVG_NODE_EDITOR's node_editor_commands.ady and ACCOUNTING's
       accounting_js_events.ady put such values in a typed `let` meanwhile.
 
+### An async method
+
+- [ ] `async def follow(self, ...)` in a class is left out of the Nim
+      altogether, with no word: the call to it then fails as "undeclared
+      routine". It should come out as an `{.async.}` proc, or be refused
+      (Nim's async procs cannot take `var` parameters, so `self` would have
+      to be a ref). page_server's `News.follow` is not async meanwhile.
+
 ### A str joined with a char
 
 - [ ] `vals += ("" if done else ", ") + '"' + name`: a conditional

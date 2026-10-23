@@ -49,9 +49,9 @@ The portfolio, and where the boxes are, are kept in memory: it starts again when
 | `backend/roi_model.ady` | the model, with no HTML, no HTTP and no places: an `Investment` (money, year), an `InvestmentPercentage` (product, percentage) for each of the three products, held with it by a `Portfolio`, which also owns the rebalancing (`set_share`); `evaluate` gives an `Outcome`, a `ProductOutcome` for each product and the overall performance. Each box of the drawing is one of these. |
 | `backend/roi_layout.ady` | where the boxes are: a `Layout` of centres, what a drag changes (`move_block`), and the size of the drawing. The model knows none of it. |
 | `backend/roi_gui.ady` | how to draw it: a `to_html` for each model type (what it looks like inside its box), and the boxes, the arrows and the page around them, from the portfolio and the layout. |
-| `backend/roi_commands.ady` | the commands, the one vocabulary of the page and the server: their verbs, what they are done to, their method and URL on the wire, and `command_of`, which reads a request back. Compiled both ways. |
+| `backend/roi_commands.ady` | the commands, the one vocabulary of the page and the server (a `Command_Of` this app's things, from the stdlib's `commands.ady`): their verbs, what they are done to, their method and URL on the wire, and `command_of`, which reads a request back. Compiled both ways. |
 | `backend/roi_events.ady` | what each request does: a `Session` holds the portfolio and the layout, `answer(method, path, fields)` reads the request into a command, carries it out and publishes what changed on its channels. No HTTP, so the tests call it. |
-| `backend/server.ady` | HTTP, and nothing else: hands each request to the session, serves the two scripts, and tells every page following `GET /events` of each change. |
+| `backend/server.ady` | HTTP, and nothing else: hands each request to the session, serves the two scripts, and tells every page following `GET /events` of each change (the stdlib's `page_server.ady`). |
 | `frontend/roi_js_events.ady` | the browser side, compiled to JavaScript: the blackboard, its observers, and the drag of a box. |
 | `frontend/htmx.min.js` | htmx, vendored. |
 | `test_roi.ady` | tests of the model, and of the page through a `Session`, as the browser would ask, with the changes it publishes. |

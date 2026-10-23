@@ -2,7 +2,8 @@
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_node_editor.ady)"""
 from drawing import Spot_T
 from backend/node_editor_model import Diagram, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot, sample
-from backend/node_editor_events_gui import Channel_T, Change, Session
+from commands import Change
+from backend/node_editor_events_gui import Channel_T, Session
 
 # ---- the model ----
 var d: Diagram = sample()

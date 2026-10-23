@@ -1,0 +1,115 @@
+#!/usr/bin/env ady2nim
+"""
+page_server.ady -- what every server of a page that htmx draws does the same way
+
+A server of BROWSER_EXAMPLES (DIJKSTRA_HTMX, SVG_NODE_EDITOR, ACCOUNTING, ROI_HTMX) answers each
+request from a session of its own, and tells every open page of each change, so that a second tab
+follows the first. What is the same in all of them is here:
+
+    Page_Request    a request as the page sent it: its method, its path, and its fields, read
+                    once from the query and the body ("a=1&b=2")
+    News            the pages following GET /events (server-sent events): `follow` keeps the
+                    answer to one open, `tell` writes a message to every one still there
+    send_script     a script the page loads, read from a directory
+    port_of         the port the server listens on: the first argument, or a default
+
+A server, then:
+
+    from page_server import News, send_script, port_of
+
+    var news: News = News()
+
+    def tell(channel: Channel_T, change: Change):       # subscribed to the session's channels
+        news.tell(f"{channel} {change.kind} {change.key}")
+
+    async def handler(req: Request):
+        case req.url.path:
+            when "/events":
+                news.follow(req.client)                 # and no end: the changes follow, from tell
+            when "/htmx.min.js":
+                await send_script(req, Path("frontend"))
+            ...
+
+The page hears the messages with the browser module's `listen_to_server("/events", ...)`.
+"""
+from asyncdispatch nimport asyncCheck, complete, newFuture
+from asynchttpserver nimport Request, respond, newHttpHeaders, Http200, Http404
+from asyncnet nimport AsyncSocket, send, close, isClosed
+from uri nimport decodeUrl
+
+# ---- A request: its method, its path and its fields ----
+
+class Page_Request:
+    var method: str                 # GET, POST, PUT, DELETE
+    var path:   str                 # /all, /nodes, ...
+    var fields: {str}str            # by name, from the query and the body
+
+    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2"), or both joined
+    # by "&". A name that comes twice keeps its last value.
+    def __init__(self, method: str, path: str, text: str):
+        self.method = method
+        self.path = path
+        self.fields = {:}
+        for pair in text.split("&"):
+            let at: int = pair.find("=")
+            if at > 0:
+                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
+
+    # The field KEY, or "" when there is none.
+    def field(self, key: str) -> str:
+        if key in self.fields:
+            return self.fields[key]
+        return ""
+
+# ---- The pages that follow the changes: GET /events ----
+
+# The first lines of the answer to GET /events, which never ends: a stream of messages.
+const EVENTS_HEAD: str = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n"
+
+# TEXT to one page; a page that has gone is closed, and dropped at the next message.
+async def send_news(client: AsyncSocket, text: str):
+    try:
+        await client.send(text)
+    except Exception:
+        client.close()
+
+# The pages following GET /events: the answer to each is kept open, and every message is written to it.
+class News:
+    var followers: []AsyncSocket
+
+    def __init__(self):
+        self.followers = []
+
+    # The page that asked GET /events on CLIENT follows from now on.
+    def follow(self, client: AsyncSocket):
+        asyncCheck(send_news(client, EVENTS_HEAD))      # sent at once, before any message
+        self.followers.append(client)
+
+    # MESSAGE, one line, to every page that follows ("NODES_CHAN CREATE 4").
+    def tell(self, message: str):
+        var still: []AsyncSocket = []
+        for client in self.followers:
+            if not client.isClosed():
+                asyncCheck(send_news(client, f"data: {message}\n\n"))   # its failure is handled there
+                still.append(client)
+        self.followers = still
+
+# ---- The rest of a server ----
+
+# The script REQ asks for (its path, "/htmx.min.js"), from the directory DIR.
+async def send_script(req: Request, dir: Path):
+    let path: str = req.url.path
+    let script: str | !PathFailure_T = (dir / path[1:]).read_text()
+    if script is PathFailure_T:
+        await req.respond(Http404, f"{dir}{path} is not here: run the server from the app's directory, after make")
+    else:
+        await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
+
+# The port the server listens on: the first of ARGS, when it is a number; else DEFAULT.
+def port_of(args: []str, default: int) -> int:
+    if len(args) == 0:
+        return default
+    let n: int | !ParseFailure_T = parse_int(args[0])
+    if n is ParseFailure_T:
+        return default
+    return n

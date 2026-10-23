@@ -3,7 +3,8 @@
 from backend/roi_model import GOLD, BITCOIN, SP500, Outcome, Portfolio, evaluate, new_portfolio, set_share, set_year
 from drawing import Spot_T
 from backend/roi_layout import Layout, move_block, new_layout
-from backend/roi_events import Channel_T, Change, Session
+from commands import Change
+from backend/roi_events import Channel_T, Session
 from backend/roi_gui import shell_text
 
 # ---- the model ----

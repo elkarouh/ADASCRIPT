@@ -21,42 +21,16 @@ Session knows none of them:
 Reset is no command on one node or connector: it is its own route, and what it changed is an UPDATE
 with no key: everything, read it all again.
 """
-from uri nimport decodeUrl
 from drawing import Drawing_Pixel_T, Spot_T
 from blackboard import PublishChannel
+from page_server import Page_Request
+from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
 from backend/node_editor_model import Diagram, Link_T, Refusal_T, sample
 from backend/node_editor_gui import all_text, problem_text
-from backend/node_editor_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, LINK, DIAGRAM, command_of, value, number_value, spot, link
-
-# ---- A request: its method, its path and its fields ----
-
-class Request:
-    var method: str                 # GET, POST, PUT, DELETE
-    var path:   str                 # /all, /nodes, /links, ...
-    var fields: {str}str            # by name, from the query and the body
-
-    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2").
-    def __init__(self, method: str, path: str, text: str):
-        self.method = method
-        self.path = path
-        self.fields = {:}
-        for pair in text.split("&"):
-            let at: int = pair.find("=")
-            if at > 0:
-                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
-
-    # The command this request is; None when it is none.
-    def command(self) -> ?Command:
-        return command_of(self.method, self.path, self.fields)
+from backend/node_editor_commands import Command, NODE, LINK, DIAGRAM, command_of, link
 
 # The channels of the server's blackboard: one per collection.
 type Channel_T is enum NODES_CHAN, LINKS_CHAN
-
-# What a command changed, as the channels carry it, in the commands' verbs: the node's id, or the
-# connector's two ports ("0 2 3 2"); "" for everything (reset), which is read again whole.
-type Change is record:
-    kind: Verb_T
-    key:  str
 
 # A channel of the session's: one of Channel_T, carrying a Change.
 type Change_Channel_T is PublishChannel[Channel_T, Change]
@@ -110,14 +84,14 @@ class Session:
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
     # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
-        let r: Request = Request(method, path, fields)
+        let r: Page_Request = Page_Request(method, path, fields)
         if r.method == "POST" and r.path == "/reset":
             self.diagram = sample()
             self.links_channel.publish(Change(UPDATE, ""))
             self.nodes_channel.publish(Change(UPDATE, ""))
             let went: None | !Refusal_T = None      # a reset cannot be refused
             return problem_text(went)
-        let c: ?Command = r.command()
+        let c: ?Command = command_of(r.method, r.path, r.fields)
         if c is None:
             return ""
         if c.verb == READ:

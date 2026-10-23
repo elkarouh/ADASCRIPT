@@ -15,7 +15,7 @@ from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPe
 from drawing import Drawing_Pixel_T
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
-from backend/roi_commands import Command, method, url, update_investment, update_share
+from backend/roi_commands import Command, url, update_investment, update_share
 
 const INVEST_COLOR: str = "#D4D9D7"
 const OVERALL_COLOR: str = "#EAECEA"

@@ -28,7 +28,7 @@ from shared/routes import Shape, boxes, px, Route_T
 from shared/layout import WIDTH, GAP, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
 from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
-from backend/accounting_commands import Command, method, url, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario
+from backend/accounting_commands import Command, url, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario
 
 # The settings, as the query gives them.
 type Params is record:

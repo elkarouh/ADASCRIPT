@@ -16,49 +16,26 @@ change it made is published, and two subscribers here hear of it: `keep`, which 
 graph.txt (in the directory the server runs in), and `tell`, which tells every open page, which then
 reads itself again.
 """
-from asyncdispatch nimport asyncCheck, complete, newFuture, Port, waitFor
+from asyncdispatch nimport complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
-from asyncnet nimport AsyncSocket, send, close, isClosed
+from page_server import News, send_script, port_of
 from backend/dijkstra_gui import shell_text
-from backend/dijkstra_events_gui import Channel_T, Change, Session
+from commands import Change
+from backend/dijkstra_events_gui import Channel_T, Session
 
 # The session the requests are answered from: main makes it the one that keeps the network in graph.txt.
 var session: Session = Session("")
 
-# The pages following GET /events: the answer to each is kept open, and every change is written to it.
-var followers: []AsyncSocket = []
-
-# The first lines of the answer to GET /events, which never ends: a stream of messages.
-const EVENTS_HEAD: str = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n"
-
-# MESSAGE to one page; a page that has gone is closed, and dropped at the next change.
-async def send_news(client: AsyncSocket, message: str):
-    try:
-        await client.send(message)
-    except Exception:
-        client.close()
+# The pages following GET /events.
+var news: News = News()
 
 # A change, told to every page that follows: subscribed to the session's channels in main.
 def tell(channel: Channel_T, change: Change):
-    let message: str = f"data: {channel} {change.kind} {change.key}\n\n"
-    var still: []AsyncSocket = []
-    for client in followers:
-        if not client.isClosed():
-            asyncCheck(send_news(client, message))   # its failure is handled there
-            still.append(client)
-    followers = still
+    news.tell(f"{channel} {change.kind} {change.key}")
 
 # A change, kept: the network written to graph.txt.
 def keep(channel: Channel_T, change: Change):
     session.keep()
-
-# A script the page loads, from the frontend directory.
-async def send_script(req: Request, path: str):
-    let script: str | !PathFailure_T = (Path("frontend") / path[1:]).read_text()
-    if script is PathFailure_T:
-        await req.respond(Http404, f"frontend{path} is not here: run from the demo's directory, after make dijkstra_js_events.js")
-    else:
-        await req.respond(Http200, script, newHttpHeaders([("Content-Type", "text/javascript")]))
 
 async def handler(req: Request):
     let html_type: HttpHeaders = newHttpHeaders([("Content-Type", "text/html; charset=utf-8")])
@@ -67,12 +44,11 @@ async def handler(req: Request):
         when "/":
             await req.respond(Http200, shell_text(), html_type)
         when "/htmx.min.js":
-            await send_script(req, path)
+            await send_script(req, Path("frontend"))
         when "/dijkstra_js_events.js":
-            await send_script(req, path)
+            await send_script(req, Path("frontend"))
         when "/events":
-            await req.client.send(EVENTS_HEAD)  # and no end: the changes follow, from tell
-            followers.append(req.client)
+            news.follow(req.client)             # and no end: the changes follow, from tell
         when others:
             let page: str = session.answer(req.reqMethod'Image, path, req.url.query + "&" + req.body)
             if page == "":
@@ -81,14 +57,7 @@ async def handler(req: Request):
                 await req.respond(Http200, page, html_type)
 
 def main():
-    var port: int = 8810
-    let args: []str = $@
-    if len(args) > 0:
-        let n: int | !ParseFailure_T = parse_int(args[0])
-        if n is ParseFailure_T:
-            pass
-        else:
-            port = n
+    let port: int = port_of($@, 8810)
     session = Session("graph.txt")
     session.nodes_channel.subscribe(keep)       # kept first, so a page that reads again sees it saved, or why not
     session.edges_channel.subscribe(keep)

@@ -4,8 +4,8 @@ Delete, of a transaction, an account, a scenario, or the books. Compiled both wa
 buttons and its script make commands, the server reads each request back into one, and both go by
 the same words, as BROWSER_EXAMPLES/DIJKSTRA_HTMX's do.
 
-A Command is its verb (CREATE, READ, UPDATE, DELETE), what it is done to (A_TRANSACTION, AN_ACCOUNT,
-A_SCENARIO, or THE_BOOKS, which is what is read: named so, and not ENTRY or BOOKS, for Nim, which
+A Command (the stdlib's commands.ady) is its verb (CREATE, READ, UPDATE, DELETE), what it is done
+to (A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, or THE_BOOKS, which is what is read: named so, and not ENTRY or BOOKS, for Nim, which
 would take ENTRY for the model's Entry), and its fields by name:
 
     create_entry()                  # C: POST   /h/entries     date what amount vat, source target (the arrow)
@@ -25,45 +25,13 @@ the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()`
 the page, and a change with the paragraph #told (accounting_page_gui.ady): done, or why not. No
 HTML, no HTTP.
 """
-from drawing import Drawing_Pixel_T, Spot_T
+from drawing import Spot_T
+from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Command_Of, draft_fields
 
-type Verb_T is enum CREATE, READ, UPDATE, DELETE
 type Thing_T is enum A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, THE_BOOKS
+type Command is Command_Of[Thing_T]        # a command (the stdlib's commands.ady), of this app's things
 
-type Command is record:
-    verb:   Verb_T
-    thing:  Thing_T
-    fields: {str}str
-
-# The field NAME of command C, or "" when it has none.
-def value(c: Command, name: str) -> str:
-    if name in c.fields:
-        return c.fields[name]
-    return ""
-
-# Where command C puts its account: its fields x and y; None when it has none, or they are not numbers.
-def spot(c: Command) -> ?Spot_T:
-    let x: float | !ParseFailure_T = parse_float(c.value("x"))
-    let y: float | !ParseFailure_T = parse_float(c.value("y"))
-    if x is ParseFailure_T:
-        return None
-    if y is ParseFailure_T:
-        return None
-    return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
-
-# ---- On the wire: the verb is the HTTP method, the thing is the URL ----
-
-# The HTTP method command C goes by: its verb.
-def method(c: Command) -> str:
-    case c.verb:
-        when CREATE:
-            return "POST"
-        when READ:
-            return "GET"
-        when UPDATE:
-            return "PUT"
-        when DELETE:
-            return "DELETE"
+# ---- On the wire: the verb is the HTTP method (`c.method()`), the thing is the URL ----
 
 # The URL command C goes to: what it is done to.
 def url(c: Command) -> str:
@@ -109,7 +77,8 @@ def create_account() -> Command:
 
 # D: the account NAME, which no transaction may touch.
 def delete_account(name: str) -> Command:
-    return Command(DELETE, AN_ACCOUNT, {"name": name})
+    let fields: {str}str = {"name": name}
+    return Command(DELETE, AN_ACCOUNT, fields)
 
 # C: the books shown, saved as a new scenario (newname), and shown.
 def create_scenario() -> Command:
@@ -130,9 +99,5 @@ def read_books(fields: {str}str) -> Command:
 # A draft, while the reader still holds the account ID: where it is now. Nothing is changed for it
 # but the page; when the account is let go, the page is read again with its place in the field pos.
 def move_account(id: str, at: Spot_T) -> Command:
-    let fields: {str}str = {"id": id, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}", "draft": "yes"}
-    return Command(READ, THE_BOOKS, fields)
-
-# Whether C is a draft: the reader is still making it, and nothing is to be done for it but on the page.
-def is_draft(c: Command) -> bool:
-    return c.value("draft") == "yes"
+    let fields: {str}str = {"id": id, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}"}
+    return Command(READ, THE_BOOKS, draft_fields(fields))

@@ -3,8 +3,8 @@
 of a node or an edge. Compiled both ways, like the model: the page makes commands, the server reads
 each request back into one, and both go by the same words.
 
-A Command is its verb (CREATE, READ, UPDATE, DELETE), what it is done to (a NODE, an EDGE, or the
-whole NETWORK, which is what is read), and its fields by name:
+A Command (the stdlib's commands.ady) is its verb (CREATE, READ, UPDATE, DELETE), what it is done
+to (a NODE, an EDGE, or the whole NETWORK, which is what is read), and its fields by name:
 
     delete_node("A")                    # D: DELETE /nodes   name=A
     create_edge("A", "B", "3")          # C: POST   /edges   a=A b=B cost=3
@@ -15,49 +15,17 @@ whole NETWORK, which is what is read), and its fields by name:
 On the wire the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say
 which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a command
 on its own blackboard and its liaison sends it (`Liaison_Officer.send` in dijkstra_js_events.ady), unless it is a
-draft (`is_draft`), which stays in the browser; the server reads it back (`Session.answer` in
+draft (`c.is_draft()`), which stays in the browser; the server reads it back (`Session.answer` in
 dijkstra_events_gui.ady) and carries it out; and what it changed goes out with the same verbs (a
-`Change`, also of this module's Verb_T). No HTML, no HTTP.
+`Change`, also of commands.ady). No HTML, no HTTP.
 """
-from drawing import Drawing_Pixel_T, Spot_T
+from drawing import Spot_T
+from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Command_Of, draft_fields
 
-type Verb_T is enum CREATE, READ, UPDATE, DELETE
 type Thing_T is enum NODE, EDGE, NETWORK
+type Command is Command_Of[Thing_T]        # a command (the stdlib's commands.ady), of this app's things
 
-type Command is record:
-    verb:   Verb_T
-    thing:  Thing_T
-    fields: {str}str
-
-# The field NAME of command C, or "" when it has none.
-def value(c: Command, name: str) -> str:
-    if name in c.fields:
-        return c.fields[name]
-    return ""
-
-# Where command C puts its node: its fields x and y; None when it has none, or they are not numbers.
-def spot(c: Command) -> ?Spot_T:
-    let x: float | !ParseFailure_T = parse_float(c.value("x"))
-    let y: float | !ParseFailure_T = parse_float(c.value("y"))
-    if x is ParseFailure_T:
-        return None
-    if y is ParseFailure_T:
-        return None
-    return Spot_T(x=Drawing_Pixel_T(x), y=Drawing_Pixel_T(y))
-
-# ---- On the wire: the verb is the HTTP method, the thing is the URL ----
-
-# The HTTP method command C goes by: its verb.
-def method(c: Command) -> str:
-    case c.verb:
-        when CREATE:
-            return "POST"
-        when READ:
-            return "GET"
-        when UPDATE:
-            return "PUT"
-        when DELETE:
-            return "DELETE"
+# ---- On the wire: the verb is the HTTP method (`c.method()`), the thing is the URL ----
 
 # The URL command C goes to: what it is done to.
 def url(c: Command) -> str:
@@ -83,38 +51,42 @@ def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
 
 # C: a node NAME, at AT (in the drawing's units).
 def create_node(name: str, at: Spot_T) -> Command:
-    return Command(CREATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+    let fields: {str}str = {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}
+    return Command(CREATE, NODE, fields)
 
 # U: the node NAME, moved to AT.
 def update_node(name: str, at: Spot_T) -> Command:
-    return Command(UPDATE, NODE, {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"})
+    let fields: {str}str = {"name": name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}
+    return Command(UPDATE, NODE, fields)
 
 # U, while the reader still holds the node NAME: where it is now. A draft: the change is not made
 # yet, so only the page shows it; when the node is let go, update_node makes it.
 def move_node(name: str, at: Spot_T) -> Command:
-    return Command(UPDATE, NODE, {"name": name, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}", "draft": "yes"})
-
-# Whether C is a draft: the reader is still making it, and nothing is to be changed for it but the page.
-def is_draft(c: Command) -> bool:
-    return c.value("draft") == "yes"
+    let fields: {str}str = {"name": name, "x": f"{at.x:.1f}", "y": f"{at.y:.1f}"}
+    return Command(UPDATE, NODE, draft_fields(fields))
 
 # D: the node NAME, and its edges.
 def delete_node(name: str) -> Command:
-    return Command(DELETE, NODE, {"name": name})
+    let fields: {str}str = {"name": name}
+    return Command(DELETE, NODE, fields)
 
 # C: an edge from A to B, costing COST (as the reader typed it; the server refuses what is no cost).
 def create_edge(a: str, b: str, cost: str) -> Command:
-    return Command(CREATE, EDGE, {"a": a, "b": b, "cost": cost})
+    let fields: {str}str = {"a": a, "b": b, "cost": cost}
+    return Command(CREATE, EDGE, fields)
 
 # U: the edge from A to B, now costing COST.
 def update_edge(a: str, b: str, cost: str) -> Command:
-    return Command(UPDATE, EDGE, {"a": a, "b": b, "cost": cost})
+    let fields: {str}str = {"a": a, "b": b, "cost": cost}
+    return Command(UPDATE, EDGE, fields)
 
 # D: the edge from A to B.
 def delete_edge(a: str, b: str) -> Command:
-    return Command(DELETE, EDGE, {"a": a, "b": b})
+    let fields: {str}str = {"a": a, "b": b}
+    return Command(DELETE, EDGE, fields)
 
 # R: the network, as this reader sees it, after clicking the node PICK ("" for none): the start, then
 # the goal, or, with UNPICK, a chosen node taken out again.
 def read_network(pick: str, unpick: bool) -> Command:
-    return Command(READ, NETWORK, {"pick": pick, "act": ("unpick" if unpick else "")})
+    let fields: {str}str = {"pick": pick, "act": ("unpick" if unpick else "")}
+    return Command(READ, NETWORK, fields)

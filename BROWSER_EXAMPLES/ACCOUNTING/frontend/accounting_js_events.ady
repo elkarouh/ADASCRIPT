@@ -51,7 +51,8 @@ from browser import Element_T, Event_T, Click_T, send_request, page, find, text,
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, shift, draggable
 from blackboard import PublishChannel, Observer
-from backend/accounting_commands import Command, READ, is_draft, spot, method, url, value, read_books, move_account
+from commands import READ
+from backend/accounting_commands import Command, url, read_books, move_account
 
 # ---- The page's blackboard: what the reader asks, and what the server says changed ----
 
@@ -159,7 +160,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
     # its own of the same name, and its answer, the page, takes the place of #all; a change's answer,
     # what was done or why not, takes the place of #told.
     def callback(self, channel: Page_Channel_T, c: Command):
-        if is_draft(c):
+        if c.is_draft():
             return
         if c.verb == READ:
             send_request(c.method(), c.url(), c.fields, "#all", "#state")
@@ -175,7 +176,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
 # the server.
 class Mouse_Follower(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c):
+        if not c.is_draft():
             return
         let id: str = c.value("id")
         let el: ?Element_T = page.find(f"g.node[data_id=\"{id}\"]")

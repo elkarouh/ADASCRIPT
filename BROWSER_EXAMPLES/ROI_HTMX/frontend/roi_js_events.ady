@@ -39,7 +39,8 @@ from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, clamp, shift, trace, no_click_cb, draggable
 from backend/roi_layout import WIDE, HIGH
-from backend/roi_commands import Command, READ, is_draft, value, spot, method, url, update_block, move_block, read_portfolio
+from commands import READ
+from backend/roi_commands import Command, url, update_block, move_block, read_portfolio
 
 const WIDTH: Drawing_Pixel_T = Drawing_Pixel_T(WIDE)    # the drawing's size (the svg's viewBox, and its size on the page)
 const HEIGHT: Drawing_Pixel_T = Drawing_Pixel_T(HIGH)
@@ -69,7 +70,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
     # page, in place of #all; a change's is whether it went through, in place of #problem (the page
     # is drawn again on the news of the change).
     def callback(self, channel: Page_Channel_T, c: Command):
-        if is_draft(c):
+        if c.is_draft():
             return
         let target: str = ("#all" if c.verb == READ else "#problem")
         send_request(c.method(), c.url(), c.fields, target)
@@ -83,7 +84,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
 # the server.
 class Mouse_Follower(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c):
+        if not c.is_draft():
             return
         let name: str = c.value("name")
         let now: ?Spot_T = c.spot()

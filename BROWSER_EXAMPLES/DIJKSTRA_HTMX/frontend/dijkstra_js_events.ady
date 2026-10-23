@@ -78,7 +78,8 @@ from browser import Element_T, Event_T, Click_T, send_request, click_of, page, f
 from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, clamp, shift, draw_line, place_at, no_click_cb, draggable
 from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, inside, place_of
-from backend/dijkstra_commands import Command, READ, method, url, value, spot, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
+from commands import READ
+from backend/dijkstra_commands import Command, url, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
 # ---- The page's blackboard: what the reader asks, and what the server says changed ----
@@ -214,7 +215,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
     # method, its thing the URL. A read's answer is the page, in place of #all; a change's is whether
     # it went through, in place of #problem (the page is drawn again on the news of the change).
     def callback(self, channel: Page_Channel_T, c: Command):
-        if is_draft(c):
+        if c.is_draft():
             return
         let target: str = ("#all" if c.verb == READ else "#problem")
         send_request(c.method(), c.url(), c.fields, target, "#state")
@@ -229,7 +230,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
 class Mouse_Follower(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
         let name: str = c.value("name")
-        if not is_draft(c) or name not in network.node_views:
+        if not c.is_draft() or name not in network.node_views:
             return
         let now: ?Spot_T = c.spot()
         if now is None:

@@ -2,8 +2,9 @@
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
-from backend/dijkstra_events_gui import Channel_T, Change, Session
-from backend/dijkstra_commands import Command, command_of, method, url, create_node, update_node, move_node, is_draft, delete_node, create_edge, update_edge, delete_edge, read_network
+from commands import Change
+from backend/dijkstra_events_gui import Channel_T, Session
+from backend/dijkstra_commands import Command, command_of, url, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 from drawing import Drawing_Pixel_T, Spot_T
 
 # ---- the model ----
@@ -36,8 +37,8 @@ assert command_of("GET", "/nodes", {:}) is None                  # a node is not
 assert command_of("DELETE", "/all", {:}) is None                 # and the network is only read
 assert command_of("PATCH", "/nodes", {:}) is None
 # a node still held is a draft, which the page's liaison keeps in the browser; let go, it is not
-assert is_draft(move_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))))
-assert not is_draft(update_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0)))) and not is_draft(delete_node("H"))
+assert move_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))).is_draft()
+assert not update_node("H", Spot_T(Drawing_Pixel_T(30.0), Drawing_Pixel_T(40.0))).is_draft() and not delete_node("H").is_draft()
 
 # ---- the page, through the requests the server answers (kept nowhere) ----
 var session: Session = Session("")

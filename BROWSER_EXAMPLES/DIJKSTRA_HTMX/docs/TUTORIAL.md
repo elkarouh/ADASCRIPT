@@ -266,21 +266,22 @@ button type="button" class="quiet" data_hx_post="/reset" data_hx_confirm="Put th
 
 **The server reads each request back into a command.** `server.ady` only matches
 the path and hands the request on. `Session.answer` reads it back into the same
-`Command` the page sent (`r.command()`, a `Request`, the request read once,
-which asks `command_of` in `backend/dijkstra_commands.ady`, the vocabulary both sides share), and `carry_out` does it, one `case` on what it is done
-to and one on the verb:
+`Command` the page sent (`command_of` in `backend/dijkstra_commands.ady`, the vocabulary both
+sides share, given the request read once: a `Page_Request`, from the standard library's
+`page_server.ady`, with its method, its path and its fields), and `carry_out` does it, one
+`case` on what it is done to and one on the verb:
 
 ```adascript
 class Session:
     ...
     def answer(self, method: str, path: str, fields: str) -> str:
-        let r: Request = Request(method, path, fields)
+        let r: Page_Request = Page_Request(method, path, fields)
         ...                                     # relayout and reset: routes of their own
-        let c: ?Command = r.command()
+        let c: ?Command = command_of(r.method, r.path, r.fields)
         if c is None:
             return ""
         if c.verb == READ:
-            return all_text(self.net, r.params(), self.unsaved)
+            return all_text(self.net, params_of(r), self.unsaved)
         return problem_text(self.carry_out(c))
 
     def carry_out(self, c: Command) -> None | !Refusal_T:
@@ -313,7 +314,7 @@ command (POST, PUT, DELETE) answers only whether it went through: the paragraph
 on a channel (stdlib's `blackboard.ady`): `NODES_CHAN` or `EDGES_CHAN` carries a `Change`, such as
 `CREATE H`. The Session does not know who listens. The server does: `keep` writes the
 network to its file, and `tell` writes the change to every open page (`GET /events`,
-server-sent events), which reads itself again. So every page, the one that made the
+server-sent events: page_server's `News`), which reads itself again. So every page, the one that made the
 change too, is drawn the same way: from the news. A request with an unknown path returns
 `""`, and the server answers 404. The picture at the top, "The whole picture", draws this path.
 
@@ -325,19 +326,20 @@ JavaScript with `ady2nim js`.
 **A gesture makes a command; one place sends it.** What the page can ask of the
 server is four verbs on two things, Create, Read, Update or Delete of a node or an
 edge, and each is a `Command`, in `backend/dijkstra_commands.ady`, which is compiled
-both ways, like the model, so the server reads a request back into the same `Command`:
+both ways, like the model, so the server reads a request back into the same `Command`.
+The verbs and what a command is are the standard library's (`commands.ady`: a
+`Command_Of` a thing, with its fields, read with `c.value(name)`); what the things are,
+and the URL of each, are the app's:
 
 ```adascript
-type Verb_T is enum CREATE, READ, UPDATE, DELETE
-type Thing_T is enum NODE, EDGE, NETWORK
+from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Command_Of
 
-type Command is record:
-    verb:   Verb_T
-    thing:  Thing_T
-    fields: {str}str
+type Thing_T is enum NODE, EDGE, NETWORK
+type Command is Command_Of[Thing_T]
 
 def delete_node(name: str) -> Command:
-    return Command(DELETE, NODE, {"name": name})
+    let fields: {str}str = {"name": name}
+    return Command(DELETE, NODE, fields)
 ```
 
 A gesture only says which command it means. The Delete key, Backspace and the
@@ -410,14 +412,14 @@ What ties them together is a channel per kind of change, from the standard libra
 they are named by an enum of its own, not by strings. The reader sees every channel there is
 in one line, `Channel_T`, and a misspelt channel does not compile.
 
+A `Change` (from `commands.ady`, like the verbs) is a verb, `kind`, and a `key`: the node's
+name, or the edge's two ends; "" for everything.
+
 ```adascript
 from blackboard import PublishChannel
+from commands import Change
 
 type Channel_T is enum NODES_CHAN, EDGES_CHAN
-
-type Change is record:
-    kind: Verb_T                        # CREATE, UPDATE or DELETE: the commands' own verbs
-    key:  str                           # the node's name, or the edge's two ends; "" for everything
 
 type Change_Channel_T is PublishChannel[Channel_T, Change]    # a channel of Channel_T, carrying a Change
 
@@ -499,7 +501,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
         listen_to_server("/events", self.news)
 
     def callback(self, channel: Page_Channel_T, c: Command):
-        if is_draft(c):
+        if c.is_draft():
             return
         let target: str = ("#all" if c.verb == READ else "#problem")
         send_request(c.method(), c.url(), c.fields, target, "#state")

@@ -59,7 +59,8 @@ from drawing import Drawing_Pixel_T, Spot_T
 from svg_drag import Hooks_T, holding, spot_of, spot_at, shift, draggable
 from svg_path import SIDEWAYS, connector_d
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, Side_T, Pin_T, Port_T, Link_T, Refusal_T, Diagram, inside
-from backend/node_editor_commands import Command, READ, is_draft, number_value, spot, method, url, create_node, update_node, move_node, delete_node, create_link, delete_link, read_diagram
+from commands import READ
+from backend/node_editor_commands import Command, url, create_node, update_node, move_node, delete_node, create_link, delete_link, read_diagram
 
 const BEZIER_WEIGHT: float = 0.675      # how far a connector goes out of a port before it bends, as the original's
 
@@ -138,7 +139,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
     # page, in place of #all; a change's is whether it went through, in place of #problem (the page
     # is drawn again on the news of the change).
     def callback(self, channel: Page_Channel_T, c: Command):
-        if is_draft(c):
+        if c.is_draft():
             return
         let target: str = ("#all" if c.verb == READ else "#problem")
         send_request(c.method(), c.url(), c.fields, target)
@@ -152,7 +153,7 @@ class Liaison_Officer(Observer[Page_Channel_T, Command]):
 # Nothing goes to the server.
 class Mouse_Follower(Observer[Page_Channel_T, Command]):
     def callback(self, channel: Page_Channel_T, c: Command):
-        if not is_draft(c):
+        if not c.is_draft():
             return
         let id: int = c.number_value("id")
         let el: ?Element_T = diagram.node_el(id)
