@@ -315,9 +315,7 @@ on a channel (stdlib's `blackboard.ady`): `NODES_CHAN` or `EDGES_CHAN` carries a
 network to its file, and `tell` writes the change to every open page (`GET /events`,
 server-sent events), which reads itself again. So every page, the one that made the
 change too, is drawn the same way: from the news. A request with an unknown path returns
-`""`, and the server answers 404.
-
-![A change, from a gesture to every open page: a Command in, a Change out](request_flow.svg)
+`""`, and the server answers 404. The picture at the top, "The whole picture", draws this path.
 
 **Some events stay in the browser.** A drag must follow the mouse many
 times a second, and a server round trip for each move would be too slow.
