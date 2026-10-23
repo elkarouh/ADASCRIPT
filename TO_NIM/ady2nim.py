@@ -2919,6 +2919,12 @@ def main(argv=None):
 
         # --- tier 3: invoke nim ---
         cmd = ["nim", subcommand] + nim_flags
+        # Under JavaScript Nim checks an int against 32 bits, though a JS number holds
+        # integers exactly to 2^53: a sum of cents past 21 million stopped a page with an
+        # overflow that native code never sees. Off by default, before the file's flags,
+        # so `#ady2nim-args js --overflowChecks:on` still turns them on.
+        if subcommand == "js":
+            cmd.insert(2, "--overflowChecks:off")
         # a hand-written .nim beside the program is nimported from there; the
         # cache, given after it, is searched first, as Nim puts a later --path first
         cmd += [f"--nimcache:{nimcache_dir}", f"--out:{exe_file}",

@@ -1,5 +1,4 @@
 #!/usr/bin/env ady2nim
-#ady2nim-args js --overflowChecks:off
 """frontend_server -- the server, in the page: the accounting app with no server at all.
 
     make alone          then open frontend/index.html, from the file or from any site
@@ -10,9 +9,6 @@ storage instead of scenarios/, and each change is told to the page, which then r
 The scenarios and the config come in this script (frontend/shipped.ady, which make alone writes
 from accounting.conf and scenarios/*.books), and go into the browser's storage the first time.
 frontend/index.html loads this script only; it writes the page, which loads the others.
-
-Overflow checks are off (the second line): in JavaScript an int is checked against 32 bits, and a
-year of a company's books goes past 21 million in cents; the numbers themselves are exact to 2^53.
 """
 from page_alone import serve_in_page, tell_page
 from store import Store

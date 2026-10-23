@@ -3501,6 +3501,11 @@ The same classes compile for the browser with `ady2nim js`, where the
 karax tree is a live DOM. Needs `nimble install karax`. **Nim only**: the
 Python backend does not know `html:`.
 
+An `int` in the browser is a JavaScript number, exact to 2^53. Nim would check
+it for overflow against 32 bits, so a sum past 2,147,483,647 (21 million in
+cents) would stop the page; `ady2nim js` turns those checks off
+(`#ady2nim-args js --overflowChecks:on` turns them back on).
+
 **Events.** An attribute whose name starts with `on` is an event handler. Its
 value is a call on the widget, with no arguments to write:
 
