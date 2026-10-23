@@ -74,24 +74,6 @@ from backend/dijkstra_model import Network, Node_T, Edge_T, WIDTH, COST_DY, insi
 from backend/dijkstra_commands import Command, READ, UPDATE, NODE, method, url, is_draft, create_node, update_node, move_node, delete_node, create_edge, update_edge, delete_edge, read_network
 
 
-# ---- The model's values, read off the drawing, and the drawing's values as the model's ----
-
-# The node a <g class="node"> draws: its name. Where it is drawn is not the model's.
-def node_of(el: Element_T) -> Node_T:
-    return Node_T(el.data("name"))
-
-# The edge a <g data_from data_to data_cost> draws.
-def edge_of(el: Element_T) -> Edge_T:
-    return Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
-
-# Outline the element EL, or take the outline off it.
-def set_selected(el: Element_T, lit: bool):
-    let cls: str = el.attr("class")
-    if lit:
-        el.set_attr("class", cls + " selected")
-    else:
-        el.set_attr("class", cls.replace(" selected", ""))
-
 # ---- The page's blackboard: what the reader asks, and what the server says changed ----
 
 # The channels of the page's blackboard.
@@ -131,9 +113,9 @@ def send(c: Command):
 
 # ---- The drawing's objects: each node and edge keeps its own drawn parts ----
 #
-# A NodeView is a node as the page draws it: its Node_T and its element. An EdgeView is an edge
-# as the page draws it: its Edge_T and its element. They draw what the network tells them; they
-# never decide where anything is.
+# A NodeView is a node as the page draws it: its element, and the Node_T read off it. An EdgeView
+# is an edge as the page draws it: its element, and the Edge_T read off it. They draw what the
+# network tells them; they never decide where anything is.
 #
 # An edge is <g data_from="A" data_to="B"> holding <path>s (the line, and the wider one to
 # point at) and a <text class="cost">.
@@ -142,8 +124,9 @@ class NodeView:
     var node: Node_T
     var el: Element_T
 
-    def __init__(self, node: Node_T, el: Element_T):
-        self.node = node
+    # The node a <g class="node"> draws: its name. Where it is drawn is not the model's.
+    def __init__(self, el: Element_T):
+        self.node = Node_T(el.data("name"))
         self.el = el
 
     # Choose this node for the route: the start, then the goal; or, with UNPICK, take it out again.
@@ -163,8 +146,9 @@ class EdgeView:
     var edge: Edge_T
     var el: Element_T
 
-    def __init__(self, edge: Edge_T, el: Element_T):
-        self.edge = edge
+    # The edge a <g data_from data_to data_cost> draws.
+    def __init__(self, el: Element_T):
+        self.edge = Edge_T(el.data("from"), el.data("to"), int(el.number("data_cost")))
         self.el = el
 
     # Ask whether to delete this edge, and if so send it.
@@ -199,24 +183,24 @@ class Drawing:
         for n in network.nodes:
             let el: ?Element_T = page.find(f"g.node[data_name=\"{n.name}\"]")
             if el is not None:
-                self.nodes[n.name] = NodeView(n, el)
+                self.nodes[n.name] = NodeView(el)
         for e in network.edges:
             let el: ?Element_T = page.find(f"g[data_from=\"{e.a}\"][data_to=\"{e.b}\"]")
             if el is not None:
-                let view: EdgeView = EdgeView(e, el)
+                let view: EdgeView = EdgeView(el)
                 self.edges[f"{e.a}-{e.b}"] = view
                 self.edge_list.append(view)
 
     # The view of the node drawn as EL, or none when the page does not draw it.
     def node_at(self, el: Element_T) -> ?NodeView:
-        let name: str = node_of(el).name
+        let name: str = NodeView(el).node.name
         if name in self.nodes:
             return self.nodes[name]
         return None
 
     # The view of the edge drawn as EL, or none when the page does not draw it.
     def edge_at(self, el: Element_T) -> ?EdgeView:
-        let e: Edge_T = edge_of(el)
+        let e: Edge_T = EdgeView(el).edge
         let key: str = f"{e.a}-{e.b}"
         if key in self.edges:
             return self.edges[key]
@@ -256,7 +240,7 @@ var network: NetworkView = NetworkView()     # the page is read again each time 
 # draft, which the Mouse_Follower draws).
 def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
     let now: Spot_T = inside(wanted)
-    ask_for(move_node(node_of(node).name, now))
+    ask_for(move_node(NodeView(node).node.name, now))
     return now
 
 # It draws a draft of a node's move: the node is drawn where it is asked to be, the page's model
@@ -287,6 +271,14 @@ def dropped_cb(node: Element_T, at: Spot_T):
         view.drop_at(at)
 
 # ---- The selection: the node or edge the reader last clicked ----
+
+# Outline the element EL, or take the outline off it.
+def set_selected(el: Element_T, lit: bool):
+    let cls: str = el.attr("class")
+    if lit:
+        el.set_attr("class", cls + " selected")
+    else:
+        el.set_attr("class", cls.replace(" selected", ""))
 
 # The reader's selection: what it holds, and what the gestures do with it.
 class Selection:
@@ -528,7 +520,7 @@ class Wire:
         let target: ?Element_T = on(click_of(e), "g.node")
         if target is None:
             return
-        let to: Node_T = node_of(target)
+        let to: Node_T = NodeView(target).node
         if to.name == self.from_node.name:
             return
         let cost: str = ask(f"Cost of the edge {self.from_node.name} — {to.name}?", "1")
