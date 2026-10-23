@@ -1,48 +1,145 @@
 #!/usr/bin/env ady2nim
 """roi_events -- what each event the page sends does, and the portfolio and layout it does it to; no HTTP.
 
-server.ady hands every request here as a method, a path and its fields, and sends back the
-drawing that comes out. The tests call answer() the same way, with no server running. The
-portfolio and the layout live here, in memory: they start again when the server does.
+server.ady hands every request to a Session, as a method, a path and its fields, and sends back
+what comes out. The tests make a Session of their own and call answer() the same way, with no server
+running. The portfolio and the layout live in the Session, in memory: they start again when the
+server does.
+
+Commands in, events out, as in DIJKSTRA_HTMX. Every request is read back into a Command, the page's
+own vocabulary (roi_commands.ady): Read the portfolio, or Update the investment, a share or a block.
+A read answers the whole drawing. A change answers only the paragraph #problem, empty, or saying why
+not. When it went through, what it changed is published with the same verbs, on the channel of
+what it changed, named by Channel_T: PORTFOLIO_CHAN (the investment, the shares) and LAYOUT_CHAN
+(where the blocks are) carry a Change. Whoever must hear of it subscribes -- the server, which tells
+every open page, which then reads itself again -- and the Session knows none of them:
+
+    def heard(channel: Channel_T, change: Change):
+        print channel, change.kind, change.key          # "PORTFOLIO_CHAN UPDATE gold", "LAYOUT_CHAN UPDATE overall"
+    session.portfolio_channel.subscribe(heard)
+
+Reset is no command on one thing: it is its own route, and what it changed is an UPDATE with no key:
+everything, read it all again.
 """
+from uri nimport decodeUrl
 from drawing import Drawing_Pixel_T, Spot_T
+from blackboard import PublishChannel
 from backend/roi_model import Portfolio, Product_T, new_portfolio, set_share, set_year
-from backend/roi_layout import Layout, move_block, new_layout
-from backend/roi_gui import all_text, field_of, name_of
+from backend/roi_layout import Layout, new_layout, move_block
+from backend/roi_gui import all_text, problem_text, name_of
+from backend/roi_commands import Command, Verb_T, READ, UPDATE, THE_INVESTMENT, A_SHARE, A_BLOCK, THE_PORTFOLIO, command_of, value, spot
 
-var portfolio: Portfolio = new_portfolio()
-var layout: Layout = new_layout()
+# ---- A request: its method, its path and its fields ----
 
-def number_of(text: str, fallback: float) -> float:
+class Request:
+    var method: str                 # GET, PUT, POST
+    var path:   str                 # /all, /investment, /shares, /blocks, /reset
+    var fields: {str}str            # by name, from the query and the body
+
+    # METHOD on PATH, with the fields of TEXT, a query or a form body ("a=1&b=2").
+    def __init__(self, method: str, path: str, text: str):
+        self.method = method
+        self.path = path
+        self.fields = {:}
+        for pair in text.split("&"):
+            let at: int = pair.find("=")
+            if at > 0:
+                self.fields[pair[:at]] = decodeUrl(pair[at + 1:])
+
+    # The command this request is; None when it is none.
+    def command(self) -> ?Command:
+        return command_of(self.method, self.path, self.fields)
+
+# The channels of the server's blackboard: the portfolio, and where its blocks are drawn.
+type Channel_T is enum PORTFOLIO_CHAN, LAYOUT_CHAN
+
+# What a command changed, as the channels carry it, in the commands' verbs: which field ("funds",
+# "year", a product) or block; "" for everything (reset), which is read again whole.
+type Change is record:
+    kind: Verb_T
+    key:  str
+
+# A channel of the session's: one of Channel_T, carrying a Change.
+type Change_Channel_T is PublishChannel[Channel_T, Change]
+
+# TEXT as a number: -1 when it is not one.
+def number_of(text: str) -> float:
     let n: float | !ParseFailure_T = parse_float(text)
     if n is ParseFailure_T:
-        return fallback
+        return -1.0
     return n
 
-# What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): the page to send
-# back, or "" when there is no such thing.
-#   GET /all?changed=gold&value=40   the share of gold is now 40, and the others adjust
-#   GET /all?changed=funds&value=500 the money invested; likewise changed=year
-#   PUT /move                        a block dragged: name, x, y (its centre)
-#   POST /reset                      the starting portfolio and layout again
-def answer(method: str, path: str, fields: str) -> str:
-    if method == "GET" and path == "/all":
-        let what: str = field_of(fields, "changed")
-        let value: float = number_of(field_of(fields, "value"), -1.0)
-        if value >= 0.0:
-            if what == "funds":
-                portfolio.investment.funds = value
-            elif what == "year":
-                set_year(portfolio, int(value))              # a year there are no prices for is refused: the rest stays
-            else:
+# The portfolio, and where its blocks are drawn.
+class Session:
+    var portfolio: Portfolio
+    var layout: Layout
+    var portfolio_channel: Change_Channel_T = Change_Channel_T(PORTFOLIO_CHAN)    # what happened to the investment or a share
+    var layout_channel: Change_Channel_T = Change_Channel_T(LAYOUT_CHAN)          # to where a block is
+
+    def __init__(self):
+        self.portfolio = new_portfolio()
+        self.layout = new_layout()
+
+    # The routes, all answered by answer below. Each but the last is a Command (on the wire, the verb
+    # is the method and the thing the URL); the read answers the whole drawing for htmx to swap in,
+    # the others the paragraph #problem (empty when the command went through).
+    #
+    #     GET  /all          R the drawing
+    #     PUT  /investment   U the money invested, or the year      (funds, or year)
+    #     PUT  /shares       U a product's share; the others adjust (product, percentage)
+    #     PUT  /blocks       U a block dragged                      (name, x, y: its centre)
+    #     POST /reset        the starting portfolio and layout again
+
+    # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
+    # or "" when there is no such thing.
+    def answer(self, method: str, path: str, fields: str) -> str:
+        let r: Request = Request(method, path, fields)
+        if r.method == "POST" and r.path == "/reset":
+            self.portfolio = new_portfolio()
+            self.layout = new_layout()
+            self.portfolio_channel.publish(Change(UPDATE, ""))
+            self.layout_channel.publish(Change(UPDATE, ""))
+            return problem_text("")
+        let c: ?Command = r.command()
+        if c is None:
+            return ""
+        if c.verb == READ:
+            return all_text(self.portfolio, self.layout)
+        return problem_text(self.carry_out(c))
+
+    # Carry out the change C, and when it went through publish what it changed: "", or why not.
+    def carry_out(self, c: Command) -> str:
+        case c.thing:
+            when THE_INVESTMENT:
+                if "funds" in c.fields:
+                    let funds: float = number_of(c.value("funds"))
+                    if funds < 0.0:
+                        return "The money invested is a number, 0 or more."
+                    self.portfolio.investment.funds = funds
+                    self.portfolio_channel.publish(Change(UPDATE, "funds"))
+                    return ""
+                let refused: str = set_year(self.portfolio, int(number_of(c.value("year"))))
+                if refused == "":
+                    self.portfolio_channel.publish(Change(UPDATE, "year"))
+                return refused
+            when A_SHARE:
+                let share: float = number_of(c.value("percentage"))
+                if share < 0.0:
+                    return "A share is a number, 0 to 100."
+                let product: str = c.value("product")
                 for kind in Product_T:
-                    if name_of(kind) == what:
-                        set_share(portfolio, kind, min(value, 100.0))
-    elif method == "PUT" and path == "/move":                    # name, x, y: where a block was let go
-        move_block(layout, field_of(fields, "name"), Spot_T(Drawing_Pixel_T(number_of(field_of(fields, "x"), 0.0)), Drawing_Pixel_T(number_of(field_of(fields, "y"), 0.0))))
-    elif method == "POST" and path == "/reset":
-        portfolio = new_portfolio()
-        layout = new_layout()
-    else:
-        return ""
-    return all_text(portfolio, layout)
+                    if name_of(kind) == product:
+                        set_share(self.portfolio, kind, min(share, 100.0))
+                        self.portfolio_channel.publish(Change(UPDATE, product))
+                        return ""
+                return f"There is no product {product}."
+            when A_BLOCK:
+                let at: ?Spot_T = c.spot()
+                if at is None:
+                    return "Where should the block go? There is no place."
+                let refused: str = move_block(self.layout, c.value("name"), at)
+                if refused == "":
+                    self.layout_channel.publish(Change(UPDATE, c.value("name")))
+                return refused
+            when THE_PORTFOLIO:
+                return ""                               # only read (command_of)

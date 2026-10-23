@@ -3,7 +3,7 @@
 from backend/roi_model import GOLD, BITCOIN, SP500, Outcome, Portfolio, evaluate, new_portfolio, set_share, set_year
 from drawing import Spot_T
 from backend/roi_layout import Layout, move_block, new_layout
-from backend/roi_events import answer
+from backend/roi_events import Channel_T, Change, Session
 from backend/roi_gui import shell_text
 
 # ---- the model ----
@@ -35,23 +35,43 @@ assert abs(float(l.centres[1].x) - 75.59) < 0.01 and abs(float(l.centres[1].y) -
 assert move_block(l, "nothing", Spot_T(1.0, 1.0)) != ""
 
 # ---- the page, through the requests the server answers ----
-let first: str = answer("GET", "/all", "")
+var session: Session = Session()
+var heard: []str = []
+def hear(channel: Channel_T, change: Change):
+    heard.append(f"{channel} {change.kind} {change.key}")
+session.portfolio_channel.subscribe(hear)
+session.layout_channel.subscribe(hear)
+
+let first: str = session.answer("GET", "/all", "")
 assert "<svg" in first and "Investment" in first and "S&amp;P 500" in first
-assert "data-hx-get=\"/all\"" in first
+assert "data-hx-put=\"/shares\"" in first and "data-hx-put=\"/investment\"" in first     # the fields send themselves
 assert "What % did you invest in <strong>" in first                          # bare text beside a tag
 assert "value=\"2018\" selected" in first or "selected=\"selected\" value=\"2018\"" in first
 assert "font-family: sans-serif" in shell_text() and "&quot;" not in shell_text()   # the CSS as written
-assert "34.74" in answer("GET", "/all", "")                                   # gold's value in the sample
-assert "value=\"40\"" in answer("GET", "/all", "changed=gold&value=40")
-assert "value=\"10\"" in answer("GET", "/all", "changed=gold&value=40")     # bitcoin gave 15
-assert "value=\"500\"" in answer("GET", "/all", "changed=funds&value=500")
-assert "2020" in answer("GET", "/all", "changed=year&value=2020")
-assert "value=\"500\"" in answer("GET", "/all", "changed=year&value=1999")  # an impossible year is ignored, the rest stays
-assert "value=\"25\"" in answer("POST", "/reset", "")
+assert "34.74" in first                                                     # gold's value in the sample
+
+# A change answers only #problem, empty when it went through, and is published.
+let done: str = session.answer("PUT", "/shares", "product=gold&percentage=40")
+assert "id=\"problem\"" in done and "<svg" not in done and "</p>" in done
+assert heard == ["PORTFOLIO_CHAN UPDATE gold"]
+assert "value=\"40\"" in session.answer("GET", "/all", "")
+assert "value=\"10\"" in session.answer("GET", "/all", "")                    # bitcoin gave 15
+session.answer("PUT", "/investment", "funds=500")
+assert "value=\"500\"" in session.answer("GET", "/all", "")
+session.answer("PUT", "/investment", "year=2020")
+assert "2020\" selected" in session.answer("GET", "/all", "") or "selected=\"selected\" value=\"2020\"" in session.answer("GET", "/all", "")
+assert "There are no prices for 1999" in session.answer("PUT", "/investment", "year=1999")   # refused, and said why
+assert "is a number" in session.answer("PUT", "/investment", "funds=lots")
+assert "There is no product" in session.answer("PUT", "/shares", "product=tulips&percentage=5")
+assert heard == ["PORTFOLIO_CHAN UPDATE gold", "PORTFOLIO_CHAN UPDATE funds", "PORTFOLIO_CHAN UPDATE year"]   # nothing for a refusal
 assert "data-a=\"investment\"" in first                       # the arrows say what they join
 assert "data-name=\"gold\"" in first and "data-x=\"360.0\"" in first                                    # a block says where its centre is
-assert "data-x=\"200.0\"" in answer("PUT", "/move", "name=gold&x=200&y=300")                             # and a drop moves it
-assert "data-y=\"300.0\"" in answer("GET", "/all", "")                                                   # the server keeps it
-assert "data-x=\"360.0\"" in answer("POST", "/reset", "")
-assert answer("GET", "/nowhere", "") == ""
+session.answer("PUT", "/blocks", "name=gold&x=200&y=300")                                                    # a drop moves it
+assert "data-x=\"200.0\"" in session.answer("GET", "/all", "") and "data-y=\"300.0\"" in session.answer("GET", "/all", "")
+assert heard[len(heard) - 1] == "LAYOUT_CHAN UPDATE gold"
+session.answer("POST", "/reset", "")
+assert "data-x=\"360.0\"" in session.answer("GET", "/all", "") and "value=\"25\"" in session.answer("GET", "/all", "")
+assert heard[len(heard) - 2:] == ["PORTFOLIO_CHAN UPDATE ", "LAYOUT_CHAN UPDATE "]
+assert session.answer("GET", "/nowhere", "") == ""
+assert session.answer("GET", "/shares", "") == ""                               # a share is not read
 print "ok"

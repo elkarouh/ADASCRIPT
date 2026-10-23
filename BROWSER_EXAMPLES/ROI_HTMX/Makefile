@@ -20,13 +20,13 @@ PORT    ?= 8820
 all: server frontend/roi_js_events.js
 
 # ady2nim keeps its own cache and rebuilds only what changed, so this always runs it.
-server: backend/roi_model.ady backend/roi_gui.ady backend/roi_events.ady backend/server.ady
+server: backend/roi_model.ady backend/roi_commands.ady backend/roi_layout.ady backend/roi_gui.ady backend/roi_events.ady backend/server.ady
 	@echo "building backend/server"
 	@$(ADY2NIM) c backend/server.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log
 
 # The one script of our own, Adascript compiled to JavaScript; the server sends it as /roi_js_events.js.
-frontend/roi_js_events.js: frontend/roi_js_events.ady
+frontend/roi_js_events.js: frontend/roi_js_events.ady backend/roi_commands.ady backend/roi_layout.ady
 	@echo "building frontend/roi_js_events.js"
 	@$(ADY2NIM) js frontend/roi_js_events.ady > build.log 2>&1 || { cat build.log; exit 1; }
 	@rm -f build.log

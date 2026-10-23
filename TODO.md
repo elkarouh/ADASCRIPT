@@ -63,6 +63,13 @@ it but do:. Not yet:
       SVG_NODE_EDITOR's node_editor_commands.ady and ACCOUNTING's
       accounting_js_events.ady put such values in a typed `let` meanwhile.
 
+### A str joined with a char
+
+- [ ] `vals += ("" if done else ", ") + '"' + name`: a conditional
+      expression in parentheses, then `+` a char, comes out as Nim's `+`,
+      which strings and chars do not have (`&` is wanted). ROI_HTMX's
+      `vals_of` (roi_gui.ady) builds its pairs with an f-string meanwhile.
+
 ### Narrowing an optional
 
 - [ ] a leaving guard whose `or` mixes other tests with `x is None`:

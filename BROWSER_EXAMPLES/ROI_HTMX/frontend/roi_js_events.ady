@@ -1,86 +1,159 @@
 #!/usr/bin/env ady2nim
 #ady2nim-args js
-"""roi_js_events -- the events that stay in the browser: a box dragged with the mouse.
+"""roi_js_events -- the drawing's own behaviour, in the browser: a box dragged with the mouse, and the
+page kept up with the server.
 
-Every other event is declared in the HTML (hx-* attributes, roi_gui.ady) and handled on the
-server (roi_events.ady); only what must follow the mouse every frame is here.
+The fields on the boxes (the money, the year, each product's share) send themselves: their hx-*
+attributes (roi_gui.ady) say which command each is. What must follow the mouse every frame is here,
+and what keeps the page as the server has it, whichever page changed it.
+
+It is built as BROWSER_EXAMPLES/DIJKSTRA_HTMX's script is. The gesture never talks to the server: it
+makes a Command, an Update of a block (backend/roi_commands.ady, the server's vocabulary too, which
+reads each request back into one), and publishes it on the page's blackboard, the channel
+`commands_channel`. Two observers carry it out (blackboard's Observer: each is an object that
+subscribes itself as it is made, and its `callback` is what it does with what it hears):
+
+    Liaison_Officer the liaison officer: what is for the server it sends there, so the portfolio is
+                    changed in one place, the server's; and it brings the server's news back
+    Mouse_Follower  a draft (a block still held: `move_block`) only moves the drawing, here and now,
+                    many times a second; the liaison leaves it in the browser
+
+The answer to an Update says only whether it went through (the paragraph #problem). What the server
+says changed, on any page, comes in on the other channel, `changes_channel`; the Page_Refresher hears
+it and asks for the page again (Read, which takes the place of #all).
 
 A box that can be dragged is a <rect class="node" data_name=".." data_x=".." data_y=".."> (its
-centre, in the drawing's units); the elements that belong to it, the rectangle itself and the
-form on it, carry data_block=".." with the same name. An arrow is a <g class="arrow"> that says
-which blocks it joins and where on each (data_a, data_ax, data_ay for its start: the block's
-name and the distance from its top left corner; data_b, data_bx, data_by for its end; data_leave,
-how it leaves its start, and data_stop, how short of its end it stops), and holds two <path>s,
-which svg_path's connector_d draws, as the server does.
+centre, in the drawing's units); the elements that belong to it, the rectangle itself and the form
+on it, carry data_block=".." with the same name. An arrow is a <g class="arrow"> that says which
+blocks it joins and where on each (data_a, data_ax, data_ay for its start: the block's name and the
+distance from its top left corner; data_b, data_bx, data_by for its end; data_leave, how it leaves
+its start, and data_stop, how short of its end it stops), and holds two <path>s, which svg_path's
+connector_d draws, as the server does. Only the rectangle can be taken hold of, not the fields on
+it, so they can still be clicked.
 
-While a box is dragged it moves with everything that belongs to it, and the arrows that end
-at it are drawn again, here in the browser, at once. Letting go sends the block's name and
-new centre, PUT /move: the server keeps the place and draws the page again.
-
-Only the rectangle can be taken hold of, not the fields on it, so they can still be clicked.
 The drag itself is the standard library's svg_drag, and the page its browser module.
 """
-from browser import Element_T, page, find, all, data, number, send_request
+from blackboard import PublishChannel, Observer
+from browser import Element_T, page, find, all, data, number, send_request, listen_to_server
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from drawing import Drawing_Pixel_T, Spot_T
-from svg_drag import Hooks_T, spot_of, clamp, shift, trace, no_click_cb, draggable
-
+from svg_drag import Hooks_T, holding, spot_of, clamp, shift, trace, no_click_cb, draggable
 from backend/roi_layout import WIDE, HIGH
+from backend/roi_commands import Command, READ, is_draft, value, spot, method, url, update_block, move_block, read_portfolio
 
 const WIDTH: Drawing_Pixel_T = Drawing_Pixel_T(WIDE)    # the drawing's size (the svg's viewBox, and its size on the page)
 const HEIGHT: Drawing_Pixel_T = Drawing_Pixel_T(HIGH)
 
-# What the server wrote on an element, read as if it were a field: `rect.data_name`.
-def data_name(n: Element_T) -> str:
-    return n.data("name")
+# ---- The page's blackboard: what the reader asks, and what the server says changed ----
 
-def data_a(a: Element_T) -> str:
-    return a.data("a")
+# The channels of the page's blackboard.
+type Page_Channel_T is enum COMMANDS, CHANGES
+type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel of Page_Channel_T, carrying a Command
+type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
 
-def data_b(a: Element_T) -> str:
-    return a.data("b")
+# What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
+var commands_channel: Command_Channel_T = Command_Channel_T(COMMANDS)
+# What the server says changed ("PORTFOLIO_CHAN UPDATE gold"), whichever page changed it.
+var changes_channel: Change_Channel_T = Change_Channel_T(CHANGES)
 
-# The rectangle that is the block called NAME.
-def block_named(name: str) -> Element_T:
-    return page.element(f"rect.node[data_name=\"{name}\"]")
+# ---- The observers of commands: the liaison officer, and the draft's drawer ----
 
-# Where a block's top left corner is, when its centre is AT.
-def corner_of(block: Element_T, at: Spot_T) -> Spot_T:
-    return Spot_T(x=at.x - Drawing_Pixel_T(block.number("width") / 2.0), y=at.y - Drawing_Pixel_T(block.number("height") / 2.0))
+# It hears every command: one that is for the server goes there; a draft stays in the browser. And
+# it brings the server's news back: what GET /events says changed goes on changes_channel.
+class Liaison_Officer(Observer[Page_Channel_T, Command]):
+    def __init__(self, channel: var Command_Channel_T):
+        super().__init__(channel)
+        listen_to_server("/events", self.news)
 
-# Where an end of ARROW is: the block NAME is called, with its centre at AT if it is the block
-# being dragged (NODE), else where the server drew it; OFFSET_X and OFFSET_Y from its top left.
-def end_of(node: Element_T, at: Spot_T, name: str, dx: Drawing_Pixel_T, dy: Drawing_Pixel_T) -> Spot_T:
-    let block: Element_T = block_named(name)
-    let centre: Spot_T = (at if name == node.data_name else spot_of(block))
-    let corner: Spot_T = corner_of(block, centre)
-    return Spot_T(x=corner.x + dx, y=corner.y + dy)
+    # Send C, unless it is a draft: its verb is the method, its thing the URL. A read's answer is the
+    # page, in place of #all; a change's is whether it went through, in place of #problem (the page
+    # is drawn again on the news of the change).
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if is_draft(c):
+            return
+        let target: str = ("#all" if c.verb == READ else "#problem")
+        send_request(c.method(), c.url(), c.fields, target)
 
-# Redraw, in the browser, the arrows that end at NODE's block, as if it stood at AT.
-def redraw_arrows_of(node: Element_T, at: Spot_T):
-    let name: str = node.data_name
-    for arrow in page.all("g.arrow"):
-        if name in [arrow.data_a, arrow.data_b]:
-            let a: Spot_T = end_of(node, at, arrow.data_a, Drawing_Pixel_T(arrow.number("data_ax")), Drawing_Pixel_T(arrow.number("data_ay")))
-            let b: Spot_T = end_of(node, at, arrow.data_b, Drawing_Pixel_T(arrow.number("data_bx")), Drawing_Pixel_T(arrow.number("data_by")))
-            let leave: Leave_T = (VERTICAL if arrow.data("leave") == "vertical" else SIDEWAYS)
-            for path in arrow.all("path"):
-                path.trace(connector_d(float(a.x), float(a.y), float(b.x), float(b.y), leave, arrow.number("data_stop")))
+    # The server says CHANGE ("LAYOUT_CHAN UPDATE gold"), whichever page made it.
+    def news(self, change: str):
+        changes_channel.publish(change)
 
-# While NODE is dragged: its block goes where the mouse takes it, kept inside the drawing, and
-# the arrows follow.
-def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
-    let half_w: Drawing_Pixel_T = Drawing_Pixel_T(node.number("width") / 2.0)
-    let half_h: Drawing_Pixel_T = Drawing_Pixel_T(node.number("height") / 2.0)
-    let now: Spot_T = Spot_T(x=clamp(wanted.x, half_w, WIDTH - half_w), y=clamp(wanted.y, half_h, HEIGHT - half_h))
-    for part in page.all(f"[data_block=\"{node.data_name}\"]"):
-        shift(part, centre, now)
-    redraw_arrows_of(node, now)
-    return now
+# It draws a draft of a block's move (move_block, the only draft): the block, and the form on it,
+# are drawn where it is asked to be, and the arrows that end at it are drawn again. Nothing goes to
+# the server.
+class Mouse_Follower(Observer[Page_Channel_T, Command]):
+    def callback(self, channel: Page_Channel_T, c: Command):
+        if not is_draft(c):
+            return
+        let name: str = c.value("name")
+        let now: ?Spot_T = c.spot()
+        if now is None:
+            return
+        let centre: Spot_T = spot_of(self.block_named(name))    # where the server drew it
+        for part in page.all(f"[data_block=\"{name}\"]"):
+            shift(part, centre, now)
+        self.redraw_arrows_of(name, now)
 
-# NODE let go at AT: tell the server the block's name and new centre (PUT /move, see
-# roi_events.ady); the page the server answers with takes the place of #all.
-def dropped_cb(node: Element_T, at: Spot_T):
-    send_request("PUT", "/move", {"name": node.data_name, "x": f"{at.x:.0f}", "y": f"{at.y:.0f}"}, "#all")
+    # The rectangle that is the block called NAME.
+    def block_named(self, name: str) -> Element_T:
+        return page.element(f"rect.node[data_name=\"{name}\"]")
 
-draggable("rect.node", "svg.drawing", WIDTH, Hooks_T(moved_cb=moved_cb, dropped_cb=dropped_cb, clicked_cb=no_click_cb))
+    # Where an end of an arrow is: on the block NAME, DX and DY from its top left corner; the block
+    # MOVED stands with its centre at AT, the others where the server drew them.
+    def end_of(self, moved: str, at: Spot_T, name: str, dx: Drawing_Pixel_T, dy: Drawing_Pixel_T) -> Spot_T:
+        let block: Element_T = self.block_named(name)
+        let centre: Spot_T = (at if name == moved else spot_of(block))
+        let x: Drawing_Pixel_T = centre.x - Drawing_Pixel_T(block.number("width") / 2.0) + dx
+        let y: Drawing_Pixel_T = centre.y - Drawing_Pixel_T(block.number("height") / 2.0) + dy
+        return Spot_T(x=x, y=y)
+
+    # Draw again the arrows that end at the block NAME, as if it stood with its centre at AT.
+    def redraw_arrows_of(self, name: str, at: Spot_T):
+        for arrow in page.all("g.arrow"):
+            if name in [arrow.data("a"), arrow.data("b")]:
+                let a: Spot_T = self.end_of(name, at, arrow.data("a"), Drawing_Pixel_T(arrow.number("data_ax")), Drawing_Pixel_T(arrow.number("data_ay")))
+                let b: Spot_T = self.end_of(name, at, arrow.data("b"), Drawing_Pixel_T(arrow.number("data_bx")), Drawing_Pixel_T(arrow.number("data_by")))
+                let leave: Leave_T = (VERTICAL if arrow.data("leave") == "vertical" else SIDEWAYS)
+                for path in arrow.all("path"):
+                    path.trace(connector_d(float(a.x), float(a.y), float(b.x), float(b.y), leave, arrow.number("data_stop")))
+
+# ---- The gesture ----
+
+# The pointer on the drawing: svg_drag's drag of a block, which calls moved or dropped. A click that
+# is no drag is the fields' own.
+class Pointer:
+    def __init__(self):
+        draggable("rect.node", "svg.drawing", WIDTH, Hooks_T(moved_cb=self.moved, dropped_cb=self.dropped, clicked_cb=no_click_cb))
+
+    # While NODE is dragged: its block is asked to go where the mouse takes it, kept inside the
+    # drawing (a draft, which the Mouse_Follower draws).
+    def moved(self, node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
+        let half_w: Drawing_Pixel_T = Drawing_Pixel_T(node.number("width") / 2.0)
+        let half_h: Drawing_Pixel_T = Drawing_Pixel_T(node.number("height") / 2.0)
+        let now: Spot_T = Spot_T(x=clamp(wanted.x, half_w, WIDTH - half_w), y=clamp(wanted.y, half_h, HEIGHT - half_h))
+        commands_channel.publish(move_block(node.data("name"), now))
+        return now
+
+    # NODE let go at AT: its block is put there (U).
+    def dropped(self, node: Element_T, at: Spot_T):
+        commands_channel.publish(update_block(node.data("name"), at))
+
+# ---- The observer of changes ----
+
+# The server tells every open page of each change (GET /events, "PORTFOLIO_CHAN UPDATE gold"),
+# whichever page made it, this one included; each asks for itself again. Not while a block is held:
+# letting it go is a change of its own, and its news draws the page again.
+class Page_Refresher(Observer[Page_Channel_T, str]):
+    def callback(self, channel: Page_Channel_T, change: str):
+        if holding():
+            return
+        commands_channel.publish(read_portfolio())
+
+# ---- Start: the page's knowledge sources ----
+
+let pointer: Pointer = Pointer()
+
+# Each observer subscribes itself to its channel as it is made.
+let liaison: Liaison_Officer = Liaison_Officer(commands_channel)
+let mouse_follower: Mouse_Follower = Mouse_Follower(commands_channel)
+let page_refresher: Page_Refresher = Page_Refresher(changes_channel)

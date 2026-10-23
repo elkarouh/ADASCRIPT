@@ -2,27 +2,20 @@
 """roi_gui -- the page as HTML the server draws, for htmx to swap in; no JointJS.
 
 The page is one SVG: boxes (rects with a form inside, in a foreignObject) joined by arrows
-(paths). The browser draws it and nothing more. A field that is changed sends GET /all with
-its value (`value`) and what it is (`changed`); the server works it out and sends the whole
-drawing again, which htmx swaps in (see server.ady).
+(paths). The browser draws it and nothing more. A field that is changed sends its command
+(roi_commands.ady), PUT /investment or PUT /shares, with its value; the answer is only the
+paragraph #problem, empty, or saying why not, and the whole drawing is asked for again on the
+news of the change (roi_js_events.ady), on every page.
 
 Each box of the drawing is one thing of the model: the Investment, an InvestmentPercentage for
 each product, a ProductOutcome for each product's results, and the Outcome as a whole. `to_html`
 says what each looks like inside its box; where the boxes are is the Layout (roi_layout.ady).
 """
-from uri nimport decodeUrl
 from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPercentage, Outcome, Portfolio, Product_T, ProductOutcome, evaluate
 from drawing import Drawing_Pixel_T
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
-
-# The value of KEY in a query or a form body ("a=1&b=2"), or "".
-def field_of(text: str, key: str) -> str:
-    for pair in text.split("&"):
-        let at: int = pair.find("=")
-        if at > 0 and pair[:at] == key:
-            return decodeUrl(pair[at + 1:])
-    return ""
+from backend/roi_commands import Command, method, url, update_investment, update_share
 
 const INVEST_COLOR: str = "#D4D9D7"
 const OVERALL_COLOR: str = "#EAECEA"
@@ -110,9 +103,12 @@ def box_html(block: str, x: Drawing_Pixel_T, y: Drawing_Pixel_T, w: Drawing_Pixe
                 div class="jj-form":
                     + inside
 
-# What a field that is changed tells the server it is: hx-vals, sent with its value (see roi_events.ady).
-def changed(what: str) -> str:
-    return '{"changed": "' + what + '"}'
+# What a field that is changed sends with its own value: the fields of its command C, as hx-vals.
+def vals_of(c: Command) -> str:
+    var pairs: []str = []
+    for name, value in c.fields.items():
+        pairs.append(f'"{name}": "{value}"')
+    return "{" + ", ".join(pairs) + "}"
 
 # What the Investment looks like inside its box: the money, and the year it was put in.
 def to_html(investment: Investment) -> Html:
@@ -127,11 +123,11 @@ def to_html(investment: Investment) -> Html:
             div class="jj-field-vertical":
                 label:
                     "How much did you invest?"
-                    input class="jj-input" type="number" name="value" value=plain(investment.funds) min="0" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=changed("funds") data_hx_target="#all" data_hx_swap="outerHTML"
+                    input class="jj-input" type="number" name="funds" value=plain(investment.funds) min="0" data_hx_put=update_investment().url() data_hx_trigger="change" data_hx_target="#problem" data_hx_swap="outerHTML"
             div class="jj-field-vertical":
                 label:
                     "What year it was?"
-                    select class="jj-input" name="value" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=changed("year") data_hx_target="#all" data_hx_swap="outerHTML":
+                    select class="jj-input" name="year" data_hx_put=update_investment().url() data_hx_trigger="change" data_hx_target="#problem" data_hx_swap="outerHTML":
                         for y in years:
                             if y == investment.year:
                                 option value=str(y) selected="selected": str(y)
@@ -147,7 +143,7 @@ def to_html(share: InvestmentPercentage) -> Html:
                 strong: label_of(share.kind)
                 "?"
                 span class="jj-input-container":
-                    input class="jj-input" type="number" name="value" value=plain(share.percentage) min="0" max="100" step="1" data_hx_get="/all" data_hx_trigger="change" data_hx_vals=changed(name_of(share.kind)) data_hx_target="#all" data_hx_swap="outerHTML"
+                    input class="jj-input" type="number" name="percentage" value=plain(share.percentage) min="0" max="100" step="1" data_hx_put=update_share(name_of(share.kind)).url() data_hx_trigger="change" data_hx_vals=vals_of(update_share(name_of(share.kind))) data_hx_target="#problem" data_hx_swap="outerHTML"
                     span class="jj-input-unit": "%"
 
 # A line of a results box: what it is, and its value, which cannot be edited.
@@ -187,11 +183,20 @@ def head_html(color: str) -> Html:
         marker id=head_id(color) viewBox="-2 -12 17 24" refX="0" refY="0" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="24" orient="auto":
             path d="M 0 4 L 0 10 L 13 0 L 0 -10 L 0 -4" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
 
+# The paragraph #problem: why the change was refused (PROBLEM), or empty when it went through.
+def problem_html(problem: str) -> Html:
+    html:
+        p id="problem" class="problem": problem
+
+def problem_text(problem: str) -> str:
+    return str(problem_html(problem))
+
 def all_html(portfolio: Portfolio, layout: Layout) -> Html:
     let outcome: Outcome = evaluate(portfolio)
     let box: str = f"0 0 {Drawing_Pixel_T(WIDE):.0f} {Drawing_Pixel_T(HIGH):.0f}"
     html:
         div id="all":
+            + problem_html("")
             svg viewBox=box width=f"{Drawing_Pixel_T(WIDE):.0f}" height=f"{Drawing_Pixel_T(HIGH):.0f}" class="drawing":
                 defs:
                     + head_html(INVEST_COLOR)
@@ -211,6 +216,8 @@ const STYLE: str = """
 * { font-family: sans-serif; }
 body { margin: 0; padding: 0; background-color: #f6f4f4; }
 svg.drawing { display: block; user-select: none; }
+p.problem { position: fixed; top: 0.5em; left: 0.5em; margin: 0; color: #b71c1c; background: #fdecea; border-radius: 6px; padding: 0.4em 0.7em; }
+p.problem:empty { display: none; }
 rect.body, rect.node { stroke: #333; stroke-width: 2; }
 rect.node { cursor: grab; }
 foreignObject { pointer-events: none; }
