@@ -141,12 +141,13 @@ class Session:
                 self.books.record(e)
         return None
 
-    # The routes the page sends, all answered by answer below. Each but the last is a Command
-    # (accounting_commands.ady: on the wire, the verb is the method and the thing the URL); the
-    # read answers the whole page for htmx to swap in, the others the paragraph #told: what was
-    # done, or why not.
+    # The routes the page sends, all answered by answer below, each a Command
+    # (accounting_commands.ady: on the wire, the verb is the method and the thing the URL). The read
+    # answers the whole page for htmx to swap in; the others the paragraph #told: what was done, or
+    # why not.
     #
     #     GET    /h/all          R the page, from the settings in the query (the form #state)
+    #     PUT    /h/all          U the year closed: the costs and the revenue moved into retained earnings
     #     POST   /h/entries      C a transaction: the arrow drawn and the popup (source, target, date, what, amount, vat)
     #     DELETE /h/entries      D a transaction                       (id)
     #     POST   /h/accounts     C an account                          (number, acctname, akind)
@@ -154,7 +155,6 @@ class Session:
     #     POST   /h/scenarios    C the books shown, saved as a scenario (newname), and shown
     #     PUT    /h/scenarios    U the scenario shown, started over
     #     DELETE /h/scenarios    D the scenario shown; the first one left is shown
-    #     POST   /h/close-year   the costs and the revenue moved into retained earnings
     #
     # A change that went through is published on the channel of what it changed (a Change), and
     # the server tells every open page, which reads itself again.
@@ -162,100 +162,102 @@ class Session:
     # What METHOD on PATH does, with FIELDS (the query and the body, "a=1&b=2"): what to send back,
     # or "" when there is no such thing.
     def answer(self, method: str, path: str, fields: str) -> str:
-        var done: str | !BookFailure_T = ""
-        if method == "POST" and path == "/h/close-year":
-            let b: Books = self.books.books(self.config.currency)
-            try:
-                let closed: None | !BookFailure_T = self.close_year(b)
-                if closed is BookFailure_T:
-                    done = closed
-                else:
-                    done = f"Closed the year on {year_end(b)}: the profit is in {retained_account(b)}."
-                    self.entries_channel.publish(Change(UPDATE, ""))
-            except:
-                done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
-            return told_text(done)
-        let r: Page_Request = Page_Request(method, path, fields)
-        let c: ?Command = command_of(r.method, r.path, r.fields)
+        let c: ?Command = command_of(method, path, Page_Request(method, path, fields).fields)
         if c is None:
             return ""
         if c.verb == READ:
             return self.page_all(fields)
+        var done: str | !BookFailure_T = ""
         try:
-            done = self.carry_out(c, params_of(fields))
+            case c.thing:
+                when A_TRANSACTION:
+                    done = self.change_transaction(c, params_of(fields))
+                when AN_ACCOUNT:
+                    done = self.change_account(c)
+                when A_SCENARIO:
+                    done = self.change_scenario(c)
+                when THE_BOOKS:
+                    done = self.change_books()
         except:                             # the database, not the books: say so, and keep serving
             done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
         return told_text(done)
 
-    # Carry out the change C, whose fields P has as the page's settings too (the arrow, the popup):
-    # what to tell, or why not. When it went through, what it changed is published.
-    def carry_out(self, c: Command, p: Params) -> str | !BookFailure_T:
+    # The transaction C names recorded (the arrow and the popup, which P has as the page's settings)
+    # or deleted (id): what to tell, or why not. When it went through, it is published.
+    def change_transaction(self, c: Command, p: Params) -> str | !BookFailure_T:
         let b: Books = self.books.books(self.config.currency)
-        case c.thing:
-            when A_TRANSACTION:
-                if c.verb == CREATE:
-                    let made: Entry | !BookFailure_T = entry_of(b, p)
-                    if made is BookFailure_T:
-                        return made
-                    do:
-                        self.books.record(made)
-                    self.entries_channel.publish(Change(CREATE, made.what))
-                    return f"Recorded: {made.what}"
-                if c.verb == DELETE:
-                    let id: int = int_of(c.value("id"), 0)
-                    var what: str = ""
-                    for i in range(len(b.ids)):
-                        if b.ids[i] == id:
-                            what = b.entries[i].what
-                    do:
-                        self.books.delete_entry(id)
-                    self.entries_channel.publish(Change(DELETE, str(id)))
-                    return f"Deleted: {what}"
-            when AN_ACCOUNT:
-                if c.verb == CREATE:
-                    let number: str = c.value("number").strip()
-                    let name: str = c.value("acctname").strip()
-                    if number == "" or name == "":
-                        return BookFailure_T("An account needs a number and a name.")
-                    let kind: Kind_T | !BookFailure_T = kind_named(c.value("akind"))
-                    if kind is BookFailure_T:
-                        return kind
-                    do:
-                        self.books.open_account(number, kind, name)
-                    self.accounts_channel.publish(Change(CREATE, name))
-                    return f"Opened: {number} {name}"
-                if c.verb == DELETE:
-                    let name: str = c.value("name")
-                    do:
-                        self.books.delete_account(name)
-                    self.accounts_channel.publish(Change(DELETE, name))
-                    return f"Deleted the account {name}."
-            when A_SCENARIO:
-                case c.verb:
-                    when CREATE:
-                        let name: str = c.value("newname").strip()
-                        if name == "":
-                            return BookFailure_T("Name the new scenario.")
-                        do:
-                            self.save_as(name)
-                        self.scenarios_channel.publish(Change(CREATE, name))
-                        return f"Saved as {name}."
-                    when UPDATE:
-                        do:
-                            self.show_scenario(self.current, True)
-                        self.scenarios_channel.publish(Change(UPDATE, self.current))
-                        return "Started over."
-                    when DELETE:
-                        let gone: str = self.current
-                        do:
-                            self.delete_scenario()
-                        self.scenarios_channel.publish(Change(DELETE, gone))
-                        return "Scenario deleted."
-                    when READ:
-                        pass
-            when THE_BOOKS:
-                pass                                # only read (command_of)
-        return BookFailure_T("The page asked for what the ledger does not do.")
+        if c.verb == CREATE:
+            let made: Entry | !BookFailure_T = entry_of(b, p)
+            if made is BookFailure_T:
+                return made
+            do:
+                self.books.record(made)
+            self.entries_channel.publish(Change(CREATE, made.what))
+            return f"Recorded: {made.what}"
+        let id: int = int_of(c.value("id"), 0)        # DELETE, the other (command_of)
+        var what: str = ""
+        for i in range(len(b.ids)):
+            if b.ids[i] == id:
+                what = b.entries[i].what
+        do:
+            self.books.delete_entry(id)
+        self.entries_channel.publish(Change(DELETE, str(id)))
+        return f"Deleted: {what}"
+
+    # The account C names opened (number, acctname, akind) or deleted (name): what to tell, or why
+    # not. When it went through, it is published.
+    def change_account(self, c: Command) -> str | !BookFailure_T:
+        if c.verb == CREATE:
+            let number: str = c.value("number").strip()
+            let name: str = c.value("acctname").strip()
+            if number == "" or name == "":
+                return BookFailure_T("An account needs a number and a name.")
+            let kind: Kind_T | !BookFailure_T = kind_named(c.value("akind"))
+            if kind is BookFailure_T:
+                return kind
+            do:
+                self.books.open_account(number, kind, name)
+            self.accounts_channel.publish(Change(CREATE, name))
+            return f"Opened: {number} {name}"
+        let name: str = c.value("name")               # DELETE, the other (command_of)
+        do:
+            self.books.delete_account(name)
+        self.accounts_channel.publish(Change(DELETE, name))
+        return f"Deleted the account {name}."
+
+    # The books shown saved as a new scenario (newname), the scenario shown started over, or
+    # deleted: what to tell, or why not. When it went through, it is published.
+    def change_scenario(self, c: Command) -> str | !BookFailure_T:
+        case c.verb:
+            when CREATE:
+                let name: str = c.value("newname").strip()
+                if name == "":
+                    return BookFailure_T("Name the new scenario.")
+                do:
+                    self.save_as(name)
+                self.scenarios_channel.publish(Change(CREATE, name))
+                return f"Saved as {name}."
+            when UPDATE:
+                do:
+                    self.show_scenario(self.current, True)
+                self.scenarios_channel.publish(Change(UPDATE, self.current))
+                return "Started over."
+            when others:
+                let gone: str = self.current          # DELETE (a scenario is not read: command_of)
+                do:
+                    self.delete_scenario()
+                self.scenarios_channel.publish(Change(DELETE, gone))
+                return "Scenario deleted."
+
+    # The year closed (the one change of the books: command_of): what to tell, or why not. When it
+    # went through, the transactions are published, every one: an UPDATE with no key.
+    def change_books(self) -> str | !BookFailure_T:
+        let b: Books = self.books.books(self.config.currency)
+        let closed: None | !BookFailure_T = self.close_year(b)
+        if closed is BookFailure_T:
+            return closed
+        self.entries_channel.publish(Change(UPDATE, ""))
+        return f"Closed the year on {year_end(b)}: the profit is in {retained_account(b)}."
 
     # GET /h/all: the page again, from the settings in QUERY.
     def page_all(self, query: str) -> str:

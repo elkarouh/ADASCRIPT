@@ -28,7 +28,7 @@ from shared/routes import Shape, boxes, px, Route_T
 from shared/layout import WIDTH, GAP, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
 from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
-from backend/accounting_commands import Command, url, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario
+from backend/accounting_commands import Command, url, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario, close_year
 
 # The settings, as the query gives them.
 type Params is record:
@@ -936,7 +936,7 @@ def tools_html(current: str, picked: []str, can_close: bool) -> Html:
             + command_button("Save as...", create_scenario(), "#newname", "", "")
             + command_button("Delete scenario", delete_scenario(), "", "Delete this scenario, and the changes you made in it? It cannot be undone.", "")
             if can_close:
-                button type="button" data_hx_post="/h/close-year" data_hx_confirm="Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero." data_hx_target="#told" data_hx_swap="outerHTML": "Close the year"
+                + command_button("Close the year", close_year(), "", "Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero.", "")
             if len(picked) > 0:
                 span class="picked": " " + picked_text
             if len(picked) >= 2:
