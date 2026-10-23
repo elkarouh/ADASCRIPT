@@ -10,7 +10,8 @@ Push finished work straight to `master` (fast-forward from the working
 branch; rebase onto `origin/master` first if it has moved) -- unless the
 change touches the transpiler itself: `TO_NIM/`, `TO_PYTHON/`, `GRAMMAR/` or
 `HPARSEC/`. Transpiler changes wait on the working branch until the user says
-to push them to master.
+to push them to master. The standard library, `TO_NIM/STDLIB/`, is not the
+transpiler: a change there alone goes to master like any other.
 
 What to run before pushing:
 
@@ -20,7 +21,8 @@ What to run before pushing:
   come out byte for byte the same.
 - Anything else: only the checks for what changed (that app's own
   `make test`, the examples touched, the browser check of a page), not the
-  full `make test`.
+  full `make test`. A change to `TO_NIM/STDLIB/` alone is checked through
+  the apps, examples and tests that use what changed.
 
 ## Scripts for the browser
 
