@@ -8,7 +8,7 @@
     GET    /node_editor_js_events.js     node_editor_js_events.ady, compiled to JavaScript
     GET    /events      the changes, as they are made, for every open page (server-sent events)
 
-Every other request (GET /all, and the routes for nodes, links and reset) is answered
+Every other request (GET /all and DELETE /all, and the routes for nodes and links) is answered
 by Session.answer in node_editor_events_gui.ady, which lists them.
 
 A read answers the whole page, which htmx swaps in; a command only whether it went through. Each

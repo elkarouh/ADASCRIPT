@@ -11,6 +11,7 @@ empty when it went through, and the page is drawn again on the news of the chang
 The drawing is that of https://codepen.io/osublake/embed/OxWjgq, in the original's sizes and colours.
 """
 from drawing import Drawing_Pixel_T, Spot_T
+from backend/node_editor_commands import url, reset_diagram
 from backend/node_editor_model import NODE_W, NODE_H, WIDTH, HEIGHT, PORTS, PORT_R, Diagram, Node_T, Pin_T, Port_T, Refusal_T, Side_T, label_of, port_spot
 
 
@@ -110,7 +111,7 @@ def all_html(d: Diagram, problem: None | !Refusal_T) -> Html:
     html:
         div id="all":
             div class="toolbar":
-                button type="button" data_hx_post="/reset" data_hx_confirm="Put the sample diagram back? What you made is lost." data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
+                button type="button" data_hx_delete=reset_diagram().url() data_hx_confirm="Put the sample diagram back? What you made is lost." data_hx_target="#problem" data_hx_swap="outerHTML": "Reset the sample"
             + problem_html(problem)
             svg id="editor" viewBox=box:
                 g id="nodes":

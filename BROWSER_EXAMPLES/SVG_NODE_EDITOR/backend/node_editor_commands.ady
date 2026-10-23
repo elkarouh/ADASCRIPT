@@ -4,13 +4,14 @@ Delete, of a node or a connector. Compiled both ways, like the model: the page m
 server reads each request back into one, and both go by the same words.
 
 A Command (the stdlib's commands.ady) is its verb (CREATE, READ, UPDATE, DELETE), what it is done
-to (a NODE, a LINK, or the whole DIAGRAM, which is what is read), and its fields by name:
+to (a NODE, a LINK, or the whole DIAGRAM: read, or put back), and its fields by name:
 
     delete_node(2)                      # D: DELETE /nodes   id=2
     create_link(Link_T(out, in))        # C: POST   /links   out_node=0 out_row=2 in_node=3 in_row=2
     update_node(2, at)                  # U: PUT    /nodes   id=2 x=.. y=..
     move_node(2, at)                    # U, a draft: the node still held; it stays in the browser
     read_diagram()                      # R: GET    /all
+    reset_diagram()                     # D: DELETE /all     the diagram goes: the sample is back
 
 On the wire the verb is the HTTP method and the thing is the URL: `c.method()` and `c.url()` say
 which, and `command_of` reads them back, so the mapping is written once, here. The page publishes a
@@ -42,13 +43,13 @@ def url(c: Command) -> str:
         when DIAGRAM:
             return "/all"
 
-# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. The diagram is
-# only read, and only the diagram is read.
+# The command that HTTP_METHOD on PATH is, with FIELDS; None when it is none of them. Only the diagram
+# is read, and it is only read or put back.
 def command_of(http_method: str, path: str, fields: {str}str) -> ?Command:
     for verb in Verb_T:
         for thing in Thing_T:
             let c: Command = Command(verb, thing, fields)
-            if c.method() == http_method and c.url() == path and (verb == READ) == (thing == DIAGRAM):
+            if c.method() == http_method and c.url() == path and (verb != READ or thing == DIAGRAM) and (thing != DIAGRAM or verb in [READ, DELETE]):
                 return c
     return None
 
@@ -92,3 +93,8 @@ def delete_link(l: Link_T) -> Command:
 def read_diagram() -> Command:
     let no_fields: {str}str = {:}
     return Command(READ, DIAGRAM, no_fields)
+
+# D: the diagram, which goes: the sample is put back.
+def reset_diagram() -> Command:
+    let no_fields: {str}str = {:}
+    return Command(DELETE, DIAGRAM, no_fields)
