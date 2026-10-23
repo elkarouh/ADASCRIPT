@@ -41,6 +41,13 @@ it but do:. Not yet:
       the cached .nim still has `discard x.publish(...)`, and Nim refuses
       it until the cache entry is removed. The key should take in the
       sources of what the module imports.
+- [ ] a cached .nim whose source has moved stays in the cache, and Nim
+      still finds it: map_base.ady moved from EXAMPLES/MAP_UTILS to the
+      stdlib, but an old cache kept MAP_UTILS/map_base.nim beside
+      map_flat.nim. map_flat imported that one, moon_sim the stdlib's, and
+      Nim saw two modules named map_base ("ambiguous identifier:
+      'Speed_T'"). A build should remove the cached .nim files that no
+      source makes any more.
 
 ### A method of a generic class from another module, as a value
 
