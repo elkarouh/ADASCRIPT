@@ -33,22 +33,6 @@ it but do:. Not yet:
       (`_method_value_classes`, ady2nim.py); for the rest `@virtual` is the
       workaround today.
 
-### A module's cached Nim outlives a change to what it imports
-
-- [ ] the cache keeps each imported module's .nim and makes it again only
-      when that module's own source changes. When a stdlib module it imports
-      changes a signature (blackboard's `publish` stopped returning an int),
-      the cached .nim still has `discard x.publish(...)`, and Nim refuses
-      it until the cache entry is removed. The key should take in the
-      sources of what the module imports.
-- [ ] a cached .nim whose source has moved stays in the cache, and Nim
-      still finds it: map_base.ady moved from EXAMPLES/MAP_UTILS to the
-      stdlib, but an old cache kept MAP_UTILS/map_base.nim beside
-      map_flat.nim. map_flat imported that one, moon_sim the stdlib's, and
-      Nim saw two modules named map_base ("ambiguous identifier:
-      'Speed_T'"). A build should remove the cached .nim files that no
-      source makes any more.
-
 ### A method of a generic class from another module, as a value
 
 - [ ] `listen_to_server("/events", changes_channel.publish)`, the channel a
@@ -108,17 +92,6 @@ it but do:. Not yet:
       into the union: the call is taken for the method, which already
       returns one ("got 'Entry' but expected 'Result[...]'"). ACCOUNTING's
       `Popup` names its method `entry_in` meanwhile.
-
-### A field's type, from another module's class
-
-- [ ] `int(t.amount)` in accounting_gui.ady, `t` a `Transaction` whose
-      `amount` is a `Cents_T`, came out as `t.amount.parseInt()` once
-      another module of the same build (accounting_page_state.ady, which
-      accounting_gui does not import) had a class with a field `amount:
-      str`: the field's type is looked up by its name, across the build.
-      And the .nim made so stays in the cache after the other field is
-      renamed (see the cache above). ACCOUNTING's `Popup` calls the field
-      `howmuch` meanwhile.
 
 ### Narrowing an optional
 

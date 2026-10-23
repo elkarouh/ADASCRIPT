@@ -1,0 +1,5 @@
+# a module of test_field_other_module.ady: int() of a field that is a number, not a str
+from fo_model import Cents_T, Transaction
+
+def back(t: Transaction) -> Cents_T:
+    return Cents_T(-int(t.amount))

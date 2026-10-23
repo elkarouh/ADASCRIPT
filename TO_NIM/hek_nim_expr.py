@@ -4223,12 +4223,19 @@ def to_nim(self, prec=None):
             _field_m = _re_sub.search(r'\.(\w+)$', arg)
             _field_is_str = False
             if _field_m:
-                _fname2 = _field_m.group(1)
-                for _cname2, _fmap2 in ParserState.class_field_types.items():
-                    _ftype2 = _fmap2.get(_fname2, "")
-                    if _ftype2 in ("string", "str"):
-                        _field_is_str = True
-                        break
+                # The type of `x.field` itself, when it can be named, decides.
+                # Only when it cannot is the field looked up by its name, and
+                # then every class with a field of that name must make it a
+                # string: `t.amount` (a Cents_T) was parsed as a string because
+                # a class of another module had `amount: str`.
+                _known2 = _nim_expr_type(arg) or ""
+                if _known2:
+                    _field_is_str = _known2 in ("string", "str")
+                else:
+                    _fname2 = _field_m.group(1)
+                    _ftypes2 = {_fmap2[_fname2] for _fmap2 in ParserState.class_field_types.values()
+                                if _fname2 in _fmap2}
+                    _field_is_str = bool(_ftypes2) and _ftypes2 <= {"string", "str"}
             _is_str = (
                 "paramStr" in arg            # $1, $2, etc.
                 or arg.startswith('"')       # string literal

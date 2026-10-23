@@ -1,0 +1,17 @@
+#!/usr/bin/env ady2nim
+# test_field_other_module.ady -- a field's type is its own class's, whatever another module calls a field.
+#
+# fo_user's `int(t.amount)` is of a Transaction's amount, a Cents_T. fo_other, which fo_user does
+# not import, has a class with a field `amount: str`: int() of it parses a string, and it must
+# not make int(t.amount) parse one too ("parseInt(t.amount)", a type mismatch).
+#
+#   ady2nim TESTS/test_field_other_module.ady -r
+
+from fo_model import Cents_T, Transaction
+from fo_other import Popup
+from fo_user import back
+
+let p: Popup = Popup("5")
+assert int(back(Transaction("x", Cents_T(7)))) == -7
+assert int(p.amount) == 5                   # this one is a str: parsed
+print int(back(Transaction("x", Cents_T(7)))), int(p.amount)

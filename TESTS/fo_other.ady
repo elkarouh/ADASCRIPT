@@ -1,0 +1,5 @@
+# a module of test_field_other_module.ady: a class whose field amount is a str, which fo_user does not import
+class Popup:
+    var amount: str
+    def __init__(self, amount: str):
+        self.amount = amount

@@ -93,6 +93,7 @@ STANDALONE := \
     ../TESTS/test_field_result_assign.ady \
     ../TESTS/test_return_optional_call.ady \
     ../TESTS/test_import_except.ady \
+    ../TESTS/test_field_other_module.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \
@@ -792,6 +793,36 @@ test-part-05:
 	    rm -rf $$d; \
 	    if [ "$$before" = 3 ] && [ "$$after" = 103 ]; then echo OK; \
 	    else echo "FAIL (before: $$before, after the edit: $$after, want 3 then 103)"; exit 1; fi
+	@# A module's cached .nim is made again when a module it imports, at any
+	@# depth, changes: what that one declares is part of what this one is
+	@# translated to. mid.ady calls lib's f() as a statement; f stops returning
+	@# an int, and the old mid.nim's `discard f()` was kept.
+	@printf '  %-42s' "a changed import remakes its importer"; \
+	    d=$$(mktemp -d); \
+	    printf 'def f() -> int:\n    return 1\n' > $$d/lib.ady && \
+	    printf 'from lib import f\ndef g():\n    f()\n' > $$d/mid.ady && \
+	    printf 'from mid import g\ng()\nprint "ok"\n' > $$d/top.ady && \
+	    XDG_CACHE_HOME=$$d/cache $(ADY2NIM) c $$d/top.ady >/dev/null 2>&1 && sleep 1 && \
+	    printf 'def f():\n    print "f"\n' > $$d/lib.ady && \
+	    XDG_CACHE_HOME=$$d/cache $(ADY2NIM) c $$d/top.ady >/dev/null 2>&1; \
+	    out=$$($$d/top 2>&1); rm -rf $$d; \
+	    if [ "$$out" = "$$(printf 'f\nok')" ]; then echo OK; \
+	    else echo "FAIL (got: $$out)"; exit 1; fi
+	@# What no source makes any more leaves the cache: a module that moved
+	@# left its old .nim behind, Nim found it, and two modules had one name
+	@# ("ambiguous identifier"; map_base, from EXAMPLES/MAP_UTILS to STDLIB).
+	@printf '  %-42s' "a moved module's old .nim removed"; \
+	    d=$$(mktemp -d); mkdir $$d/sub; \
+	    printf 'def h() -> int:\n    return 2\n' > $$d/sub/m.ady && \
+	    printf 'from sub/m import h\nprint h()\n' > $$d/top.ady && \
+	    XDG_CACHE_HOME=$$d/cache $(ADY2NIM) c $$d/top.ady >/dev/null 2>&1 && \
+	    before=$$(find $$d/cache -path '*sub/m.nim' | wc -l) && \
+	    mv $$d/sub/m.ady $$d/m.ady && sleep 1 && \
+	    printf 'from m import h\nprint h()\n' > $$d/top.ady && \
+	    XDG_CACHE_HOME=$$d/cache $(ADY2NIM) c $$d/top.ady >/dev/null 2>&1 && \
+	    after=$$(find $$d/cache -path '*sub/m.nim' | wc -l); out=$$($$d/top); rm -rf $$d; \
+	    if [ "$$before" = 1 ] && [ "$$after" = 0 ] && [ "$$out" = 2 ]; then echo OK; \
+	    else echo "FAIL (sub/m.nim before: $$before, after: $$after; printed $$out)"; exit 1; fi
 
 test-part-06:
 	@# The transpiler's own tests: translations and the errors it must raise.

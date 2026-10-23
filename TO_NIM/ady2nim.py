@@ -2762,6 +2762,28 @@ def main(argv=None):
 
         _enqueue_nimports(code, _ady_dir)
 
+        # The newest source a dep's .nim is made from: the dep's own, and that
+        # of every module it imports, at any depth. What a module declares
+        # (its types, its signatures) goes into what its importers are
+        # translated to, so an importer's .nim made before such a change is
+        # stale: blackboard's `publish` stopped returning an int, and the
+        # cached .nim of a module calling it still had `discard ...publish()`.
+        _closure_mtimes = {}
+        def _closure_mtime(ady_path):
+            if ady_path in _closure_mtimes:
+                return _closure_mtimes[ady_path]
+            _closure_mtimes[ady_path] = os.path.getmtime(ady_path)     # an import cycle ends here
+            _newest = _closure_mtimes[ady_path]
+            with open(ady_path, encoding="utf-8") as _f:
+                _src = _resolved_imports(_f.read(), os.path.dirname(ady_path))
+            for _dn in _dep_names(_src):
+                _p = _find_dep_ady(_dn, os.path.dirname(ady_path))
+                if _p:
+                    _newest = max(_newest, _closure_mtime(_p))
+            _closure_mtimes[ady_path] = _newest
+            return _newest
+
+        _dep_nims = set()    # the .nim of every dep this build has
         while _dep_worklist:
             _dep_name, _dep_ady, _dep_dir = _dep_worklist.pop(0)
             # A dep named with a path (`nimport lib/geom`) mirrors that path
@@ -2771,8 +2793,9 @@ def main(argv=None):
             _dep_nim = os.path.join(cache_dir, *(_dep_name.split("/"))) + ".nim"
             os.makedirs(os.path.dirname(_dep_nim), exist_ok=True)
             _dep_mtime = os.path.getmtime(_dep_ady)
+            _dep_nims.add(os.path.abspath(_dep_nim))
             _dep_nim_mtime = os.path.getmtime(_dep_nim) if os.path.exists(_dep_nim) else 0
-            if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime):
+            if _dep_nim_mtime < max(_dep_mtime, _eff_transpiler_mtime, _closure_mtime(_dep_ady)):
                 with open(_dep_ady, encoding="utf-8") as _f:
                     _dep_code = _resolved_imports(_f.read(), _dep_dir)
                 try:
@@ -2801,6 +2824,24 @@ def main(argv=None):
             # Scan this dep for its own nimports regardless of whether we re-transpiled.
             with open(_dep_ady, encoding="utf-8") as _f:
                 _enqueue_nimports(_resolved_imports(_f.read(), _dep_dir), _dep_dir)
+
+        # What no source makes any more goes: the .nim of a module this program
+        # no longer imports, or of one that moved, and the copy of a standard
+        # library module that is no longer there. Nim would still find them:
+        # map_base.ady moved from EXAMPLES/MAP_UTILS to STDLIB, an old cache
+        # kept MAP_UTILS/map_base.nim, a module imported that one and another
+        # the stdlib's, and Nim saw two modules named map_base ("ambiguous
+        # identifier: 'Speed_T'").
+        _stdlib_names = set(os.listdir(_stdlib_dir))
+        _keep = _dep_nims | {os.path.abspath(nim_file)}
+        for _root, _dirs, _files in os.walk(cache_dir):
+            for _f in _files:
+                _p = os.path.abspath(os.path.join(_root, _f))
+                _top = os.path.abspath(_root) == os.path.abspath(cache_dir)
+                if _top and _f in _stdlib_names:
+                    continue                    # a standard library module, as it is now
+                if (_f.endswith(".nim") and _p not in _keep) or (_top and _f.endswith(".ady")):
+                    os.remove(_p)
 
         # -t stops here: the .nim and every dependency it needs are written,
         # which is all it was asked for.  Tier 1 has already printed the path.

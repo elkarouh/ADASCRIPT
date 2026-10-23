@@ -1,0 +1,5 @@
+# a module of test_field_other_module.ady: a record whose field amount is a number
+type Cents_T is distinct int
+type Transaction is record:
+    what:   str
+    amount: Cents_T
