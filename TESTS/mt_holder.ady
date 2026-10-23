@@ -1,0 +1,11 @@
+# a module of test_method_through_module.ady: holds a Counter, and names nothing of it but the type
+from mt_counter import Counter
+
+class Holder:
+    var counter: Counter
+
+    def __init__(self):
+        self.counter = Counter()
+
+def make_holder() -> Holder:
+    return Holder()

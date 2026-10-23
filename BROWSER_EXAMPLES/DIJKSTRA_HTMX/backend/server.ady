@@ -19,7 +19,6 @@ reads itself again.
 from asyncdispatch nimport asyncCheck, complete, newFuture, Port, waitFor
 from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http200, Http404, AsyncHttpServer, newAsyncHttpServer, serve
 from asyncnet nimport AsyncSocket, send, close, isClosed
-from blackboard import PublishChannel
 from backend/dijkstra_gui import shell_text
 from backend/dijkstra_events_gui import Channel_T, Change, Session
 

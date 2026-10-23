@@ -1,0 +1,12 @@
+# a module of test_method_through_module.ady: a class with methods
+class Counter:
+    var count: int
+
+    def __init__(self):
+        self.count = 0
+
+    def bump(self, by: int):
+        self.count += by
+
+    def total(self) -> int:
+        return self.count

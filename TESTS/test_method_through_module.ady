@@ -1,0 +1,16 @@
+#!/usr/bin/env ady2nim
+# test_method_through_module.ady -- a value reached through a module brings its methods along.
+#
+# This file imports only mt_holder; the Counter in a Holder is mt_counter's, which this file
+# does not import, and its methods are called all the same, as in Python.
+#
+#   ady2nim TESTS/test_method_through_module.ady -r
+#   ady2py  TESTS/test_method_through_module.ady -c
+
+from mt_holder import make_holder, Holder
+
+var h: Holder = make_holder()
+h.counter.bump(2)
+h.counter.bump(3)
+assert h.counter.total() == 5
+print h.counter.total()

@@ -811,6 +811,30 @@ def _resolved_imports(code, search_dir):
     return code
 
 
+def _reexports(code, search_dir):
+    """The `export` line of a module that others import: each .ady module it
+    takes a type from (a class, record, enum or distinct type), so that whoever
+    reaches a value of that type through this module can call its methods. In
+    Nim a method is a routine of the module that declares it, and is not seen
+    through a module that only imports it; in Adascript, as in Python, a value
+    brings its methods along. CODE is the module's source, as _resolved_imports
+    leaves it."""
+    from ady_modules import import_map, module_dirs, STAR
+    import re as _re_rx
+    bases = module_dirs(search_dir) + (os.path.join(os.path.dirname(os.path.realpath(__file__)), "STDLIB"),)
+    out = []
+    for mod, listed in import_map(code).items():
+        path = next((p for p in (os.path.join(b, mod + ".ady") for b in bases) if os.path.isfile(p)), None)
+        if path is None:
+            continue
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        types = set(_re_rx.findall(r"^(?:class|type)\s+(\w+)", text, _re_rx.M))
+        if types and (listed is STAR or not listed or types.intersection(listed)):
+            out.append(mod.split("/")[-1])
+    return "export " + ", ".join(sorted(set(out))) if out else ""
+
+
 def _nim_import_line():
     """The `import` line for ParserState.nim_imports. options goes on a line of
     its own without its `$` when the program prints a ?T its own way."""
@@ -2678,6 +2702,9 @@ def main(argv=None):
                     print(f"# ERROR transpiling dependency {_dep_ady}: {_e}", file=sys.stderr)
                     sys.exit(1)
                 _dep_nim_output = _export_toplevel(_dep_nim_output)
+                _dep_exports = _reexports(_dep_code, _dep_dir)
+                if _dep_exports:
+                    _dep_nim_output = _dep_nim_output.rstrip("\n") + "\n" + _dep_exports + "\n"
                 with open(_dep_nim, "w", encoding="utf-8") as _f:
                     _f.write(_dep_nim_output)
                 import shutil as _shutil2

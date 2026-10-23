@@ -1,7 +1,6 @@
 #!/usr/bin/env ady2nim
 """The model, the page and the requests, with no server running: make test (ady2nim c -r tests/test_dijkstra.ady)"""
 from graphs import shortest_route
-from blackboard import PublishChannel      # its subscribe, for session.nodes_channel.subscribe below
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
 from backend/dijkstra_events_gui import Channel_T, Change, Session
 from backend/dijkstra_commands import Command, command_of, method_of, url_of, create_node, update_node, move_node, is_draft, delete_node, create_edge, update_edge, delete_edge, read_network
