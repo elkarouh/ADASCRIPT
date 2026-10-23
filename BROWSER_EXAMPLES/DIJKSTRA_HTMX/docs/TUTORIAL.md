@@ -452,9 +452,11 @@ The page is built the same way. Its blackboard has two channels, in
 
 ```adascript
 type Page_Channel_T is enum COMMANDS, CHANGES
+type Command_Channel_T is PublishChannel[Page_Channel_T, Command]
+type Change_Channel_T is PublishChannel[Page_Channel_T, str]
 
-var commands: PublishChannel[Page_Channel_T, Command] = PublishChannel[Page_Channel_T, Command](COMMANDS)  # what the reader asks
-var changes: PublishChannel[Page_Channel_T, str] = PublishChannel[Page_Channel_T, str](CHANGES)            # what the server says changed
+var commands: Command_Channel_T = Command_Channel_T(COMMANDS)  # what the reader asks
+var changes: Change_Channel_T = Change_Channel_T(CHANGES)      # what the server says changed
 ```
 
 Every gesture publishes a command on `commands` (`ask_for`), and nothing else. Who

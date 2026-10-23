@@ -23,16 +23,18 @@ type Event is record:
     seq: int
     data: {str}str
 
+type Event_Channel_T is PublishChannel[EventType, Event]    # a channel of EventType, carrying an Event
+
 class Blackboard:
     var symbol: str
-    var channels: [EventType]PublishChannel[EventType, Event]
+    var channels: [EventType]Event_Channel_T
     var published: int
 
     def __init__(self, symbol: str, keep_history: bool):
         self.symbol = symbol
         self.published = 0
         for kind in EventType:
-            self.channels[kind] = PublishChannel[EventType, Event](kind)
+            self.channels[kind] = Event_Channel_T(kind)
             self.channels[kind].raise_errors = True
             self.channels[kind].keep_history = keep_history and kind != PRICE_UPDATE
 

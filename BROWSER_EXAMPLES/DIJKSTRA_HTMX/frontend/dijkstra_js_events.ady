@@ -95,11 +95,13 @@ def set_selected(el: Element_T, lit: bool):
 
 # The channels of the page's blackboard.
 type Page_Channel_T is enum COMMANDS, CHANGES
+type Command_Channel_T is PublishChannel[Page_Channel_T, Command]    # a channel of Page_Channel_T, carrying a Command
+type Change_Channel_T is PublishChannel[Page_Channel_T, str]         # and one carrying a change, as text
 
 # What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
-var commands: PublishChannel[Page_Channel_T, Command] = PublishChannel[Page_Channel_T, Command](COMMANDS)
+var commands: Command_Channel_T = Command_Channel_T(COMMANDS)
 # What the server says changed ("NODES_CHAN CREATE H"), whichever page changed it.
-var changes: PublishChannel[Page_Channel_T, str] = PublishChannel[Page_Channel_T, str](CHANGES)
+var changes: Change_Channel_T = Change_Channel_T(CHANGES)
 commands.raise_errors = True            # a subscriber that fails is a bug: let it show
 changes.raise_errors = True
 

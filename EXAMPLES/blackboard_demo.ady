@@ -15,17 +15,19 @@ type Alarm is record:
     first: str
     second: str
 
+type Alarm_Channel_T is PublishChannel[Channel_T, Alarm]     # a channel of Channel_T, carrying an Alarm
+
 class Blackboard:
     var name: str
-    var alarm_channel_1: PublishChannel[Channel_T, Alarm]
-    var alarm_channel_2: PublishChannel[Channel_T, Alarm]
-    var alarm_channel_3: PublishChannel[Channel_T, Alarm]
+    var alarm_channel_1: Alarm_Channel_T
+    var alarm_channel_2: Alarm_Channel_T
+    var alarm_channel_3: Alarm_Channel_T
 
     def __init__(self, name: str):
         self.name = name
-        self.alarm_channel_1 = PublishChannel[Channel_T, Alarm](ALARM_CHANNEL_1)
-        self.alarm_channel_2 = PublishChannel[Channel_T, Alarm](ALARM_CHANNEL_2)
-        self.alarm_channel_3 = PublishChannel[Channel_T, Alarm](ALARM_CHANNEL_3)
+        self.alarm_channel_1 = Alarm_Channel_T(ALARM_CHANNEL_1)
+        self.alarm_channel_2 = Alarm_Channel_T(ALARM_CHANNEL_2)
+        self.alarm_channel_3 = Alarm_Channel_T(ALARM_CHANNEL_3)
 
 var board: Blackboard = Blackboard("BLACKBOARD")
 
