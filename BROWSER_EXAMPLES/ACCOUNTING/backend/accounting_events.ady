@@ -20,8 +20,9 @@ Nothing has to be kept on a change: the ledger writes each one to the scenario's
 """
 from blackboard import PublishChannel
 from backend/accounting_model import BookFailure_T, Entry, EQUITY, Kind_T
-from backend/books_text import Books, closing_entries, kind_named, text_of_books
-from backend/accounting_page_gui import Params, account_numbered, all_text, told_text, entry_of, fresh_params, int_of, params_of, year_end, retained_account
+from backend/books_text import Books, Year_End, kind_named, text_of_books
+from backend/accounting_page_state import Settings, Popup
+from backend/accounting_page_gui import all_text, told_text
 from page_server import Page_Request
 from commands import Verb_T, CREATE, READ, UPDATE, DELETE, Change
 from backend/accounting_commands import Command, A_TRANSACTION, AN_ACCOUNT, A_SCENARIO, THE_BOOKS, command_of
@@ -115,28 +116,25 @@ class Session:
             return self.show_scenario(name, False)
         return None
 
-    # The htmx page for the settings P.
-    def page_text(self, p: Params) -> str:
+    # The htmx page for the settings S.
+    def page_text(self, s: Settings) -> str:
         let b: Books = self.books.books(self.config.currency)
         let names: []str = self.scenarios.names()
         var titles: []str = []
         for n in names:
             titles.append(self.scenarios.title_of(n))
-        return all_text(b, names, titles, self.current, p)
+        return all_text(b, names, titles, self.current, s)
 
     # The year closed: the costs and the revenue moved into retained earnings.
-    def close_year(self, b: Books) -> None | !BookFailure_T:
-        if len(b.entries) == 0:
+    def close_year(self, year: Year_End) -> None | !BookFailure_T:
+        if year.date == "":
             return BookFailure_T("There is nothing to close.")
-        let date: str = year_end(b)
-        let name: str = retained_account(b)
-        let made: []Entry = closing_entries(b, date, name)
-        if len(made) == 0:
+        if len(year.entries) == 0:
             return BookFailure_T("Nothing to close: every cost and revenue account is already at zero.")
-        if account_numbered(b, "14") == "":
+        if year.opened:
             do:
-                self.books.open_account("140000", EQUITY, name)
-        for e in made:
+                self.books.open_account("140000", EQUITY, year.retained)
+        for e in year.entries:
             do:
                 self.books.record(e)
         return None
@@ -171,7 +169,7 @@ class Session:
         try:
             case c.thing:
                 when A_TRANSACTION:
-                    done = self.change_transaction(c, params_of(fields))
+                    done = self.change_transaction(c)
                 when AN_ACCOUNT:
                     done = self.change_account(c)
                 when A_SCENARIO:
@@ -182,19 +180,20 @@ class Session:
             done = BookFailure_T("the database failed: " + getCurrentExceptionMsg())
         return told_text(done)
 
-    # The transaction C names recorded (the arrow and the popup, which P has as the page's settings)
-    # or deleted (id): what to tell, or why not. When it went through, it is published.
-    def change_transaction(self, c: Command, p: Params) -> str | !BookFailure_T:
+    # The transaction C names recorded (the arrow and the popup: source, target, date, what, amount,
+    # vat) or deleted (id): what to tell, or why not. When it went through, it is published.
+    def change_transaction(self, c: Command) -> str | !BookFailure_T:
         let b: Books = self.books.books(self.config.currency)
         if c.verb == CREATE:
-            let made: Entry | !BookFailure_T = entry_of(b, p)
+            let popup: Popup = Popup(c.value("source"), c.value("target"), c.value("date"), c.value("what"), c.value("amount"), c.value("vat"))
+            let made: Entry | !BookFailure_T = popup.entry_in(b)
             if made is BookFailure_T:
                 return made
             do:
                 self.books.record(made)
             self.entries_channel.publish(Change(CREATE, made.what))
             return f"Recorded: {made.what}"
-        let id: int = int_of(c.value("id"), 0)        # DELETE, the other (command_of)
+        let id: int = c.number_value("id")            # DELETE, the other (command_of)
         var what: str = ""
         for i in range(len(b.ids)):
             if b.ids[i] == id:
@@ -252,19 +251,19 @@ class Session:
     # The year closed (the one change of the books: command_of): what to tell, or why not. When it
     # went through, the transactions are published, every one: an UPDATE with no key.
     def change_books(self) -> str | !BookFailure_T:
-        let b: Books = self.books.books(self.config.currency)
-        let closed: None | !BookFailure_T = self.close_year(b)
+        let year: Year_End = Year_End(self.books.books(self.config.currency))
+        let closed: None | !BookFailure_T = self.close_year(year)
         if closed is BookFailure_T:
             return closed
         self.entries_channel.publish(Change(UPDATE, ""))
-        return f"Closed the year on {year_end(b)}: the profit is in {retained_account(b)}."
+        return f"Closed the year on {year.date}: the profit is in {year.retained}."
 
     # GET /h/all: the page again, from the settings in QUERY.
     def page_all(self, query: str) -> str:
-        var p: Params = params_of(query)
-        if p.scenario != "" and p.scenario != self.current:   # "": the one shown, as a page reading itself again asks
-            let shown: None | !BookFailure_T = self.show_scenario(p.scenario, False)
+        var s: Settings = Settings(query)
+        if s.scenario != "" and s.scenario != self.current:   # "": the one shown, as a page reading itself again asks
+            let shown: None | !BookFailure_T = self.show_scenario(s.scenario, False)
             if shown is None:
                 self.scenarios_channel.publish(Change(UPDATE, self.current))     # every page shows it
-            p = fresh_params(p.tab)           # another scenario: its own grouping
-        return self.page_text(p)
+            s = s.fresh()                     # another scenario: its own grouping
+        return self.page_text(s)

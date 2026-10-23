@@ -4,859 +4,64 @@
     GET /h        the shell: a script tag and a div that loads /h/all
     GET /h/all    the whole page, drawn from the books and the settings in the query
 
-The server keeps no state of the page's. The settings (scenario, grouping, tab) are the
-fields of a form inside the page; a change to one asks /h/all for the page
-again with all of them, and the answer replaces the page. A click on a
-group, or on a tab, adds one more field, `go` or `toggle`, to the request.
+The server keeps no state of the page's. The settings (scenario, grouping, tab, ...) are the
+fields of the form #state inside the page; a change to one asks /h/all for the page again with all
+of them, and the answer replaces the page. A click adds one more field to the request: what was
+done. accounting_page_state.ady reads them, carries out what was done, and works out what the page
+shows, a View; here it is drawn:
 
-The same books_text.ady, accounting_gui.ady, routes.ady and accounting_model.ady the
-JavaScript page uses draw it, here native: the amounts are 64-bit, and the
-grouping is not limited to what a browser's int can count. An account is
-dragged by accounting_js_events.ady, the page's one script of our own. Everything the
-JavaScript page does, this one does: it records a transaction by an arrow
-drawn from one account to another, replays, runs the exercise, closes the
-year, opens and deletes accounts and transactions, starts a scenario over,
-saves it and deletes it. What changes the books is a command (accounting_commands.ady): each button
-that makes one sends it by its own method and URL, and its answer is only the paragraph #told,
-above the page: what was done, or why not. The page is drawn again on the news of the change
-(accounting_js_events.ady), on every page that shows the books; the rest is GET /h/all.
+    Drawing         the graph: four quarters, an account a box, an arrow a flow of money
+    Tabs            below it: the transactions, the T-accounts, the accounts, the statements
+    all_html        the whole page: the form #state, the buttons, the graph, the tabs
+
+The same books_text.ady, accounting_gui.ady, routes.ady and accounting_model.ady the JavaScript page
+used draw it, here native: the amounts are 64-bit, and the grouping is not limited to what a
+browser's int can count. An account is dragged by accounting_js_events.ady, the page's one script of
+our own. It records a transaction by an arrow drawn from one account to another, replays, runs the
+exercise, closes the year, opens and deletes accounts and transactions, starts a scenario over,
+saves it and deletes it. Each button sends a command (accounting_commands.ady) by its own method
+and URL: a read's answer is the page, in place of #all; a change's answer is only the paragraph
+#told, above the page: what was done, or why not. The page is drawn again on the news of the change
+(accounting_js_events.ady), on every page that shows the books.
 """
-from uri nimport decodeUrl
-from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, Colour_T, ASSET, LIABILITY, EQUITY, EXPENSE, REVENUE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat, vat_text
+from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, ASSET, LIABILITY, EQUITY, EXPENSE, Entry, Graph, Kind_T, Posting, VatRate_T, NO_VAT, vat_text
 from drawing import Drawing_Pixel_T, Spot_T
 from shared/routes import Shape, boxes, px, Route_T
-from shared/layout import WIDTH, GAP, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
-from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, RETAINED, T_TEXT, signed, box_html, css_of, tip_of, account_tip, to_html, section_html, sections_after_graph
-from backend/books_text import AccountRow, Books, Ratio, closing_entries, graph_of, kind_text, ratios_of
-from backend/accounting_commands import Command, url, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario, close_year
+from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
+from backend/accounting_gui import STYLE, NODE_STYLE, EDGE_STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, T_TEXT, box_html, css_of, tip_of, to_html, section_html, sections_after_graph
+from backend/books_text import AccountRow, Books, Ratio, kind_text, ratios_of
+from backend/accounting_groups import Grouping
+from backend/accounting_page_state import Settings, View, posting_text
+from commands import CREATE, READ, UPDATE, DELETE
+from backend/accounting_commands import Command, url, read_books, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario, close_year
 
-# The settings, as the query gives them.
-type Params is record:
-    scenario: str
-    tab:      str
-    detail:   str                   # "" the first time: the page picks
-    fold:     int
-    opened:   []str
-    go:       str
-    toggle:   str
-    pos:      str                   # where accounts were dragged to: "id@x,y|id@x,y"
-    tidy:     bool
-    source:   str                   # the frozen account, where the money leaves, or ""
-    target:   str                   # the account an arrow from it was dropped on, or ""
-    freeze:   str                   # an account clicked: frozen, or let go if it was
-    cancel:   bool                  # the popup closed
-    date:     str                   # the popup's fields
-    what:     str
-    howmuch:  str
-    vat:      str
-    note:     str                   # what the server says: recorded, or why not
-    step:     int                   # the transaction shown last; -1: not replaying, all shown
-    playing:  bool
-    only:     str                   # the account whose transactions alone are replayed, or ""
-    act:      str                   # next, prev, play, pause, all, tick
-    slide:    str                   # where the date slider is
-    help:     bool                  # the explanations shown
-    dc:       bool                  # debits and credits, not plus and minus
-    picked:   []str                 # accounts shift-clicked, to be merged
-    merges:   []str                 # the groups made so: "name~account~account", ...
-    pick:     str                   # an account shift-clicked: picked, or let go if it was
-    mergename: str                  # the name asked for the merged accounts
-    ex:       int                   # the exercise: the transaction asked for, -1 when there is none
-    score:    int                   # ... right at the first try
-    tries:    int                   # ... wrong answers to this transaction
-    bad:      bool                  # the note is a refusal
+# ---- Buttons ----
 
-def fresh_params(tab: str) -> Params:
-    return Params("", tab, "", 0, [], "", "", "", False, "", "", "", False, "", "", "", "", "", -1, False, "", "", "", False, False, [], [], "", "", -1, 0, 0, False)
-
-def int_of(text: str, otherwise: int) -> int:
-    let n: int | !ParseFailure_T = parse_int(text)
-    if n is ParseFailure_T:
-        return otherwise
-    else:
-        return n
-
-def params_of(query: str) -> Params:
-    var p: Params = fresh_params("Transactions")
-    for pair in query.split("&"):
-        let at: int = pair.find("=")
-        if at < 0:
-            continue
-        let key: str = pair[:at]
-        let value: str = decodeUrl(pair[at + 1:])
-        if key == "scenario":
-            p.scenario = value
-        elif key == "tab":
-            p.tab = value
-        elif key == "detail":
-            p.detail = value
-        elif key == "fold":
-            let n: int | !ParseFailure_T = parse_int(value)
-            if n is ParseFailure_T:
-                p.fold = 0
-            else:
-                p.fold = n
-        elif key == "opened":
-            for k in value.split("|"):
-                if k != "":
-                    p.opened.append(k)
-        elif key == "go":
-            p.go = value
-        elif key == "toggle":
-            p.toggle = value
-        elif key == "pos":
-            p.pos = value
-        elif key == "tidy":
-            p.tidy = value != ""
-        elif key == "source":
-            p.source = value
-        elif key == "target":
-            p.target = value
-        elif key == "freeze":
-            p.freeze = value
-        elif key == "cancel":
-            p.cancel = value != ""
-        elif key == "date":
-            p.date = value
-        elif key == "what":
-            p.what = value
-        elif key == "amount":
-            p.howmuch = value
-        elif key == "vat":
-            p.vat = value
-        elif key == "step":
-            let n: int | !ParseFailure_T = parse_int(value)
-            if n is ParseFailure_T:
-                p.step = -1
-            else:
-                p.step = n
-        elif key == "playing":
-            p.playing = value == "1"
-        elif key == "only":
-            p.only = value
-        elif key == "act":
-            p.act = value
-        elif key == "slide":
-            p.slide = value
-        elif key == "help":
-            p.help = value == "1"
-        elif key == "dc":
-            p.dc = value == "1"
-        elif key == "picked":
-            for k in value.split("|"):
-                if k != "":
-                    p.picked.append(k)
-        elif key == "merges":
-            for k in value.split("|"):
-                if k != "":
-                    p.merges.append(k)
-        elif key == "pick":
-            p.pick = value
-        elif key == "mergename":
-            p.mergename = value
-        elif key == "ex":
-            p.ex = int_of(value, -1)
-        elif key == "score":
-            p.score = int_of(value, 0)
-        elif key == "tries":
-            p.tries = int_of(value, 0)
-    return p
-
-# ---------------------------------------------------------------------
-# Groups: the same idea as the JavaScript page, on the server
-# ---------------------------------------------------------------------
-
-type Grouped is record:
-    books:   Books                  # the books with a group in place of its accounts
-    names:   []str                  # the groups
-    keys:    []str
-    members: []str                  # each group's accounts, a line each
-    from_names: []str               # an account in a group ...
-    to_names:   []str               # ... and the group's name
-
-def prefix_of(number: str, digits: int) -> str:
-    return (number[:digits] if len(number) > digits else number)
-
-def key_of(r: AccountRow, digits: int) -> str:
-    return prefix_of(r.number, digits) + "/" + str(int(r.kind))
-
-def groups_at(b: Books, digits: int) -> int:
-    var keys: []str = []
-    for r in b.accounts:
-        let k: str = key_of(r, digits)
-        if k not in keys:
-            keys.append(k)
-    return len(keys)
-
-def longest_number(b: Books) -> int:
-    var most: int = 0
-    for r in b.accounts:
-        most = max(most, len(r.number))
-    return most
-
-# A big chart starts grouped, to the longest prefix that leaves about thirty nodes.
-def auto_detail(b: Books) -> int:
-    if len(b.accounts) <= 40:
-        return 0
-    var best: int = 1
-    for d in range(1, 7):
-        if groups_at(b, d) <= 30:
-            best = d
-    return best
-
-def moves_counts(b: Books) -> []int:
-    var counts: []int = []
-    for r in b.accounts:
-        counts.append(0)
-    for e in b.entries:
-        for p in e.postings:
-            for i in range(len(b.accounts)):
-                if b.accounts[i].name == p.account:
-                    counts[i] += 1
-    return counts
-
-# Entry E's postings with each account in a group put in it, the ones that add up to nothing gone.
-def mapped(e: Entry, from_names: []str, to_names: []str) -> []Posting:
-    var merged: []Posting = []
-    for p in e.postings:
-        var n: str = p.account
-        for i in range(len(from_names)):
-            if from_names[i] == p.account:
-                n = to_names[i]
-        var at: int = -1
-        for k in range(len(merged)):
-            if merged[k].account == n:
-                at = k
-        if at >= 0:
-            merged[at].amount = Cents_T(int(merged[at].amount) + int(p.amount))
-        else:
-            merged.append(Posting(n, p.amount))
-    var kept: []Posting = []
-    for p in merged:
-        if int(p.amount) != 0:
-            kept.append(p)
-    return kept
-
-# Which of the groups the user MERGES made has account NAME, or -1.
-def merge_of(merges: []str, name: str) -> int:
-    for m in range(len(merges)):
-        if name in merges[m].split("~")[1:]:
-            return m
-    return -1
-
-def grouped(b: Books, detail: int, fold: int, opened: []str, merges: []str) -> Grouped:
-    if detail == 0 and fold == 0 and len(merges) == 0:
-        return Grouped(b, [], [], [], [], [])
-    let counts: []int = moves_counts(b)
-    var keys: []str = []
-    for i in range(len(b.accounts)):
-        let r: AccountRow = b.accounts[i]
-        let made: int = merge_of(merges, r.name)
-        if made >= 0:
-            keys.append("m/" + merges[made].split("~")[0])
-        elif fold > 0 and counts[i] < fold:
-            keys.append("q/" + str(int(r.kind)))
-        elif detail > 0:
-            keys.append(key_of(r, detail))
-        else:
-            keys.append("")
-    var out: Books = b
-    out.accounts = []
-    var names: []str = []
-    var gkeys: []str = []
-    var members: []str = []
-    var seen: []int = []
-    var from_names: []str = []
-    var to_names: []str = []
-    for i in range(len(b.accounts)):
-        let r: AccountRow = b.accounts[i]
-        var n: int = 0
-        for k in keys:
-            if k == keys[i]:
-                n += 1
-        if keys[i] == "" or n == 1 or keys[i] in opened:
-            out.accounts.append(r)
-        else:
-            if keys[i] not in gkeys:
-                var name: str = f"{prefix_of(r.number, detail)}… {r.name} +{n - 1}"
-                var number: str = prefix_of(r.number, detail)
-                if keys[i].startswith("q/"):
-                    name = f"{n} quiet {kind_text(r.kind)}"
-                    number = "999999"
-                elif keys[i].startswith("m/"):
-                    name = keys[i][2:]
-                gkeys.append(keys[i])
-                names.append(name)
-                members.append("")
-                seen.append(0)
-                out.accounts.append(AccountRow(number, r.kind, name))
-            let at: int = gkeys.index(keys[i])
-            if seen[at] < 12:
-                let line: str = f"{r.number} {r.name}"
-                members[at] = (line if members[at] == "" else members[at] + "\n" + line)
-            elif seen[at] == 12:
-                members[at] = members[at] + "\n..."
-            seen[at] += 1
-            from_names.append(r.name)
-            to_names.append(names[at])
-    out.entries = []
-    out.ids = []
-    for e in b.entries:
-        let kept: []Posting = mapped(e, from_names, to_names)
-        if len(kept) >= 2:
-            out.entries.append(Entry(e.date, e.what, kept))
-            out.ids.append(0)
-    return Grouped(out, names, gkeys, members, from_names, to_names)
-
-# ---------------------------------------------------------------------
-# The graph: four quarters, an account a box, stacked in number order
-# ---------------------------------------------------------------------
-
-# -------------------------------------------------------------------
-# The accounts: the nodes of the drawing, each a box in its quarter
-# -------------------------------------------------------------------
-
-def quarter_of(k: Kind_T) -> int:
-    if k == ASSET:
-        return 0
-    if k == LIABILITY or k == EQUITY:
-        return 1
-    if k == EXPENSE:
-        return 2
-    return 3
-
-def tall_of(g: Graph, name: str) -> Drawing_Pixel_T:
-    var ins: int = 0
-    var outs: int = 0
-    for f in g.flows:
-        if f.target.name == name:
-            ins += 1
-        if f.source.name == name:
-            outs += 1
-    return max(Drawing_Pixel_T(15.0), Drawing_Pixel_T(4.5 * float(max(ins, outs)) + 8.0))
-
-# An account's id in the page: its number and kind, which group rows have too.
-def id_of(r: AccountRow) -> str:
-    return r.number + "/" + str(int(r.kind))
-
-# A string as a JSON string, for hx-vals.
-def json_quote(s: str) -> str:
-    return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
-def node_html(a: Account, p: Spot_T, tall: Drawing_Pixel_T, id: str, key: str, tip: str, frozen: bool, now: bool, picked: bool) -> Html:
-    let shape: Shape = Shape(True, boxes().half_w, tall)
-    let x: str = f"{p.x:.1f}"
-    let y: str = f"{p.y:.1f}"
-    let h: str = f"{tall:.1f}"
-    let kept: str = ("node from" if frozen else ("node now" if now else "node"))
-    let css: str = (kept + " picked" if picked else kept)
-    let freeze_vals: str = "{\"freeze\": " + json_quote(a.name) + "}"
-    if key == "":
-        html:
-            g class=css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=freeze_vals data_hx_target="#all" data_hx_swap="outerHTML":
-                title: tip
-                + box_html(a, p, shape)
-    else:
-        let vals: str = "{\"toggle\": \"" + key + "\"}"
-        let group_css: str = css + " group"
-        html:
-            g class=group_css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
-                title: tip
-                + box_html(a, p, shape)
-
-def group_key(gr: Grouped, name: str) -> str:
-    for i in range(len(gr.names)):
-        if gr.names[i] == name:
-            return gr.keys[i]
-    return ""
-
-def node_tip(g: Graph, gr: Grouped, a: Account) -> str:
-    for i in range(len(gr.names)):
-        if gr.names[i] == a.name:
-            return f"{a.name}: balance {money(a.balance)}\n{gr.members[i]}\nClick to open the group"
-    return account_tip(g, a)
-
-# -------------------------------------------------------------------
-# The arrows: the edges of the drawing, each from one account to another
-# -------------------------------------------------------------------
-
-def arrow_html(g: Graph, f: Flow, route: Route_T, now: bool) -> Html:
-    let css: str = ("now" if now else "")
-    let tip: str = tip_of(g, f)
-    html:
-        g class=css data_from=f.source.name data_to=f.target.name:
-            + to_html(f, route, tip)
-
-# -------------------------------------------------------------------
-# The drawing as a whole: the layout of the accounts and the page
-# -------------------------------------------------------------------
-
-type Placed is record:
-    names:  []str
-    points: []Spot_T
-    tall:   []Drawing_Pixel_T
-    height: Drawing_Pixel_T
-    split_y: Drawing_Pixel_T
-    slots:  []Slot_T
-
-# Where the accounts of the books are drawn (shared/layout.ady lays them out, in the browser too):
-# each account as a slot, and the placement of all of them, with the ones dragged where they were let go.
-def placed(g: Graph, rows: []AccountRow, gr: Grouped, pos: str) -> Placed:
-    var names: []str = []
-    var slots: []Slot_T = []
-    var tall: []Drawing_Pixel_T = []
-    for r in rows:
-        names.append(r.name)
-        let half: Drawing_Pixel_T = tall_of(g, r.name)
-        tall.append(half)
-        slots.append(Slot_T(id_of(r), r.name, quarter_of(r.kind), r.number, half, group_key(gr, r.name) != ""))
-    let at: Layout_T = layout_of_slots(slots, pos)
-    return Placed(names, at.points, tall, at.height, at.split_y, slots)
-
-def graph_html(g: Graph, whole: Graph, gr: Grouped, pos: str, source: str, now_arrows: []str, now_accounts: []str, picked: []str) -> Html:
-    let rows: []AccountRow = gr.books.accounts
-    let at: Placed = placed(whole, rows, gr, pos)
-    let width: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH)
-    let size: Spot_T = Spot_T(width, at.height)
-    let routes: []Route_T = routes_for(g, at.names, at.points, at.tall, size, boxes())
-    var arrows: []Arrow_T = []
-    for f in g.flows:
-        arrows.append(Arrow_T(f.source.name, f.target.name, money(f.amount)))
-    let box: str = f"0 0 {width:.0f} {at.height:.0f}"
-    let across: str = f"M 8 {px(at.split_y)} L {px(width - 8.0)} {px(at.split_y)}"
-    let rx: str = px(width / 2.0 + 20.0)
-    let by: str = px(at.split_y + 30.0)
-    let down: str = f"M {px(width / 2.0)} 8 L {px(width / 2.0)} {px(at.height - 8.0)}"
-    html:
-        div class="drawing":
-            svg viewBox=box class="graph":
-                defs:
-                    marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
-                        polygon points="0 0, 10 3.5, 0 7"
-                    marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
-                        polygon class="now" points="0 0, 4.3 1.5, 0 3"
-                path class="split" d=down
-                path class="split" d=across
-                stext class="side" x="20" y="30": "Assets"
-                stext class="side" x=rx y="30": "Liabilities and equity"
-                stext class="side" x="20" y=by: "Expenses"
-                stext class="side" x=rx y=by: "Revenue"
-                for i in range(len(g.flows)):
-                    + arrow_html(g, g.flows[i], routes[i], (g.flows[i].source.name + "\t" + g.flows[i].target.name) in now_arrows)
-                path id="rubber" class="rubber" d=""
-                for i in range(len(g.accounts)):
-                    + node_html(g.accounts[i], at.points[i], at.tall[i], id_of(rows[i]), group_key(gr, g.accounts[i].name), node_tip(g, gr, g.accounts[i]), g.accounts[i].name == source, g.accounts[i].name in now_accounts, g.accounts[i].name in picked)
-            # the accounts and arrows as the server keeps them, for the browser to lay out and route again
-            # (outside the svg: a <pre> inside it would end the drawing)
-            script type="application/json" id="books": books_text(at.slots, arrows)
-
-# ---------------------------------------------------------------------
-# The replay: the transactions one at a time, the books as they stood after each
-# ---------------------------------------------------------------------
-
-def dates_of(b: Books) -> []str:
-    var days: []str = []
-    for e in b.entries:
-        if len(days) == 0 or days[len(days) - 1] != e.date:
-            days.append(e.date)
-    return days
-
-# Where the slider stands: the position, among the days, of the books shown.
-def slider_position(b: Books, step: int) -> int:
-    let days: []str = dates_of(b)
-    if step < 0 or step >= len(b.entries):
-        return max(0, len(days) - 1)
-    return max(0, days.index(b.entries[step].date))
-
-# The transactions replayed, by number: those touching ONLY, or all.
-def replayable(b: Books, only: str) -> []int:
-    var found: []int = []
-    for i in range(len(b.entries)):
-        var touches: bool = only == ""
-        for p in b.entries[i].postings:
-            if p.account == only:
-                touches = True
-        if touches:
-            found.append(i)
-    return found
-
-# The replayable transaction D places after (D < 0: before) STEP; from the first one if not
-# replaying going forward, the last going back; -1 if there is none.
-def replayable_by(b: Books, only: str, step: int, d: int) -> int:
-    let found: []int = replayable(b, only)
-    if len(found) == 0:
-        return -1
-    if step < 0:
-        return (found[0] if d > 0 else found[len(found) - 1])
-    var at: int = -1                    # where STEP is among them, or just before it
-    for k in range(len(found)):
-        if found[k] <= step:
-            at = k
-    if at >= 0 and found[at] != step and d < 0:
-        at += 1                         # STEP is not one of them: back from the next one
-    return found[max(0, min(len(found) - 1, at + d))]
-
-# The books as they stood after transaction STEP; all of them when STEP is -1.
-def upto(b: Books, step: int) -> Books:
-    if step < 0:
-        return b
-    var out: Books = b
-    out.entries = b.entries[:step + 1]
-    return out
-
-# The first N transactions of B.
-def first_n(b: Books, n: int) -> Books:
-    var out: Books = b
-    out.entries = b.entries[:n]
-    return out
-
-# The same, with the groups of GR.
-def replayed_books(b: Books, gr: Grouped, step: int) -> Books:
-    return first_books(b, gr, (len(b.entries) if step < 0 else step + 1))
-
-# The first N transactions, with the groups of GR.
-def first_books(b: Books, gr: Grouped, n: int) -> Books:
-    var out: Books = gr.books
-    out.entries = []
-    out.ids = []
-    for i in range(len(b.entries)):
-        if i < n:
-            let kept: []Posting = mapped(b.entries[i], gr.from_names, gr.to_names)
-            if len(kept) >= 2:
-                out.entries.append(Entry(b.entries[i].date, b.entries[i].what, kept))
-                out.ids.append(0)
-    return out
-
-# ---------------------------------------------------------------------
-# Recording a transaction: click an account to freeze it, drag an arrow from it to another
-# (accounting_js_events.ady), and say when, what and how much
-# ---------------------------------------------------------------------
-
-def kind_of(b: Books, name: str) -> int:
-    for r in b.accounts:
-        if r.name == name:
-            return int(r.kind)
-    return -1
-
-def has_account(b: Books, name: str) -> bool:
-    return kind_of(b, name) >= 0
-
-# The account whose number starts with PREFIX: 411 is VAT receivable, 451 VAT payable.
-def account_numbered(b: Books, prefix: str) -> str:
-    for r in b.accounts:
-        if r.number.startswith(prefix):
-            return r.name
-    return ""
-
-def last_date(b: Books) -> str:
-    return (b.entries[len(b.entries) - 1].date if len(b.entries) > 0 else "")
-
-# The transaction the popup describes: from the frozen account to the one the arrow went to,
-# AMOUNT before VAT. With VAT, a sale (the source is revenue) owes it to the tax office, a
-# purchase claims it back.
-def entry_of(b: Books, p: Params) -> Entry | !BookFailure_T:
-    if len(p.date) != 10:
-        return BookFailure_T("The date is written 2012-01-31.")
-    if p.what == "":
-        return BookFailure_T("Say what happened.")
-    do:
-        amount <- parse_float(p.howmuch.replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
-        rate <- parse_enum(VatRate_T, p.vat) else BookFailure_T("Pick a VAT rate from the list.")
-    let net: Cents_T = Cents_T(int(amount * 100.0 + 0.5))
-    if net <= 0:
-        return BookFailure_T("The amount is more than zero: the arrow says which way it goes.")
-    if rate == NO_VAT:
-        return entry(p.date, p.what, p.source, p.target, net)
-    let is_sale: bool = kind_of(b, p.source) == int(REVENUE)
-    let vat: str = account_numbered(b, "451" if is_sale else "411")
-    if vat == "":
-        return BookFailure_T(f"There is no {('VAT payable (451...)' if is_sale else 'VAT receivable (411...)')} account to put the VAT in.")
-    if is_sale:
-        return sale_with_vat(p.date, p.what, p.source, p.target, vat, net, rate)
-    return purchase_with_vat(p.date, p.what, p.source, p.target, vat, net, rate)
-
-def vat_option_html(rate: VatRate_T, chosen: str) -> Html:
-    let name: str = str(rate)
-    let label: str = vat_text(rate)
-    if name == chosen or (chosen == "" and rate == NO_VAT):
-        html:
-            option value=name selected="selected": label
-    else:
-        html:
-            option value=name: label
-
-def popup_html(b: Books, p: Params) -> Html:
-    let title: str = f"{p.source}  →  {p.target}"
-    let date: str = (p.date if p.date != "" else last_date(b))
-    let cancel_vals: str = "{\"cancel\": \"1\"}"
-    html:
-        form id="popup" class="popup" data_hx_post=create_entry().url() data_hx_include="#state" data_hx_target="#told" data_hx_swap="outerHTML":
-            h3: title
-            label: "Date"
-            input name="date" value=date placeholder="2012-01-31"
-            label: "What happened"
-            input name="what" value=p.what placeholder="a chair for the office"
-            label: "Amount, before VAT"
-            input name="amount" value=p.howmuch placeholder="605.00"
-            label: "VAT"
-            select name="vat":
-                for rate in VatRate_T:
-                    + vat_option_html(rate, p.vat)
-            button type="submit": "Record"
-            button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=cancel_vals data_hx_target="#all" data_hx_swap="outerHTML": "Cancel"
-
-# ---------------------------------------------------------------------
-# The tabs
-# ---------------------------------------------------------------------
-
-const TABS: []str = ["Transactions", "T-accounts", "Accounts", "Statements"]
-
-def posting_text(e: Entry) -> str:
-    var parts: []str = []
-    for p in e.postings:
-        parts.append(f"{p.account} {signed(p.amount)}")
-    return ", ".join(parts)
-
-# A button that sends the command C, with the fields within INCLUDE (CSS selectors, "" for none),
-# after ASK is confirmed ("" asks nothing): by C's own method to C's URL. Its answer, what was done
-# or why not, takes the place of the paragraph #told.
+# A button that sends the command C, by its verb's method to its URL, with the fields within INCLUDE
+# (CSS selectors, "" for none), after ASK is confirmed ("" asks nothing). A read takes the settings
+# (#state) along, and its answer, the page, takes the place of #all; a change's answer, what was
+# done or why not, takes the place of the paragraph #told.
 def command_button(label: str, c: Command, include: str, ask: str, css: str) -> Html:
-    var vals: str = "{"
-    for name, value in c.fields.items():
-        vals += ("" if vals == "{" else ", ") + json_quote(name) + ": " + json_quote(value)
-    vals += "}"
-    case c.method():
-        when "POST":
+    let vals: str = c.vals()
+    case c.verb:
+        when READ:
+            let along: str = ("#state" if include == "" else "#state, " + include)
+            html:
+                button type="button" class=css data_hx_get=c.url() data_hx_include=along data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": label
+        when CREATE:
             html:
                 button type="button" class=css data_hx_post=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
-        when "PUT":
+        when UPDATE:
             html:
                 button type="button" class=css data_hx_put=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
-        when others:
+        when DELETE:
             html:
                 button type="button" class=css data_hx_delete=c.url() data_hx_include=include data_hx_vals=vals data_hx_confirm=ask data_hx_target="#told" data_hx_swap="outerHTML": label
 
-def delete_entry_button(b: Books, i: int) -> Html:
-    let ask: str = f"Delete the transaction of {b.entries[i].date}, {b.entries[i].what}?"
-    html:
-        td:
-            + command_button("Delete", delete_entry(b.ids[i]), "", ask, "delete")
-
-def row_html(b: Books, i: int, step: int) -> Html:
-    let e: Entry = b.entries[i]
-    let css: str = ("" if step < 0 else ("now" if i == step else ("later" if i > step else "")))
-    html:
-        tr class=css:
-            td: e.date
-            td: e.what
-            td: posting_text(e)
-            + delete_entry_button(b, i)
-
-# The postings of E as a journal writes them: the debits first, then the credits.
-def journal_order(e: Entry) -> []Posting:
-    var ordered: []Posting = []
-    for p in e.postings:
-        if p.amount > 0:
-            ordered.append(p)
-    for p in e.postings:
-        if p.amount < 0:
-            ordered.append(p)
-    return ordered
-
-def posting_row_html(b: Books, i: int, k: int) -> Html:
-    let e: Entry = b.entries[i]
-    let p: Posting = journal_order(e)[k]
-    let credit: bool = p.amount < 0
-    let account_css: str = ("credit" if credit else "debit")
-    html:
-        tr:
-            td: (e.date if k == 0 else "")
-            td: (e.what if k == 0 else "")
-            td class=account_css: p.account
-            td class="num": (money(p.amount) if not credit else "")
-            td class="num": (money(Cents_T(-int(p.amount))) if credit else "")
-            if k == 0:
-                + delete_entry_button(b, i)
-            else:
-                td: ""
-
-def journal_entry_html(b: Books, i: int, step: int) -> Html:
-    let css: str = ("entry" if step < 0 else ("entry now" if i == step else ("entry later" if i > step else "entry")))
-    html:
-        tbody class=css:
-            for k in range(len(b.entries[i].postings)):
-                + posting_row_html(b, i, k)
-
-# The transactions, the first COUNT of them, as plus and minus or, when DC, as a journal's debits and credits.
-def transactions_html(b: Books, step: int, count: int, dc: bool) -> Html:
-    if dc:
-        html:
-            table:
-                tr:
-                    th: "Date"
-                    th: "Transaction"
-                    th: "Account"
-                    th: "Debit"
-                    th: "Credit"
-                    th: ""
-                for i in range(count):
-                    + journal_entry_html(b, i, step)
-    else:
-        html:
-            table:
-                tr:
-                    th: "Date"
-                    th: "Transaction"
-                    th: "What it did to each account"
-                    th: ""
-                for i in range(count):
-                    + row_html(b, i, step)
-
-def account_row_html(b: Books, r: AccountRow, g: Graph, dc: bool) -> Html:
-    let balance: Cents_T = g.balance(r.name)
-    let css: str = css_of(g.account(r.name))
-    let ask: str = f"Delete the account {r.name}?"
-    html:
-        tr:
-            td: r.number
-            td class=css: r.name
-            td: kind_text(r.kind)
-            if dc:
-                td class="num": (money(balance) if balance > 0 else "")
-                td class="num": (money(Cents_T(-int(balance))) if balance < 0 else "")
-            else:
-                td class="num": money(balance)
-            td:
-                + command_button("Delete", delete_account(r.name), "", ask, "delete")
-
-def kind_option_html(word: str) -> Html:
-    html:
-        option value=word: word
-
-def accounts_html(b: Books, g: Graph, dc: bool) -> Html:
-    html:
-        table class="accounts":
-            tr:
-                th: "Number"
-                th: "Account"
-                th: "Kind"
-                if dc:
-                    th class="num": "Debit"
-                    th class="num": "Credit"
-                else:
-                    th class="num": "Balance"
-                th: ""
-            for r in b.accounts:
-                + account_row_html(b, r, g, dc)
-            tr class="new":
-                td:
-                    input name="number" placeholder="613100" size="8"
-                td:
-                    input name="acctname" placeholder="a new account" size="16"
-                td:
-                    select name="akind":
-                        for word in ["asset", "liability", "equity", "revenue", "expense"]:
-                            + kind_option_html(word)
-                td: ""
-                if dc:
-                    td: ""
-                td:
-                    + command_button("Open", create_account(), "tr.new", "", "")
-
-def ratio_row_html(r: Ratio) -> Html:
-    html:
-        tr:
-            td: r.name
-            td class="num": r.value
-            td: r.meaning
-
-def ratios_html(b: Books, g: Graph) -> Html:
-    html:
-        table:
-            tr:
-                th: "Ratio"
-                th: "Value"
-                th: "What it tells"
-            for r in ratios_of(b, g):
-                + ratio_row_html(r)
-
-# One account as a T: its debits on the left, its credits on the right, in the transactions E.
-def t_account_html(row: AccountRow, entries: []Entry, g: Graph) -> Html:
-    var debits: []Cents_T = []
-    var credits: []Cents_T = []
-    for e in entries:
-        for p in e.postings:
-            if p.account == row.name:
-                if p.amount > 0:
-                    debits.append(p.amount)
-                else:
-                    credits.append(Cents_T(-int(p.amount)))
-    let balance: Cents_T = g.balance(row.name)
-    let words: str = ("" if balance == 0 else (" debit" if balance > 0 else " credit"))
-    let owed: str = f"Balance {money(Cents_T(abs(int(balance))))}{words}"
-    let css: str = css_of(g.account(row.name))
-    let heading: str = f"{row.number} {row.name}"
-    html:
-        div class="taccount":
-            h4 class=css: heading
-            div class="tbody":
-                div class="tdebit":
-                    for d in debits:
-                        p: money(d)
-                div class="tcredit":
-                    for c in credits:
-                        p: money(c)
-            p class="tbalance": owed
-
-def touched(row: AccountRow, entries: []Entry) -> bool:
-    for e in entries:
-        for p in e.postings:
-            if p.account == row.name:
-                return True
-    return False
-
-def t_accounts_html(b: Books, g: Graph, count: int) -> Html:
-    let entries: []Entry = b.entries[:count]
-    html:
-        div class="tgrid":
-            for r in b.accounts:
-                if touched(r, entries):
-                    + t_account_html(r, entries, g)
-
-def texted(help: bool, text: str) -> str:
-    return (text if help else "")
-
-# What the tab TAB shows of the books B as the first COUNT transactions left them (G), STEP being the one replayed.
-def tab_body(tab: str, b: Books, g: Graph, step: int, count: int, help: bool, dc: bool) -> []Html:
-    if tab == "T-accounts":
-        return [section_html("T-accounts", texted(help, T_TEXT), [t_accounts_html(b, g, count)])]
-    if tab == "Accounts":
-        return [section_html("Accounts", texted(help, ACCOUNTS_TEXT), [accounts_html(b, g, dc)])]
-    if tab == "Statements":
-        let after: []Html = sections_after_graph(g, help)
-        var out: []Html = []
-        for i in range(1, len(after)):
-            out.append(after[i])
-        out.append(section_html("Ratios", texted(help, RATIOS_TEXT), [ratios_html(b, g)]))
-        return out
-    return [dc_button(dc), transactions_html(b, step, count, dc)]
-
-def dc_button(dc: bool) -> Html:
-    let label: str = ("Plus and minus" if dc else "Debit and credit")
-    html:
-        p:
-            + act_button("dc", label)
-
-def act_button(act: str, label: str) -> Html:
-    let vals: str = "{\"act\": \"" + act + "\"}"
-    html:
-        button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": label
-
-def tab_button(name: str, chosen: str) -> Html:
-    let vals: str = "{\"go\": \"" + name + "\"}"
-    let css: str = ("selected" if name == chosen else "")
-    html:
-        button class=css data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML": name
+# A button that asks for the page again with the field NAME set to VALUE: what was done.
+def setting_button(label: str, name: str, value: str) -> Html:
+    let fields: {str}str = {name: value}
+    return command_button(label, read_books(fields), "", "", "")
 
 def option_html(value: str, label: str, chosen: bool) -> Html:
     if chosen:
@@ -866,67 +71,453 @@ def option_html(value: str, label: str, chosen: bool) -> Html:
         html:
             option value=value: label
 
+# ---- The graph: four quarters, an account a box, stacked in number order ----
+
+# The graph the view V draws, its accounts placed: shared/layout.ady lays them out (in the browser
+# too, as they are dragged), each as a slot in its quarter, the ones dragged where they were let go.
+class Drawing:
+    var v:     View
+    var rows:  []AccountRow         # the accounts drawn, a group as one
+    var slots: []Slot_T
+    var tall:  []Drawing_Pixel_T    # each one's half height: more arrows, taller
+    var at:    Layout_T
+
+    def __init__(self, v: View):
+        self.v = v
+        self.rows = v.groups.books.accounts
+        self.slots = []
+        self.tall = []
+        for r in self.rows:
+            let half: Drawing_Pixel_T = self.tall_of(r.name)
+            self.tall.append(half)
+            self.slots.append(Slot_T(self.id_of(r), r.name, self.quarter_of(r.kind), r.number, half, v.groups.key_of(r.name) != ""))
+        self.at = layout_of_slots(self.slots, v.s.pos)
+
+    # The quarter of an account of kind K: assets top left, liabilities and equity top right,
+    # expenses bottom left, revenue bottom right.
+    def quarter_of(self, k: Kind_T) -> int:
+        if k == ASSET:
+            return 0
+        if k == LIABILITY or k == EQUITY:
+            return 1
+        if k == EXPENSE:
+            return 2
+        return 3
+
+    # Half the height of the account NAME's box: room for the arrows in or out, whichever are more.
+    def tall_of(self, name: str) -> Drawing_Pixel_T:
+        let ins: int = len([f for f in self.v.whole.flows if f.target.name == name])
+        let outs: int = len([f for f in self.v.whole.flows if f.source.name == name])
+        return max(Drawing_Pixel_T(15.0), Drawing_Pixel_T(4.5 * float(max(ins, outs)) + 8.0))
+
+    # An account's id in the page: its number and kind, which a group's row has too.
+    def id_of(self, r: AccountRow) -> str:
+        return r.number + "/" + str(int(r.kind))
+
+    # The account I of the graph drawn: a click freezes it, or opens it when it is a group.
+    def node_html(self, i: int) -> Html:
+        let a: Account = self.v.drawn.accounts[i]
+        let p: Spot_T = self.at.points[i]
+        let shape: Shape = Shape(True, boxes().half_w, self.tall[i])
+        let x: str = f"{p.x:.1f}"
+        let y: str = f"{p.y:.1f}"
+        let h: str = f"{self.tall[i]:.1f}"
+        let id: str = self.id_of(self.rows[i])
+        let tip: str = self.v.groups.tip(self.v.drawn, a)
+        let key: str = self.v.groups.key_of(a.name)
+        let state: str = ("node from" if a.name == self.v.s.source else ("node now" if a.name in self.v.now_accounts else "node"))
+        let css: str = (state + " picked" if a.name in self.v.s.picked else state)
+        let freeze: {str}str = {"freeze": a.name}
+        let toggle: {str}str = {"toggle": key}
+        if key == "":
+            let vals: str = read_books(freeze).vals()
+            html:
+                g class=css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+                    title: tip
+                    + box_html(a, p, shape)
+        else:
+            let vals: str = read_books(toggle).vals()
+            let group_css: str = css + " group"
+            html:
+                g class=group_css data_id=id data_name=a.name data_x=x data_y=y data_h=h data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=vals data_hx_target="#all" data_hx_swap="outerHTML":
+                    title: tip
+                    + box_html(a, p, shape)
+
+    # The arrow F of the graph drawn, along ROUTE; highlighted when it is the transaction replayed's.
+    def arrow_html(self, f: Flow, route: Route_T) -> Html:
+        let css: str = ("now" if (f.source.name + "\t" + f.target.name) in self.v.now_arrows else "")
+        let tip: str = tip_of(self.v.drawn, f)
+        html:
+            g class=css data_from=f.source.name data_to=f.target.name:
+                + to_html(f, route, tip)
+
+    def to_html(self) -> Html:
+        let g: Graph = self.v.drawn
+        let width: Drawing_Pixel_T = Drawing_Pixel_T(WIDTH)
+        let size: Spot_T = Spot_T(width, self.at.height)
+        let names: []str = [r.name for r in self.rows]
+        let routes: []Route_T = routes_for(g, names, self.at.points, self.tall, size, boxes())
+        let arrows: []Arrow_T = [Arrow_T(f.source.name, f.target.name, money(f.amount)) for f in g.flows]
+        let box: str = f"0 0 {width:.0f} {self.at.height:.0f}"
+        let across: str = f"M 8 {px(self.at.split_y)} L {px(width - 8.0)} {px(self.at.split_y)}"
+        let rx: str = px(width / 2.0 + 20.0)
+        let by: str = px(self.at.split_y + 30.0)
+        let down: str = f"M {px(width / 2.0)} 8 L {px(width / 2.0)} {px(self.at.height - 8.0)}"
+        html:
+            div class="drawing":
+                svg viewBox=box class="graph":
+                    defs:
+                        marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto":
+                            polygon points="0 0, 10 3.5, 0 7"
+                        marker id="arrow-now" markerWidth="4.3" markerHeight="3" refX="3.9" refY="1.5" orient="auto":
+                            polygon class="now" points="0 0, 4.3 1.5, 0 3"
+                    path class="split" d=down
+                    path class="split" d=across
+                    stext class="side" x="20" y="30": "Assets"
+                    stext class="side" x=rx y="30": "Liabilities and equity"
+                    stext class="side" x="20" y=by: "Expenses"
+                    stext class="side" x=rx y=by: "Revenue"
+                    for i in range(len(g.flows)):
+                        + self.arrow_html(g.flows[i], routes[i])
+                    path id="rubber" class="rubber" d=""
+                    for i in range(len(g.accounts)):
+                        + self.node_html(i)
+                # the accounts and arrows as the server keeps them, for the browser to lay out and route again
+                # (outside the svg: a <pre> inside it would end the drawing)
+                script type="application/json" id="books": books_text(self.slots, arrows)
+
+# ---- The popup: the transaction an arrow drawn records ----
+
+# The popup of the view V: from the frozen account to the one the arrow went to, say when, what and
+# how much. Record sends it; Cancel closes it.
+def popup_html(v: View) -> Html:
+    let title: str = f"{v.s.source}  →  {v.s.target}"
+    let date: str = (v.s.popup.date if v.s.popup.date != "" or len(v.b.entries) == 0 else v.b.entries[len(v.b.entries) - 1].date)
+    html:
+        form id="popup" class="popup" data_hx_post=create_entry().url() data_hx_include="#state" data_hx_target="#told" data_hx_swap="outerHTML":
+            h3: title
+            label: "Date"
+            input name="date" value=date placeholder="2012-01-31"
+            label: "What happened"
+            input name="what" value=v.s.popup.what placeholder="a chair for the office"
+            label: "Amount, before VAT"
+            input name="amount" value=v.s.popup.howmuch placeholder="605.00"
+            label: "VAT"
+            select name="vat":
+                for rate in VatRate_T:
+                    + option_html(str(rate), vat_text(rate), str(rate) == v.s.popup.vat or (v.s.popup.vat == "" and rate == NO_VAT))
+            button type="submit": "Record"
+            + setting_button("Cancel", "cancel", "1")
+
+# ---- The tabs: the transactions, the T-accounts, the accounts, the statements ----
+
+const TAB_NAMES: []str = ["Transactions", "T-accounts", "Accounts", "Statements"]
+
+# What the tabs of the view V show: the books as the first COUNT transactions left them, the one
+# replayed highlighted; as plus and minus, or as debits and credits (dc).
+class Tabs:
+    var v: View
+
+    def __init__(self, v: View):
+        self.v = v
+
+    # What the tab TAB shows.
+    def to_html(self, tab: str) -> []Html:
+        let g: Graph = self.v.books
+        let help: bool = self.v.s.help
+        if tab == "T-accounts":
+            return [section_html("T-accounts", (T_TEXT if help else ""), [self.t_accounts_html()])]
+        if tab == "Accounts":
+            return [section_html("Accounts", (ACCOUNTS_TEXT if help else ""), [self.accounts_html()])]
+        if tab == "Statements":
+            var out: []Html = sections_after_graph(g, help)[1:]
+            out.append(section_html("Ratios", (RATIOS_TEXT if help else ""), [self.ratios_html()]))
+            return out
+        return [self.dc_html(), self.transactions_html()]
+
+    # The button that writes the transactions as a journal does, or as plus and minus again.
+    def dc_html(self) -> Html:
+        let label: str = ("Plus and minus" if self.v.s.dc else "Debit and credit")
+        html:
+            p:
+                + setting_button(label, "act", "dc")
+
+    # The cell with the button that deletes transaction I.
+    def delete_html(self, i: int) -> Html:
+        let b: Books = self.v.b
+        let ask: str = f"Delete the transaction of {b.entries[i].date}, {b.entries[i].what}?"
+        html:
+            td:
+                + command_button("Delete", delete_entry(b.ids[i]), "", ask, "delete")
+
+    # How transaction I is shown in the replay: the one replayed, one after it (greyed), or as it is.
+    def replayed_css(self, i: int, css: str) -> str:
+        let step: int = self.v.s.step
+        if step < 0 or i < step:
+            return css
+        return (css + " now" if i == step else css + " later").strip()
+
+    # Transaction I as plus and minus: what it did to each account.
+    def row_html(self, i: int) -> Html:
+        let e: Entry = self.v.b.entries[i]
+        let css: str = self.replayed_css(i, "")
+        html:
+            tr class=css:
+                td: e.date
+                td: e.what
+                td: posting_text(e)
+                + self.delete_html(i)
+
+    # Posting P of transaction I, the K-th line of it in the journal.
+    def posting_row_html(self, i: int, k: int, p: Posting) -> Html:
+        let e: Entry = self.v.b.entries[i]
+        let credit: bool = p.amount < 0
+        let account_css: str = ("credit" if credit else "debit")
+        html:
+            tr:
+                td: (e.date if k == 0 else "")
+                td: (e.what if k == 0 else "")
+                td class=account_css: p.account
+                td class="num": (money(p.amount) if not credit else "")
+                td class="num": (money(Cents_T(-int(p.amount))) if credit else "")
+                if k == 0:
+                    + self.delete_html(i)
+                else:
+                    td: ""
+
+    # Transaction I as a journal writes it: the debits first, then the credits.
+    def journal_entry_html(self, i: int) -> Html:
+        let e: Entry = self.v.b.entries[i]
+        let ordered: []Posting = [p for p in e.postings if p.amount > 0] + [p for p in e.postings if p.amount < 0]
+        let css: str = self.replayed_css(i, "entry")
+        html:
+            tbody class=css:
+                for k in range(len(ordered)):
+                    + self.posting_row_html(i, k, ordered[k])
+
+    # The transactions shown, as plus and minus or, with dc, as a journal's debits and credits.
+    def transactions_html(self) -> Html:
+        if self.v.s.dc:
+            html:
+                table:
+                    tr:
+                        th: "Date"
+                        th: "Transaction"
+                        th: "Account"
+                        th: "Debit"
+                        th: "Credit"
+                        th: ""
+                    for i in range(self.v.count):
+                        + self.journal_entry_html(i)
+        else:
+            html:
+                table:
+                    tr:
+                        th: "Date"
+                        th: "Transaction"
+                        th: "What it did to each account"
+                        th: ""
+                    for i in range(self.v.count):
+                        + self.row_html(i)
+
+    # The account R: its number, name, kind and balance, and the button that deletes it.
+    def account_row_html(self, r: AccountRow) -> Html:
+        let g: Graph = self.v.books
+        let balance: Cents_T = g.balance(r.name)
+        let css: str = css_of(g.account(r.name))
+        let ask: str = f"Delete the account {r.name}?"
+        html:
+            tr:
+                td: r.number
+                td class=css: r.name
+                td: kind_text(r.kind)
+                if self.v.s.dc:
+                    td class="num": (money(balance) if balance > 0 else "")
+                    td class="num": (money(Cents_T(-int(balance))) if balance < 0 else "")
+                else:
+                    td class="num": money(balance)
+                td:
+                    + command_button("Delete", delete_account(r.name), "", ask, "delete")
+
+    # Every account, and a row to open a new one.
+    def accounts_html(self) -> Html:
+        let dc: bool = self.v.s.dc
+        html:
+            table class="accounts":
+                tr:
+                    th: "Number"
+                    th: "Account"
+                    th: "Kind"
+                    if dc:
+                        th class="num": "Debit"
+                        th class="num": "Credit"
+                    else:
+                        th class="num": "Balance"
+                    th: ""
+                for r in self.v.b.accounts:
+                    + self.account_row_html(r)
+                tr class="new":
+                    td:
+                        input name="number" placeholder="613100" size="8"
+                    td:
+                        input name="acctname" placeholder="a new account" size="16"
+                    td:
+                        select name="akind":
+                            for word in ["asset", "liability", "equity", "revenue", "expense"]:
+                                option value=word: word
+                    td: ""
+                    if dc:
+                        td: ""
+                    td:
+                        + command_button("Open", create_account(), "tr.new", "", "")
+
+    # What an accountant or a banker reads off the balance sheet.
+    def ratios_html(self) -> Html:
+        let ratios: []Ratio = ratios_of(self.v.b, self.v.books)
+        html:
+            table:
+                tr:
+                    th: "Ratio"
+                    th: "Value"
+                    th: "What it tells"
+                for r in ratios:
+                    tr:
+                        td: r.name
+                        td class="num": r.value
+                        td: r.meaning
+
+    # The account ROW as a T, in the transactions ENTRIES: its debits on the left, its credits on the right.
+    def t_account_html(self, row: AccountRow, entries: []Entry) -> Html:
+        var debits: []Cents_T = []
+        var credits: []Cents_T = []
+        for e in entries:
+            for p in e.postings:
+                if p.account == row.name:
+                    if p.amount > 0:
+                        debits.append(p.amount)
+                    else:
+                        credits.append(Cents_T(-int(p.amount)))
+        let g: Graph = self.v.books
+        let balance: Cents_T = g.balance(row.name)
+        let words: str = ("" if balance == 0 else (" debit" if balance > 0 else " credit"))
+        let owed: str = f"Balance {money(Cents_T(abs(int(balance))))}{words}"
+        let css: str = css_of(g.account(row.name))
+        let heading: str = f"{row.number} {row.name}"
+        html:
+            div class="taccount":
+                h4 class=css: heading
+                div class="tbody":
+                    div class="tdebit":
+                        for d in debits:
+                            p: money(d)
+                    div class="tcredit":
+                        for c in credits:
+                            p: money(c)
+                p class="tbalance": owed
+
+    # Every account the transactions shown touch, as a T.
+    def t_accounts_html(self) -> Html:
+        let entries: []Entry = self.v.b.entries[:self.v.count]
+        var touched: []str = []
+        for e in entries:
+            for p in e.postings:
+                touched.append(p.account)
+        html:
+            div class="tgrid":
+                for r in self.v.b.accounts:
+                    if r.name in touched:
+                        + self.t_account_html(r, entries)
+
+# ---- The form #state: the settings, and the buttons that change them ----
+
+const FOLDS: []int = [0, 2, 5, 10, 20, 50, 100]
+
 def detail_label(d: int) -> str:
     return ("All accounts" if d == 0 else (f"{d} digit" if d == 1 else f"{d} digits"))
 
 def fold_label(q: int) -> str:
     return ("Every account" if q == 0 else f"Fewer than {q} transactions")
 
-const FOLDS: []int = [0, 2, 5, 10, 20, 50, 100]
+# The form #state: the scenario and the grouping to choose, the settings as the act left them (hidden),
+# and the buttons of the replay or the exercise, with the caption of the transaction replayed or asked for.
+def state_html(v: View, names: []str, titles: []str, current: str) -> Html:
+    let s: Settings = v.s
+    let n: int = len(v.b.entries)
+    let days: []str = v.replay.days
+    let position: int = v.replay.position(s.step)
+    let last_day: str = str(max(len(days) - 1, 0))
+    let tidy: {str}str = {"tidy": "1"}
+    let tidy_vals: str = read_books(tidy).vals()
+    html:
+        form id="state" data_hx_get="/h/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
+            strong: "Scenario "
+            select name="scenario":
+                for i in range(len(names)):
+                    + option_html(names[i], titles[i], names[i] == current)
+            if len(v.b.accounts) > 12:
+                span: " Group by "
+                select name="detail":
+                    for d in range(0, v.groups.digits()):
+                        + option_html(str(d), detail_label(d), d == v.groups.detail)
+                span: " fold "
+                select name="fold":
+                    for q in FOLDS:
+                        + option_html(str(q), fold_label(q), q == s.fold)
+                if len(s.opened) > 0 or len(s.merges) > 0:
+                    + setting_button("Close groups", "act", "close_groups")
+            input type="hidden" name="opened" value="|".join(s.opened)
+            input type="hidden" name="picked" value="|".join(s.picked)
+            input type="hidden" name="merges" value="|".join(s.merges)
+            input type="hidden" name="pick" value=""
+            input type="hidden" name="tab" value=s.tab
+            input type="hidden" name="pos" value=s.pos
+            input type="hidden" name="source" value=s.source
+            input type="hidden" name="target" value=s.target
+            input type="hidden" name="step" value=str(s.step)
+            input type="hidden" name="playing" value=("1" if s.playing else "0")
+            input type="hidden" name="only" value=s.only
+            input type="hidden" name="help" value=("1" if s.help else "0")
+            input type="hidden" name="dc" value=("1" if s.dc else "0")
+            input type="hidden" name="ex" value=str(s.ex)
+            input type="hidden" name="score" value=str(s.score)
+            input type="hidden" name="tries" value=str(s.tries)
+            + setting_button(("Hide help" if s.help else "Help"), "act", "help")
+            button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
+            if s.ex >= 0:
+                p class="replay":
+                    if v.asking():
+                        + setting_button("Show the answer", "act", "answer")
+                    + setting_button("Stop the exercise", "act", "stopex")
+                p class="caption":
+                    strong: v.exercise_caption()
+                    span: "  " + (v.b.entries[s.ex].what if v.asking() else "")
+            else:
+                p class="replay":
+                    if s.playing:
+                        + setting_button("Pause", "act", "pause")
+                    else:
+                        + setting_button(v.play_label(), "act", "play")
+                    + setting_button("Previous", "act", "prev")
+                    + setting_button("Next", "act", "next")
+                    if s.step >= 0:
+                        + setting_button("Show all", "act", "all")
+                    if n > 0 and len(v.groups.names) == 0:
+                        + setting_button("Exercise", "act", "exercise")
+                    if len(days) > 1:
+                        span: " Books as at "
+                        strong: days[position]
+                        input type="range" name="slide" min="0" max=last_day value=str(position)
+                if s.step >= 0:
+                    p class="caption":
+                        strong: v.replay.caption(s.step)
+                        span: "  " + v.b.entries[s.step].what
+            if s.hint() != "":
+                p class="hint": s.hint()
 
-# LIST without its first X.
-def without_name(items: []str, x: str) -> []str:
-    var kept: []str = []
-    for k in items:
-        if k != x:
-            kept.append(k)
-    return kept
-
-# Why the accounts PICKED cannot be merged under NAME, or "".
-def merge_trouble(b: Books, picked: []str, merges: []str, name: str) -> str:
-    if len(picked) < 2:
-        return "Shift-click two accounts or more, then merge them."
-    if name == "":
-        return "Name the merged accounts."
-    if "~" in name or "|" in name:
-        return "The name has no ~ or | in it."
-    for q in picked:
-        if kind_of(b, q) != kind_of(b, picked[0]):
-            return "Merge accounts of one kind only: assets, liabilities, equity, revenue or expenses."
-    if has_account(b, name) or merge_of(merges, name) >= 0:
-        return f"There is already an account or group called {name}."
-    for m in merges:
-        if m.split("~")[0] == name:
-            return f"There is already an account or group called {name}."
-    return ""
-
-# The year ends on 31 December of the last transaction's.
-def year_end(b: Books) -> str:
-    return b.entries[len(b.entries) - 1].date[:4] + "-12-31"
-
-# The equity account the profit goes to: the one numbered 14..., or a new one.
-def retained_account(b: Books) -> str:
-    let found: str = account_numbered(b, "14")
-    return (found if found != "" else RETAINED)
-
-# Whether any cost or revenue account has a balance to close.
-def closable(b: Books) -> bool:
-    return len(b.entries) > 0 and len(closing_entries(b, year_end(b), retained_account(b))) > 0
-
-# What to tell about the frozen account, the exercise, or how to freeze one.
-def hint_of(source: str, exercising: bool, help: bool) -> str:
-    if source == "":
-        if exercising:
-            return "Click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
-        return texted(help, "To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches.")
-    if exercising:
-        return f"{source} is frozen: drag an arrow from it to the account the money reaches. Click {source} again to let it go."
-    return f"{source} is frozen: drag an arrow from it to the account the money reaches. Click {source} again to let it go. Play, Previous and Next replay its transactions alone."
-
-# The buttons that change the books or the scenario, and the merge of the picked accounts.
-def tools_html(current: str, picked: []str, can_close: bool) -> Html:
+# The buttons that change the books or the scenario (CURRENT), and the merge of the accounts picked.
+def tools_html(v: View, current: str) -> Html:
     let saved: str = current + "_mine"
-    let merge_vals: str = "{\"act\": \"merge\"}"
+    let picked: []str = v.s.picked
     let picked_text: str = "Picked: " + ", ".join(picked)
     html:
         p class="tools":
@@ -935,296 +526,44 @@ def tools_html(current: str, picked: []str, can_close: bool) -> Html:
             input id="newname" name="newname" value=saved size="16" title="Letters, digits, _ and -"
             + command_button("Save as...", create_scenario(), "#newname", "", "")
             + command_button("Delete scenario", delete_scenario(), "", "Delete this scenario, and the changes you made in it? It cannot be undone.", "")
-            if can_close:
+            if v.can_close():
                 + command_button("Close the year", close_year(), "", "Close the year? The costs and the revenue go to retained earnings, and the cost and revenue accounts start again from zero.", "")
             if len(picked) > 0:
                 span class="picked": " " + picked_text
             if len(picked) >= 2:
                 input id="mergename" name="mergename" placeholder="name of the merged accounts" size="24"
-                button type="button" data_hx_get="/h/all" data_hx_include="#state, #mergename" data_hx_vals=merge_vals data_hx_target="#all" data_hx_swap="outerHTML": "Merge the picked"
+                + command_button("Merge the picked", read_books({"act": "merge"}), "#mergename", "", "")
 
-# The whole page for the books B of scenario CURRENT, as the settings P ask.
-def all_html(b: Books, names: []str, titles: []str, current: str, p: Params) -> Html:
-    var detail: int = (auto_detail(b) if p.detail == "" else 0)
-    if p.detail != "":
-        detail = int_of(p.detail, 0)
-    var act: str = p.act
-    var note: str = p.note
-    var bad: bool = p.bad
-    var help: bool = p.help
-    var dc: bool = p.dc
-    if act == "help":
-        help = not help
-    if act == "dc":
-        dc = not dc
-    var opened: []str = p.opened
-    if p.toggle != "":
-        if p.toggle in opened:
-            opened = without_name(opened, p.toggle)
-        else:
-            opened.append(p.toggle)
-    var merges: []str = p.merges
-    var picked: []str = p.picked
-    if act == "close_groups":
-        opened = []
-        merges = []
-    if p.pick != "" and has_account(b, p.pick):
-        if p.pick in picked:
-            picked = without_name(picked, p.pick)
-        else:
-            picked.append(p.pick)
-    if act == "merge":
-        let trouble: str = merge_trouble(b, picked, merges, p.mergename.strip())
-        if trouble != "":
-            note = trouble
-            bad = True
-        else:
-            merges.append(p.mergename.strip() + "~" + "~".join(picked))
-            picked = []
-            opened = []
-            note = ""
-    let tab: str = (p.go if p.go != "" else p.tab)
-    let pos: str = ("" if p.tidy else p.pos)
-    var source: str = p.source
-    var target: str = p.target
-    if p.freeze != "":
-        source = ("" if source == p.freeze else p.freeze)
-        target = ""
-    if p.cancel:
-        target = ""
-    if not has_account(b, source) or not has_account(b, target) or source == target:
-        target = ""
-    if not has_account(b, source):
-        source = ""
-    let gr: Grouped = grouped(b, detail, p.fold, opened, merges)
-    let n: int = len(b.entries)
-    # the exercise: EX is the transaction asked for, an arrow is its answer
-    var ex: int = p.ex
-    var score: int = p.score
-    var tries: int = p.tries
-    if act == "exercise" and n > 0 and len(gr.names) == 0:
-        ex = 0
-        score = 0
-        tries = 0
-        source = ""
-        target = ""
-        note = "Draw the arrow for the transaction below: click the account the money leaves, then drag to the one it reaches."
-        bad = False
-    elif act == "stopex" and ex >= 0:
-        note = f"Exercise stopped: {score} right at the first try."
-        bad = False
-        ex = -1
-        act = "all"                  # all the transactions shown again
-    if len(gr.names) > 0 or n == 0:
-        ex = -1
-    if ex >= 0:
-        ex = min(ex, n)
-        var solved: bool = False
-        if act == "answer" and ex < n:
-            note = f"The answer: {posting_text(b.entries[ex])}."
-            bad = False
-            solved = True
-            ex += 1
-            tries = 0
-            source = ""
-            target = ""
-        elif source != "" and target != "" and ex < n:
-            let e: Entry = b.entries[ex]
-            if moves(e, source, target):
-                if tries == 0:
-                    score += 1
-                note = f"Right: money leaves {source} and reaches {target}. The transaction did {posting_text(e)}."
-                bad = False
-                solved = True
-                ex += 1
-                tries = 0
-            else:
-                tries += 1
-                bad = True
-                if moves(e, target, source):
-                    note = "Other way round: the arrow goes from the account the money leaves to the one it reaches."
-                else:
-                    note = f"Not {source} to {target}. Which account gives, and which one receives?" + (" Or press Show the answer." if tries >= 2 else "")
-            source = ""
-            target = ""
-        if solved and ex >= n:
-            note = note + f" That was the last one: {score} right at the first try, out of {n}."
-        act = ""
-    # the replay: STEP is the transaction shown last, -1 for all of them
-    var step: int = min(p.step, n - 1)
-    var only: str = (p.only if has_account(b, p.only) else "")
-    var playing: bool = p.playing
-    if ex >= 0:
-        step = ex - 1
-        only = ""
-        playing = False
-    else:
-        if act in ["next", "prev", "play"] and source != "":      # a frozen account: only its transactions are replayed
-            only = source
-            source = ""
-            target = ""
-        if act == "all":
-            step = -1
-            playing = False
-            only = ""
-        elif act == "prev" or act == "next":
-            playing = False
-            let i: int = replayable_by(b, only, step, (1 if act == "next" else -1))
-            if i >= 0:
-                step = i
-        elif act == "play":
-            let found: []int = replayable(b, only)
-            if len(found) > 0:
-                if step < 0 or step >= found[len(found) - 1] or (only != "" and step not in found):
-                    step = found[0]
-                playing = True
-        elif act == "pause":
-            playing = False
-        elif act == "tick":
-            if playing:
-                let next: int = replayable_by(b, only, step, 1)
-                if next > step:
-                    step = next
-                else:
-                    playing = False
-        elif p.slide != "":                                         # the date slider moved
-            let days: []str = dates_of(b)
-            let at: int = int_of(p.slide, -1)
-            if at != slider_position(b, step) and at >= 0 and at < len(days):
-                playing = False
-                var last: int = 0
-                for i in range(n):
-                    if b.entries[i].date <= days[at]:
-                        last = i
-                step = last
-    let count: int = (ex if ex >= 0 else (n if step < 0 else step + 1))
-    let shown: Books = first_books(b, gr, count)
-    let g: Graph = graph_of(shown)
-    let whole: Graph = (g if count == n else graph_of(gr.books))
-    let real: Graph = graph_of(first_n(b, count))
-    var now_arrows: []str = []
-    var now_accounts: []str = []
-    if step >= 0:
-        var one: Books = gr.books
-        one.entries = []
-        one.ids = []
-        let kept: []Posting = mapped(b.entries[step], gr.from_names, gr.to_names)
-        for q in kept:
-            now_accounts.append(q.account)
-        if len(kept) >= 2:
-            one.entries = [Entry(b.entries[step].date, b.entries[step].what, kept)]
-            one.ids = [0]
-        for f in graph_of(one).flows:
-            now_arrows.append(f.source.name + "\t" + f.target.name)
-    let sizes: int = longest_number(b)
-    let opened_text: str = "|".join(opened)
-    let picked_text: str = "|".join(picked)
-    let merges_text: str = "|".join(merges)
-    let tidy_vals: str = "{\"tidy\": \"1\"}"
-    let tick_vals: str = "{\"act\": \"tick\"}"
-    let playing_text: str = ("1" if playing else "0")
-    let help_text: str = ("1" if help else "0")
-    let dc_text: str = ("1" if dc else "0")
-    let days: []str = dates_of(b)
-    let position: str = str(slider_position(b, step))
-    let last_day: str = str(max(len(days) - 1, 0))
-    let found: []int = replayable(b, only)
-    let play_label: str = (f"Play {source}'s transactions" if source != "" else (f"Play {only}'s transactions" if only != "" else "Play the transactions"))
-    let which: str = ("" if step < 0 else
-                      f"Transaction {step + 1} of {n}, {b.entries[step].date}" if only == "" or step not in found else
-                      f"{only}: transaction {found.index(step) + 1} of {len(found)} (number {step + 1} of {n}), {b.entries[step].date}")
-    let what: str = (b.entries[step].what if step >= 0 else "")
-    let asked: bool = ex >= 0 and ex < n
-    let ex_which: str = (f"Exercise: transaction {ex + 1} of {n}, {b.entries[ex].date}, {score} right so far" if asked else f"Exercise finished: {score} right at the first try, out of {n}")
-    let ex_what: str = (b.entries[ex].what if asked else "")
-    let hint: str = hint_of(source, ex >= 0, help)
-    let can_close: bool = ex < 0 and step < 0 and closable(b)
-    let note_css: str = ("refused" if bad else "note")
-    let about: []str = (b.about.split("\n") if help and b.about != "" else [])
-    let help_label: str = ("Hide help" if help else "Help")
+# ---- The page ----
+
+# The whole page for the view V of scenario CURRENT, of the scenarios NAMES (their TITLES).
+def all_html(v: View, names: []str, titles: []str, current: str) -> Html:
+    let s: Settings = v.s
+    let arrow: bool = s.source != "" and s.target != ""
+    let about: []str = (v.b.about.split("\n") if s.help and v.b.about != "" else [])
+    let note_css: str = ("refused" if s.bad else "note")
+    let tick: {str}str = {"act": "tick"}
+    let tick_vals: str = read_books(tick).vals()
     html:
         div id="all":
-            form id="state" data_hx_get="/h/all" data_hx_trigger="change" data_hx_target="#all" data_hx_swap="outerHTML":
-                strong: "Scenario "
-                select name="scenario":
-                    for i in range(len(names)):
-                        + option_html(names[i], titles[i], names[i] == current)
-                if len(b.accounts) > 12:
-                    span: " Group by "
-                    select name="detail":
-                        for d in range(0, sizes):
-                            + option_html(str(d), detail_label(d), d == detail)
-                    span: " fold "
-                    select name="fold":
-                        for q in FOLDS:
-                            + option_html(str(q), fold_label(q), q == p.fold)
-                    if len(opened) > 0 or len(merges) > 0:
-                        + act_button("close_groups", "Close groups")
-                input type="hidden" name="opened" value=opened_text
-                input type="hidden" name="picked" value=picked_text
-                input type="hidden" name="merges" value=merges_text
-                input type="hidden" name="pick" value=""
-                input type="hidden" name="tab" value=tab
-                input type="hidden" name="pos" value=pos
-                input type="hidden" name="source" value=source
-                input type="hidden" name="target" value=target
-                input type="hidden" name="step" value=str(step)
-                input type="hidden" name="playing" value=playing_text
-                input type="hidden" name="only" value=only
-                input type="hidden" name="help" value=help_text
-                input type="hidden" name="dc" value=dc_text
-                input type="hidden" name="ex" value=str(ex)
-                input type="hidden" name="score" value=str(score)
-                input type="hidden" name="tries" value=str(tries)
-                + act_button("help", help_label)
-                button type="button" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tidy_vals data_hx_target="#all" data_hx_swap="outerHTML" title="Lay the accounts out again": "Tidy up"
-                if ex >= 0:
-                    p class="replay":
-                        if asked:
-                            + act_button("answer", "Show the answer")
-                        + act_button("stopex", "Stop the exercise")
-                    p class="caption":
-                        strong: ex_which
-                        span: "  " + ex_what
-                else:
-                    p class="replay":
-                        if playing:
-                            + act_button("pause", "Pause")
-                        else:
-                            + act_button("play", play_label)
-                        + act_button("prev", "Previous")
-                        + act_button("next", "Next")
-                        if step >= 0:
-                            + act_button("all", "Show all")
-                        if n > 0 and len(gr.names) == 0:
-                            + act_button("exercise", "Exercise")
-                        if len(days) > 1:
-                            span: " Books as at "
-                            strong: days[int(position)]
-                            input type="range" name="slide" min="0" max=last_day value=position
-                    if step >= 0:
-                        p class="caption":
-                            strong: which
-                            span: "  " + what
-                if hint != "":
-                    p class="hint": hint
-            + tools_html(current, picked, can_close)
-            if help:
+            + state_html(v, names, titles, current)
+            + tools_html(v, current)
+            if s.help:
                 p: APP_INTRO
-            h2: b.title
+            h2: v.b.title
             for line in about:
                 p class="about": line
-            if note != "" and not (source != "" and target != ""):
-                p class=note_css: note
-            if source != "" and target != "":
-                + popup_html(b, p)
-            + graph_html(g, whole, gr, pos, source, now_arrows, now_accounts, picked)
+            if s.note != "" and not arrow:
+                p class=note_css: s.note
+            if arrow:
+                + popup_html(v)
+            + Drawing(v).to_html()
             div class="tabs":
-                for name in TABS:
-                    + tab_button(name, tab)
-            for part in tab_body(tab, b, real, step, count, help, dc):
+                for name in TAB_NAMES:
+                    + command_button(name, read_books({"go": name}), "", "", ("selected" if name == s.tab else ""))
+            for part in Tabs(v).to_html(s.tab):
                 + part
-            if playing:
+            if s.playing:
                 div class="ticker" data_hx_get="/h/all" data_hx_include="#state" data_hx_vals=tick_vals data_hx_trigger="load delay:1800ms" data_hx_target="#all" data_hx_swap="outerHTML"
 
 const EXTRA: str = """
@@ -1304,5 +643,7 @@ const MISSING: str = "<script onerror=\"addEventListener('load', function () { d
 def shell_text() -> str:
     return "<!doctype html>" + str(shell()).replace("<script src=\"/htmx.min.js\">", MISSING)
 
-def all_text(b: Books, names: []str, titles: []str, current: str, p: Params) -> str:
-    return str(all_html(b, names, titles, current, p))
+# The page for the books B of scenario CURRENT, of the scenarios NAMES (their TITLES), as the settings
+# S ask, what the reader did carried out.
+def all_text(b: Books, names: []str, titles: []str, current: str, s: Settings) -> str:
+    return str(all_html(View(b, s), names, titles, current))

@@ -146,6 +146,45 @@ def closing_entries(b: Books, date: str, equity: str) -> []Entry:
         made.append(Entry(date, "Closing the year: the revenue goes to retained earnings", revenue))
     return made
 
+# The account NAME's kind, as a number (int(ASSET), ...); -1 when the books have no such account.
+def kind_of(b: Books, name: str) -> int:
+    for r in b.accounts:
+        if r.name == name:
+            return int(r.kind)
+    return -1
+
+def has_account(b: Books, name: str) -> bool:
+    return kind_of(b, name) >= 0
+
+# The account whose number starts with PREFIX, or "": 411 is VAT receivable, 451 VAT payable.
+def account_numbered(b: Books, prefix: str) -> str:
+    for r in b.accounts:
+        if r.number.startswith(prefix):
+            return r.name
+    return ""
+
+# The equity account the profit goes to, when the chart has none numbered 14...
+const RETAINED: str = "Retained earnings"
+
+# The year the books end in, closed: on 31 December of the last transaction's year, the costs and
+# the revenue go to retained earnings (closing_entries).
+class Year_End:
+    var date:     str               # 31 December of the year; "" when there is no transaction
+    var retained: str               # the equity account the profit goes to: the one numbered 14...
+    var opened:   bool              # ... which is opened, as RETAINED, when there is none
+    var entries:  []Entry           # what closes the year; [] when there is nothing to close
+
+    def __init__(self, b: Books):
+        let found: str = account_numbered(b, "14")
+        self.retained = (found if found != "" else RETAINED)
+        self.opened = found == ""
+        if len(b.entries) == 0:
+            self.date = ""
+            self.entries = []
+        else:
+            self.date = b.entries[len(b.entries) - 1].date[:4] + "-12-31"
+            self.entries = closing_entries(b, self.date, self.retained)
+
 # A ratio of the books: its name, its value as text and what it tells.
 type Ratio is record:
     name:    str

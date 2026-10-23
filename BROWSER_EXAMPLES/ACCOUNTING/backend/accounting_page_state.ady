@@ -1,0 +1,438 @@
+#!/usr/bin/env ady2nim
+"""accounting_page_state -- what the page shows: its settings, and what the reader's act does to them
+
+The server keeps no state of the page's. Its settings (the scenario, the grouping, the tab, the
+account frozen, the transaction replayed, the exercise) are the fields of the form #state inside
+the page; a button or a click asks GET /h/all for the page again, with all of them and one more
+field that says what was done: `act` (next, play, exercise, merge, ...), `go` (a tab), `toggle`
+(a group), `freeze` (an account), `pick` (an account shift-clicked). Here the settings are read
+from the query, the act is carried out on them, and what the page then shows is worked out:
+
+    Settings    the settings, as the query gives them and as the act leaves them
+    Popup       the transaction the popup describes, as the reader typed it
+    Replay      the transactions one at a time, the books as they stood after each
+    View        the books as the settings show them: grouped, replayed, the graphs drawn
+
+accounting_page_gui.ady draws a View; the settings go back into its form #state. No HTML here.
+"""
+from backend/accounting_model import BookFailure_T, Cents_T, Entry, Graph, Posting, REVENUE, VatRate_T, NO_VAT, entry, moves, purchase_with_vat, sale_with_vat
+from backend/accounting_gui import signed
+from backend/books_text import Books, Year_End, account_numbered, graph_of, has_account, kind_of
+from backend/accounting_groups import Grouping
+from page_server import Page_Request
+
+# The transaction E as the page tells it: "Bank -$605.00, Furniture $500.00, VAT receivable $105.00".
+def posting_text(e: Entry) -> str:
+    return ", ".join([f"{p.account} {signed(p.amount)}" for p in e.postings])
+
+# ---- The popup: the transaction an arrow drawn records ----
+
+# The transaction the popup describes, as the reader typed it: from the frozen account SOURCE to the
+# one the arrow went to, TARGET; HOWMUCH before VAT.
+class Popup:
+    var source: str
+    var target: str
+    var date:   str                 # 2012-01-31
+    var what:   str                 # what happened
+    var howmuch: str                # the amount, 605.00, before VAT (not `amount`: see TODO.md)
+    var vat:    str                 # the rate: a VatRate_T, by name
+
+    def __init__(self, source: str, target: str, date: str, what: str, howmuch: str, vat: str):
+        self.source = source
+        self.target = target
+        self.date = date
+        self.what = what
+        self.howmuch = howmuch
+        self.vat = vat
+
+    # The transaction to record in the books B, or why there is none. With VAT, a sale (the source
+    # is revenue) owes it to the tax office, a purchase claims it back.
+    def entry_in(self, b: Books) -> Entry | !BookFailure_T:
+        if len(self.date) != 10:
+            return BookFailure_T("The date is written 2012-01-31.")
+        if self.what == "":
+            return BookFailure_T("Say what happened.")
+        do:
+            amount <- parse_float(self.howmuch.replace(",", "")) else BookFailure_T("The amount is a number, 605.00.")
+            rate <- parse_enum(VatRate_T, self.vat) else BookFailure_T("Pick a VAT rate from the list.")
+        let net: Cents_T = Cents_T(int(amount * 100.0 + 0.5))
+        if net <= 0:
+            return BookFailure_T("The amount is more than zero: the arrow says which way it goes.")
+        if rate == NO_VAT:
+            return entry(self.date, self.what, self.source, self.target, net)
+        let is_sale: bool = kind_of(b, self.source) == int(REVENUE)
+        let vat: str = account_numbered(b, "451" if is_sale else "411")
+        if vat == "":
+            return BookFailure_T(f"There is no {('VAT payable (451...)' if is_sale else 'VAT receivable (411...)')} account to put the VAT in.")
+        if is_sale:
+            return sale_with_vat(self.date, self.what, self.source, self.target, vat, net, rate)
+        return purchase_with_vat(self.date, self.what, self.source, self.target, vat, net, rate)
+
+# ---- The replay: the transactions one at a time ----
+
+# The transactions of the books B replayed: those touching the account ONLY, or all of them.
+class Replay:
+    var b:     Books
+    var only:  str                  # the account whose transactions alone are replayed, or ""
+    var found: []int                # the transactions replayed, by number
+    var days:  []str                # the days there are transactions on, in order
+
+    def __init__(self, b: Books, only: str):
+        self.b = b
+        self.only = only
+        self.found = []
+        self.days = []
+        for i in range(len(b.entries)):
+            let e: Entry = b.entries[i]
+            if only == "" or only in [p.account for p in e.postings]:
+                self.found.append(i)
+            if len(self.days) == 0 or self.days[len(self.days) - 1] != e.date:
+                self.days.append(e.date)
+
+    # The transaction replayed D places after STEP (D < 0: before it); from the first one when
+    # not replaying (STEP < 0) going forward, the last going back; -1 when there is none.
+    def by(self, step: int, d: int) -> int:
+        if len(self.found) == 0:
+            return -1
+        if step < 0:
+            return (self.found[0] if d > 0 else self.found[len(self.found) - 1])
+        var at: int = -1                # where STEP is among them, or just before it
+        for k in range(len(self.found)):
+            if self.found[k] <= step:
+                at = k
+        if at >= 0 and self.found[at] != step and d < 0:
+            at += 1                     # STEP is not one of them: back from the next one
+        return self.found[max(0, min(len(self.found) - 1, at + d))]
+
+    # Where the date slider stands when STEP is the transaction shown last: the day's position.
+    def position(self, step: int) -> int:
+        if step < 0 or step >= len(self.b.entries):
+            return max(0, len(self.days) - 1)
+        return max(0, self.days.index(self.b.entries[step].date))
+
+    # The last transaction on the day at position AT, or before it: where the slider put at AT stops.
+    def last_on(self, at: int) -> int:
+        var last: int = 0
+        for i in range(len(self.b.entries)):
+            if self.b.entries[i].date <= self.days[at]:
+                last = i
+        return last
+
+    # What the caption says of the transaction STEP: its number and date.
+    def caption(self, step: int) -> str:
+        let n: int = len(self.b.entries)
+        if self.only == "" or step not in self.found:
+            return f"Transaction {step + 1} of {n}, {self.b.entries[step].date}"
+        return f"{self.only}: transaction {self.found.index(step) + 1} of {len(self.found)} (number {step + 1} of {n}), {self.b.entries[step].date}"
+
+# ---- The settings ----
+
+# The settings of the page, as the query (the form #state, and the field a click adds) gives them.
+# The act carried out on them (act_on, exercise, replay), they are what the page shows.
+class Settings:
+    var scenario: str               # the scenario asked for; "": the one shown
+    var tab:      str               # the tab shown
+    var go:       str               # a tab clicked
+    var detail:   int               # the digits the accounts are grouped by; -1: the page picks
+    var fold:     int               # the accounts in fewer transactions folded, one box per kind; 0: none
+    var opened:   []str             # the groups opened, by key
+    var toggle:   str               # a group clicked: opened, or closed again
+    var merges:   []str             # the groups the reader made: "name~account~account", ...
+    var picked:   []str             # the accounts shift-clicked, to be merged
+    var pick:     str               # an account shift-clicked: picked, or let go if it was
+    var mergename: str              # the name asked for the merged accounts
+    var pos:      str               # where accounts were dragged to: "id@x,y|id@x,y"
+    var tidy:     bool              # ... forgotten: laid out again
+    var source:   str               # the frozen account, which the money leaves, or ""
+    var target:   str               # the account an arrow from it was dropped on, or ""
+    var freeze:   str               # an account clicked: frozen, or let go if it was
+    var cancel:   bool              # the popup closed
+    var popup:    Popup             # what the reader typed in the popup
+    var step:     int               # the transaction shown last; -1: not replaying, all shown
+    var playing:  bool
+    var only:     str               # the account whose transactions alone are replayed, or ""
+    var slide:    int               # where the date slider was put; -1 when it was not
+    var ex:       int               # the exercise: the transaction asked for; -1 when there is none
+    var score:    int               # ... answered right at the first try
+    var tries:    int               # ... wrong answers to this transaction
+    var help:     bool              # the explanations shown
+    var dc:       bool              # debits and credits, not plus and minus
+    var act:      str               # what was done: next, prev, play, pause, tick, all, exercise, answer, stopex, merge, close_groups, help, dc
+    var note:     str               # what to tell of it: done, or why not
+    var bad:      bool              # ... why not
+
+    def __init__(self, query: str):
+        let q: Page_Request = Page_Request("GET", "/h/all", query)
+        self.scenario = q.field("scenario")
+        self.tab = (q.field("tab") if q.field("tab") != "" else "Transactions")
+        self.go = q.field("go")
+        self.detail = (-1 if q.field("detail") == "" else q.number_field("detail", 0))
+        self.fold = q.number_field("fold", 0)
+        self.opened = [k for k in q.field("opened").split("|") if k != ""]
+        self.toggle = q.field("toggle")
+        self.merges = [k for k in q.field("merges").split("|") if k != ""]
+        self.picked = [k for k in q.field("picked").split("|") if k != ""]
+        self.pick = q.field("pick")
+        self.mergename = q.field("mergename")
+        self.pos = q.field("pos")
+        self.tidy = q.field("tidy") != ""
+        self.source = q.field("source")
+        self.target = q.field("target")
+        self.freeze = q.field("freeze")
+        self.cancel = q.field("cancel") != ""
+        self.popup = Popup(self.source, self.target, q.field("date"), q.field("what"), q.field("amount"), q.field("vat"))
+        self.step = q.number_field("step", -1)
+        self.playing = q.field("playing") == "1"
+        self.only = q.field("only")
+        self.slide = q.number_field("slide", -1)
+        self.ex = q.number_field("ex", -1)
+        self.score = q.number_field("score", 0)
+        self.tries = q.number_field("tries", 0)
+        self.help = q.field("help") == "1"
+        self.dc = q.field("dc") == "1"
+        self.act = q.field("act")
+        self.note = ""
+        self.bad = False
+
+    # The settings another scenario starts with: its own grouping, and none of this one's; the tab stays.
+    def fresh(self) -> Settings:
+        var s: Settings = Settings("")
+        s.tab = self.tab
+        return s
+
+    # What to tell: TEXT, done.
+    def tell(self, text: str):
+        self.note = text
+        self.bad = False
+
+    # What to tell: TEXT, why not.
+    def refuse(self, text: str):
+        self.note = text
+        self.bad = True
+
+    # NAMES, with NAME taken out if it was in, put in if it was not.
+    def flipped(self, names: []str, name: str) -> []str:
+        if name in names:
+            return [k for k in names if k != name]
+        return names + [name]
+
+    # The act carried out on the settings, in the books B: the help and the journal shown or hidden,
+    # a group opened or closed, accounts picked and merged, a tab chosen, an account frozen. The
+    # exercise and the replay follow, once the books are grouped.
+    def act_on(self, b: Books):
+        if self.act == "help":
+            self.help = not self.help
+        if self.act == "dc":
+            self.dc = not self.dc
+        if self.toggle != "":
+            self.opened = self.flipped(self.opened, self.toggle)
+        if self.act == "close_groups":
+            self.opened = []
+            self.merges = []
+        if self.pick != "" and has_account(b, self.pick):
+            self.picked = self.flipped(self.picked, self.pick)
+        if self.act == "merge":
+            self.merge(b)
+        if self.go != "":
+            self.tab = self.go
+        if self.tidy:
+            self.pos = ""
+        if self.freeze != "":
+            self.source = ("" if self.source == self.freeze else self.freeze)
+            self.target = ""
+        if self.cancel or not has_account(b, self.source) or not has_account(b, self.target) or self.source == self.target:
+            self.target = ""
+        if not has_account(b, self.source):
+            self.source = ""
+
+    # The accounts picked merged into a group named as asked, or why not.
+    def merge(self, b: Books):
+        let name: str = self.mergename.strip()
+        var trouble: str = ""
+        if len(self.picked) < 2:
+            trouble = "Shift-click two accounts or more, then merge them."
+        elif name == "":
+            trouble = "Name the merged accounts."
+        elif "~" in name or "|" in name:
+            trouble = "The name has no ~ or | in it."
+        elif len([q for q in self.picked if kind_of(b, q) != kind_of(b, self.picked[0])]) > 0:
+            trouble = "Merge accounts of one kind only: assets, liabilities, equity, revenue or expenses."
+        elif has_account(b, name) or name in [m.split("~")[0] for m in self.merges]:
+            trouble = f"There is already an account or group called {name}."
+        if trouble != "":
+            self.refuse(trouble)
+            return
+        self.merges.append(name + "~" + "~".join(self.picked))
+        self.picked = []
+        self.opened = []
+        self.tell("")
+
+    # The exercise, in the books B: started, stopped, or the arrow drawn checked against the
+    # transaction asked for, which is EX. Not while the books are GROUPED, nor when they are empty.
+    def exercise(self, b: Books, grouped: bool):
+        let n: int = len(b.entries)
+        if self.act == "exercise" and n > 0 and not grouped:
+            self.ex = 0
+            self.score = 0
+            self.tries = 0
+            self.source = ""
+            self.target = ""
+            self.tell("Draw the arrow for the transaction below: click the account the money leaves, then drag to the one it reaches.")
+        elif self.act == "stopex" and self.ex >= 0:
+            self.tell(f"Exercise stopped: {self.score} right at the first try.")
+            self.ex = -1
+            self.act = "all"            # all the transactions shown again
+        if grouped or n == 0:
+            self.ex = -1
+        if self.ex < 0:
+            return
+        self.ex = min(self.ex, n)
+        var solved: bool = False
+        if self.act == "answer" and self.ex < n:
+            self.tell(f"The answer: {posting_text(b.entries[self.ex])}.")
+            solved = True
+            self.source = ""
+            self.target = ""
+        elif self.source != "" and self.target != "" and self.ex < n:
+            let e: Entry = b.entries[self.ex]
+            if moves(e, self.source, self.target):
+                if self.tries == 0:
+                    self.score += 1
+                self.tell(f"Right: money leaves {self.source} and reaches {self.target}. The transaction did {posting_text(e)}.")
+                solved = True
+            else:
+                self.tries += 1
+                if moves(e, self.target, self.source):
+                    self.refuse("Other way round: the arrow goes from the account the money leaves to the one it reaches.")
+                else:
+                    self.refuse(f"Not {self.source} to {self.target}. Which account gives, and which one receives?" + (" Or press Show the answer." if self.tries >= 2 else ""))
+            self.source = ""
+            self.target = ""
+        if solved:
+            self.ex += 1
+            self.tries = 0
+            if self.ex >= n:
+                self.note = self.note + f" That was the last one: {self.score} right at the first try, out of {n}."
+        self.act = ""
+
+    # The replay, in the books B: STEP moved by Previous, Next, Play's tick or the date slider, or
+    # all shown again. In the exercise, the transactions before the one asked for are shown.
+    def replay(self, b: Books):
+        self.step = min(self.step, len(b.entries) - 1)
+        if not has_account(b, self.only):
+            self.only = ""
+        if self.ex >= 0:
+            self.step = self.ex - 1
+            self.only = ""
+            self.playing = False
+            return
+        if self.act in ["next", "prev", "play"] and self.source != "":      # a frozen account: only its transactions are replayed
+            self.only = self.source
+            self.source = ""
+            self.target = ""
+        let r: Replay = Replay(b, self.only)
+        if self.act == "all":
+            self.step = -1
+            self.playing = False
+            self.only = ""
+        elif self.act == "prev" or self.act == "next":
+            self.playing = False
+            let i: int = r.by(self.step, (1 if self.act == "next" else -1))
+            if i >= 0:
+                self.step = i
+        elif self.act == "play":
+            if len(r.found) > 0:
+                if self.step < 0 or self.step >= r.found[len(r.found) - 1] or (self.only != "" and self.step not in r.found):
+                    self.step = r.found[0]
+                self.playing = True
+        elif self.act == "pause":
+            self.playing = False
+        elif self.act == "tick":
+            if self.playing:
+                let next: int = r.by(self.step, 1)
+                if next > self.step:
+                    self.step = next
+                else:
+                    self.playing = False
+        elif self.slide >= 0 and self.slide < len(r.days) and self.slide != r.position(self.step):
+            self.playing = False
+            self.step = r.last_on(self.slide)
+
+    # What to tell of the frozen account, the exercise, or how to freeze one.
+    def hint(self) -> str:
+        let exercising: bool = self.ex >= 0
+        if self.source == "":
+            if exercising:
+                return "Click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches."
+            return ("To record a transaction, click the account the money leaves: it freezes. Then drag an arrow from it to the account the money reaches." if self.help else "")
+        let frozen: str = f"{self.source} is frozen: drag an arrow from it to the account the money reaches. Click {self.source} again to let it go."
+        return (frozen if exercising else frozen + " Play, Previous and Next replay its transactions alone.")
+
+# ---- What the page shows ----
+
+# The books B as the settings S show them, the act carried out: grouped, the first COUNT
+# transactions drawn, the one replayed highlighted.
+class View:
+    var b:      Books
+    var s:      Settings            # as the act left them: they go back into the form #state
+    var groups: Grouping
+    var replay: Replay              # the transactions replayed: of the account s.only, or all
+    var count:  int                 # the transactions shown: the first COUNT
+    var drawn:  Graph               # the graph drawn: the books after them, grouped
+    var whole:  Graph               # ... after all of them: where the accounts are placed
+    var books:  Graph               # the books after them, not grouped: the tabs
+    var now_arrows:   []str         # the arrows of the transaction replayed: "source\ttarget"
+    var now_accounts: []str         # ... and its accounts
+    var year:   Year_End            # the closing of the year
+
+    def __init__(self, b: Books, s: Settings):
+        self.b = b
+        self.s = s
+        self.s.act_on(b)
+        self.groups = Grouping(b, self.s.detail, self.s.fold, self.s.opened, self.s.merges)
+        self.s.exercise(b, len(self.groups.names) > 0)
+        self.s.replay(b)
+        self.replay = Replay(b, self.s.only)
+        let n: int = len(b.entries)
+        self.count = (self.s.ex if self.s.ex >= 0 else (n if self.s.step < 0 else self.s.step + 1))
+        self.drawn = graph_of(self.groups.first(self.count))
+        self.whole = (self.drawn if self.count == n else graph_of(self.groups.books))
+        var first: Books = b
+        first.entries = b.entries[:self.count]
+        self.books = graph_of(first)
+        self.now_arrows = []
+        self.now_accounts = []
+        if self.s.step >= 0:
+            let e: Entry = b.entries[self.s.step]
+            let kept: []Posting = self.groups.mapped(e)
+            self.now_accounts = [q.account for q in kept]
+            if len(kept) >= 2:
+                var one: Books = self.groups.books
+                one.entries = [Entry(e.date, e.what, kept)]
+                one.ids = [0]
+                self.now_arrows = [f.source.name + "\t" + f.target.name for f in graph_of(one).flows]
+        self.year = Year_End(b)
+
+    # Whether the transaction asked for in the exercise is there: not after the last one.
+    def asking(self) -> bool:
+        return self.s.ex >= 0 and self.s.ex < len(self.b.entries)
+
+    # Whether the year can be closed: not in the exercise nor the replay, and some cost or revenue
+    # account has a balance.
+    def can_close(self) -> bool:
+        return self.s.ex < 0 and self.s.step < 0 and len(self.year.entries) > 0
+
+    # What the Play button plays.
+    def play_label(self) -> str:
+        if self.s.source != "":
+            return f"Play {self.s.source}'s transactions"
+        if self.s.only != "":
+            return f"Play {self.s.only}'s transactions"
+        return "Play the transactions"
+
+    # What the exercise's caption says.
+    def exercise_caption(self) -> str:
+        let n: int = len(self.b.entries)
+        if self.asking():
+            return f"Exercise: transaction {self.s.ex + 1} of {n}, {self.b.entries[self.s.ex].date}, {self.s.score} right so far"
+        return f"Exercise finished: {self.s.score} right at the first try, out of {n}"

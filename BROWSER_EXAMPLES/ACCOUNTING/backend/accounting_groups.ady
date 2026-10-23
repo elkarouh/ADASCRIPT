@@ -1,0 +1,207 @@
+#!/usr/bin/env ady2nim
+"""accounting_groups -- big books drawn with fewer boxes: their accounts grouped
+
+A chart of a few hundred accounts is too many boxes for one drawing. The page (accounting_page_gui.ady)
+draws a group in their place, of three kinds:
+
+    by number   the accounts whose numbers start with the same digits, of one kind: "61… Rent +4"
+    folded      the quiet ones, in fewer transactions than the page says, one box per kind
+    merged      the accounts the reader shift-clicked, and named
+
+A group is drawn as an account of its own, and the transactions between its accounts are not drawn
+at all. A click on a group opens it: its accounts are drawn again, each as itself. The same idea as
+the JavaScript page had, here on the server.
+"""
+from backend/accounting_model import Account, Cents_T, Entry, Graph, Posting
+from backend/accounting_gui import money, account_tip
+from backend/books_text import AccountRow, Books, has_account, kind_of, kind_text
+
+# The groups of the books B: the books as they are drawn, with a group in place of its accounts.
+class Grouping:
+    var whole:   Books                  # the books as they are
+    var books:   Books                  # ... as they are drawn
+    var detail:  int                    # the digits the accounts are grouped by; 0: not by number
+    var merges:  []str                  # the groups the reader made: "name~account~account", ...
+    var names:   []str                  # the groups
+    var keys:    []str                  # ... each one's key: "61/4" (digits and kind), "q/4" (folded), "m/name" (merged)
+    var members: []str                  # ... each one's accounts, a line each
+    var from_names: []str               # an account in a group ...
+    var to_names:   []str               # ... and the group's name
+
+    # The books B grouped by the first DETAIL digits of the account numbers (-1: the page picks),
+    # with the accounts in fewer than FOLD transactions folded (0: none), the reader's MERGES, and
+    # the groups whose keys are OPENED drawn as their accounts again.
+    def __init__(self, b: Books, detail: int, fold: int, opened: []str, merges: []str):
+        self.whole = b
+        self.books = b
+        self.merges = merges
+        self.names = []
+        self.keys = []
+        self.members = []
+        self.from_names = []
+        self.to_names = []
+        self.detail = (self.picked_detail() if detail < 0 else detail)
+        if self.detail > 0 or fold > 0 or len(merges) > 0:
+            self.group(fold, opened)
+
+    # The first DIGITS of NUMBER: all of it when it is no longer.
+    def prefix(self, number: str, digits: int) -> str:
+        return (number[:digits] if len(number) > digits else number)
+
+    # The group by number account R is in, grouped by DIGITS: the prefix and the kind, "61/4".
+    def key_at(self, r: AccountRow, digits: int) -> str:
+        return self.prefix(r.number, digits) + "/" + str(int(r.kind))
+
+    # How many boxes grouping by DIGITS leaves.
+    def groups_at(self, digits: int) -> int:
+        var keys: []str = []
+        for r in self.whole.accounts:
+            let k: str = self.key_at(r, digits)
+            if k not in keys:
+                keys.append(k)
+        return len(keys)
+
+    # The digits of the longest account number: how far the accounts can be grouped.
+    def digits(self) -> int:
+        var most: int = 0
+        for r in self.whole.accounts:
+            most = max(most, len(r.number))
+        return most
+
+    # What the page picks: a big chart (over forty accounts) is grouped to the longest prefix that
+    # leaves about thirty boxes; a small one is not.
+    def picked_detail(self) -> int:
+        if len(self.whole.accounts) <= 40:
+            return 0
+        var best: int = 1
+        for d in range(1, 7):
+            if self.groups_at(d) <= 30:
+                best = d
+        return best
+
+    # Which of the reader's merges has the account NAME, or -1.
+    def merge_of(self, name: str) -> int:
+        for m in range(len(self.merges)):
+            if name in self.merges[m].split("~")[1:]:
+                return m
+        return -1
+
+    # The group each account goes in: its key, or "" for none; a merge first, then the fold, then the number.
+    def keys_of(self, fold: int) -> []str:
+        var counts: []int = [0 for r in self.whole.accounts]       # the transactions each account is in
+        for e in self.whole.entries:
+            for p in e.postings:
+                for i in range(len(self.whole.accounts)):
+                    if self.whole.accounts[i].name == p.account:
+                        counts[i] += 1
+        var keys: []str = []
+        for i in range(len(self.whole.accounts)):
+            let r: AccountRow = self.whole.accounts[i]
+            let made: int = self.merge_of(r.name)
+            if made >= 0:
+                keys.append("m/" + self.merges[made].split("~")[0])
+            elif fold > 0 and counts[i] < fold:
+                keys.append("q/" + str(int(r.kind)))
+            elif self.detail > 0:
+                keys.append(self.key_at(r, self.detail))
+            else:
+                keys.append("")
+        return keys
+
+    # The groups made: an account alone under its key, or in a group OPENED, is drawn as itself.
+    def group(self, fold: int, opened: []str):
+        let keys: []str = self.keys_of(fold)
+        var seen: []int = []                # the accounts listed in each group's members, twelve at most
+        self.books.accounts = []
+        for i in range(len(self.whole.accounts)):
+            let r: AccountRow = self.whole.accounts[i]
+            let n: int = keys.count(keys[i])
+            if keys[i] == "" or n == 1 or keys[i] in opened:
+                self.books.accounts.append(r)
+            else:
+                if keys[i] not in self.keys:
+                    var name: str = f"{self.prefix(r.number, self.detail)}… {r.name} +{n - 1}"
+                    var number: str = self.prefix(r.number, self.detail)
+                    if keys[i].startswith("q/"):
+                        name = f"{n} quiet {kind_text(r.kind)}"
+                        number = "999999"
+                    elif keys[i].startswith("m/"):
+                        name = keys[i][2:]
+                    self.keys.append(keys[i])
+                    self.names.append(name)
+                    self.members.append("")
+                    seen.append(0)
+                    self.books.accounts.append(AccountRow(number, r.kind, name))
+                let at: int = self.keys.index(keys[i])
+                if seen[at] < 12:
+                    let line: str = f"{r.number} {r.name}"
+                    self.members[at] = (line if self.members[at] == "" else self.members[at] + "\n" + line)
+                elif seen[at] == 12:
+                    self.members[at] = self.members[at] + "\n..."
+                seen[at] += 1
+                self.from_names.append(r.name)
+                self.to_names.append(self.names[at])
+        self.books = self.first(len(self.whole.entries))
+
+    # Entry E's postings, each account in a group put in it; the ones that add up to nothing gone.
+    def mapped(self, e: Entry) -> []Posting:
+        var merged: []Posting = []
+        for p in e.postings:
+            var n: str = p.account
+            for i in range(len(self.from_names)):
+                if self.from_names[i] == p.account:
+                    n = self.to_names[i]
+            var at: int = -1
+            for k in range(len(merged)):
+                if merged[k].account == n:
+                    at = k
+            if at >= 0:
+                merged[at].amount = Cents_T(int(merged[at].amount) + int(p.amount))
+            else:
+                merged.append(Posting(n, p.amount))
+        return [p for p in merged if int(p.amount) != 0]
+
+    # The books as drawn after their first N transactions: those still between two boxes.
+    def first(self, n: int) -> Books:
+        var out: Books = self.books
+        out.entries = []
+        out.ids = []
+        for i in range(min(n, len(self.whole.entries))):
+            let e: Entry = self.whole.entries[i]
+            let kept: []Posting = self.mapped(e)
+            if len(kept) >= 2:
+                out.entries.append(Entry(e.date, e.what, kept))
+                out.ids.append(0)
+        return out
+
+    # The key of the group NAME, or "" when NAME is an account.
+    def key_of(self, name: str) -> str:
+        for i in range(len(self.names)):
+            if self.names[i] == name:
+                return self.keys[i]
+        return ""
+
+    # What hovering over A in the graph G says: a group lists its accounts.
+    def tip(self, g: Graph, a: Account) -> str:
+        for i in range(len(self.names)):
+            if self.names[i] == a.name:
+                return f"{a.name}: balance {money(a.balance)}\n{self.members[i]}\nClick to open the group"
+        return account_tip(g, a)
+
+    # Why the accounts PICKED cannot be merged under NAME, or "".
+    def merge_trouble(self, picked: []str, name: str) -> str:
+        if len(picked) < 2:
+            return "Shift-click two accounts or more, then merge them."
+        if name == "":
+            return "Name the merged accounts."
+        if "~" in name or "|" in name:
+            return "The name has no ~ or | in it."
+        for q in picked:
+            if kind_of(self.whole, q) != kind_of(self.whole, picked[0]):
+                return "Merge accounts of one kind only: assets, liabilities, equity, revenue or expenses."
+        if has_account(self.whole, name) or self.merge_of(name) >= 0:
+            return f"There is already an account or group called {name}."
+        for m in self.merges:
+            if m.split("~")[0] == name:
+                return f"There is already an account or group called {name}."
+        return ""

@@ -7,7 +7,7 @@ request from a session of its own, and tells every open page of each change, so 
 follows the first. What is the same in all of them is here:
 
     Page_Request    a request as the page sent it: its method, its path, and its fields, read
-                    once from the query and the body ("a=1&b=2")
+                    once from the query and the body ("a=1&b=2"): `field`, `number_field`
     News            the pages following GET /events (server-sent events): `follow` keeps the
                     answer to one open, `tell` writes a message to every one still there
     send_script     a script the page loads, read from a directory
@@ -60,6 +60,14 @@ class Page_Request:
         if key in self.fields:
             return self.fields[key]
         return ""
+
+    # The field KEY as a whole number; OTHERWISE when there is none, or it is not a number.
+    def number_field(self, key: str, otherwise: int) -> int:
+        let text: str = self.field(key)
+        let n: int | !ParseFailure_T = parse_int(text)
+        if n is ParseFailure_T:
+            return otherwise
+        return n
 
 # ---- The pages that follow the changes: GET /events ----
 

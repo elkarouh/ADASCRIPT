@@ -95,6 +95,26 @@ it but do:. Not yet:
       which strings and chars do not have (`&` is wanted). ROI_HTMX's
       `vals_of` built its pairs with an f-string, as commands.ady's `vals` does.
 
+### A method named like a function it calls
+
+- [ ] in a class with a method `entry(self, b) -> Entry | !BookFailure_T`, the
+      line `return entry(date, what, source, target, net)`, a call of the
+      model's function `entry` (which returns an `Entry`), is not wrapped
+      into the union: the call is taken for the method, which already
+      returns one ("got 'Entry' but expected 'Result[...]'"). ACCOUNTING's
+      `Popup` names its method `entry_in` meanwhile.
+
+### A field's type, from another module's class
+
+- [ ] `int(t.amount)` in accounting_gui.ady, `t` a `Transaction` whose
+      `amount` is a `Cents_T`, came out as `t.amount.parseInt()` once
+      another module of the same build (accounting_page_state.ady, which
+      accounting_gui does not import) had a class with a field `amount:
+      str`: the field's type is looked up by its name, across the build.
+      And the .nim made so stays in the cache after the other field is
+      renamed (see the cache above). ACCOUNTING's `Popup` calls the field
+      `howmuch` meanwhile.
+
 ### Narrowing an optional
 
 - [ ] a leaving guard whose `or` mixes other tests with `x is None`:
