@@ -3317,6 +3317,9 @@ def _func_def_to_nim_inner(self, indent=0):
                 # overloaded within the class: the return type depends on the arguments
                 ParserState.proc_return_types[f"?{_cls_ctx}.{name}"] = "ambiguous"
             ParserState.proc_return_types[f"{_cls_ctx}.{name}"] = _ret_type
+            ParserState.proc_return_types[f".{name}"] = _ret_type
+        else:
+            ParserState.proc_return_types[f"def {name}"] = _ret_type
         ParserState.proc_return_types[name] = _ret_type
     # Register param types for call-site Option[T] some() coercion
     if name and params:
@@ -6016,7 +6019,12 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # overloaded within the class: the return type depends on the arguments
             ParserState.proc_return_types[f"?{class_name}.{name}"] = "ambiguous"
         ParserState.proc_return_types[f"{class_name}.{name}"] = _ret_type
-        ParserState.proc_return_types[name] = _ret_type
+        ParserState.proc_return_types[f".{name}"] = _ret_type      # any class's: `x.name()`
+        # The bare name is a function's, when there is one: a method `entry`
+        # whose body calls the function `entry` took the call for itself, and
+        # its result was not wrapped into the union the method returns.
+        if f"def {name}" not in ParserState.proc_return_types:
+            ParserState.proc_return_types[name] = _ret_type
     # Push scope and register params for body translation
     ParserState.symbol_table.push_scope(name or "<method>")
     _param_shadow = _shadow_params([p.split(":")[0].strip() for p in params if ":" in p])
@@ -6111,6 +6119,11 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # its value by value, so `return self.x` does not make self var
             'ok', 'err', 'some', 'of0', 'of1', 'of2', 'of3', 'of4', 'of5',
         }
+        # A field that holds a function: calling it (`self.url_of(c)`) calls
+        # what the field holds, and changes nothing of self.
+        _proc_fields = {
+            _fn for _fn, _ft in ParserState.class_field_types.get(class_name or "", {}).items()
+            if _ft.replace(" ", "").startswith(("proc(", "(")) and ("->" in _ft or "proc" in _ft)}
         def _purity_evidence(body_text):
             """(may_mutate, sibling_calls) for the pure-method fixpoint."""
             may_mutate = bool(
@@ -6120,7 +6133,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             sibling_calls = set()
             for m in _re.finditer(r'self\.(\w+)\s*\(', body_text):
                 callee = m.group(1)
-                if callee in _READONLY_METHODS:
+                if callee in _READONLY_METHODS or callee in _proc_fields:
                     continue
                 if callee in _siblings:
                     sibling_calls.add(callee)
@@ -6162,13 +6175,16 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             arg_calls = {m.group(1) for m in _re.finditer(r'\b(\w+)\(', body_text)
                          if m.group(1) in _siblings}
             _by_value = _by_value | set(_siblings)
-            for m in _re.finditer(r'(\w+)\(\s*self\b', text):
+            # `parse_int(self.value(name))` hands on what a method of self
+            # returned, not self: a value, which no callee can change self
+            # through (the call itself is weighed above, as a sibling's).
+            for m in _re.finditer(r'(\w+)\(\s*self\b(?!(?:\.\w+)+\s*\()', text):
                 # `to_Kilometers_T(self.length())`: the conversion a scaled unit
                 # gets takes its argument by value
                 if m.group(1) not in _by_value and not (
                         m.group(1).startswith("to_") and m.group(1).endswith("_T")):
                     may_mutate = True
-            if _re.search(r'(?:[\])]\(|,)\s*self\b', text):
+            if _re.search(r'(?:[\])]\(|,)\s*self\b(?!(?:\.\w+)+\s*\()', text):
                 may_mutate = True
             return may_mutate, sibling_calls, arg_calls
 

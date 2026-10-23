@@ -42,18 +42,6 @@ it but do:. Not yet:
       the alias's type arguments into `publish`'s generic parameter types.
       DIJKSTRA_HTMX's liaison has a method `news` for it meanwhile.
 
-### Table literals the record or the return gives the type of
-
-- [ ] `Command(READ, DIAGRAM, {:})`: an empty `{:}` as a record's field in
-      its constructor comes out as `initTable()` with no types, and Nim
-      cannot instantiate it. The field's type, `{str}str`, says which.
-- [ ] with `ady2nim js`, a table literal whose values are calls
-      (`{"pick": node.data("name")}`, `{"a": str(n)}`) comes out as
-      `js{...}`, a JsObject, not a Table, where a `{str}str` is wanted: as
-      a method's argument, or returned (C is right; `{"a": x}` is right).
-      SVG_NODE_EDITOR's node_editor_commands.ady and ACCOUNTING's
-      accounting_js_events.ady put such values in a typed `let` meanwhile.
-
 ### An async method
 
 - [ ] `async def follow(self, ...)` in a class is left out of the Nim
@@ -62,36 +50,12 @@ it but do:. Not yet:
       (Nim's async procs cannot take `var` parameters, so `self` would have
       to be a ref). page_server's `News.follow` is not async meanwhile.
 
-### A method that reads only, taken for one that changes
-
-- [ ] in a generic class, `let n: int | !ParseFailure_T = parse_int(self.value(name))`
-      makes the method's `self` a `var`, though nothing is changed: a
-      `let` command then cannot call it ("expression is immutable"). The
-      same line with `self.get()`, or outside a generic class, is right;
-      the method's name, `value`, may be what is taken for a write.
-      commands.ady's `number_value` and `spot` read the field into a
-      `let` first meanwhile.
-- [ ] a field that holds a function, called (`self.url_of(c)`), is taken
-      for a call of a method that may change self: the method gets a `var
-      self`, and so does every method that calls it ("'page' is immutable").
-      server_page.ady's `sending` reads the field into a `let` first
-      meanwhile.
-
 ### A str joined with a char
 
 - [ ] `vals += ("" if done else ", ") + '"' + name`: a conditional
       expression in parentheses, then `+` a char, comes out as Nim's `+`,
       which strings and chars do not have (`&` is wanted). ROI_HTMX's
       `vals_of` built its pairs with an f-string, as commands.ady's `vals` does.
-
-### A method named like a function it calls
-
-- [ ] in a class with a method `entry(self, b) -> Entry | !BookFailure_T`, the
-      line `return entry(date, what, source, target, net)`, a call of the
-      model's function `entry` (which returns an `Entry`), is not wrapped
-      into the union: the call is taken for the method, which already
-      returns one ("got 'Entry' but expected 'Result[...]'"). ACCOUNTING's
-      `Popup` names its method `entry_in` meanwhile.
 
 ### Narrowing an optional
 

@@ -1675,6 +1675,8 @@ def to_nim(self):
     ret_type = getattr(ParserState, "_current_return_type", "")
     val = _coerce_string_to_char(val, ret_type.lstrip(": ").strip())
     val = _coerce_char_to_string(val, ret_type.lstrip(": ").strip())
+    # a dict literal returned where a {K}V is: a Table, on JS too
+    val = hek_nim_expr._js_table_literal(val, ret_type)
     # An inline tuple return type that merely *contains* an Option --
     # `def f() -> (int, ?S_T)` -- is not itself an Option, and wrapping the
     # whole tuple in some() typed nothing: `some((1, nil))` is

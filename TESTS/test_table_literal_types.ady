@@ -1,0 +1,32 @@
+#!/usr/bin/env ady2nim
+# test_table_literal_types.ady -- a table literal takes the type the place it goes to gives.
+#
+# An empty `{:}` given to a record's {str}str field is an empty table of strings, not an
+# `initTable()` with no types, which Nim cannot instantiate. And under `ady2nim js` a literal
+# whose values are calls, given to a class's constructor, to a routine or returned where a
+# {str}str is wanted, is a Table, not a JavaScript object.
+#
+#   ady2nim TESTS/test_table_literal_types.ady -r
+
+type Cmd is record:
+    verb:   str
+    fields: {str}str
+
+class Box:
+    var fields: {str}str
+    def __init__(self, fields: {str}str):
+        self.fields = fields
+    def count(self) -> int:
+        return len(self.fields)
+
+def made(n: int) -> {str}str:
+    return {"a": str(n)}
+
+def count_of(fields: {str}str) -> int:
+    return len(fields)
+
+let c: Cmd = Cmd("GET", {:})
+let b: Box = Box({"pick": str(4), "x": "1"})
+assert len(c.fields) == 0 and b.count() == 2
+assert made(2)["a"] == "2"
+print len(c.fields), b.count(), count_of({"n": str(3)}), len(made(2))

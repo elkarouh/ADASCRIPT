@@ -1071,6 +1071,10 @@ def _union_type_of(expr_str):
             return f"Result[{_m.group(1)}, ParseFailure_T]"
     if _called:
         _rt = _proc_ret_nim(_called)
+        # `x.entry()` is a method's call, `entry(n)` the function's, when a
+        # function and a method share the name: each has its own type
+        if _re.search(r"\.\s*" + _re.escape(_called) + r"\s*\([^()]*(?:\([^()]*\)[^()]*)*\)\s*$", expr_str):
+            _rt = getattr(ParserState, "proc_return_types", {}).get("." + _called, "") or _rt
         if _rt.startswith(("Result[", "OneOf")):
             return _rt
     if "[" in expr_str or "." in expr_str:
@@ -4002,6 +4006,11 @@ def to_nim(self, prec=None):
                         if _kw and _kw.group(1) in named_fields:
                             fn, av = _kw.group(1), _kw.group(2)
                         ftype = ftype_map.get(fn, "")
+                        # A {K}V field given `{:}` or, on JS, a dict literal: the
+                        # Table of the field's own types, as by name above
+                        av = _js_table_literal(av, ftype)
+                        if av == "initTable()" and ftype.startswith("Table["):
+                            av = f"initTable[{ftype[6:-1]}]()"
                         # An Option field given None or a plain value is lifted, as
                         # a typed declaration does
                         if ftype.startswith("Option["):

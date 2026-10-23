@@ -1,0 +1,33 @@
+#!/usr/bin/env ady2nim
+# test_pure_calls.ady -- a method that only reads takes self as it is, so a `let` can call it:
+# one that calls a field holding a function (`self.namer(x)`), and one that hands on what a
+# method of self returned (`parse_int(self.value(name))`). Both took `var self` ("'b' is immutable").
+#
+#   ady2nim TESTS/test_pure_calls.ady -r
+
+class Box[T]:
+    var namer: (T) -> str
+    var fields: {str}str
+    def __init__(self, namer: (T) -> str):
+        self.namer = namer
+        self.fields = {"n": "4"}
+    def value(self, name: str) -> str:
+        if name in self.fields:
+            return self.fields[name]
+        return ""
+    def number(self, name: str) -> int:
+        let n: int | !ParseFailure_T = parse_int(self.value(name))
+        if n is ParseFailure_T:
+            return -1
+        return n
+    def name_of(self, x: T) -> str:
+        return self.namer(x)
+    def twice(self, x: T) -> str:
+        return self.name_of(x) + self.name_of(x)
+
+def show(i: int) -> str:
+    return f"<{i}>"
+
+let b: Box[int] = Box[int](show)
+assert b.twice(3) == "<3><3>" and b.number("n") == 4 and b.number("none") == -1
+print b.twice(3), b.number("n")

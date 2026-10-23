@@ -1,0 +1,33 @@
+#!/usr/bin/env ady2nim
+# test_method_named_like_function.ady -- a method calls the function of its own name.
+#
+# Form.entry returns `int | !Bad_T`, and returns what the function entry, an int, gives: the
+# call is the function's, and its result is wrapped into the union ("got 'int' but expected
+# 'Result[...]'" when the call was taken for the method).
+#
+#   ady2nim TESTS/test_method_named_like_function.ady -r
+
+type Bad_T is record:
+    why: str
+
+def entry(n: int) -> int:
+    return n * 2
+
+class Form:
+    var text: str
+    def __init__(self, text: str):
+        self.text = text
+    def entry(self) -> int | !Bad_T:
+        if self.text == "":
+            return Bad_T("empty")
+        return entry(len(self.text))
+
+let f: Form = Form("abc")
+let e: int | !Bad_T = f.entry()
+assert e is int and e == 6
+let none: int | !Bad_T = Form("").entry()
+assert none is Bad_T
+if e is Bad_T:
+    print e.why
+else:
+    print e
