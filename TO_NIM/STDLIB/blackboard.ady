@@ -13,24 +13,30 @@ A PublishChannel is a named channel. Subscribers register a callback; `publish` 
 event to every subscriber, in the order they subscribed, and returns how many took it
 without failing. Nothing is queued: when `publish` returns, every subscriber has run.
 
-The channel is generic in the event it carries, so what travels is a record or an enum,
-checked at compile time, not a bag of keyword arguments:
+The channel is generic in two types: the name of the channel, and the event it carries.
+A blackboard has a handful of channels, all known when it is written, so a channel is named
+by a value of an enum of the blackboard's own, not by a string. The enum is then the list of
+the blackboard's channels, in one line, for the reader to see; a misspelt channel is a
+compile error; and a subscriber that hears several channels can `case` on which. The event
+is a record or an enum, checked at compile time, not a bag of keyword arguments:
 
     from blackboard import PublishChannel
+
+    type Channel_T is enum NODES, EDGES          # the blackboard's channels
 
     type Change is record:
         kind: str            # "create", "update" or "delete"
         key: str
 
-    def on_change(channel: str, event: Change):
-        print channel, event.kind, event.key
+    def on_change(channel: Channel_T, event: Change):
+        print channel, event.kind, event.key     # NODES create A
 
-    var nodes: PublishChannel[Change] = PublishChannel[Change]("nodes")
+    var nodes: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](NODES)
     let id: int = nodes.subscribe(on_change)
     nodes.publish(Change("create", "A"))
     nodes.unsubscribe(id)
 
-A callback takes the channel's name and the event. `subscribe` answers a number, the
+A callback takes the channel's name (the enum's value) and the event. `subscribe` answers a number, the
 subscription's id, and `unsubscribe` takes that number back: functions are not compared,
 so the id is what names a subscription (the same callback subscribed twice is called twice,
 under two ids). A callback that raises is skipped and does not stop the others; `publish`
@@ -42,17 +48,17 @@ History is off by default. `keep_history = True` keeps the last `max_history` ev
 """
 
 
-class PublishChannel[Event_T]:
-    var name: str
+class PublishChannel[Channel_T, Event_T]:
+    var name: Channel_T
     var ids: []int
-    var callbacks: [](str, Event_T) -> None
+    var callbacks: [](Channel_T, Event_T) -> None
     var next_id: int
     var history: []Event_T
     var keep_history: bool
     var max_history: int
     var raise_errors: bool
 
-    def __init__(self, name: str):
+    def __init__(self, name: Channel_T):
         self.name = name
         self.ids = []
         self.callbacks = []
@@ -62,7 +68,7 @@ class PublishChannel[Event_T]:
         self.max_history = 1000
         self.raise_errors = False
 
-    def subscribe(self, callback: (str, Event_T) -> None) -> int:
+    def subscribe(self, callback: (Channel_T, Event_T) -> None) -> int:
         let id: int = self.next_id
         self.next_id += 1
         self.ids.append(id)
@@ -84,7 +90,7 @@ class PublishChannel[Event_T]:
                 self.history = self.history[1:]
         var notified: int = 0
         # a copy, so a callback may unsubscribe itself while it runs
-        let current: [](str, Event_T) -> None = self.callbacks[:]
+        let current: [](Channel_T, Event_T) -> None = self.callbacks[:]
         for callback in current:
             try:
                 callback(self.name, event)

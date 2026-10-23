@@ -3,7 +3,7 @@
 from graphs import shortest_route
 from blackboard import PublishChannel      # its subscribe, for session.nodes.subscribe below
 from backend/dijkstra_model import Edge_T, Network, Refusal_T, sample, uses
-from backend/dijkstra_events_gui import Change, Session
+from backend/dijkstra_events_gui import Channel_T, Change, Session
 from backend/dijkstra_commands import Command, command_of, method_of, url_of, create_node, update_node, move_node, is_draft, delete_node, create_edge, update_edge, delete_edge, read_network
 from drawing import Drawing_Pixel_T, Spot_T
 
@@ -90,7 +90,7 @@ assert "<pre id=\"network\">node A\n" in session.answer("GET", "/all", "") and "
 
 # ---- what changed, as a subscriber hears it: published only when the request went through ----
 var heard: []str = []
-def hear(channel: str, change: Change):
+def hear(channel: Channel_T, change: Change):
     heard.append(f"{channel} {change.kind} {change.key}")
 var told: Session = Session("")
 told.nodes.subscribe(hear)
@@ -103,8 +103,8 @@ told.answer("PUT", "/edges", "a=A&b=H&cost=2")
 told.answer("PUT", "/nodes", "name=H&x=300&y=100")
 told.answer("DELETE", "/nodes", "name=H")                # its edge first, then the node
 told.answer("POST", "/reset", "")
-assert heard == ["nodes CREATE H", "edges CREATE A H", "edges UPDATE A H", "nodes UPDATE H",
-                 "edges DELETE A H", "nodes DELETE H", "edges UPDATE ", "nodes UPDATE "]
+assert heard == ["NODES CREATE H", "EDGES CREATE A H", "EDGES UPDATE A H", "NODES UPDATE H",
+                 "EDGES DELETE A H", "NODES DELETE H", "EDGES UPDATE ", "NODES UPDATE "]
 
 # a change that could not be kept: every page says so, until one is
 var stuck: Session = Session("/nowhere/graph.txt")

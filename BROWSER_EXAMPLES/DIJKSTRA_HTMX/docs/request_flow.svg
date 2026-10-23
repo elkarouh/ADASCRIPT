@@ -54,7 +54,7 @@
 <text x="585.0" y="334.0" text-anchor="middle" font-size="13" fill="#52606d"  >(first)</text>
 <rect x="260" y="260" width="190" height="100" rx="8" fill="#fff" stroke="#9aa5b1" stroke-width="1.5"/>
 <text x="355.0" y="296.0" text-anchor="middle" font-size="15" fill="#1f2933" font-weight="700" font-family="ui-monospace, Menlo, Consolas, monospace">tell</text>
-<text x="355.0" y="315.0" text-anchor="middle" font-size="13" fill="#52606d"  >data: nodes DELETE H</text>
+<text x="355.0" y="315.0" text-anchor="middle" font-size="13" fill="#52606d"  >data: NODES DELETE H</text>
 <text x="355.0" y="334.0" text-anchor="middle" font-size="13" fill="#52606d"  >to every GET /events</text>
 <line x1="990" y1="310" x2="950" y2="310" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>
 <line x1="760" y1="310" x2="680" y2="310" stroke="#52606d" stroke-width="1.6" marker-end="url(#a)"/>

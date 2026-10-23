@@ -297,7 +297,7 @@ The routes are listed in a comment above `answer`, in the class. **Commands in, 
 out.** The read, `GET /all`, answers the whole page, which htmx swaps into `#all`. A
 command (POST, PUT, DELETE) answers only whether it went through: the paragraph
 `#problem`, empty, or saying why not. When it went through, each change is published
-on a channel (stdlib's `blackboard.ady`): `nodes` or `edges` carries a `Change`, such as
+on a channel (stdlib's `blackboard.ady`): `NODES` or `EDGES` carries a `Change`, such as
 `CREATE H`. The Session does not know who listens. The server does: `keep` writes the
 network to its file, and `tell` writes the change to every open page (`GET /events`,
 server-sent events), which reads itself again. So every page, the one that made the
@@ -395,18 +395,22 @@ work on one shared problem without talking to each other. It has three parts:
 | The knowledge sources | each reacts to a change, knowing nothing of the others | `keep` writes `graph.txt`; `tell` writes to every open page |
 
 What ties them together is a channel per kind of change, from the standard library's
-`blackboard.ady`:
+`blackboard.ady`. A blackboard has a handful of channels, known when it is written, so
+they are named by an enum of its own, not by strings. The reader sees every channel there is
+in one line, `Channel_T`, and a misspelt channel does not compile.
 
 ```adascript
 from blackboard import PublishChannel
+
+type Channel_T is enum NODES, EDGES
 
 type Change is record:
     kind: Verb_T                        # CREATE, UPDATE or DELETE: the commands' own verbs
     key:  str                           # the node's name, or the edge's two ends; "" for everything
 
 class Session:
-    var nodes: PublishChannel[Change]   # what happened to a node
-    var edges: PublishChannel[Change]   # what happened to an edge
+    var nodes: PublishChannel[Channel_T, Change]    # what happened to a node: NODES
+    var edges: PublishChannel[Channel_T, Change]    # what happened to an edge: EDGES
     ...
         if problem is None:             # only what went through is told
             for ch in node_changes:
@@ -436,7 +440,7 @@ Four rules follow from it:
 The test is a knowledge source too: it subscribes a function that writes down what it
 hears, and checks the list (`tests/test_dijkstra.ady`).
 
-A subscriber is a plain function, `(channel: str, change: Change) -> None`, so what it
+A subscriber is a plain function, `(channel: Channel_T, change: Change) -> None`, so what it
 needs (the session, the open pages) it finds at module level, as `keep` and `tell` do in
 `server.ady`.
 
@@ -446,8 +450,10 @@ The page is built the same way. Its blackboard has two channels, in
 `frontend/dijkstra_js_events.ady`:
 
 ```adascript
-var commands: PublishChannel[Command] = PublishChannel[Command]("commands")  # what the reader asks
-var changes: PublishChannel[str] = PublishChannel[str]("changes")            # what the server says changed
+type Page_Channel_T is enum COMMANDS, CHANGES
+
+var commands: PublishChannel[Page_Channel_T, Command] = PublishChannel[Page_Channel_T, Command](COMMANDS)  # what the reader asks
+var changes: PublishChannel[Page_Channel_T, str] = PublishChannel[Page_Channel_T, str](CHANGES)            # what the server says changed
 ```
 
 Every gesture publishes a command on `commands` (`ask_for`), and nothing else. Who
@@ -467,7 +473,7 @@ only the page is exactly what comes many times a second. `heard` is the liaison'
 other half: it puts what `GET /events` says on `changes`.
 
 ```adascript
-def liaison(channel: str, c: Command):
+def liaison(channel: Page_Channel_T, c: Command):
     if not is_draft(c):
         send(c)
 

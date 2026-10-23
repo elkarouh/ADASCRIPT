@@ -1,7 +1,7 @@
 #!/usr/bin/env ady2nim
 """trading_blackboard.ady -- one channel per kind of event, over stdlib's blackboard.ady
 
-A Blackboard for one symbol holds a PublishChannel for every EventType, indexed by the enum.
+A Blackboard for one symbol holds a PublishChannel for every EventType, indexed and named by the enum.
 `board.publish(kind, ...)` builds the Event (symbol, source, sequence number) and sends it down
 the channel of its kind; `board.subscribe(kind, callback)` listens to one kind. A subscriber
 that fails stops the publisher (raise_errors), so a driving loop fails loudly. Every channel
@@ -9,7 +9,7 @@ keeps its history except PRICE_UPDATE, which fires on every bar and is never rea
 
 The event's payload is a table of strings, which is what every backend can carry; a fixed
 payload (a buy signal with entry_price, stop_loss, ...) is better as a record of its own on
-a PublishChannel[Signal_T] of its own. A GlobalBlackboard is such a channel shared by tickers.
+a PublishChannel[EventType, Signal_T] of its own. A GlobalBlackboard is such a channel shared by tickers.
 """
 
 from blackboard import PublishChannel
@@ -25,18 +25,18 @@ type Event is record:
 
 class Blackboard:
     var symbol: str
-    var channels: [EventType]PublishChannel[Event]
+    var channels: [EventType]PublishChannel[EventType, Event]
     var published: int
 
     def __init__(self, symbol: str, keep_history: bool):
         self.symbol = symbol
         self.published = 0
         for kind in EventType:
-            self.channels[kind] = PublishChannel[Event](f"{kind}")
+            self.channels[kind] = PublishChannel[EventType, Event](kind)
             self.channels[kind].raise_errors = True
             self.channels[kind].keep_history = keep_history and kind != PRICE_UPDATE
 
-    def subscribe(self, kind: EventType, callback: (str, Event) -> None) -> int:
+    def subscribe(self, kind: EventType, callback: (EventType, Event) -> None) -> int:
         return self.channels[kind].subscribe(callback)
 
     def unsubscribe(self, kind: EventType, id: int) -> bool:
@@ -51,7 +51,7 @@ class Blackboard:
     def subscriber_count(self, kind: EventType) -> int:
         return self.channels[kind].subscriber_count()
 
-def on_buy_signal(channel: str, event: Event):
+def on_buy_signal(channel: EventType, event: Event):
     print f"buy signal on {channel}: {event.symbol} from {event.source} at {event.data['entry_price']}"
 
 var board: Blackboard = Blackboard("AAPL", True)

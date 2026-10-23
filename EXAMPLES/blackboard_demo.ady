@@ -3,10 +3,13 @@
 
 The blackboard holds three alarm channels. Each knowledge source subscribes some of its own
 methods to the channels it cares about and knows nothing of the other sources; the publisher
-knows nothing of any source. An alarm is a record, so a source reads its fields by name.
+knows nothing of any source. The channels are named by an enum of the board's own; an alarm is
+a record, so a source reads its fields by name.
 """
 
 from blackboard import PublishChannel
+
+type Channel_T is enum ALARM_CHANNEL_1, ALARM_CHANNEL_2, ALARM_CHANNEL_3
 
 type Alarm is record:
     first: str
@@ -14,23 +17,23 @@ type Alarm is record:
 
 class Blackboard:
     var name: str
-    var alarm_channel_1: PublishChannel[Alarm]
-    var alarm_channel_2: PublishChannel[Alarm]
-    var alarm_channel_3: PublishChannel[Alarm]
+    var alarm_channel_1: PublishChannel[Channel_T, Alarm]
+    var alarm_channel_2: PublishChannel[Channel_T, Alarm]
+    var alarm_channel_3: PublishChannel[Channel_T, Alarm]
 
     def __init__(self, name: str):
         self.name = name
-        self.alarm_channel_1 = PublishChannel[Alarm]("alarm_channel_1")
-        self.alarm_channel_2 = PublishChannel[Alarm]("alarm_channel_2")
-        self.alarm_channel_3 = PublishChannel[Alarm]("alarm_channel_3")
+        self.alarm_channel_1 = PublishChannel[Channel_T, Alarm](ALARM_CHANNEL_1)
+        self.alarm_channel_2 = PublishChannel[Channel_T, Alarm](ALARM_CHANNEL_2)
+        self.alarm_channel_3 = PublishChannel[Channel_T, Alarm](ALARM_CHANNEL_3)
 
 var board: Blackboard = Blackboard("BLACKBOARD")
 
 # Knowledge source 1 listens on channels 1 and 2; source 2 on channels 2 and 3.
-def source_1_accepts(channel: str, alarm: Alarm):
+def source_1_accepts(channel: Channel_T, alarm: Alarm):
     print "source 1 of", board.name, "received:", alarm.first, alarm.second, "on", channel
 
-def source_2_accepts(channel: str, alarm: Alarm):
+def source_2_accepts(channel: Channel_T, alarm: Alarm):
     print "source 2 of", board.name, "received:", alarm.first, alarm.second, "on", channel
 
 board.alarm_channel_1.subscribe(source_1_accepts)

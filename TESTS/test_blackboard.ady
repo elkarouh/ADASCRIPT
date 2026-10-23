@@ -6,6 +6,8 @@
 
 from blackboard import PublishChannel
 
+type Channel_T is enum NODES, ALARMS      # the channels of this blackboard
+
 type Change is record:
     kind: str
     key: str
@@ -13,16 +15,17 @@ type Change is record:
 # What the subscribers saw, in order
 var log: []str = []
 
-def first(channel: str, event: Change):
+def first(channel: Channel_T, event: Change):
     log.append(f"first {channel} {event.kind} {event.key}")
 
-def second(channel: str, event: Change):
+def second(channel: Channel_T, event: Change):
     log.append(f"second {channel} {event.kind} {event.key}")
 
-def broken(channel: str, event: Change):
+def broken(channel: Channel_T, event: Change):
     assert False
 
-var nodes: PublishChannel[Change] = PublishChannel[Change]("nodes")
+var nodes: PublishChannel[Channel_T, Change] = PublishChannel[Channel_T, Change](NODES)
+assert nodes.name == NODES
 assert nodes.subscriber_count() == 0
 assert nodes.publish(Change("create", "A")) == 0     # nobody listening
 
@@ -31,7 +34,7 @@ let id2: int = nodes.subscribe(second)
 assert id1 != id2
 assert nodes.subscriber_count() == 2
 assert nodes.publish(Change("create", "A")) == 2
-assert log == ["first nodes create A", "second nodes create A"]     # subscription order
+assert log == ["first NODES create A", "second NODES create A"]     # subscription order
 
 # unsubscribe by id; a second try, or an unknown id, is False
 assert nodes.unsubscribe(id1)
@@ -39,7 +42,7 @@ assert not nodes.unsubscribe(id1)
 assert not nodes.unsubscribe(99)
 log = []
 assert nodes.publish(Change("delete", "A")) == 1
-assert log == ["second nodes delete A"]
+assert log == ["second NODES delete A"]
 
 # a callback that fails is skipped; the others still run and only the ones that returned count
 nodes.clear_subscribers()
@@ -49,7 +52,7 @@ nodes.subscribe(first)
 nodes.subscribe(broken)
 nodes.subscribe(second)
 assert nodes.publish(Change("update", "B")) == 2
-assert log == ["first nodes update B", "second nodes update B"]
+assert log == ["first NODES update B", "second NODES update B"]
 
 # raise_errors: the failure of a subscriber reaches the publisher
 nodes.raise_errors = True
@@ -74,10 +77,10 @@ assert nodes.history[1].key == "E"
 
 # an event need not be a record: a channel of plain strings
 var seen: []str = []
-def note(channel: str, event: str):
-    seen.append(channel + ":" + event)
-var alarms: PublishChannel[str] = PublishChannel[str]("alarm")
+def note(channel: Channel_T, event: str):
+    seen.append(f"{channel}:{event}")
+var alarms: PublishChannel[Channel_T, str] = PublishChannel[Channel_T, str](ALARMS)
 alarms.subscribe(note)
 alarms.publish("fire")
-assert seen == ["alarm:fire"]
+assert seen == ["ALARMS:fire"]
 print "ok"

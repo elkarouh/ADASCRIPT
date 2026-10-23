@@ -8,13 +8,13 @@ running.
 Commands in, events out. Every request is read back into a Command, the page's own vocabulary
 (dijkstra_commands.ady): Create, Read, Update or Delete, of a node or an edge. A read answers the whole
 page. A change answers only whether it went through: the paragraph #problem, empty, or saying why not.
-When it went through, what it changed is published with the same verbs, one channel per collection:
-`nodes` and `edges` carry a Change (CREATE, UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which
+When it went through, what it changed is published with the same verbs, one channel per collection,
+named by Channel_T: NODES and EDGES carry a Change (CREATE, UPDATE or DELETE, and which one). Whoever must hear of it subscribes -- the server, which
 keeps the network in its file (`keep`) and tells every open page, which then reads itself again --
 and the Session knows none of them:
 
-    def heard(channel: str, change: Change):
-        print channel, change.kind, change.key          # "nodes CREATE H", "edges DELETE A H"
+    def heard(channel: Channel_T, change: Change):
+        print channel, change.kind, change.key          # "NODES CREATE H", "EDGES DELETE A H"
     session.nodes.subscribe(heard)
 
 Relayout and reset are no command on one node or edge: each is its own route, and what it changed is
@@ -28,6 +28,9 @@ from backend/dijkstra_gui import all_text, problem_text
 from backend/dijkstra_request import fields_of, number_of, params_of
 from backend/dijkstra_commands import Command, Verb_T, CREATE, READ, UPDATE, DELETE, NODE, EDGE, NETWORK, command_of, value
 
+# The channels of the server's blackboard: one per collection.
+type Channel_T is enum NODES, EDGES
+
 # What a command changed, as the channels carry it, in the commands' verbs: the node's name, or the
 # edge's two ends ("A B"); "" for everything (relayout, reset), which is read again whole.
 type Change is record:
@@ -40,15 +43,15 @@ class Session:
     var net: Network
     var store: str                      # the file the network is kept in; "" keeps it nowhere
     var unsaved: None | !Refusal_T      # why the last change could not be kept, shown on the page
-    var nodes: PublishChannel[Change]   # what happened to a node
-    var edges: PublishChannel[Change]   # what happened to an edge
+    var nodes: PublishChannel[Channel_T, Change]    # what happened to a node
+    var edges: PublishChannel[Channel_T, Change]    # what happened to an edge
 
     def __init__(self, store: str):
         self.store = store
         let kept: None | !Refusal_T = None
         self.unsaved = kept
-        self.nodes = PublishChannel[Change]("nodes")
-        self.edges = PublishChannel[Change]("edges")
+        self.nodes = PublishChannel[Channel_T, Change](NODES)
+        self.edges = PublishChannel[Channel_T, Change](EDGES)
         self.net = sample()
         if store != "":
             let text: str | !PathFailure_T = Path(store).read_text()

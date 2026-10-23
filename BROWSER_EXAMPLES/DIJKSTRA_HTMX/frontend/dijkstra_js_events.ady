@@ -98,10 +98,13 @@ def set_selected(el: Element_T, lit: bool):
 
 # ---- The page's blackboard: what the reader asks, and what the server says changed ----
 
+# The channels of the page's blackboard.
+type Page_Channel_T is enum COMMANDS, CHANGES
+
 # What the reader asks for, as commands. Every gesture publishes here, and nowhere else.
-var commands: PublishChannel[Command] = PublishChannel[Command]("commands")
-# What the server says changed ("nodes CREATE H"), whichever page changed it.
-var changes: PublishChannel[str] = PublishChannel[str]("changes")
+var commands: PublishChannel[Page_Channel_T, Command] = PublishChannel[Page_Channel_T, Command](COMMANDS)
+# What the server says changed ("NODES CREATE H"), whichever page changed it.
+var changes: PublishChannel[Page_Channel_T, str] = PublishChannel[Page_Channel_T, str](CHANGES)
 commands.raise_errors = True            # a subscriber that fails is a bug: let it show
 changes.raise_errors = True
 
@@ -112,7 +115,7 @@ def ask_for(c: Command):
 # ---- The liaison officer: between the page's blackboard and the server's ----
 
 # A command that is for the server goes there; a draft stays in the browser.
-def liaison(channel: str, c: Command):
+def liaison(channel: Page_Channel_T, c: Command):
     if not is_draft(c):
         send(c)
 
@@ -259,7 +262,7 @@ def moved_cb(node: Element_T, centre: Spot_T, wanted: Spot_T) -> Spot_T:
 
 # A draft of a node's move: the node is drawn where it is asked to be, the page's model keeps the
 # place, and the edges that end at it are drawn again. Nothing goes to the server.
-def follow_mouse(channel: str, c: Command):
+def follow_mouse(channel: Page_Channel_T, c: Command):
     if not is_draft(c) or c.verb != UPDATE or c.thing != NODE:
         return
     let name: str = c.value("name")
@@ -544,11 +547,11 @@ var wire: Wire = Wire()
 
 # ---- What the server says changed ----
 
-# The server tells every open page of each change to the network (GET /events, "nodes CREATE H"),
+# The server tells every open page of each change to the network (GET /events, "NODES CREATE H"),
 # whichever page made it, this one included; each asks for itself again, keeping what its reader
 # picked (#state). Not while a node or a wire is held: what is let go is a change of its own, and
 # its news draws the page again.
-def read_again(channel: str, change: str):
+def read_again(channel: Page_Channel_T, change: str):
     if holding() or wire.linking:
         return
     ask_for(read_network("", False))

@@ -21,7 +21,7 @@ from asynchttpserver nimport HttpHeaders, newHttpHeaders, Request, respond, Http
 from asyncnet nimport AsyncSocket, send, close, isClosed
 from blackboard import PublishChannel
 from backend/dijkstra_gui import shell_text
-from backend/dijkstra_events_gui import Change, Session
+from backend/dijkstra_events_gui import Channel_T, Change, Session
 
 # The session the requests are answered from: main makes it the one that keeps the network in graph.txt.
 var session: Session = Session("")
@@ -40,7 +40,7 @@ async def send_news(client: AsyncSocket, message: str):
         client.close()
 
 # A change, told to every page that follows: subscribed to the session's channels in main.
-def tell(channel: str, change: Change):
+def tell(channel: Channel_T, change: Change):
     let message: str = f"data: {channel} {change.kind} {change.key}\n\n"
     var still: []AsyncSocket = []
     for client in followers:
@@ -50,7 +50,7 @@ def tell(channel: str, change: Change):
     followers = still
 
 # A change, kept: the network written to graph.txt.
-def keep(channel: str, change: Change):
+def keep(channel: Channel_T, change: Change):
     session.keep()
 
 # A script the page loads, from the frontend directory.
