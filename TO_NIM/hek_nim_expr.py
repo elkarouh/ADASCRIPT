@@ -5070,6 +5070,17 @@ def _wrap_option_args(expr):
     m = _re.match(r"^([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
     skip_self = False
     receiver_prefix = ""
+    generic_args = ""
+    if not m:
+        # a generic class's constructor, newCommand_Of[Thing_T](args): the
+        # parameters are newCommand_Of's
+        m = _re.match(r"^([A-Za-z_]\w*)(\[[\w\s,]*\])\((.+)\)$", expr, _re.DOTALL)
+        if m:
+            generic_args = m.group(2)
+            import collections as _col
+            _FakeMatch = _col.namedtuple("_FakeMatch", ["group"])
+            _g1, _g2 = m.group(1), m.group(3)
+            m = _FakeMatch(group=lambda i: (_g1 if i == 1 else _g2))
     if not m:
         # Try method call: obj.method(args)
         m = _re.match(r"^(.+)\.([A-Za-z_]\w*)\((.+)\)$", expr, _re.DOTALL)
@@ -5297,7 +5308,7 @@ def _wrap_option_args(expr):
             new_args.append(kw_prefix + arg)
     if not changed:
         return expr
-    return f"{receiver_prefix}{proc_name}({', '.join(new_args)})"
+    return f"{receiver_prefix}{proc_name}{generic_args}({', '.join(new_args)})"
 
 
 # Nim overloads these for char and for string, with nothing mixed.

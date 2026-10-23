@@ -4,7 +4,8 @@
 # An empty `{:}` given to a record's {str}str field is an empty table of strings, not an
 # `initTable()` with no types, which Nim cannot instantiate. And under `ady2nim js` a literal
 # whose values are calls, given to a class's constructor, to a routine or returned where a
-# {str}str is wanted, is a Table, not a JavaScript object.
+# {str}str is wanted, is a Table, not a JavaScript object; so is one given to a generic class's
+# constructor, by the class's name or an alias of it.
 #
 #   ady2nim TESTS/test_table_literal_types.ady -r
 
@@ -19,6 +20,16 @@ class Box:
     def count(self) -> int:
         return len(self.fields)
 
+class Named_Of[Kind_T]:
+    var kind:   Kind_T
+    var fields: {str}str
+    def __init__(self, kind: Kind_T, fields: {str}str):
+        self.kind = kind
+        self.fields = fields
+
+type Kind_T is enum ONE, TWO
+type Named is Named_Of[Kind_T]
+
 def made(n: int) -> {str}str:
     return {"a": str(n)}
 
@@ -29,4 +40,7 @@ let c: Cmd = Cmd("GET", {:})
 let b: Box = Box({"pick": str(4), "x": "1"})
 assert len(c.fields) == 0 and b.count() == 2
 assert made(2)["a"] == "2"
+let named: Named = Named(TWO, {"n": str(5)})
+let spelled: Named_Of[Kind_T] = Named_Of[Kind_T](ONE, {"n": str(6), "m": "x"})
+assert named.fields["n"] == "5" and len(spelled.fields) == 2
 print len(c.fields), b.count(), count_of({"n": str(3)}), len(made(2))
