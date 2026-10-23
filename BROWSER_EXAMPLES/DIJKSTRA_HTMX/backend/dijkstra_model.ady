@@ -168,9 +168,8 @@ class Network:
     # undirected, so each one is entered both ways.
     def build_graph(self) -> {str}[](float, str):
         var graph: {str}[](float, str)
-        let none: [](float, str) = []
         for n in self.nodes:
-            graph[n.name] = none
+            graph[n.name] = []
         for e in self.edges:
             graph[e.a].append((float(e.cost), e.b))
             graph[e.b].append((float(e.cost), e.a))
