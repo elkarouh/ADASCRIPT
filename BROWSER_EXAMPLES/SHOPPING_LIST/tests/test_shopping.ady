@@ -1,0 +1,22 @@
+#!/usr/bin/env ady2nim
+"""The shopping list's model, with no page and no browser: ady2nim c -r tests/test_shopping.ady"""
+from shopping_model import Shopping_List, Refusal_T
+
+var basket: Shopping_List = Shopping_List()
+assert basket.want("milk") is None
+assert basket.want("bread") is None
+assert basket.want("milk") is Refusal_T
+assert basket.want("  ") is Refusal_T
+assert basket.left() == 2
+
+basket.toggle("milk")
+assert basket.left() == 1
+assert basket.text() == "+ milk\n- bread"
+
+var again: Shopping_List = Shopping_List()
+again.load(basket.text())
+assert again.text() == basket.text()
+
+basket.remove("milk")
+assert basket.text() == "- bread"
+print "shopping: all checks passed"

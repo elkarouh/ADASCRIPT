@@ -2,6 +2,7 @@
 
 | Directory | What it shows |
 |---|---|
+| `SHOPPING_LIST/` | a shopping list in the browser alone, no server: the app of the tutorial in `DOCS/ADASCRIPT_FOR_JAVASCRIPT.md` |
 | `HTML/` | pages written as objects with `html:` blocks: a card drawn as SVG, and a page of widgets with buttons |
 | `DIJKSTRA_HTMX/` | shortest path, with a GUI the server draws and htmx keeps up to date; `backend/` is native, `frontend/` runs in the browser |
 | `ROI_HTMX/` | a return-on-investment diagram in the same shape |

@@ -87,7 +87,9 @@ type Look is record:
     font:             str = ""          # inherit
     font_family:      str = ""          # "sans-serif"
     line_height:      str = ""
+    list_style:       str = ""          # none: a list without its bullets
     text_align:       str = ""
+    text_decoration:  str = ""          # line-through: struck out
     vertical_align:   str = ""
     outline:          str = ""
     user_select:      str = ""          # none: a drag selects no text
@@ -179,7 +181,9 @@ class Style:
             ["padding-left", look.padding_left],
             ["font-family", look.font_family],
             ["line-height", look.line_height],
+            ["list-style", look.list_style],
             ["text-align", look.text_align],
+            ["text-decoration", look.text_decoration],
             ["vertical-align", look.vertical_align],
             ["outline", look.outline],
             ["user-select", look.user_select]]

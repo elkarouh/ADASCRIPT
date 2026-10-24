@@ -140,6 +140,8 @@ BROWSER_EXAMPLES/ACCOUNTING/scenarios/*.kept
 BROWSER_EXAMPLES/ACCOUNTING/frontend/shipped.ady
 BROWSER_EXAMPLES/ACCOUNTING/frontend/frontend_server.js
 BROWSER_EXAMPLES/ACCOUNTING/frontend/accounting_js_events.js
+BROWSER_EXAMPLES/SHOPPING_LIST/shopping_page.js
+BROWSER_EXAMPLES/SHOPPING_LIST/tests/test_shopping
 
 # Built test and editor binaries
 EDITORS/KILO/kilo

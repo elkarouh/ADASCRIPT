@@ -18,6 +18,7 @@ called on its first argument that way):
     node.number("data_x")                       # an attribute, as a number (0.0 if it is not one)
     node.has_class("from")                      # class="node from" -> True
     node.set_html("<b>3</b> done")               # what the element shows, in place of what it showed
+    note.set_text(typed)                        # the same, as plain text: what the reader typed
     label.set_attr("x", "120")                  # change an attribute
     form.fill("x", "120")                       # put a value in the form's input named x
     form.field("pos")                           # and read one
@@ -147,6 +148,11 @@ def text(node: Element_T) -> str:
 # the page's own markup, so what the reader typed must not go into it as it is.
 def set_html(node: Element_T, html: str):
     Element(node).innerHTML = cstring(html)
+
+# Put TEXT in NODE, in place of what it held, as text: what the reader typed shows as typed, a <
+# included, and is never read as markup.
+def set_text(node: Element_T, text: str):
+    Element(node).textContent = cstring(text)
 
 # Whether NODE has the CSS class WORD: class="node from" holds two.
 def has_class(node: Element_T, word: str) -> bool:

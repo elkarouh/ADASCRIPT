@@ -1,0 +1,64 @@
+#!/usr/bin/env ady2nim
+#ady2nim-args js
+"""shopping_page -- the shopping list in the browser: ady2nim js shopping_page.ady, then open index.html.
+
+The script draws the page, listens to the reader's clicks and keys, changes the list, keeps it in
+the browser's storage, and draws the list again. No server: the page works opened as a file.
+"""
+from browser import Element_T, Event_T, Click_T, page, element, set_html, set_text, listen, click_of, on, data, field, fill, key_of
+from store import Store
+from shopping_model import Shopping_List, Refusal_T
+from shopping_view import page_view
+
+# The list, and where it is kept between visits: the browser's storage, under "shopping".
+var basket: Shopping_List = Shopping_List()
+var kept: Store = Store("shopping")
+
+# Say PROBLEM under the box, or nothing when it is "".
+def say(problem: str):
+    page.element("#problem").set_text(problem)
+
+# The list changed: keep it, and draw it again.
+def changed():
+    say("")
+    if not kept.write("list.txt", basket.text()):
+        say("The list could not be kept.")
+    page.element("#list").set_html(page_view.shown.text(basket))
+
+# What the reader typed, on the list.
+def add_typed():
+    let done: None | !Refusal_T = basket.want(page.field("name"))
+    if done is Refusal_T:
+        say(done.message)
+        return
+    page.fill("name", "")
+    changed()
+
+# A click: on Add, on an item's ×, or on an item.
+def clicked(e: Event_T):
+    let c: Click_T = click_of(e)
+    if c.on("#add") is not None:
+        add_typed()
+        return
+    let remove: ?Element_T = c.on("button.remove")
+    if remove is not None:
+        basket.remove(remove.data("name"))
+        changed()
+        return
+    let item: ?Element_T = c.on("li.item")
+    if item is not None:
+        basket.toggle(item.data("name"))
+        changed()
+
+# A key: Enter in the box adds what was typed.
+def pressed(e: Event_T):
+    if key_of(e) == "Enter":
+        add_typed()
+
+# The page as it starts: the list kept last time, drawn, and the reader listened to.
+let before: ?str = kept.read("list.txt")
+if before is not None:
+    basket.load(before)
+page.element("#app").set_html(page_view.text(basket))
+listen("click", clicked)
+listen("keydown", pressed)

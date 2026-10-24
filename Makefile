@@ -1911,6 +1911,13 @@ test-part-56:
 	    $(ADY2NIM) js $(BEXDIR)/DIJKSTRA_HTMX/frontend/frontend_server.ady >/dev/null 2>&1 \
 	        && echo OK || { echo FAIL; exit 1; }; \
 	    rm -f $(BEXDIR)/DIJKSTRA_HTMX/frontend/frontend_server.js; \
+	    printf '  %-42s' "SHOPPING_LIST/tests/test_shopping.ady"; \
+	    (cd $(BEXDIR)/SHOPPING_LIST && $(ADY2NIM) c -r tests/test_shopping.ady 2>/dev/null) | grep -qF "shopping: all checks passed" \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    printf '  %-42s' "SHOPPING_LIST/shopping_page.ady (ady2nim js)"; \
+	    $(ADY2NIM) js $(BEXDIR)/SHOPPING_LIST/shopping_page.ady >/dev/null 2>&1 \
+	        && echo OK || { echo FAIL; exit 1; }; \
+	    rm -f $(BEXDIR)/SHOPPING_LIST/shopping_page.js; \
 	    for app in SVG_NODE_EDITOR ROI_HTMX; do \
 	        printf '  %-42s' "$$app/frontend/frontend_server.ady (ady2nim js)"; \
 	        $(ADY2NIM) js $(BEXDIR)/$$app/frontend/frontend_server.ady >/dev/null 2>&1 \

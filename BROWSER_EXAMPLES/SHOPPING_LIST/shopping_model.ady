@@ -1,0 +1,64 @@
+#!/usr/bin/env ady2nim
+"""shopping_model -- a shopping list: what to buy, and what is bought.
+
+The model knows nothing of the page: no element, no event, no HTML. It compiles to native code,
+where tests/test_shopping.ady checks it, and to JavaScript, where shopping_page.ady uses it.
+"""
+
+# A thing to buy: its name, and whether it is in the basket already.
+type Item_T is record:
+    name:   str
+    bought: bool
+
+# Why a change was not made: what the page shows the reader.
+type Refusal_T is record:
+    message: str
+
+# The list: its items, in the order they were added.
+class Shopping_List:
+    var items: []Item_T = []
+
+    # NAME on the list, to buy; refused when it is empty or on the list already.
+    def want(self, name: str) -> None | !Refusal_T:
+        let wanted: str = name.strip()
+        if wanted == "":
+            return Refusal_T(message="Type what to buy first.")
+        if self.has(wanted):
+            return Refusal_T(message=f"{wanted} is on the list already.")
+        self.items.append(Item_T(name=wanted, bought=False))
+        return None
+
+    # Whether NAME is on the list.
+    def has(self, name: str) -> bool:
+        for item in self.items:
+            if item.name == name:
+                return True
+        return False
+
+    # NAME bought, or not bought after all.
+    def toggle(self, name: str):
+        for i in 0 ..< len(self.items):
+            if self.items[i].name == name:
+                self.items[i].bought = not self.items[i].bought
+
+    # NAME off the list.
+    def remove(self, name: str):
+        self.items = [item for item in self.items if item.name != name]
+
+    # How many are still to buy.
+    def left(self) -> int:
+        return len([item for item in self.items if not item.bought])
+
+    # The list as text, one item a line: "+ milk" bought, "- bread" not yet.
+    def text(self) -> str:
+        var lines: []str = []
+        for item in self.items:
+            lines.append(("+ " if item.bought else "- ") + item.name)
+        return "\n".join(lines)
+
+    # The list TEXT says (as `text` writes it), in place of this one.
+    def load(self, text: str):
+        self.items = []
+        for line in text.split("\n"):
+            if len(line) > 2:
+                self.items.append(Item_T(name=line[2:], bought=line.startswith("+")))

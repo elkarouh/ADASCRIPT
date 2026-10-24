@@ -1,0 +1,76 @@
+#!/usr/bin/env ady2nim
+"""shopping_view -- what the shopping list looks like: each class draws one part, its look in it.
+
+A view draws from what it is given and nothing else, and writes HTML with an `html:` block; what
+the reader typed is escaped on the way, so a name with < in it shows as it was typed.
+"""
+from style import Look, Rule, Style
+from shopping_model import Item_T, Shopping_List
+
+const INK: str = "#1f2933"
+const SOFT: str = "#7b8794"
+const LINE: str = "#e4e7eb"
+const RED: str = "#c62828"
+
+# An item: its name, struck out once bought, and a button that takes it off the list. A click on
+# the item says it is bought; the script finds the item by its data_name.
+class Item_View:
+    style "li.item":
+        &:                      cursor="pointer" padding="0.4em 0" border_bottom=f"1px solid {LINE}" display="flex" justify_content="space-between"
+        &.bought span.name:     color=SOFT text_decoration="line-through"
+        button.remove:          border="none" background="none" color=RED cursor="pointer" font_size="1.1em"
+
+    def to_html(self, item: Item_T) -> Html:
+        let css: str = ("item bought" if item.bought else "item")
+        html:
+            li class=css data_name=item.name:
+                span class="name": item.name
+                button type="button" class="remove" data_name=item.name: "×"
+
+# The list: how many are left to buy, and every item.
+class List_View:
+    var items: Item_View = Item_View()
+    style "div#list":
+        p.left:                 color=SOFT margin="0.5em 0"
+        ul:                     list_style="none" padding="0" margin="0"
+
+    def to_html(self, basket: Shopping_List) -> Html:
+        html:
+            div id="list":
+                p class="left": f"{basket.left()} to buy"
+                ul:
+                    for item in basket.items:
+                        + self.items.to_html(item)
+
+    # The list as the page's text, for the script to put in the page.
+    def text(self, basket: Shopping_List) -> str:
+        return str(self.to_html(basket))
+
+    # The rules of the list and of its items, for the page's <style>.
+    def css(self) -> str:
+        return self.style.css() + self.items.style.css()
+
+# The page: a box to type what to buy, its button, why the last one was refused, and the list.
+class Page_View:
+    var shown: List_View = List_View()
+    style "":
+        body:                   font_family="system-ui, sans-serif" color=INK max_width="30em" margin="2em auto" padding="0 1em"
+        input, button:          font="inherit"
+        p#problem:              color=RED min_height="1.2em" margin="0.3em 0"
+
+    def to_html(self, basket: Shopping_List) -> Html:
+        let css: str = self.style.css() + self.shown.css()
+        html:
+            div:
+                style: css
+                h1: "Shopping list"
+                input name="name" placeholder="milk"
+                button type="button" id="add": "Add"
+                p id="problem"
+                + self.shown.to_html(basket)
+
+    # The page as text, for the script to put in the page.
+    def text(self, basket: Shopping_List) -> str:
+        return str(self.to_html(basket))
+
+let page_view: Page_View = Page_View()
