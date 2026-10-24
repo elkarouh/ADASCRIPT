@@ -6093,7 +6093,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # `self.bags[i].items.add(x)`, `self.channels[kind].subscribe(f)`.
             # The builtin mutators, and the methods of the program that take
             # their self by var, change self just as `self.items.add(x)` does.
-            for m in _re.finditer(r'self(?:\.\w+|\[[^\]\n]*\])+\.(\w+)\s*\(', body_text):
+            for m in _re.finditer(r'self(?:\.\w+|\[[^\]\n]*\])+\.`?(\w+)`?\s*\(', body_text):
                 if m.group(1) in _FIELD_MUTATORS or m.group(1) in ParserState.var_self_methods:
                     return True
             # Method call on self that isn't known-read-only
@@ -6124,6 +6124,19 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         _proc_fields = {
             _fn for _fn, _ft in ParserState.class_field_types.get(class_name or "", {}).items()
             if _ft.replace(" ", "").startswith(("proc(", "(")) and ("->" in _ft or "proc" in _ft)}
+        # `self.style.class_of(mark)`: a method of the program's own class,
+        # called on a field of that class, that takes its self by value (it is
+        # not among var_self_methods) changes nothing of the field, so nothing
+        # of self. Counting it a write made a method that also called a
+        # sibling take `var self`, and it could not be used on a `let`.
+        _field_types = ParserState.class_field_types.get(class_name or "", {})
+        def _by_value_field_method(call):
+            fm = _re.match(r'self\.(\w+)\.`?(\w+)`?\s*\($', call)
+            if not fm or fm.group(2) in _FIELD_MUTATORS:
+                return False
+            ftype = _field_types.get(fm.group(1), "").split("[")[0].strip()
+            return (ftype in ParserState.class_field_types
+                    and fm.group(2) not in ParserState.var_self_methods)
         def _purity_evidence(body_text):
             """(may_mutate, sibling_calls) for the pure-method fixpoint."""
             may_mutate = bool(
@@ -6142,8 +6155,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # Writes the rules above cannot see, so no demotion past them: a
             # method on a field (`self.tbl.del(k)` changes the table), and
             # self or a field handed to a call that may take it as `var`.
-            for m in _re.finditer(r'self(?:\.\w+|\[[^\]]*\])+\.(\w+)\s*\(', body_text):
-                if m.group(1) not in _READONLY_METHODS:
+            for m in _re.finditer(r'self(?:\.\w+|\[[^\]]*\])+\.`?(\w+)`?\s*\(', body_text):
+                if m.group(1) not in _READONLY_METHODS and not _by_value_field_method(m.group(0)):
                     may_mutate = True
             # A call's paren follows a name (`inc(self.n)`); a grouping paren
             # does not, and the emitter wraps a returned expression in one --
@@ -6207,8 +6220,13 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
         new_params = []
         for p in params:
             pname = p.split(":")[0].strip()
-            if pname and pname != "self" and _re.search(
-                rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", _body_no_strings
+            # `rect(class = css, x = fmt"...")`: a named argument -- an html:
+            # block's attribute -- after `(` or `,` and spaces is no write to
+            # a parameter `x`, though the character just before it is a space
+            if pname and pname != "self" and any(
+                not _re.search(r"[(,]\s*$", _body_no_strings[:_m.start()])
+                for _m in _re.finditer(
+                    rf"(?<![=(,.])\b{_re.escape(pname)}\b\s*(\.add\(|\.append\(|\.extend\(|\.pop\(|\.clear\(|\.remove\(|\.sort\(|\.next\(|\[.*\]\s*=(?!=)|[+\-*/&]=|=(?!=))", _body_no_strings)
             ):
                 if " = " in p:
                     _shadow_vars.append(pname)

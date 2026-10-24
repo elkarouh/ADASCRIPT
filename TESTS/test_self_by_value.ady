@@ -1,0 +1,43 @@
+#!/usr/bin/env ady2nim
+"""When a method takes self, or a parameter, by var: only when it may change it.
+
+- A method of the program's own class called on a field (`self.style.class_of(mark)`), which takes
+  its self by value, changes nothing: a method that does that and calls a sibling keeps a plain
+  self, and can be called on a `let`.
+- A method that changes a field through a method named like a Nim keyword (Style's `when`, which
+  Nim writes `when` in backquotes) takes self by var.
+- An html: block's attribute named like a parameter (`x=...`) is no write to the parameter.
+
+    ady2nim c -r test_self_by_value.ady
+"""
+from style import Look, Rule, Style
+
+type Mark_T is enum PLAIN, FROM
+
+class View:
+    var states: Style = Style("g")
+
+    def inner(self, a: str) -> str:
+        return "<" + a + ">"
+
+    def outer(self, a: str, mark: Mark_T) -> str:
+        let marked: str = self.states.class_of(mark)
+        return marked + self.inner(a)
+
+    def mark(self, state: Mark_T):
+        self.states.when(state, " circle", Look(stroke="red"))
+
+    def dot(self, x: float, y: float) -> Html:
+        html:
+            svg:
+                circle cx=f"{x:.0f}" cy=f"{y:.0f}" x=f"{x:.0f}" y=f"{y:.0f}" r="2"
+
+let shown: View = View()
+assert shown.outer("a", FROM) == "from<a>"
+let x: float = 3.0
+assert "x=\"3\"" in str(shown.dot(x, 4.0))
+
+var drawn: View = View()
+drawn.mark(FROM)
+assert drawn.states.css() == "g.from circle { stroke: red; }\n", drawn.states.css()
+print "self by value ok"
