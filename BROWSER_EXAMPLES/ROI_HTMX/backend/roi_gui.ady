@@ -12,7 +12,7 @@ each product, a ProductOutcome for each product's results, and the Outcome as a 
 says what each looks like inside its box; where the boxes are is the Layout (roi_layout.ady).
 """
 from backend/roi_model import CURRENT_YEAR, FIRST_YEAR, Investment, InvestmentPercentage, Outcome, Portfolio, Product_T, ProductOutcome, evaluate
-from drawing import Drawing_Pixel_T
+from drawing import Drawing_Pixel_T, Spot_T
 from svg_path import Leave_T, SIDEWAYS, VERTICAL, connector_d
 from backend/roi_layout import HIGH, WIDE, Layout, height_of, left_of, top_of, width_of
 from backend/roi_commands import Thing_T, Command, url, read_portfolio, update_investment, update_share
@@ -76,6 +76,23 @@ def money(v: float) -> str:
 # (Arrow_View.head_to_html, below) begins, so that the tip of the head is at the box.
 const HEAD: Drawing_Pixel_T = 13.0
 
+# An end of an arrow: the block it is at, that block's top left corner, and where on the block
+# the arrow is, from that corner.
+type Arrow_End is tuple:
+    block:  str
+    corner: Spot_T
+    at:     Spot_T
+
+# The end of an arrow at (DX, DY) from the top left corner of the block called BLOCK, laid out by LAYOUT.
+def end_at(layout: Layout, block: str, dx: Drawing_Pixel_T, dy: Drawing_Pixel_T) -> Arrow_End:
+    return (block: block, corner: Spot_T(left_of(layout, block), top_of(layout, block)), at: Spot_T(dx, dy))
+
+# The end of an arrow at the middle of the left side of the box of the product KIND, or of its right
+# side (RIGHT).
+def product_end(layout: Layout, kind: Product_T, right: bool) -> Arrow_End:
+    let product: str = name_of(kind)
+    return end_at(layout, product, (width_of(product) if right else Drawing_Pixel_T(0.0)), height_of(product) / 2.0)
+
 # An arrow from one block to another: a dark outline, the colour on it, and its head.
 class Arrow_View:
     style "g.arrow":
@@ -89,16 +106,15 @@ class Arrow_View:
     def head_url(self, color: str) -> str:
         return "url(#" + self.head_id(color) + ")"
 
-    # The arrow from the block called FROM to the block called TO. It starts at (FX, FY) from
-    # FROM's top left corner and ends at (TX, TY) from TO's. The page writes those on it (data_*),
-    # and how it leaves and how short it stops, for the script that redraws it while a block is
-    # dragged.
-    def to_html(self, layout: Layout, from_block: str, fx: Drawing_Pixel_T, fy: Drawing_Pixel_T, to_block: str, tx: Drawing_Pixel_T, ty: Drawing_Pixel_T, color: str, leave: Leave_T) -> Html:
-        let d: str = connector_d(float(left_of(layout, from_block) + fx), float(top_of(layout, from_block) + fy),
-                                 float(left_of(layout, to_block) + tx), float(top_of(layout, to_block) + ty), leave, float(HEAD))
+    # The arrow of COLOR from the end A to the end B, leaving A as LEAVE says. The page writes on it
+    # where each end is on its block (data_*), and how it leaves and how short it stops, for the
+    # script that redraws it while a block is dragged.
+    def to_html(self, a: Arrow_End, b: Arrow_End, color: str, leave: Leave_T) -> Html:
+        let d: str = connector_d(float(a.corner.x + a.at.x), float(a.corner.y + a.at.y),
+                                 float(b.corner.x + b.at.x), float(b.corner.y + b.at.y), leave, float(HEAD))
         let leaves: str = ("vertical" if leave == VERTICAL else "sideways")
         html:
-            g class="arrow" data_a=from_block data_ax=f"{fx:.1f}" data_ay=f"{fy:.1f}" data_b=to_block data_bx=f"{tx:.1f}" data_by=f"{ty:.1f}" data_leave=leaves data_stop=f"{HEAD:.1f}":
+            g class="arrow" data_a=a.block data_ax=f"{a.at.x:.1f}" data_ay=f"{a.at.y:.1f}" data_b=b.block data_bx=f"{b.at.x:.1f}" data_by=f"{b.at.y:.1f}" data_leave=leaves data_stop=f"{HEAD:.1f}":
                 path class="outline" d=d
                 path class="line" d=d stroke=color marker_end=self.head_url(color)
 
@@ -258,8 +274,8 @@ def all_html(portfolio: Portfolio, layout: Layout) -> Html:
                 for i in 0 ..< len(outcome.list_of_outcomes):
                     + boxes.to_html("overall", left_of(layout, "overall") + PERF_DX, top_of(layout, "overall") + PERF_DY[i], PERF_W, PERF_H, INVEST_COLOR, to_html(outcome.list_of_outcomes[i]), False)
                 for i in 0 ..< len(outcome.list_of_outcomes):
-                    + arrows.to_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Drawing_Pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
-                    + arrows.to_html(layout, name_of(outcome.list_of_outcomes[i].kind), width_of(name_of(outcome.list_of_outcomes[i].kind)), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
+                    + arrows.to_html(end_at(layout, "investment", send_x(i), send_y(i)), product_end(layout, outcome.list_of_outcomes[i].kind, False), INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
+                    + arrows.to_html(product_end(layout, outcome.list_of_outcomes[i].kind, True), end_at(layout, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0), color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
 
 # The page's own look (the boxes, with their forms, and the arrows have their own, in their classes
 # above).

@@ -136,6 +136,10 @@ def fit_name(name: str, room: Drawing_Pixel_T) -> str:
         return name
     return name[:chars - 1] + "\u2026"
 
+# What an account is to the live page's drawing, besides itself: frozen (FROM: an arrow drawn from
+# it records a transaction), or one of the transaction replayed's (NOW).
+type Mark_T is enum PLAIN, FROM, NOW
+
 # An account drawn: as a node (a circle, the example's drawing) or as a box (the app's), its colour
 # by kind, its name and balance, and how it looks when it is frozen, picked, grouped or on the way
 # of a transaction.
@@ -185,14 +189,18 @@ class Account_View:
                 if second != "":
                     stext class="label" x=cx y=y2: second
 
-    # An account as a box at P, its name on the left and its balance on the
-    # right, as on a line of a balance sheet (without its sign: the colour, and
-    # the side of the drawing, say whether it is owned or owed).
-
-    # An account as a box at P, its name on the left and its balance on the
-    # right, as on a line of a balance sheet (without its sign: the colour, and
-    # the side of the drawing, say whether it is owned or owed).
-    def box_to_html(self, a: Account, p: Spot_T, shape: Shape) -> Html:
+    # An account as the live page draws it: a box at P, its name on the left and its balance on
+    # the right, as on a line of a balance sheet (without its sign: the colour, and the side of the
+    # drawing, say whether it is owned or owed); MARK, PICKED, and a GROUP of accounts drawn as one;
+    # TIP when the mouse is over it. Its NUMBER (number and kind), P and its half height are written
+    # on it (data_*) for the script that drags it.
+    def box_to_html(self, a: Account, number: str, p: Spot_T, shape: Shape, mark: Mark_T, picked: bool, group: bool, tip: str) -> Html:
+        let marked: str = ("node" if mark == PLAIN else "node " + self.style.class_of(mark))
+        let shown: str = (marked + " picked" if picked else marked)
+        let state: str = (shown + " group" if group else shown)
+        let x: str = f"{p.x:.1f}"
+        let y: str = f"{p.y:.1f}"
+        let half: str = f"{shape.half_h:.1f}"
         let left: str = px(p.x - shape.half_w)
         let top: str = px(p.y - shape.half_h)
         let w: str = px(shape.half_w * 2.0)
@@ -204,10 +212,12 @@ class Account_View:
         let balance: str = money(a.balance if a.balance >= 0 else -a.balance)
         let shown_name: str = fit_name(a.name, shape.half_w * 2.0 - 16.0 - 10.0 - Drawing_Pixel_T(6.7 * float(len(balance))))
         html:
-            g:
-                rect class=css x=left y=top width=w height=h rx="5"
-                stext class="boxname" x=nx y=cy: shown_name
-                stext class="boxbalance" x=bx y=cy: balance
+            g class=state data_id=number data_name=a.name data_x=x data_y=y data_h=half:
+                title: tip
+                g:
+                    rect class=css x=left y=top width=w height=h rx="5"
+                    stext class="boxname" x=nx y=cy: shown_name
+                    stext class="boxbalance" x=bx y=cy: balance
 
 # What hovering over F's arrow shows: each of its transactions, one a line,
 # with its date and amount.
@@ -245,6 +255,15 @@ class Flow_View:
                 path class="hit" d=d
                 path class="edge" d=d
                 stext class="amount" x=lx y=ly: money(f.amount)
+
+    # A flow as the live page draws it: its arrow (to_html), NOW when it is the transaction
+    # replayed's, its ends written on it (data_*) for the script.
+    def live_to_html(self, f: Flow, route: Route_T, tip: str, now: bool) -> Html:
+        let css: str = ("now" if now else "")
+        let arrow: Html = self.to_html(f, route, tip)
+        html:
+            g class=css data_from=f.source.name data_to=f.target.name:
+                + arrow
 
 # The accounts and the arrows, as every drawing draws them.
 let account_view: Account_View = Account_View()

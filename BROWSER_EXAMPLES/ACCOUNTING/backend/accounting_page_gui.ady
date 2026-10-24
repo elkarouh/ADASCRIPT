@@ -28,7 +28,7 @@ from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, ASSE
 from drawing import Drawing_Pixel_T, Spot_T
 from shared/routes import Shape, boxes, px, Route_T
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
-from backend/accounting_gui import page_view, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, T_TEXT, account_view, flow_view, css_of, tip_of, to_html, section_html, sections_after_graph
+from backend/accounting_gui import Mark_T, page_view, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, T_TEXT, account_view, flow_view, css_of, tip_of, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, kind_text, ratios_of
 from backend/accounting_groups import Grouping
 from backend/accounting_page_state import Settings, View, posting_text
@@ -98,40 +98,29 @@ class Drawing:
     def id_of(self, r: AccountRow) -> str:
         return r.number + "/" + str(int(r.kind))
 
+    # What the account A is to the drawing: frozen, or the transaction replayed's.
+    def mark_of(self, a: Account) -> Mark_T:
+        if a.name == self.v.s.source:
+            return FROM
+        if a.name in self.v.now_accounts:
+            return NOW
+        return PLAIN
+
     # The account I of the graph drawn: a click freezes it, or opens it when it is a group.
     def node_html(self, i: int) -> Html:
         let a: Account = self.v.drawn.accounts[i]
         let key: str = self.v.groups.key_of(a.name)
-        let state: str = ("node from" if a.name == self.v.s.source else ("node now" if a.name in self.v.now_accounts else "node"))
-        let css: str = (state + " picked" if a.name in self.v.s.picked else state)
+        let shape: Shape = Shape(True, boxes().half_w, self.tall[i])
+        let box: Html = account_view.box_to_html(a, self.id_of(self.rows[i]), self.at.points[i], shape, self.mark_of(a), a.name in self.v.s.picked, key != "", self.v.groups.tip(self.v.drawn, a))
         let freeze: {str}str = {"freeze": a.name}
         let toggle: {str}str = {"toggle": key}
         if key == "":
-            return page.sending(read_books(freeze), self.box_of(i, css), "", "", "")
-        return page.sending(read_books(toggle), self.box_of(i, css + " group"), "", "", "")
-
-    # The box of account I, its class CSS, and what hovering over it says.
-    def box_of(self, i: int, css: str) -> Html:
-        let a: Account = self.v.drawn.accounts[i]
-        let p: Spot_T = self.at.points[i]
-        let shape: Shape = Shape(True, boxes().half_w, self.tall[i])
-        let x: str = f"{p.x:.1f}"
-        let y: str = f"{p.y:.1f}"
-        let h: str = f"{self.tall[i]:.1f}"
-        let id: str = self.id_of(self.rows[i])
-        let tip: str = self.v.groups.tip(self.v.drawn, a)
-        html:
-            g class=css data_id=id data_name=a.name data_x=x data_y=y data_h=h:
-                title: tip
-                + account_view.box_to_html(a, p, shape)
+            return page.sending(read_books(freeze), box, "", "", "")
+        return page.sending(read_books(toggle), box, "", "", "")
 
     # The arrow F of the graph drawn, along ROUTE; highlighted when it is the transaction replayed's.
     def arrow_html(self, f: Flow, route: Route_T) -> Html:
-        let css: str = ("now" if (f.source.name + "\t" + f.target.name) in self.v.now_arrows else "")
-        let tip: str = tip_of(self.v.drawn, f)
-        html:
-            g class=css data_from=f.source.name data_to=f.target.name:
-                + flow_view.to_html(f, route, tip)
+        return flow_view.live_to_html(f, route, tip_of(self.v.drawn, f), (f.source.name + "\t" + f.target.name) in self.v.now_arrows)
 
     def to_html(self) -> Html:
         let g: Graph = self.v.drawn
