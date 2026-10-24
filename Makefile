@@ -100,6 +100,7 @@ STANDALONE := \
     ../TESTS/test_store.ady \
     ../TESTS/test_style_block.ady \
     ../TESTS/test_self_by_value.ady \
+    ../TESTS/test_name_clashes.ady \
     blackboard_demo.ady \
     trading_blackboard.ady \
     ../TESTS/test_graphs.ady \

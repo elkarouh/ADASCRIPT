@@ -402,12 +402,18 @@ def check_no_failing_init(code):
             f"returning `{cls} | !{failure}` for ady2py")
 
 
-def scan_return_types(code):
+def scan_return_types(code, methods=True):
     """Every `def`'s return annotation, as written, by routine name.
 
     A class whose `__init__` says `-> None | !F` is a routine returning
-    `Class | !F`, under the name its constructor call is emitted as."""
-    types = {m.group(1): m.group(2) for m in _RETURN_DECL.finditer(code)}
+    `Class | !F`, under the name its constructor call is emitted as.
+
+    METHODS false leaves out the methods of classes: those are by
+    `Class.method`, in scan_method_return_types, since a name alone cannot
+    tell two classes' methods apart, nor a method from a function."""
+    in_class = _class_body_lines(code) if not methods else set()
+    types = {m.group(1): m.group(2) for m in _RETURN_DECL.finditer(code)
+             if code.count("\n", 0, m.start()) not in in_class}
     types.pop("__init__", None)
     for cls, failure in failing_constructors(code).items():
         types[f"try{cls}"] = f"{cls} | !{failure}"
@@ -415,6 +421,20 @@ def scan_return_types(code):
         if _re_dup.match(r"(?!distinct\b).+?[ \t]+where[ \t]", m.group(2).strip()):
             types[f"to_{m.group(1)}"] = f"{m.group(1)} | !ParseFailure_T"
     return types
+
+
+def _class_body_lines(code):
+    """The numbers, from 0, of the lines of CODE inside a class body."""
+    out, cls = set(), False
+    for i, line in enumerate(code.splitlines()):
+        if _re_dup.match(r"class[ \t]+\w+", line):
+            cls = True
+            continue
+        if line[:1].strip() and not line.startswith(("#", "@")):
+            cls = False                 # a top-level line ends the class
+        if cls:
+            out.add(i)
+    return out
 
 
 def scan_method_return_types(code):

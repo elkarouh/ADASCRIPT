@@ -1,0 +1,66 @@
+#!/usr/bin/env ady2nim
+"""A name the program gives a method or a variable that is also a builtin's, or another class's.
+
+- A method named `add` that may fail: `self.items.append(name)` inside it, which is the add of a
+  list, drops no failure.
+- A method named `read` that returns nothing, while Store's `read` returns a ?str: `bag.read(x)`
+  is Bag's read.
+- A variable named `list` is that variable, not the builtin.
+- Two classes' methods of one name, returning other types, and a function of a method's name:
+  each call is the one its receiver's class has, or the function.
+
+A method is found through its receiver's class, never by its name alone.
+
+    ady2nim c -r test_name_clashes.ady
+"""
+from store import Store
+
+type Refusal_T is record:
+    message: str
+
+class Bag:
+    var items: []str = []
+
+    def add(self, name: str) -> None | !Refusal_T:
+        if name == "":
+            return Refusal_T(message="empty")
+        self.items.append(name)
+        return None
+
+    def read(self, text: str):
+        self.items = text.split(",")
+
+class Pile:
+    var n: int = 0
+
+    def add(self, k: int) -> int:
+        self.n += k
+        return self.n
+
+def read(text: str) -> int:
+    return len(text)
+
+var bag: Bag = Bag()
+assert bag.add("x") is None
+assert bag.add("") is not None
+assert len(bag.items) == 1
+
+var kept: Store = Store("")
+let before: ?str = kept.read("test_name_clashes")
+bag.read("a,b")
+if before is not None:
+    bag.read(before)
+assert len(bag.items) == 2
+
+var list: Bag = Bag()
+list.read("a,b,c")
+assert len(list.items) == 3
+var pile: Pile = Pile()
+pile.add(2)
+assert pile.add(3) == 5
+var piles: []Pile = [pile]
+assert piles[0].add(1) == 6
+bag.read("x,y,z,w")
+assert len(bag.items) == 4
+assert read("abc") == 3
+print "name clashes ok"

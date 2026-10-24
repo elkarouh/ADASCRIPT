@@ -179,6 +179,17 @@ _NIM_VALUE_HELPERS = {
 }
 
 
+def _note_method_type(name, ret_type):
+    """Note what a method NAME returns under `.name`, for a call whose
+    receiver's type is not known -- and, under `?.name`, that two classes'
+    methods of the name return different types, when they do: then the name
+    alone tells nothing. The bare name is a function's only."""
+    prt = ParserState.proc_return_types
+    if prt.get(f".{name}", ret_type) != ret_type:
+        prt[f"?.{name}"] = "ambiguous"
+    prt[f".{name}"] = ret_type
+
+
 def _add_call_discards(lines):
     """Put `discard` on a call statement whose value nim would insist be used.
 
@@ -235,6 +246,7 @@ def _add_call_discards(lines):
             # e.g. Lexer._skip_whitespace collides with a free skip_whitespace()).
             _dname = None
             _dret = None
+            _dknown = False     # the receiver's type is known: Nim's add is not its add
             if _df and _whole_call(_stripped, _df):
                 _dname = _df.group(1)
                 if _dname in _proc_rtypes_blk:
@@ -251,10 +263,12 @@ def _add_call_discards(lines):
                             if _dkey in _proc_rtypes_blk:
                                 _dret = _proc_rtypes_blk[_dkey]
                                 break
-                elif _dname in _proc_rtypes_blk:
-                    # Unknown receiver type: best-effort unqualified lookup.
-                    _dret = _proc_rtypes_blk[_dname]
-            if (_dname and _dname not in _NIM_VOID_BUILTINS_BLK
+                if _dret is None:
+                    # through the receiver's class: `bag.read(t)` is Bag's
+                    # read, not a Store's
+                    _dret = hek_nim_expr._call_type(_stripped)
+                _dknown = _drecv == "self" or bool(hek_nim_expr._receiver_type(_drecv))
+            if (_dname and (_dname not in _NIM_VOID_BUILTINS_BLK or _dknown)
                     and _dret is not None and _dret not in _void_rets_blk):
                 _ind_prefix = _ln[:len(_ln) - len(_stripped)]
                 _ln = f"{_ind_prefix}discard {_stripped}"
@@ -978,7 +992,7 @@ def _walrus_call_returns_option(val):
     _meth = _re_wo.match(r'^.+\.([A-Za-z_]\w*)\(', val)
     _func = _re_wo.match(r'^([A-Za-z_]\w*)\(', val) if not _meth else None
     _fname = _meth.group(1) if _meth else (_func.group(1) if _func else None)
-    return bool(_fname) and _rtypes.get(_fname, "").startswith("Option[")
+    return bool(_fname) and (hek_nim_expr._call_type(val) or "").startswith("Option[")
 
 
 def _register_walrus_type(name, val):
@@ -3163,7 +3177,7 @@ def _wrap_option_tail_lines(lines, lo, hi, inner):
     # a call to a routine that already returns an Option, here or in a
     # nimported module, is the value itself; so is an Optional field
     _called_o = hek_nim_expr._outer_call_name(last_s)
-    if _called_o and (hek_nim_expr._proc_ret_nim(_called_o) or "").startswith("Option["):
+    if _called_o and (hek_nim_expr._call_type(last_s) or "").startswith("Option["):
         _sym_type_o = "Option["
     if hek_nim_expr._expr_is_option(last_s):
         _sym_type_o = "Option["
@@ -3306,6 +3320,8 @@ def _func_def_to_nim_inner(self, indent=0):
     _mark_docstring(block_node, ret_ann)
     _mark_either_tail(block_node, ret_ann)
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
+    if name and not ret_ann and getattr(ParserState, "_current_class_name", None):
+        _note_method_type(name, "")
     if ret_ann and name:
         _cls_ctx = getattr(ParserState, "_current_class_name", None)
         if not hasattr(ParserState, "proc_return_types"):
@@ -3317,10 +3333,10 @@ def _func_def_to_nim_inner(self, indent=0):
                 # overloaded within the class: the return type depends on the arguments
                 ParserState.proc_return_types[f"?{_cls_ctx}.{name}"] = "ambiguous"
             ParserState.proc_return_types[f"{_cls_ctx}.{name}"] = _ret_type
-            ParserState.proc_return_types[f".{name}"] = _ret_type
+            _note_method_type(name, _ret_type)
         else:
             ParserState.proc_return_types[f"def {name}"] = _ret_type
-        ParserState.proc_return_types[name] = _ret_type
+            ParserState.proc_return_types[name] = _ret_type
     # Register param types for call-site Option[T] some() coercion
     if name and params:
         import re as _re_fpt
@@ -6010,6 +6026,8 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
     _mark_docstring(block_node, ret_ann)
     _mark_either_tail(block_node, ret_ann)
     # Record method return type for type inference (e.g. conn.rows() -> seq[seq[string]])
+    if name and not ret_ann:
+        _note_method_type(name, "")
     if ret_ann and name:
         if not hasattr(ParserState, "proc_return_types"):
             ParserState.proc_return_types = {}
@@ -6019,12 +6037,7 @@ def _generate_method_decl(func_node, indent, class_name, parent_name, is_virtual
             # overloaded within the class: the return type depends on the arguments
             ParserState.proc_return_types[f"?{class_name}.{name}"] = "ambiguous"
         ParserState.proc_return_types[f"{class_name}.{name}"] = _ret_type
-        ParserState.proc_return_types[f".{name}"] = _ret_type      # any class's: `x.name()`
-        # The bare name is a function's, when there is one: a method `entry`
-        # whose body calls the function `entry` took the call for itself, and
-        # its result was not wrapped into the union the method returns.
-        if f"def {name}" not in ParserState.proc_return_types:
-            ParserState.proc_return_types[name] = _ret_type
+        _note_method_type(name, _ret_type)
     # Push scope and register params for body translation
     ParserState.symbol_table.push_scope(name or "<method>")
     _param_shadow = _shadow_params([p.split(":")[0].strip() for p in params if ":" in p])

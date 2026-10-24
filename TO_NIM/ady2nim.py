@@ -1010,7 +1010,11 @@ def translate_once(code, export_symbols=False):
     from ady_stmt import BUILTIN_FAILURE_TYPES, BUILTIN_RETURN_TYPES, BUILTIN_RESULT_PROCS
     ParserState.failure_types = (_failures | BUILTIN_FAILURE_TYPES
                                  | _nimport_carried.get("failure_types", set()))
-    ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code)}
+    # A function's by its name; a method's by `Class.method`, never by its name
+    # alone: two classes' `add`s, a class's `add` and a list's, are not one
+    from ady_stmt import scan_method_return_types
+    ParserState.ady_return_types = {**BUILTIN_RETURN_TYPES, **scan_return_types(code, methods=False)}
+    ParserState.ady_method_return_types = {k: v for k, v in scan_method_return_types(code).items() if v}
     from ady_stmt import scan_value_cycles
     ParserState.value_cycle_classes = scan_value_cycles(code)
     import re as _re_eq

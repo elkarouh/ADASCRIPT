@@ -822,6 +822,132 @@ def _proc_ret_nim(name):
     return _cache[name]
 
 
+def _method_type(receiver_type, method, args_text=""):
+    """The Nim type METHOD returns, called on a value of RECEIVER_TYPE: "" when
+    it returns nothing, None when that is not known.
+
+    A method is found through its receiver's class and the classes that class
+    inherits from, never by its name alone: two classes can each have an
+    `add`, and so can a list. A receiver of a known type that is no class
+    with the method -- a seq, a Path -- calls a routine taking it first,
+    `path.write_text(s)`, which is found by its name. Only when the
+    receiver's type is not known is a method found by its name, and then only
+    when no two classes' methods of that name return different types.
+    ARGS_TEXT, the emitted arguments, picks among a class's overloads."""
+    prt = getattr(ParserState, "proc_return_types", {})
+    scanned = getattr(ParserState, "ady_method_return_types", {})
+    methods = getattr(ParserState, "_all_class_methods", None) or {}
+    parents = getattr(ParserState, "_all_class_parents", None) or {}
+    cls = (receiver_type or "").strip()
+    cls = (cls[4:] if cls.startswith("var ") else cls).split("[")[0].strip()
+    if cls in ("object", "auto", "RootObj", "typed", "untyped"):
+        cls = ""                        # says nothing of which type it is
+    _base = cls
+    if cls:
+        seen = set()
+        while cls and cls not in seen:
+            seen.add(cls)
+            if f"?{cls}.{method}" in prt:
+                return _overload_type(cls, method, args_text)
+            if f"{cls}.{method}" in prt:
+                return prt[f"{cls}.{method}"]
+            if f"{cls}.{method}" in scanned:
+                return _ady_type_nim(scanned[f"{cls}.{method}"])
+            if method in methods.get(cls, ()):
+                return ""
+            if cls not in methods and cls not in parents and not _builtin_type(cls):
+                break       # a class of another module, whose parents are not known here
+            cls = (parents.get(cls) or "").split("[")[0].strip()
+        else:
+            # every class it is, known, and none with the method; or a seq, a
+            # Path: a routine taking it first, `path.write_text(s)` -- a
+            # function of the program only when its first parameter is of the
+            # receiver's type (`got.add(x)` on a seq is no `add(a: int, b: int)`)
+            _rt = prt.get(f"def {method}") or _proc_ret_nim(method)
+            if _rt and f"def {method}" in prt and _first_param(method) not in ("", _base):
+                return None
+            return _rt or None
+        if _first_param(method) == _base:
+            # a function taking a value of the receiver's type first: `c.on(css)`
+            # of a Click_T record
+            _rt = prt.get(f"def {method}", prt.get(method))
+            if _rt is not None:
+                return _rt
+    if f"?.{method}" in prt:
+        return None
+    _rt = prt.get(f".{method}")
+    if _rt is None:
+        _found = {v for k, v in scanned.items() if k.endswith(f".{method}")}
+        _rt = _ady_type_nim(_found.pop()) if len(_found) == 1 else None
+    return _rt if _rt is not None else (prt.get(method) or _proc_ret_nim(method) or None)
+
+
+def _first_param(name):
+    """The type, without parameters, of the first parameter of the function
+    NAME; "" when it is not known, or is a generic's `T`."""
+    _types = (getattr(ParserState, "proc_param_types", None) or {}).get(name) or [""]
+    _first = (_types[0] or "").replace("var ", "").split("[")[0].strip()
+    return _first if len(_first) > 1 else ""
+
+
+def _builtin_type(name):
+    """Whether NAME, a Nim type's name without its parameters, is no class:
+    a number, a string, a seq, a table, a Path."""
+    return name[:1].islower() or name in (
+        "Table", "OrderedTable", "TableRef", "HashSet", "OrderedSet", "CountTable",
+        "Option", "Path", "Result", "Deque", "File", "Regex", "JsonNode")
+
+
+def _receiver_type(receiver):
+    """The Nim type of RECEIVER, an emitted expression, or ""."""
+    receiver = receiver.strip()
+    if receiver == "self":
+        return getattr(ParserState, "_current_class_name", "") or ""
+    return (_nim_expr_type(receiver) or _field_type(receiver) or "").strip()
+
+
+def _call_type(expr_str):
+    """What the call EXPR_STR ends in returns, as a Nim type: "" when it
+    returns nothing, None when that is not known or EXPR_STR ends in no call.
+
+    `recv.name(args)` is a method's call, its type found through recv's class
+    (_method_type); `name(args)` is a function's, found by its name."""
+    s = expr_str.strip()
+    name = _outer_call_name(s)
+    if not name:
+        return None
+    m = _last_method_call(s)
+    if m and m.group(2) == name:
+        return _method_type(_receiver_type(m.group(1)), name, s[m.end(2) + 1:-1])
+    import re as _re
+    for m in _re.finditer(r"\.\s*" + _re.escape(name) + r"\s*\(", s):
+        if _closes_at_end(s, m.end() - 1):
+            # a method of a receiver with spaces in it, `f(a, b).name(x)`
+            return _method_type(_receiver_type(s[:m.start()]), name, s[m.end():-1])
+    prt = getattr(ParserState, "proc_return_types", {})
+    _rt = prt.get(f"def {name}")
+    if _rt is None:
+        _rt = prt.get(name)
+    return _rt if _rt is not None else (_proc_ret_nim(name) or None)
+
+
+def _ady_type_nim(text):
+    """TEXT, an Adascript type as written, in Nim; "" when it does not parse."""
+    _cache = getattr(ParserState, "ady_type_nim_cache", None)
+    if _cache is None:
+        _cache = ParserState.ady_type_nim_cache = {}
+    if text not in _cache:
+        _cache[text] = ""
+        try:
+            from ady_declarations import parse_type
+            _ast = parse_type(text)
+            if _ast is not None:
+                _cache[text] = _ast.to_nim()
+        except Exception:
+            pass
+    return _cache[text]
+
+
 def _result_type_of(expr_str):
     """The Nim Result type of EXPR_STR -- a name declared `T | !F`, or a call
     of a routine returning one -- or "" when it is not a Result."""
@@ -1070,11 +1196,7 @@ def _union_type_of(expr_str):
         if _m:
             return f"Result[{_m.group(1)}, ParseFailure_T]"
     if _called:
-        _rt = _proc_ret_nim(_called)
-        # `x.entry()` is a method's call, `entry(n)` the function's, when a
-        # function and a method share the name: each has its own type
-        if _re.search(r"\.\s*" + _re.escape(_called) + r"\s*\([^()]*(?:\([^()]*\)[^()]*)*\)\s*$", expr_str):
-            _rt = getattr(ParserState, "proc_return_types", {}).get("." + _called, "") or _rt
+        _rt = _call_type(expr_str) or ""
         if _rt.startswith(("Result[", "OneOf")):
             return _rt
     if "[" in expr_str or "." in expr_str:
@@ -1551,8 +1673,7 @@ def _field_type(expr):
         # is declared to return
         _called = _outer_call_name(base.strip())
         if _called:
-            _btype = _re_ft.sub(r"^var\s+", "",
-                                getattr(ParserState, "proc_return_types", {}).get(_called, "") or "")
+            _btype = _re_ft.sub(r"^var\s+", "", _call_type(base) or "")
             # a constructor: `newEph(2.0).n` is a field of an Eph
             if not _btype and _called.startswith(("new", "init")):
                 _cls = _called[3:] if _called.startswith("new") else _called[4:]
@@ -1688,20 +1809,9 @@ def _nim_expr_type(expr):
                 return "string"
             if base_type and base_type.startswith("seq[") and method == "join":
                 return "string"
-            # Look up method return type from proc_return_types (populated during pre-pass)
-            _prt = getattr(ParserState, "proc_return_types", {})
-            # Try "ClassName.method" first, then bare "method"
-            import re as _re_bt
-            _cls_m = _re_bt.match(r'^([A-Za-z_]\w*)$', base_type or "")
-            _cls_name = _cls_m.group(1) if _cls_m else None
-            if _cls_name and f"?{_cls_name}.{method}" in _prt:
-                # overloaded within the class: the one its arguments pick
-                return _overload_type(_cls_name, method, s[call_m.end(2) + 1:-1])
-            if _cls_name and f"{_cls_name}.{method}" in _prt:
-                return _prt[f"{_cls_name}.{method}"]
-            if method in _prt:
-                return _prt[method]
-            return None
+            if base_type is None and call_m.group(1).strip() == "self":
+                base_type = getattr(ParserState, "_current_class_name", "") or None
+            return _method_type(base_type, method, s[call_m.end(2) + 1:-1]) or None
 
         # field access: base.field  (simple identifier on both sides)
         dot_m = _re.match(r"^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$", s)
@@ -1898,7 +2008,7 @@ def _nim_truthiness(expr):
         _meth_m = _re_truth.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\.([A-Za-z_]\w*)\(', expr)
         _func_m = _re_truth.match(r'^([A-Za-z_]\w*)\(', expr) if not _meth_m else None
         _rname = (_meth_m.group(1) if _meth_m else (_func_m.group(1) if _func_m else None))
-        if _rname and _proc_rtypes.get(_rname, "").startswith("Option["):
+        if _rname and (_call_type(expr) or "").startswith("Option["):
             ParserState.nim_imports.add("options")
             return f"{expr}.isSome"
         # ...and anything else already known to be an Option: `if v:` where
@@ -2153,7 +2263,7 @@ def _nim_atom_unit(e):
         t = _field_type(e).strip() or t      # a field: `self.flown`
     if not is_distinct(t) and called:
         # a call of a routine declared to return one: `cruise() + 100.0`
-        t = getattr(ParserState, "proc_return_types", {}).get(called, "") or t
+        t = _call_type(e) or t
     if t.startswith("var "):
         t = t[4:].strip()
     if is_distinct(t):
@@ -2171,7 +2281,7 @@ def _element_type(e):
         return ""
     base, idx = m.group(1).strip(), m.group(2).strip()
     called = _outer_call_name(base) if base.endswith(")") else None
-    bt = (getattr(ParserState, "proc_return_types", {}).get(called, "") if called
+    bt = ((_call_type(base) or "") if called
           else (_nim_expr_type(base) or _field_type(base) or ""))
     bt = (bt or "").strip()
     if bt.startswith("var "):
@@ -3804,7 +3914,9 @@ def to_nim(self, prec=None):
         return _bare
     # Map Python builtin names to Nim equivalents
     raw_name = result
-    result = _PY_IDENT_TO_NIM.get(result, result)
+    if not (raw_name in _PY_IDENT_TO_NIM and ParserState.symbol_table.lookup(raw_name)):
+        # a variable the program named `list` is that variable, not the builtin
+        result = _PY_IDENT_TO_NIM.get(result, result)
     _scaled = _scaled_conversion(self, raw_name)
     if _scaled is not None:
         return _scaled
@@ -6458,7 +6570,7 @@ def _expr_is_option(expr_str):
     # some(f(x)) on an optional f is Option[Option[T]], which Nim rejects.
     _called = _outer_call_name(expr_str)
     if _called:
-        _rt = getattr(ParserState, "proc_return_types", {}).get(_called, "")
+        _rt = _call_type(expr_str) or ""
         if _rt.startswith("Option["):
             return True
         # ...and a call through a variable of function type, `(str) -> ?int`:
@@ -7299,7 +7411,7 @@ def register_loop_var_types(target, iterable):
                     _callee_m = _vcm
             if _callee_m and (_callee_m.group(1) in getattr(ParserState, "iterator_names", set())
                               or _callee_m.group(1) in getattr(ParserState, "virtual_iterators", set())):
-                _ret = (getattr(ParserState, 'proc_return_types', {}) or {}).get(_callee_m.group(1), "")
+                _ret = _call_type(iterable) or ""
                 if _ret and "," not in _ret:
                     ParserState.symbol_table.add(target.strip("()\n "), _ret, "let")
     elif "," in target:

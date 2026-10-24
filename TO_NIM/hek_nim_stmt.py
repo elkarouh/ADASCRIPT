@@ -1642,7 +1642,7 @@ def _note_tuple_result_units(value, names, kw):
     m = _re_tu.search(r"([A-Za-z_]\w*)\([^()]*(?:\([^()]*\)[^()]*)*\)$", value.strip())
     if not m:
         return
-    rt = hek_nim_expr._proc_ret_nim(m.group(1)).strip()
+    rt = (hek_nim_expr._call_type(value) or "").strip()
     if not (rt.startswith("(") and rt.endswith(")")):
         parts = [""] * len(names)       # a tuple type by name: unknown, but not a field's
     else:
