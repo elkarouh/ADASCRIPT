@@ -190,14 +190,12 @@ class Node_View:
     style "g.node":
         ...
 
-    # Node N of NET, as ROUTE has it.
-    def to_html(self, n: Node_T, net: Network, route: Route) -> Html:
-        let at: Spot_T = net.place_of(n.name)
+    # Node N at AT, drawn as what it is to the way (ROLE).
+    def to_html(self, n: Node_T, at: Spot_T, role: Role_T) -> Html:
         let cx: str = f"{at.x:.0f}"
         let cy: str = f"{at.y:.0f}"
         let ty: str = f"{at.y + NAME_DY:.0f}"
         let px: str = f"{at.x + NODE_R:.0f}"
-        let role: Role_T = route.role_of(n.name)
         let css: str = ("node" if role == NO_ROLE else "node " + self.style.class_of(role))
         let nr: str = f"{NODE_R:.0f}"
         let pr: str = f"{PORT_R:.0f}"
@@ -210,9 +208,11 @@ class Node_View:
 
 Three things to note:
 
-- **The object is an argument.** `to_html` takes a `Node_T`, the network
-  that says where it is, and the route that says what it is to the way.
-  It works nothing out: the route is found once, before the drawing.
+- **The object is an argument, with only what drawing it needs.** `to_html`
+  takes a `Node_T`, where it is (a `Spot_T`) and what it is to the way (a
+  `Role_T`), not the network or the route. It works nothing out, and it
+  draws a node anywhere that has those: the caller asks the network and the
+  route, found once before the drawing.
 - **Attributes are names.** `class=css` puts the value of the variable
   `css`; `class="name"` puts the text. Attribute names with a dash are
   written with an underscore, `data_name` (see *Why htmx and how* below).
@@ -226,9 +226,9 @@ Three things to note:
         html:
             svg viewBox=box class="graph":
                 for e in net.edges:
-                    + self.edges.to_html(e, net, route)
+                    + self.edges.to_html(e, net.place_of(e.a), net.place_of(e.b), route.uses(e))
                 for n in net.nodes:
-                    + self.nodes.to_html(n, net, route)
+                    + self.nodes.to_html(n, net.place_of(n.name), route.role_of(n.name))
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 ```
 
@@ -237,7 +237,7 @@ what a click on a node does to them (the start, then the goal, then the start ag
 chosen node clicked again is no longer chosen). The way between them is a `Route`, found
 once from the network and the choice: its nodes, its cost, `uses(e)` (an edge on the way,
 drawn in orange), `role_of(name)` (a `Role_T`: `START`, `GOAL`, `WAY` or `NO_ROLE`) and `said()`, the line under
-the drawing. The functions that draw only ask it.
+the drawing. Only `Network_View` asks it; the node and the edge are told.
 
 The edges are drawn first, so each node sits on top of the lines that
 end at it.

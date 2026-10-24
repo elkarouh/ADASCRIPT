@@ -113,7 +113,7 @@ const GROUND: str = "#f5f7fa"       # the page under the board
 const FRAME: str = "#e4e7eb"        # the board's border
 const RED: str = "#c62828"          # what is refused, and what deletes
 
-# An edge of a network: a line between its nodes, orange when the route runs along it, and its cost
+# An edge: a line between two places, orange when the way runs along it, and its cost
 # over its middle. Its look is its Style; the edge's g is selected by the browser (dijkstra_js_events).
 class Edge_View:
     style "g[data-from]":
@@ -123,12 +123,10 @@ class Edge_View:
         path.hit:               stroke="transparent" stroke_width=14 fill="none" cursor="pointer"
         text.cost:              font_size="13px" fill=SOFT text_anchor="middle" paint_order="stroke" stroke=PAPER stroke_width=4
 
-    # Edge E of NET, as ROUTE has it.
-    def to_html(self, e: Edge_T, net: Network, route: Route) -> Html:
-        let p1: Spot_T = net.place_of(e.a)
-        let p2: Spot_T = net.place_of(e.b)
+    # Edge E, from P1 to P2, orange when the way runs along it (ON_WAY).
+    def to_html(self, e: Edge_T, p1: Spot_T, p2: Spot_T, on_way: bool) -> Html:
         let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
-        let css: str = ("edge way" if route.uses(e) else "edge")
+        let css: str = ("edge way" if on_way else "edge")
         let lx: str = f"{(p1.x + p2.x) / 2.0:.0f}"
         let ly: str = f"{(p1.y + p2.y) / 2.0 - COST_DY:.0f}"
         let label: str = str(e.cost)
@@ -138,7 +136,7 @@ class Edge_View:
                 path class="hit" d=d
                 stext class="cost" x=lx y=ly: label
 
-# A node of a network: its circle, coloured by what it is to the route (a Role_T), its name, and a
+# A node: its circle, coloured by what it is to the way (a Role_T), its name, and a
 # port (the dot on its right) from which a wire is drawn to another. Its look is its Style.
 class Node_View:
     style "g.node":
@@ -154,14 +152,12 @@ class Node_View:
         &.selected circle.port: opacity=1
         text.name:              font_size="16px" font_weight=700 text_anchor="middle" pointer_events="none" fill=INK
 
-    # Node N of NET, as ROUTE has it.
-    def to_html(self, n: Node_T, net: Network, route: Route) -> Html:
-        let at: Spot_T = net.place_of(n.name)
+    # Node N at AT, drawn as what it is to the way (ROLE).
+    def to_html(self, n: Node_T, at: Spot_T, role: Role_T) -> Html:
         let cx: str = f"{at.x:.0f}"
         let cy: str = f"{at.y:.0f}"
         let ty: str = f"{at.y + NAME_DY:.0f}"
         let px: str = f"{at.x + NODE_R:.0f}"
-        let role: Role_T = route.role_of(n.name)
         let css: str = ("node" if role == NO_ROLE else "node " + self.style.class_of(role))
         let nr: str = f"{NODE_R:.0f}"
         let pr: str = f"{PORT_R:.0f}"
@@ -185,9 +181,9 @@ class Network_View:
         html:
             svg viewBox=box class="graph":
                 for e in net.edges:
-                    + self.edges.to_html(e, net, route)
+                    + self.edges.to_html(e, net.place_of(e.a), net.place_of(e.b), route.uses(e))
                 for n in net.nodes:
-                    + self.nodes.to_html(n, net, route)
+                    + self.nodes.to_html(n, net.place_of(n.name), route.role_of(n.name))
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 
     # The rules of the drawing, for the page's <style>.
