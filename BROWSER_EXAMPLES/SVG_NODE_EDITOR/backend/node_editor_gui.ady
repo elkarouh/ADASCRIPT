@@ -21,23 +21,6 @@ type Page is Page_Of[Thing_T]
 let page: Page = Page(url, "#problem", "")
 
 
-# The page's own look: the body, the header, the buttons (the drawing's parts have their own, in
-# their classes below).
-const STYLE: str = """
-body { margin: 0; background: #1a1a1a; color: #ddd; font-family: Arial, sans-serif; }
-header, #all { max-width: 1100px; margin: 0 auto; padding: 0 12px; }
-header h1 { font-size: 1.3em; margin: 0.8em 0 0.1em; }
-header p { color: #999; margin: 0 0 0.8em; }
-svg#editor { display: block; width: 100%; height: auto; user-select: none; background: #1a1a1a; border: 1px solid #333; }
-p.problem { color: #ffb4a8; background: #4a2420; border-radius: 6px; padding: 0.4em 0.7em; margin: 0.5em 0; }
-p.problem:empty { display: none; }
-p.hint { color: #999; font-size: 0.85em; margin: 0.5em 0 1em; }
-div.toolbar { margin: 0.5em 0; }
-button { font: inherit; font-size: 0.9em; border: 1px solid #555; border-radius: 6px; padding: 0.3em 0.8em; background: #2a2a2a; color: #ddd; cursor: pointer; }
-button:hover { background: #333; }
-pre#diagram { display: none; }
-"""
-
 # The colours, the original's.
 const ORANGE: str = "#E88802"       # a connector, and what is selected
 const PALE_ORANGE: str = "#ffd479"  # a connector selected
@@ -55,7 +38,7 @@ class Port_View:
         .port-outer:                fill=ASH
         .port-inner:                fill=SOOT
         .port-scrim:                fill="transparent" cursor="pointer"
-        .port-label:                font_size=12 fill=WHITE
+        .port-label:                font_size="12px" fill=WHITE
         .input-field .port-label:   text_anchor="start"
         .output-field .port-label:  text_anchor="end"
 
@@ -88,7 +71,7 @@ class Node_View:
         &.selected .node-background: stroke=ORANGE stroke_width=2
         .node-header:               fill=SLATE
         .node-content:              fill=GRAPHITE
-        .header-title:              font_size=20 fill=WHITE text_anchor="middle"
+        .header-title:              font_size="20px" fill=WHITE text_anchor="middle"
 
     def to_html(self, n: Node_T) -> Html:
         let x: str = f"{n.at.x:.0f}"
@@ -128,6 +111,8 @@ class Link_View:
 class Diagram_View:
     var nodes: Node_View = Node_View()
     var links: Link_View = Link_View()
+    style "svg#editor":
+        &:                          display="block" width="100%" height="auto" user_select="none" background="#1a1a1a" border="1px solid #333"
 
     def to_html(self, d: Diagram) -> Html:
         let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
@@ -140,7 +125,7 @@ class Diagram_View:
 
     # The rules of the drawing, for the page's <style>.
     def css(self) -> str:
-        return self.nodes.style.css() + self.nodes.ports.style.css() + self.links.style.css()
+        return self.style.css() + self.nodes.style.css() + self.nodes.ports.style.css() + self.links.style.css()
 
 # The drawing, as every page draws it.
 let diagram_view: Diagram_View = Diagram_View()
@@ -176,8 +161,30 @@ def header_html() -> Html:
             h1: "SVG node editor"
             p: "Nodes and connectors, kept in diagram.txt by the server."
 
+# The page's own look: the body, the header, the buttons, the paragraphs around the drawing (the
+# drawing has its own, in its classes above).
+class Page_View:
+    style "":
+        body:                       margin="0" background="#1a1a1a" color="#ddd" font_family="Arial, sans-serif"
+        header, #all:               max_width="1100px" margin="0 auto" padding="0 12px"
+        header h1:                  font_size="1.3em" margin="0.8em 0 0.1em"
+        header p:                   color="#999" margin="0 0 0.8em"
+        p.problem:                  color="#ffb4a8" background="#4a2420" border_radius="6px" padding="0.4em 0.7em" margin="0.5em 0"
+        p.problem:empty:            display="none"
+        p.hint:                     color="#999" font_size="0.85em" margin="0.5em 0 1em"
+        div.toolbar:                margin="0.5em 0"
+        button:                     font="inherit" font_size="0.9em" border="1px solid #555" border_radius="6px" padding="0.3em 0.8em" background="#2a2a2a" color="#ddd" cursor="pointer"
+        button:hover:               background="#333"
+        pre#diagram:                display="none"
+
+    # The rules of the page and of its drawing, for its <style>.
+    def css(self) -> str:
+        return self.style.css() + diagram_view.css()
+
+let page_view: Page_View = Page_View()
+
 def shell_text() -> str:
-    return page.shell_text("SVG node editor", STYLE + diagram_view.css(), ["node_editor_js_events.js"], [header_html()], read_diagram())
+    return page.shell_text("SVG node editor", page_view.css(), ["node_editor_js_events.js"], [header_html()], read_diagram())
 
 def all_text(d: Diagram, problem: None | !Refusal_T) -> str:
     return str(all_html(d, problem))

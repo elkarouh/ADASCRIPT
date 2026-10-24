@@ -15,7 +15,12 @@ which is this module's Style, Rule and Look:
             &:hover circle:     stroke=INK
             [WAY] circle:       stroke=ORANGE stroke_width=4
 
-    page.shell_text(title, STYLE + Node_View().style.css(), ...)
+    class Page_View:                    # the page's own: no scope, each selector whole
+        style "":
+            body:               margin="0" font_family="Arial, sans-serif"
+            header, #all:       max_width="68em" margin="0 auto"
+
+    page.shell_text(title, Page_View().style.css() + Node_View().style.css(), ...)
 
 A rule is for the scope followed by its part: "" the element itself (`&`), " circle" a circle in
 it, ":hover circle" one when the pointer is over it, ".way circle" one in the state WAY (`[WAY]`),
@@ -23,8 +28,10 @@ an enum value whose class, `class_of(WAY)`, the element carries. `part` and `whe
 to a Style made in code. Compiles both ways.
 """
 
-# What a rule sets: each property named as in CSS, with _ for -. A property left at its default
-# ("", or a negative number) is not set.
+# What a rule sets: each property named as in CSS, with _ for -, its value as CSS writes it, a
+# length with its unit ("0.4em 0.7em"); stroke_width, opacity and font_weight are numbers,
+# stroke_width in pixels.
+# A property left at its default ("", or a negative number) is not set.
 type Look is record:
     fill:             str = ""
     stroke:           str = ""
@@ -34,13 +41,56 @@ type Look is record:
     marker_end:       str = ""          # "url(#arrow)"
     opacity:          float = -1.0
     cursor:           str = ""
-    font_size:        float = -1.0      # in pixels
+    font_size:        str = ""          # "13px", "0.9em"
     font_weight:      int = 0           # 400 normal, 700 bold
     text_anchor:      str = ""          # start, middle, end
     pointer_events:   str = ""          # none
     paint_order:      str = ""          # stroke: the outline under the fill, as a halo
     dominant_baseline: str = ""         # middle: the text centred on its y
     font_variant_numeric: str = ""      # tabular-nums: figures of one width, in columns
+    # the page's own: what is not drawn, laid out
+    background:       str = ""          # "#fff"
+    background_color: str = ""
+    border:           str = ""          # "1px solid #999"
+    border_top:       str = ""
+    border_right:     str = ""
+    border_bottom:    str = ""
+    border_bottom_color: str = ""
+    border_radius:    str = ""
+    border_collapse:  str = ""
+    box_shadow:       str = ""
+    box_sizing:       str = ""          # border-box
+    color:            str = ""
+    display:          str = ""          # none, block, flex, grid
+    position:         str = ""          # fixed
+    top:              str = ""
+    left:             str = ""
+    z_index:          str = ""
+    transform:        str = ""          # "translateX(-50%)"
+    flex_direction:   str = ""
+    flex_wrap:        str = ""
+    flex_shrink:      str = ""
+    align_items:      str = ""
+    justify_content:  str = ""
+    gap:              str = ""
+    grid_template_columns:str = ""      # "1fr 1fr"
+    width:            str = ""
+    min_width:        str = ""
+    max_width:        str = ""
+    height:           str = ""
+    min_height:       str = ""
+    margin:           str = ""          # "0 auto", "0.5em 0"
+    margin_top:       str = ""
+    margin_bottom:    str = ""
+    padding:          str = ""
+    padding_left:     str = ""
+    font:             str = ""          # inherit
+    font_family:      str = ""          # "sans-serif"
+    line_height:      str = ""
+    text_align:       str = ""
+    vertical_align:   str = ""
+    outline:          str = ""
+    user_select:      str = ""          # none: a drag selects no text
 
 # A rule of a Style: what follows the scope (" circle", ":hover circle", ".way circle"), and its look.
 type Rule is record:
@@ -63,39 +113,80 @@ class Style:
             return str(int(f))
         return str(f)
 
-    # LOOK as declarations: "fill: #fff; stroke-width: 2px;"
+    # A number of LOOK's as CSS writes it, "" when left at its default.
+    def amount(self, f: float) -> str:
+        return ("" if f < 0.0 else self.number(f))
+
+    def pixels(self, f: float) -> str:
+        return ("" if f < 0.0 else self.number(f) + "px")
+
+    def weight(self, w: int) -> str:
+        return ("" if w <= 0 else str(w))
+
+    # LOOK as declarations: "fill: #fff; stroke-width: 2px;", the properties it sets, in this order.
     def declarations(self, look: Look) -> str:
+        let said: [][]str = [
+            ["font", look.font],              # first: the shorthand sets every font-*
+            ["fill", look.fill],
+            ["stroke", look.stroke],
+            ["stroke-width", self.pixels(look.stroke_width)],
+            ["stroke-dasharray", look.stroke_dasharray],
+            ["stroke-linejoin", look.stroke_linejoin],
+            ["marker-end", look.marker_end],
+            ["opacity", self.amount(look.opacity)],
+            ["cursor", look.cursor],
+            ["font-size", look.font_size],
+            ["font-weight", self.weight(look.font_weight)],
+            ["text-anchor", look.text_anchor],
+            ["pointer-events", look.pointer_events],
+            ["paint-order", look.paint_order],
+            ["dominant-baseline", look.dominant_baseline],
+            ["font-variant-numeric", look.font_variant_numeric],
+            ["background", look.background],
+            ["background-color", look.background_color],
+            ["border", look.border],
+            ["border-top", look.border_top],
+            ["border-right", look.border_right],
+            ["border-bottom", look.border_bottom],
+            ["border-bottom-color", look.border_bottom_color],
+            ["border-radius", look.border_radius],
+            ["border-collapse", look.border_collapse],
+            ["box-shadow", look.box_shadow],
+            ["box-sizing", look.box_sizing],
+            ["color", look.color],
+            ["display", look.display],
+            ["position", look.position],
+            ["top", look.top],
+            ["left", look.left],
+            ["z-index", look.z_index],
+            ["transform", look.transform],
+            ["flex-direction", look.flex_direction],
+            ["flex-wrap", look.flex_wrap],
+            ["flex-shrink", look.flex_shrink],
+            ["align-items", look.align_items],
+            ["justify-content", look.justify_content],
+            ["gap", look.gap],
+            ["grid-template-columns", look.grid_template_columns],
+            ["width", look.width],
+            ["min-width", look.min_width],
+            ["max-width", look.max_width],
+            ["height", look.height],
+            ["min-height", look.min_height],
+            ["margin", look.margin],
+            ["margin-top", look.margin_top],
+            ["margin-bottom", look.margin_bottom],
+            ["padding", look.padding],
+            ["padding-left", look.padding_left],
+            ["font-family", look.font_family],
+            ["line-height", look.line_height],
+            ["text-align", look.text_align],
+            ["vertical-align", look.vertical_align],
+            ["outline", look.outline],
+            ["user-select", look.user_select]]
         var d: []str = []
-        if look.fill != "":
-            d.append(f"fill: {look.fill};")
-        if look.stroke != "":
-            d.append(f"stroke: {look.stroke};")
-        if look.stroke_width >= 0.0:
-            d.append(f"stroke-width: {self.number(look.stroke_width)}px;")
-        if look.stroke_dasharray != "":
-            d.append(f"stroke-dasharray: {look.stroke_dasharray};")
-        if look.stroke_linejoin != "":
-            d.append(f"stroke-linejoin: {look.stroke_linejoin};")
-        if look.marker_end != "":
-            d.append(f"marker-end: {look.marker_end};")
-        if look.opacity >= 0.0:
-            d.append(f"opacity: {self.number(look.opacity)};")
-        if look.cursor != "":
-            d.append(f"cursor: {look.cursor};")
-        if look.font_size >= 0.0:
-            d.append(f"font-size: {self.number(look.font_size)}px;")
-        if look.font_weight > 0:
-            d.append(f"font-weight: {look.font_weight};")
-        if look.text_anchor != "":
-            d.append(f"text-anchor: {look.text_anchor};")
-        if look.pointer_events != "":
-            d.append(f"pointer-events: {look.pointer_events};")
-        if look.paint_order != "":
-            d.append(f"paint-order: {look.paint_order};")
-        if look.dominant_baseline != "":
-            d.append(f"dominant-baseline: {look.dominant_baseline};")
-        if look.font_variant_numeric != "":
-            d.append(f"font-variant-numeric: {look.font_variant_numeric};")
+        for nv in said:
+            if nv[1] != "":
+                d.append(nv[0] + ": " + nv[1] + ";")
         return " ".join(d)
 
     # LOOK for the scope followed by PART: "" the element itself, " circle" a circle in it,

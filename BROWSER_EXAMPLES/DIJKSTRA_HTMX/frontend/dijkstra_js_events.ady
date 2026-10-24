@@ -376,7 +376,7 @@ class Menus:
             self.at = spot_at(e)
             show_at(page.element("#menu-space"), c)
 
-    # Any click closes the menus; one on a button with data_tool does what it names (see menus_html
+    # Any click closes the menus; one on a button with data_tool does what it names (see Menu_View
     # in dijkstra_gui.ady).
     def clicked(self, e: Event_T):
         let c: Click_T = click_of(e)

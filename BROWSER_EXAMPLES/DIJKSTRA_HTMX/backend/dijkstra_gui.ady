@@ -97,7 +97,7 @@ class Route:
 
 # ---- The drawing: an edge, a node, the network ----
 
-# The colours, named once: the page's own rules (STYLE) take them as CSS variables.
+# The colours, named once.
 const INK: str = "#1f2933"          # text, and a node under the pointer
 const SOFT: str = "#616e7c"         # what is said in passing: an edge's cost
 const LINE: str = "#b0b8c1"         # an edge
@@ -109,6 +109,9 @@ const PALE_GREEN: str = "#e3f2e5"
 const BLUE: str = "#1565c0"         # its goal
 const PALE_BLUE: str = "#e3eefb"
 const ACCENT: str = "#3a66db"       # what is selected, and what is being drawn
+const GROUND: str = "#f5f7fa"       # the page under the board
+const FRAME: str = "#e4e7eb"        # the board's border
+const RED: str = "#c62828"          # what is refused, and what deletes
 
 # An edge of a network: a line between its nodes, orange when the route runs along it, and its cost
 # over its middle. Its look is its Style; the edge's g is selected by the browser (dijkstra_js_events).
@@ -118,7 +121,7 @@ class Edge_View:
         path.edge.way:          stroke=ORANGE stroke_width=5
         &.selected path.edge:   stroke=ACCENT stroke_width=5
         path.hit:               stroke="transparent" stroke_width=14 fill="none" cursor="pointer"
-        text.cost:              font_size=13 fill=SOFT text_anchor="middle" paint_order="stroke" stroke=PAPER stroke_width=4
+        text.cost:              font_size="13px" fill=SOFT text_anchor="middle" paint_order="stroke" stroke=PAPER stroke_width=4
 
     # Edge E of NET, as ROUTE has it.
     def to_html(self, e: Edge_T, net: Network, route: Route) -> Html:
@@ -149,7 +152,7 @@ class Node_View:
         circle.port:            fill=ACCENT opacity=0 cursor="crosshair"
         &:hover circle.port:    opacity=1
         &.selected circle.port: opacity=1
-        text.name:              font_size=16 font_weight=700 text_anchor="middle" pointer_events="none" fill=INK
+        text.name:              font_size="16px" font_weight=700 text_anchor="middle" pointer_events="none" fill=INK
 
     # Node N of NET, as ROUTE has it.
     def to_html(self, n: Node_T, net: Network, route: Route) -> Html:
@@ -174,6 +177,7 @@ class Network_View:
     var edges: Edge_View = Edge_View()
     var nodes: Node_View = Node_View()
     style "svg.graph":
+        &:                      width="100%" height="auto" user_select="none" display="block"
         path.wire:              stroke=ACCENT stroke_width=2.5 stroke_dasharray="6 4" fill="none" pointer_events="none"
 
     def to_html(self, net: Network, route: Route) -> Html:
@@ -195,25 +199,25 @@ let network_view: Network_View = Network_View()
 
 # ---- Around the drawing: the menus, the buttons, the answer to a command ----
 
-# The menus' own look (see menus_html).
-const MENU_STYLE: str = """
-div.menu { position: fixed; z-index: 10; display: none; flex-direction: column; min-width: 10em; background: #fff;
-           border: 1px solid #cbd2d9; border-radius: 8px; box-shadow: 0 6px 18px rgba(31, 41, 51, 0.18); padding: 0.3em; }
-div.menu button { border: none; text-align: left; border-radius: 4px; padding: 0.4em 0.7em; }
-"""
-
-# The menu of what a right click on a node, an edge or the space offers: the buttons carry
+# The menus of what a right click on a node, an edge or the space offers: the buttons carry
 # data_tool, which dijkstra_js_events.ady acts on for the thing that was right-clicked.
-def menus_html() -> Html:
-    html:
-        div id="menus":
-            div id="menu-node" class="menu":
-                button type="button" class="danger" data_tool="delete": "Delete node"
-            div id="menu-edge" class="menu":
-                button type="button" data_tool="cost": "Change cost…"
-                button type="button" class="danger" data_tool="delete": "Delete edge"
-            div id="menu-space" class="menu":
-                button type="button" data_tool="add-here": "New node here"
+class Menu_View:
+    style "div.menu":
+        &:                      position="fixed" z_index="10" display="none" flex_direction="column" min_width="10em" background="#fff" border="1px solid #cbd2d9" border_radius="8px" box_shadow="0 6px 18px rgba(31, 41, 51, 0.18)" padding="0.3em"
+        button:                 border="none" text_align="left" border_radius="4px" padding="0.4em 0.7em"
+
+    def to_html(self) -> Html:
+        html:
+            div id="menus":
+                div id="menu-node" class="menu":
+                    button type="button" class="danger" data_tool="delete": "Delete node"
+                div id="menu-edge" class="menu":
+                    button type="button" data_tool="cost": "Change cost…"
+                    button type="button" class="danger" data_tool="delete": "Delete edge"
+                div id="menu-space" class="menu":
+                    button type="button" data_tool="add-here": "New node here"
+
+let menu_view: Menu_View = Menu_View()
 
 # The page: a command goes to its URL; a change's answer takes the place of #problem, and a read
 # takes the reader's choice (#state) along.
@@ -253,34 +257,7 @@ def all_html(net: Network, choice: Choice, problem: None | !Refusal_T) -> Html:
             # the network, its places included, as the server keeps it: for the browser's NetworkView to draw from
             pre id="network": net.text()
             p class="hint": "Click a node to choose it as the start, then one to go to; click a chosen node again to unchoose it. Click an edge to select it, then Delete removes it. Drag a node to move it, or from its dot to another node to join them. Double-click the space for a new node, or an edge to change its cost. Right-click for a menu."
-            + menus_html()
-
-# The page's own look: the body, the form, the drawing as a whole (the drawing's parts have their
-# own, in their classes above).
-let COLOURS: str = f":root {{ --ink: {INK}; --soft: {SOFT}; --line: #e4e7eb; --bg: #f5f7fa; --card: {PAPER}; --way: {ORANGE}; --bad: #c62828; --accent: {ACCENT}; }}\n"
-const STYLE: str = """
-* { box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg);
-       margin: 0; padding: 1.5em 1em 3em; }
-header, #all { max-width: 68em; margin: 0 auto; }
-header h1 { font-size: 1.5em; margin: 0; }
-header p { color: var(--soft); margin: 0.2em 0 1.2em; }
-div.board { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1em 1.2em; }
-p.said { font-weight: 600; margin: 0 0 0.4em; min-height: 1.4em; }
-p.said.found { color: var(--way); }
-p.problem { color: var(--bad); background: #fdecea; border-radius: 6px; padding: 0.4em 0.7em; margin: 0 0 0.4em; }
-p.problem:empty { display: none; }
-p.hint { color: var(--soft); font-size: 0.85em; margin: 0.4em 0 0; }
-input, button { font: inherit; font-size: 0.9em; }
-button { border: 1px solid #cbd2d9; border-radius: 6px; padding: 0.3em 0.8em; background: #fff; cursor: pointer; }
-button:hover { background: var(--bg); }
-button.quiet { color: var(--soft); }
-button.danger { color: var(--bad); }
-div.toolbar { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 0.8em; }
-pre#network { display: none; }
-svg.graph { width: 100%; height: auto; user-select: none; display: block; }
-"""
-
+            + menu_view.to_html()
 
 # What the page says above itself.
 def header_html() -> Html:
@@ -289,8 +266,37 @@ def header_html() -> Html:
             h1: "Shortest way"
             p: "Dijkstra on a network you can edit, drawn by the server."
 
+# The page's own look: the body, the buttons, the paragraphs around the drawing (the drawing and the
+# menus have their own, in their classes above).
+class Page_View:
+    style "":
+        *:                      box_sizing="border-box"
+        body:                   font_family="system-ui, -apple-system, \"Segoe UI\", Helvetica, Arial, sans-serif" color=INK background=GROUND margin="0" padding="1.5em 1em 3em"
+        header, #all:           max_width="68em" margin="0 auto"
+        header h1:              font_size="1.5em" margin="0"
+        header p:               color=SOFT margin="0.2em 0 1.2em"
+        div.board:              background=PAPER border=f"1px solid {FRAME}" border_radius="10px" padding="1em 1.2em"
+        p.said:                 font_weight=600 margin="0 0 0.4em" min_height="1.4em"
+        p.said.found:           color=ORANGE
+        p.problem:              color=RED background="#fdecea" border_radius="6px" padding="0.4em 0.7em" margin="0 0 0.4em"
+        p.problem:empty:        display="none"
+        p.hint:                 color=SOFT font_size="0.85em" margin="0.4em 0 0"
+        input, button:          font="inherit" font_size="0.9em"
+        button:                 border="1px solid #cbd2d9" border_radius="6px" padding="0.3em 0.8em" background="#fff" cursor="pointer"
+        button:hover:           background=GROUND
+        button.quiet:           color=SOFT
+        button.danger:          color=RED
+        div.toolbar:            display="flex" flex_wrap="wrap" gap="0.5em" margin_bottom="0.8em"
+        pre#network:            display="none"
+
+    # The rules of the page, of its drawing and of its menus, for its <style>.
+    def css(self) -> str:
+        return self.style.css() + network_view.css() + menu_view.style.css()
+
+let page_view: Page_View = Page_View()
+
 def shell_text() -> str:
-    return page.shell_text("Shortest way", COLOURS + STYLE + network_view.css() + MENU_STYLE, ["dijkstra_js_events.js"], [header_html()], read_network("", False))
+    return page.shell_text("Shortest way", page_view.css(), ["dijkstra_js_events.js"], [header_html()], read_network("", False))
 
 def all_text(net: Network, choice: Choice, problem: None | !Refusal_T) -> str:
     return str(all_html(net, choice, problem))

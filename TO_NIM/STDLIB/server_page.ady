@@ -21,7 +21,7 @@ whether it went through, which takes the place of the paragraph the app names (#
     page.sending(read_books(fields), box, "", "", "")                      # any element that does, on a click
     page.on_change(update_investment(), field)                              # a field, or a form, when it changes
     page.every(1800, read_books(tick))                                     # a part that sends it after a while
-    page.shell_text("Shortest way", STYLE, ["dijkstra_js_events.js"], [header], read_network("", False))
+    page.shell_text("Shortest way", page_view.css(), ["dijkstra_js_events.js"], [header], read_network("", False))
 
 `settings`, the third, is the form whose fields go along with every read ("#state", the reader's
 choices the server does not keep), or "". The server serves /htmx.min.js (page_server's send_script);

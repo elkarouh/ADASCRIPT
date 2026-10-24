@@ -34,19 +34,6 @@ def routes_for(g: Graph, names: []str, points: []Spot_T, tall: []Drawing_Pixel_T
         texts.append(money(f.amount))
     return routes_of(sources, targets, texts, names, points, tall, size, [], [], shape)
 
-const STYLE: str = """
-body { font-family: sans-serif; max-width: 52em; margin: 2em auto; padding: 0 1em; line-height: 1.45; }
-table { border-collapse: collapse; margin: 1em 0; }
-th, td { border: 1px solid #bbb; padding: 0.3em 0.7em; text-align: left; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.green { background: #d6f0d6; }
-td.blue { background: #d6e6f8; }
-td.pink { background: #f8d6e6; }
-svg.graph { width: 100%; height: auto; margin: 1em 0; }
-td.untouched { background: #fff; }
-table.statement { min-width: 22em; }
-tr.total td { font-weight: bold; border-top: 2px solid #333; }
-"""
 
 
 def css_of(a: Account) -> str:
@@ -166,9 +153,9 @@ class Account_View:
         rect.untouched:         fill="#fff" stroke="#999" stroke_width=1.5
         circle.pink:            fill="#f8d6e6" stroke="#b05a85" stroke_width=1.5
         rect.pink:              fill="#f8d6e6" stroke="#b05a85" stroke_width=1.5
-        text.label:             text_anchor="middle" dominant_baseline="middle" font_size=11
-        text.boxname:           text_anchor="start" dominant_baseline="middle" font_size=12
-        text.boxbalance:        text_anchor="end" dominant_baseline="middle" font_size=12 font_variant_numeric="tabular-nums"
+        text.label:             text_anchor="middle" dominant_baseline="middle" font_size="11px"
+        text.boxname:           text_anchor="start" dominant_baseline="middle" font_size="12px"
+        text.boxbalance:        text_anchor="end" dominant_baseline="middle" font_size="12px" font_variant_numeric="tabular-nums"
         g.node:                 cursor="grab"
         g.from rect:            stroke="#c62828" stroke_width=5 stroke_dasharray="8 4"
         g.from:                 cursor="crosshair"
@@ -237,11 +224,11 @@ class Flow_View:
         path.hit:               fill="none" stroke="transparent" stroke_width=12
         g.arrow:hover path.edge: stroke="#000" stroke_width=2.5
         polygon:                fill="#555"
-        text.amount:            text_anchor="middle" font_size=11 font_weight=700 paint_order="stroke" stroke="#fff" stroke_width=3
+        text.amount:            text_anchor="middle" font_size="11px" font_weight=700 paint_order="stroke" stroke="#fff" stroke_width=3
         path.rubber:            stroke="#c62828" stroke_width=3 stroke_dasharray="8 4" fill="none" marker_end="url(#arrow)"
         g.now path.edge:        stroke="#e65100" stroke_width=3.5 marker_end="url(#arrow-now)"
         polygon.now:            fill="#e65100"
-        g.now text.amount:      fill="#e65100" font_weight=700 font_size=13
+        g.now text.amount:      fill="#e65100" font_weight=700 font_size="13px"
 
     # A flow as an arrow along ROUTE, with its amount where the route says. TIP
     # shows when the mouse is over it, as the browser's tooltip (the live page,
@@ -329,13 +316,34 @@ def section_html(title: str, text: str, parts: []Html) -> Html:
             for part in parts:
                 + part
 
+# The page's own look: the text, the tables (the graph has its own, in its classes above).
+class Page_View:
+    style "":
+        body:               font_family="sans-serif" max_width="52em" margin="2em auto" padding="0 1em" line_height="1.45"
+        table:              border_collapse="collapse" margin="1em 0"
+        th, td:             border="1px solid #bbb" padding="0.3em 0.7em" text_align="left"
+        td.num, th.num:     text_align="right" font_variant_numeric="tabular-nums"
+        td.green:           background="#d6f0d6"
+        td.blue:            background="#d6e6f8"
+        td.pink:            background="#f8d6e6"
+        svg.graph:          width="100%" height="auto" margin="1em 0"
+        td.untouched:       background="#fff"
+        table.statement:    min_width="22em"
+        tr.total td:        font_weight=700 border_top="2px solid #333"
+
+    # The rules of the page and of its graph, for its <style>.
+    def css(self) -> str:
+        return self.style.css() + account_view.style.css() + flow_view.style.css()
+
+let page_view: Page_View = Page_View()
+
 def page_html(title: str, text: str, sections: []Html) -> Html:
     html:
         html lang="en":
             head:
                 meta charset="utf-8"
                 title: title
-                style: STYLE + account_view.style.css() + flow_view.style.css()
+                style: page_view.css()
             body:
                 h1: title
                 p: text

@@ -20,6 +20,21 @@ class Node_View:
         &.picked circle.port: opacity=1 stroke_dasharray="6 4"
     var name: str = "n"
 
+# The page's own rules: no scope, the selector whole; a length as CSS writes it.
+class Page_View:
+    style "":
+        body:               margin="0" font_family="\"Segoe UI\", sans-serif"
+        button:             font_size="0.9em" font="inherit" border="1px solid #555"
+        header, #all:       max_width="68em" margin="0 auto"
+        p.problem:empty:    display="none"
+
+let page: Page_View = Page_View()
+assert page.style.css() == """ body { margin: 0; font-family: "Segoe UI", sans-serif; }
+ button { font: inherit; font-size: 0.9em; border: 1px solid #555; }
+ header, #all { max-width: 68em; margin: 0 auto; }
+ p.problem:empty { display: none; }
+""", page.style.css()
+
 let view: Node_View = Node_View()
 let css: str = view.style.css()
 let want: str = """g.node { cursor: grab; }

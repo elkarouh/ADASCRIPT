@@ -3602,13 +3602,30 @@ is under it: `circle` is a circle in the element, `&` the element itself
 enum value whose class (`start`, `style.class_of(START)`) the element carries.
 After the `:`, the properties are `name=value`, each value an expression and
 each name a field of the stdlib's `Look` (`stroke_width` for
-`stroke-width`), so a misspelt one does not compile.
+`stroke-width`), so a misspelt one does not compile. A value is a string as
+CSS writes it, a length with its unit (`font_size="0.9em"`,
+`margin="0 auto"`); `stroke_width` (pixels), `opacity` and `font_weight` are
+numbers.
+
+The page's own rules, for what is not drawn (the body, the buttons, the
+tables), are a block with no scope, `style "":`, its selectors whole; a comma
+joins two there (`header, #all:`), as in CSS:
+
+```python
+class Page_View:
+    style "":
+        body:               margin="0" font_family="Arial, sans-serif"
+        header, #all:       max_width="1100px" margin="0 auto"
+        button:             font="inherit" font_size="0.9em" border="1px solid #555"
+        p.problem:empty:    display="none"
+```
 
 The block is the field `style`, a `Style` (`TO_NIM/STDLIB/style.ady`), made
 for each instance; the page puts `view.style.css()` in its `<style>` once,
 and an element carries only its class and its state. Both backends;
-`TESTS/test_style_block.ady`, and DIJKSTRA_HTMX's `Network_View`,
-`Edge_View` and `Node_View`.
+`TESTS/test_style_block.ady`; the four apps of BROWSER_EXAMPLES (DIJKSTRA_HTMX,
+SVG_NODE_EDITOR, ROI_HTMX, ACCOUNTING) write all their CSS this way, each page's
+own in a `Page_View`.
 
 ---
 

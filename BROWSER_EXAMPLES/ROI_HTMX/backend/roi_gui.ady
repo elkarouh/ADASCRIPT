@@ -109,12 +109,31 @@ class Arrow_View:
             marker id=self.head_id(color) viewBox="-2 -12 17 24" refX="0" refY="0" markerUnits="userSpaceOnUse" markerWidth="17" markerHeight="24" orient="auto":
                 path d="M 0 4 L 0 10 L 13 0 L 0 -10 L 0 -4" fill=color stroke="#000" stroke_width="2" stroke_linejoin="round"
 
-# A box of a block: a rectangle, with what is in it written as HTML.
+# A box of a block: a rectangle, with what is in it written as HTML, a form (.jj-form): its fields
+# one above the other (.jj-field-vertical) or a name beside its value (.jj-field-horizontal).
 class Box_View:
     style "g.box":
-        rect.body:          stroke="#333" stroke_width=2
-        rect.node:          stroke="#333" stroke_width=2 cursor="grab"
-        foreignObject:      pointer_events="none"
+        rect.body:                      stroke="#333" stroke_width=2
+        rect.node:                      stroke="#333" stroke_width=2 cursor="grab"
+        foreignObject:                  pointer_events="none"
+        .jj-form:                       position="static" font_size="14px" text_align="center" padding="10px" display="flex" flex_direction="column" box_sizing="border-box" height="100%" pointer_events="none" color="#000"
+        .jj-form input:                 pointer_events="auto"
+        .jj-form select:                pointer_events="auto"
+        .jj-form .between:              display="flex" flex_direction="column" justify_content="space-between" height="100%"
+        .jj-form h2:                    font_size="1.5em" margin="0.83em 0"
+        .jj-form p:                     margin="1em 0"
+        .jj-form legend.lead:           margin_bottom="10px"
+        .jj-form legend:                display="block" width="100%" text_align="center" padding="0"
+        .jj-field-vertical:             display="flex" flex_direction="column"
+        .jj-field-vertical label:       margin_top="15px"
+        .jj-field-vertical .jj-input:   margin_top="10px"
+        .jj-field-horizontal label:     display="flex" align_items="center" text_align="left"
+        .jj-field-horizontal span.name: width="30%" flex_shrink="0"
+        .jj-field-horizontal .jj-input: width="70%" min_width="0"
+        .jj-input:                      box_sizing="border-box" text_align="right" margin="5px 0" font_size="13.33px"
+        .jj-field-vertical .jj-input:   width="100%"
+        .jj-input-container:            display="flex" flex_direction="row" align_items="center"
+        .jj-input-unit:                 flex_shrink="0" padding_left="5px" text_align="right"
 
     # The box at (LEFT, TOP), W by H, filled with COLOR, with INSIDE in it. It belongs to the block
     # called BLOCK, and moves with it. A box that is a block of its own, GRIP, is what the script
@@ -242,38 +261,26 @@ def all_html(portfolio: Portfolio, layout: Layout) -> Html:
                     + arrows.to_html(layout, "investment", send_x(i), send_y(i), name_of(outcome.list_of_outcomes[i].kind), Drawing_Pixel_T(0.0), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, INVEST_COLOR, (VERTICAL if i != 1 else SIDEWAYS))
                     + arrows.to_html(layout, name_of(outcome.list_of_outcomes[i].kind), width_of(name_of(outcome.list_of_outcomes[i].kind)), height_of(name_of(outcome.list_of_outcomes[i].kind)) / 2.0, "overall", PERF_DX, PERF_DY[i] + PERF_H / 2.0, color_of(outcome.list_of_outcomes[i].kind), SIDEWAYS)
 
-# The page's own look, and that of the forms in the boxes (the boxes and the arrows have their own,
-# in their classes above).
-const STYLE: str = """
-* { font-family: sans-serif; }
-body { margin: 0; padding: 0; background-color: #f6f4f4; }
-svg.drawing { display: block; user-select: none; }
-p.problem { position: fixed; top: 0.5em; left: 0.5em; margin: 0; color: #b71c1c; background: #fdecea; border-radius: 6px; padding: 0.4em 0.7em; }
-p.problem:empty { display: none; }
-fieldset { border: none; margin: 0; padding: 0; }
-input:invalid { background-color: ivory; border: 2px solid lightgray; outline: 2px solid red; }
-.jj-form { position: static; font-size: 14px; text-align: center; padding: 10px; display: flex; flex-direction: column;
-           box-sizing: border-box; height: 100%; pointer-events: none; color: #000; }
-.jj-form input, .jj-form select { pointer-events: auto; }
-.jj-form .between { display: flex; flex-direction: column; justify-content: space-between; height: 100%; }
-.jj-form h2 { font-size: 1.5em; margin: 0.83em 0; }
-.jj-form p { margin: 1em 0; }
-.jj-form legend.lead { margin-bottom: 10px; }
-.jj-form legend { display: block; width: 100%; text-align: center; padding: 0; }
-.jj-field-vertical { display: flex; flex-direction: column; }
-.jj-field-vertical label { margin-top: 15px; }
-.jj-field-vertical .jj-input { margin-top: 10px; }
-.jj-field-horizontal label { display: flex; align-items: center; text-align: left; }
-.jj-field-horizontal span.name { width: 30%; flex-shrink: 0; }
-.jj-field-horizontal .jj-input { width: 70%; min-width: 0; }
-.jj-input { box-sizing: border-box; text-align: right; margin: 5px 0; font-size: 13.33px; }
-.jj-field-vertical .jj-input { width: 100%; }
-.jj-input-container { display: flex; flex-direction: row; align-items: center; }
-.jj-input-unit { flex-shrink: 0; padding-left: 5px; text-align: right; }
-"""
+# The page's own look (the boxes, with their forms, and the arrows have their own, in their classes
+# above).
+class Page_View:
+    style "":
+        *:                  font_family="sans-serif"
+        body:               margin="0" padding="0" background_color="#f6f4f4"
+        svg.drawing:        display="block" user_select="none"
+        p.problem:          position="fixed" top="0.5em" left="0.5em" margin="0" color="#b71c1c" background="#fdecea" border_radius="6px" padding="0.4em 0.7em"
+        p.problem:empty:    display="none"
+        fieldset:           border="none" margin="0" padding="0"
+        input:invalid:      background_color="ivory" border="2px solid lightgray" outline="2px solid red"
+
+    # The rules of the page and of its drawing, for its <style>.
+    def css(self) -> str:
+        return self.style.css() + boxes.style.css() + arrows.style.css()
+
+let page_view: Page_View = Page_View()
 
 def shell_text() -> str:
-    return page.shell_text("Return of investment", STYLE + boxes.style.css() + arrows.style.css(), ["roi_js_events.js"], [], read_portfolio())
+    return page.shell_text("Return of investment", page_view.css(), ["roi_js_events.js"], [], read_portfolio())
 
 def all_text(portfolio: Portfolio, layout: Layout) -> str:
     return str(all_html(portfolio, layout))

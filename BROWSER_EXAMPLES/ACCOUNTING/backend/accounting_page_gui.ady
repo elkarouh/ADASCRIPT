@@ -28,12 +28,12 @@ from backend/accounting_model import Account, Flow, BookFailure_T, Cents_T, ASSE
 from drawing import Drawing_Pixel_T, Spot_T
 from shared/routes import Shape, boxes, px, Route_T
 from shared/layout import WIDTH, Arrow_T, Layout_T, Slot_T, books_text, layout_of_slots
-from backend/accounting_gui import STYLE, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, T_TEXT, account_view, flow_view, css_of, tip_of, to_html, section_html, sections_after_graph
+from backend/accounting_gui import page_view, money, routes_for, ACCOUNTS_TEXT, APP_INTRO, RATIOS_TEXT, T_TEXT, account_view, flow_view, css_of, tip_of, to_html, section_html, sections_after_graph
 from backend/books_text import AccountRow, Books, Ratio, kind_text, ratios_of
 from backend/accounting_groups import Grouping
 from backend/accounting_page_state import Settings, View, posting_text
 from server_page import Page_Of
-from style import Style
+from style import Look, Rule, Style
 from backend/accounting_commands import Thing_T, Command, url, no_fields, read_books, create_entry, delete_entry, create_account, delete_account, create_scenario, update_scenario, delete_scenario, close_year
 
 # ---- Buttons ----
@@ -490,7 +490,7 @@ def state_html(v: View, names: []str, titles: []str, current: str) -> Html:
                     if len(days) > 1:
                         span: " Books as at "
                         strong: days[position]
-                        input type="range" name="slide" min="0" max=last_day value=str(position)
+                        input type="range" class="slide" name="slide" min="0" max=last_day value=str(position)
                 if s.step >= 0:
                     p class="caption":
                         strong: v.replay.caption(s.step)
@@ -553,47 +553,6 @@ def all_html(v: View, names: []str, titles: []str, current: str) -> Html:
             if s.playing:
                 + page.every(1800, read_books(tick))
 
-const EXTRA: str = """
-body { max-width: 80em; }
-form#state { background: #eaf2fb; padding: 0.5em 0.8em; border-radius: 4px; margin: 0.5em 0; }
-path.split { stroke: #999; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
-text.side { font-size: 14px; font-weight: bold; fill: #666; }
-svg.graph { user-select: none; }
-form.popup { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #fff; border: 2px solid #333; border-radius: 6px; padding: 1em 1.5em; box-shadow: 0 4px 24px #0006; z-index: 10; min-width: 24em; }
-form.popup label { display: block; margin-top: 0.6em; font-weight: bold; }
-form.popup input, form.popup select { width: 100%; box-sizing: border-box; }
-form.popup button { margin: 1em 0.5em 0 0; }
-p.refused { color: #b71c1c; font-weight: bold; }
-p.note { background: #e8f5e9; padding: 0.3em 0.8em; border-radius: 4px; }
-p#told:empty { display: none; }
-tr.now td { background: #ffe0b2; font-weight: bold; }
-p.replay { margin: 0.5em 0 0 0; }
-p.caption { margin: 0.3em 0 0 0; }
-input[type=range] { vertical-align: middle; width: 16em; }
-tr.later td { color: #bbb; }
-tbody.now td { background: #ffe0b2; font-weight: bold; }
-tbody.later td { color: #bbb; }
-tbody.entry td { border-top: 2px solid #999; }
-tbody.entry tr + tr td { border-top: 1px solid #ddd; }
-p.tools, p.hint { margin: 0.4em 0; }
-p.hint { color: #555; }
-p.about { color: #444; }
-div.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 0.8em; align-items: start; }
-div.taccount { border: 1px solid #999; border-radius: 4px; background: #fff; font-size: 0.9em; }
-div.taccount h4 { margin: 0; padding: 4px 8px; border-bottom: 2px solid #333; font-size: 1em; }
-div.taccount h4.green { background: #d6f0d6; }
-div.taccount h4.liability { background: #e3d6f5; }
-div.taccount h4.revenue { background: #a9cdf5; }
-div.taccount h4.expense { background: #fbd29c; }
-div.taccount h4.untouched { background: #eee; }
-div.taccount h4.pink { background: #f8d6e6; }
-div.tbody { display: grid; grid-template-columns: 1fr 1fr; min-height: 2.4em; }
-div.tdebit { padding: 4px 8px; text-align: right; border-right: 2px solid #333; font-variant-numeric: tabular-nums; }
-div.tcredit { padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
-div.tbody p, p.tbalance { margin: 0; padding: 0 8px; }
-div.tabs button { padding: 0.35em 1em; border: 1px solid #bbb; background: #f4f4f4; cursor: pointer; }
-div.tabs button.selected { background: #fff; font-weight: bold; border-bottom-color: #fff; }
-"""
 
 # The paragraph #told, the answer to a change: what was done (DONE), or why not; empty, and not
 # shown, before the first. It is outside #all, so the page drawn again on the news keeps it.
@@ -613,8 +572,63 @@ def title_html() -> Html:
     html:
         h1: "Accounting, as graph theory"
 
+# The app's look: the static page's (page_view), and its own: the form #state and the buttons, the
+# graph's quarters, the popup, the tabs and what they show.
+class App_View:
+    style "":
+        body:                       max_width="80em"
+        form#state:                 background="#eaf2fb" padding="0.5em 0.8em" border_radius="4px" margin="0.5em 0"
+        # the graph's quarters (Drawing)
+        path.split:                 stroke="#999" stroke_width=1.5 stroke_dasharray="6 4" fill="none"
+        text.side:                  font_size="14px" font_weight=700 fill="#666"
+        svg.graph:                  user_select="none"
+        # the popup (popup_form)
+        form.popup:                 position="fixed" top="20%" left="50%" transform="translateX(-50%)" background="#fff" border="2px solid #333" border_radius="6px" padding="1em 1.5em" box_shadow="0 4px 24px #0006" z_index="10" min_width="24em"
+        form.popup label:           display="block" margin_top="0.6em" font_weight=700
+        form.popup input, form.popup select: width="100%" box_sizing="border-box"
+        form.popup button:          margin="1em 0.5em 0 0"
+        # what was done (told_html), the replay, the tools
+        p.refused:                  color="#b71c1c" font_weight=700
+        p.note:                     background="#e8f5e9" padding="0.3em 0.8em" border_radius="4px"
+        p#told:empty:               display="none"
+        tr.now td:                  background="#ffe0b2" font_weight=700
+        p.replay:                   margin="0.5em 0 0 0"
+        p.caption:                  margin="0.3em 0 0 0"
+        input.slide:                vertical_align="middle" width="16em"
+        tr.later td:                color="#bbb"
+        tbody.now td:               background="#ffe0b2" font_weight=700
+        tbody.later td:             color="#bbb"
+        tbody.entry td:             border_top="2px solid #999"
+        tbody.entry tr + tr td:     border_top="1px solid #ddd"
+        p.tools, p.hint:            margin="0.4em 0"
+        p.hint:                     color="#555"
+        p.about:                    color="#444"
+        # the T-accounts (Tabs.t_accounts_html)
+        div.tgrid:                  display="grid" grid_template_columns="repeat(auto-fill, minmax(190px, 1fr))" gap="12px" margin_top="0.8em" align_items="start"
+        div.taccount:               border="1px solid #999" border_radius="4px" background="#fff" font_size="0.9em"
+        div.taccount h4:            margin="0" padding="4px 8px" border_bottom="2px solid #333" font_size="1em"
+        div.taccount h4.green:      background="#d6f0d6"
+        div.taccount h4.liability:  background="#e3d6f5"
+        div.taccount h4.revenue:    background="#a9cdf5"
+        div.taccount h4.expense:    background="#fbd29c"
+        div.taccount h4.untouched:  background="#eee"
+        div.taccount h4.pink:       background="#f8d6e6"
+        div.tbody:                  display="grid" grid_template_columns="1fr 1fr" min_height="2.4em"
+        div.tdebit:                 padding="4px 8px" text_align="right" border_right="2px solid #333" font_variant_numeric="tabular-nums"
+        div.tcredit:                padding="4px 8px" text_align="right" font_variant_numeric="tabular-nums"
+        div.tbody p, p.tbalance:    margin="0" padding="0 8px"
+        # the tabs
+        div.tabs button:            padding="0.35em 1em" border="1px solid #bbb" background="#f4f4f4" cursor="pointer"
+        div.tabs button.selected:   background="#fff" font_weight=700 border_bottom_color="#fff"
+
+    # The rules of the page, for its <style>.
+    def css(self) -> str:
+        return page_view.css() + self.style.css()
+
+let app_view: App_View = App_View()
+
 def shell_text() -> str:
-    return page.shell_text("Accounting, as graph theory", STYLE + account_view.style.css() + flow_view.style.css() + EXTRA, ["accounting_js_events.js"], [title_html(), told_html("")], read_books(no_fields()))
+    return page.shell_text("Accounting, as graph theory", app_view.css(), ["accounting_js_events.js"], [title_html(), told_html("")], read_books(no_fields()))
 
 # The page for the books B of scenario CURRENT, of the scenarios NAMES (their TITLES), as the settings
 # S ask, what the reader did carried out.

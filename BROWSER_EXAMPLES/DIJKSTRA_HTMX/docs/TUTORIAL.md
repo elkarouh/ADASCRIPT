@@ -270,8 +270,21 @@ state, a `Role_T` value: the class `start`, which `to_html` gives the node (`sty
 is the field `style`, a `Style` of the stdlib's `style.ady`. The colours are named once, at the top
 of the drawing (`INK`, `ORANGE`, ...).
 The rules are written once for the class, not for each node: the page puts them in its `<style>`
-(`network_view.css()`, the network's and those of its edges and nodes). A page-wide rule (the
-body, the buttons) stays in `STYLE`.
+(`network_view.css()`, the network's and those of its edges and nodes). The menus are a class
+too, `Menu_View`, and the page's own rules (the body, the buttons, the paragraphs) are the block
+of `Page_View`, with no scope (`style "":`), each selector whole:
+
+```adascript
+class Page_View:
+    style "":
+        body:                   font_family="system-ui, ..." color=INK background=GROUND margin="0" padding="1.5em 1em 3em"
+        header, #all:           max_width="68em" margin="0 auto"
+        button:                 border="1px solid #cbd2d9" border_radius="6px" padding="0.3em 0.8em" background="#fff" cursor="pointer"
+        button:hover:           background=GROUND
+```
+
+A value is CSS as written, a length with its unit (`"0.9em"`); `page_view.css()` is the whole
+`<style>`: the page's rules, the drawing's and the menus'. There is no CSS string left in the app.
 
 ---
 
