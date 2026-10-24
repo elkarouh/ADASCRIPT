@@ -13,12 +13,11 @@ or from the drawing's gestures and menus (dijkstra_js_events.ady), gets only the
 tells it of the change.
 """
 from graphs import shortest_route
-from backend/dijkstra_model import Edge_T, Network, Refusal_T, WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY
+from backend/dijkstra_model import Edge_T, Network, Node_T, Refusal_T, WIDTH, HEIGHT, NODE_R, PORT_R, NAME_DY, COST_DY
 from backend/dijkstra_commands import Thing_T, Command, url, read_network, relayout_network, reset_network
 from server_page import Page_Of
-from drawing import Drawing_Pixel_T
+from drawing import Drawing_Pixel_T, Spot_T
 from style import Look, Rule, Style
-from graph_views import Graph_Palette, Node_View, Edge_View
 
 # ---- What the reader chose, and the way it gives ----
 
@@ -114,38 +113,82 @@ const GROUND: str = "#f5f7fa"       # the page under the board
 const FRAME: str = "#e4e7eb"        # the board's border
 const RED: str = "#c62828"          # what is refused, and what deletes
 
-# The colours of the graph's drawing, and what each Role_T looks like: a node on the way, its start
-# and its goal; an edge on the way. The node and the edge are the stdlib's (graph_views.ady).
-const PALETTE: Graph_Palette = Graph_Palette(ink=INK, soft=SOFT, line=LINE, rim=RIM, paper=PAPER, accent=ACCENT)
+# An edge: a line between two places, orange when the way runs along it, and its cost
+# over its middle. Its look is its Style; the edge's g is selected by the browser (dijkstra_js_events).
+class Edge_View:
+    style "g[data-from]":
+        path.edge:              stroke=LINE stroke_width=2.5 fill="none"
+        path.edge.way:          stroke=ORANGE stroke_width=5
+        &.selected path.edge:   stroke=ACCENT stroke_width=5
+        path.hit:               stroke="transparent" stroke_width=14 fill="none" cursor="pointer"
+        text.cost:              font_size="13px" fill=SOFT text_anchor="middle" paint_order="stroke" stroke=PAPER stroke_width=4
+
+    # Edge E, from P1 to P2, orange when the way runs along it (ON_WAY).
+    def to_html(self, e: Edge_T, p1: Spot_T, p2: Spot_T, on_way: bool) -> Html:
+        let d: str = f"M {p1.x:.0f} {p1.y:.0f} L {p2.x:.0f} {p2.y:.0f}"
+        let css: str = ("edge way" if on_way else "edge")
+        let lx: str = f"{(p1.x + p2.x) / 2.0:.0f}"
+        let ly: str = f"{(p1.y + p2.y) / 2.0 - COST_DY:.0f}"
+        let label: str = str(e.cost)
+        html:
+            g data_from=e.a data_to=e.b data_cost=label:
+                path class=css d=d
+                path class="hit" d=d
+                stext class="cost" x=lx y=ly: label
+
+# A node: its circle, coloured by what it is to the way (a Role_T), its name, and a
+# port (the dot on its right) from which a wire is drawn to another. Its look is its Style.
+class Node_View:
+    style "g.node":
+        &:                      cursor="grab"
+        circle:                 fill=PAPER stroke=RIM stroke_width=2
+        &:hover circle:         stroke=INK
+        [WAY] circle:           stroke=ORANGE stroke_width=4
+        [START] circle:         fill=PALE_GREEN stroke=GREEN stroke_width=4
+        [GOAL] circle:          fill=PALE_BLUE stroke=BLUE stroke_width=4
+        &.selected circle:      stroke=ACCENT stroke_width=4
+        circle.port:            fill=ACCENT opacity=0 cursor="crosshair"
+        &:hover circle.port:    opacity=1
+        &.selected circle.port: opacity=1
+        text.name:              font_size="16px" font_weight=700 text_anchor="middle" pointer_events="none" fill=INK
+
+    # Node N at AT, drawn as what it is to the way (ROLE).
+    def to_html(self, n: Node_T, at: Spot_T, role: Role_T) -> Html:
+        let cx: str = f"{at.x:.0f}"
+        let cy: str = f"{at.y:.0f}"
+        let ty: str = f"{at.y + NAME_DY:.0f}"
+        let px: str = f"{at.x + NODE_R:.0f}"
+        let css: str = ("node" if role == NO_ROLE else "node " + self.style.class_of(role))
+        let nr: str = f"{NODE_R:.0f}"
+        let pr: str = f"{PORT_R:.0f}"
+        html:
+            g class=css data_name=n.name data_x=cx data_y=cy:
+                circle cx=cx cy=cy r=nr
+                stext class="name" x=cx y=ty: n.name
+                circle class="port" cx=px cy=cy r=pr
 
 # The network: the svg with each edge and each node, and the wire the browser draws while an edge is
 # made (see dijkstra_js_events.ady). Its look is its own Style and those of its edges and nodes.
 class Network_View:
-    var edges: Edge_View[Role_T] = Edge_View[Role_T](NO_ROLE, PALETTE, COST_DY)
-    var nodes: Node_View[Role_T] = Node_View[Role_T](NO_ROLE, PALETTE, NODE_R, PORT_R, NAME_DY)
+    var edges: Edge_View = Edge_View()
+    var nodes: Node_View = Node_View()
     style "svg.graph":
         &:                      width="100%" height="auto" user_select="none" display="block"
         path.wire:              stroke=ACCENT stroke_width=2.5 stroke_dasharray="6 4" fill="none" pointer_events="none"
-
-    def __init__(self):
-        self.nodes.mark(WAY, ORANGE)
-        self.nodes.mark(START, GREEN, PALE_GREEN)
-        self.nodes.mark(GOAL, BLUE, PALE_BLUE)
-        self.edges.mark(WAY, ORANGE)
 
     def to_html(self, net: Network, route: Route) -> Html:
         let box: str = f"0 0 {Drawing_Pixel_T(WIDTH):.0f} {Drawing_Pixel_T(HEIGHT):.0f}"
         html:
             svg viewBox=box class="graph":
                 for e in net.edges:
-                    + self.edges.to_html(e.a, e.b, str(e.cost), net.place_of(e.a), net.place_of(e.b), (WAY if route.uses(e) else NO_ROLE))
+                    + self.edges.to_html(e, net.place_of(e.a), net.place_of(e.b), route.uses(e))
                 for n in net.nodes:
-                    + self.nodes.to_html(n.name, net.place_of(n.name), route.role_of(n.name))
+                    + self.nodes.to_html(n, net.place_of(n.name), route.role_of(n.name))
                 path id="wire" class="wire" visibility="hidden" d="M 0 0 L 0 0"
 
     # The rules of the drawing, for the page's <style>.
     def css(self) -> str:
-        return self.style.css() + self.edges.css() + self.nodes.css()
+        return self.style.css() + self.edges.style.css() + self.nodes.style.css()
 
 # The drawing, as every page draws it.
 let network_view: Network_View = Network_View()
