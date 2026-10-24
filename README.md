@@ -3627,6 +3627,11 @@ and an element carries only its class and its state. Both backends;
 SVG_NODE_EDITOR, ROI_HTMX, ACCOUNTING) write all their CSS this way, each page's
 own in a `Page_View`.
 
+A view meant for many apps cannot take its colours from one app's constants,
+so it builds its `Style` in its constructor, from the colours it is given:
+the stdlib's `graph_views.ady` (`Node_View[State_T]`, `Edge_View[State_T]`)
+does, with `mark(state, ...)` for the look of each of the app's states.
+
 ---
 
 ## Modules and Project Layout
@@ -3861,6 +3866,7 @@ reached from any directory without a local copy. The `.ady` ones are imported wi
 | `import page_request` | (c, js) a request as the page sent it: `Page_Request` (its method, path and fields, read once from the query and the body: `field`, `number_field`) |
 | `import page_alone` | (js) an htmx page with no server: `serve_in_page(answer, shell)` answers every request the page makes with the app's own session, in the page, and writes the page; `tell_page` tells it a change, as `GET /events` would; `ady2nim js` keeps such a script's names to itself, beside the page's own (DIJKSTRA_HTMX's `make alone`) |
 | `from style import Look, Rule, Style` | (c, js) the look of what a class draws, written in the class as a `style` block (see [The look, in the class](#the-look-in-the-class-style-blocks)): a `Style(scope, rules)`, each `Look` property named as in CSS (`stroke_width`), `css()` for the page's `<style>`, once per class; `part` and `when` add a rule in code |
+| `from graph_views import Graph_Palette, Node_View, Edge_View` | (c, js) a graph's node and edge drawn as SVG, reusable by any app: `to_html` takes only what drawing needs (a label, a `Spot_T`, a state of the app's own enum); the colours are a `Graph_Palette` given to the constructor, and `mark(state, ...)` says what a state looks like; `css()` for the page's `<style>`. BROWSER_EXAMPLES/DIJKSTRA_HTMX draws with it |
 | `from store import Store` | (c, js) texts kept by name from one run to the next: `Store(place)` with `names`, `read`, `write`, `drop`; natively the files of a directory, under `ady2nim js` the browser's storage under the place's name, and `Store("")` in memory (for tests) |
 | `import server_page` | (c) the page a server draws, in the page's own words: `Page_Of[Thing_T]` writes the htmx attributes from a command, so an app's gui says only which command each part sends: `button`, `sending` (any element), `on_change` (a field or a form), `every` (a tick), `shell_text` (the first page, which loads the rest) |
 | `import page_board` | (js) the blackboard of an htmx page's script: `Page_Channel_T` (`COMMANDS`, `CHANGES`), `changes_channel` (what the server says changed, from `GET /events`), and `Liaison_Officer[Thing_T]`, the observer that sends each command to the server but a draft |
