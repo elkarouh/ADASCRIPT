@@ -19,7 +19,7 @@ class Shopping_List:
     var items: []Item_T = []
 
     # NAME on the list, to buy; refused when it is empty or on the list already.
-    def want(self, name: str) -> None | !Refusal_T:
+    def add(self, name: str) -> None | !Refusal_T:
         let wanted: str = name.strip()
         if wanted == "":
             return Refusal_T(message="Type what to buy first.")
@@ -57,7 +57,7 @@ class Shopping_List:
         return "\n".join(lines)
 
     # The list TEXT says (as `text` writes it), in place of this one.
-    def load(self, text: str):
+    def read(self, text: str):
         self.items = []
         for line in text.split("\n"):
             if len(line) > 2:

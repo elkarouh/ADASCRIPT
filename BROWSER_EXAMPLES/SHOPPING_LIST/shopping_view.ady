@@ -34,17 +34,17 @@ class List_View:
         p.left:                 color=SOFT margin="0.5em 0"
         ul:                     list_style="none" padding="0" margin="0"
 
-    def to_html(self, basket: Shopping_List) -> Html:
+    def to_html(self, list: Shopping_List) -> Html:
         html:
             div id="list":
-                p class="left": f"{basket.left()} to buy"
+                p class="left": f"{list.left()} to buy"
                 ul:
-                    for item in basket.items:
+                    for item in list.items:
                         + self.items.to_html(item)
 
     # The list as the page's text, for the script to put in the page.
-    def text(self, basket: Shopping_List) -> str:
-        return str(self.to_html(basket))
+    def text(self, list: Shopping_List) -> str:
+        return str(self.to_html(list))
 
     # The rules of the list and of its items, for the page's <style>.
     def css(self) -> str:
@@ -58,7 +58,7 @@ class Page_View:
         input, button:          font="inherit"
         p#problem:              color=RED min_height="1.2em" margin="0.3em 0"
 
-    def to_html(self, basket: Shopping_List) -> Html:
+    def to_html(self, list: Shopping_List) -> Html:
         let css: str = self.style.css() + self.shown.css()
         html:
             div:
@@ -67,10 +67,10 @@ class Page_View:
                 input name="name" placeholder="milk"
                 button type="button" id="add": "Add"
                 p id="problem"
-                + self.shown.to_html(basket)
+                + self.shown.to_html(list)
 
     # The page as text, for the script to put in the page.
-    def text(self, basket: Shopping_List) -> str:
-        return str(self.to_html(basket))
+    def text(self, list: Shopping_List) -> str:
+        return str(self.to_html(list))
 
 let page_view: Page_View = Page_View()

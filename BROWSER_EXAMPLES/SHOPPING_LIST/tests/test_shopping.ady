@@ -2,21 +2,21 @@
 """The shopping list's model, with no page and no browser: ady2nim c -r tests/test_shopping.ady"""
 from shopping_model import Shopping_List, Refusal_T
 
-var basket: Shopping_List = Shopping_List()
-assert basket.want("milk") is None
-assert basket.want("bread") is None
-assert basket.want("milk") is Refusal_T
-assert basket.want("  ") is Refusal_T
-assert basket.left() == 2
+var list: Shopping_List = Shopping_List()
+assert list.add("milk") is None
+assert list.add("bread") is None
+assert list.add("milk") is Refusal_T
+assert list.add("  ") is Refusal_T
+assert list.left() == 2
 
-basket.toggle("milk")
-assert basket.left() == 1
-assert basket.text() == "+ milk\n- bread"
+list.toggle("milk")
+assert list.left() == 1
+assert list.text() == "+ milk\n- bread"
 
 var again: Shopping_List = Shopping_List()
-again.load(basket.text())
-assert again.text() == basket.text()
+again.read(list.text())
+assert again.text() == list.text()
 
-basket.remove("milk")
-assert basket.text() == "- bread"
+list.remove("milk")
+assert list.text() == "- bread"
 print "shopping: all checks passed"

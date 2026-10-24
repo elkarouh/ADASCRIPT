@@ -444,7 +444,7 @@ class Shopping_List:
     var items: []Item_T = []
 
     # NAME on the list, to buy; refused when it is empty or on the list already.
-    def want(self, name: str) -> None | !Refusal_T:
+    def add(self, name: str) -> None | !Refusal_T:
         let wanted: str = name.strip()
         if wanted == "":
             return Refusal_T(message="Type what to buy first.")
@@ -467,7 +467,7 @@ The rest is as short. `toggle` flips an item's `bought`, `remove` keeps every it
         return len([item for item in self.items if not item.bought])
 ```
 
-`text` writes the list as text, a line an item, and `load` reads it back; Step 7 keeps that text.
+`text` writes the list as text, a line an item, and `read` reads it back; Step 7 keeps that text.
 
 ### Step 3: test the data without a browser
 
@@ -476,12 +476,12 @@ with no browser, no DOM and no test runner to install:
 
 <!-- from: BROWSER_EXAMPLES/SHOPPING_LIST/tests/test_shopping.ady -->
 ```python
-var basket: Shopping_List = Shopping_List()
-assert basket.want("milk") is None
-assert basket.want("bread") is None
-assert basket.want("milk") is Refusal_T
-assert basket.want("  ") is Refusal_T
-assert basket.left() == 2
+var list: Shopping_List = Shopping_List()
+assert list.add("milk") is None
+assert list.add("bread") is None
+assert list.add("milk") is Refusal_T
+assert list.add("  ") is Refusal_T
+assert list.left() == 2
 ```
 
 ```bash
@@ -535,12 +535,12 @@ The list and the page are views too. `List_View` draws the count and every item,
 
 <!-- from: BROWSER_EXAMPLES/SHOPPING_LIST/shopping_view.ady -->
 ```python
-    def to_html(self, basket: Shopping_List) -> Html:
+    def to_html(self, list: Shopping_List) -> Html:
         html:
             div id="list":
-                p class="left": f"{basket.left()} to buy"
+                p class="left": f"{list.left()} to buy"
                 ul:
-                    for item in basket.items:
+                    for item in list.items:
                         + self.items.to_html(item)
 ```
 
@@ -576,12 +576,12 @@ def clicked(e: Event_T):
         return
     let remove: ?Element_T = c.on("button.remove")
     if remove is not None:
-        basket.remove(remove.data("name"))
+        list.remove(remove.data("name"))
         changed()
         return
     let item: ?Element_T = c.on("li.item")
     if item is not None:
-        basket.toggle(item.data("name"))
+        list.toggle(item.data("name"))
         changed()
 ```
 
@@ -595,7 +595,7 @@ The script starts by drawing the page and naming its listeners:
 
 <!-- from: BROWSER_EXAMPLES/SHOPPING_LIST/shopping_page.ady -->
 ```python
-page.element("#app").set_html(page_view.text(basket))
+page.element("#app").set_html(page_view.text(list))
 listen("click", clicked)
 listen("keydown", pressed)
 ```
@@ -609,7 +609,7 @@ bug of a JavaScript page cannot be written:
 <!-- from: BROWSER_EXAMPLES/SHOPPING_LIST/shopping_page.ady -->
 ```python
 def add_typed():
-    let done: None | !Refusal_T = basket.want(page.field("name"))
+    let done: None | !Refusal_T = list.add(page.field("name"))
     if done is Refusal_T:
         say(done.message)
         return
@@ -632,9 +632,9 @@ list's text:
 ```python
 def changed():
     say("")
-    if not kept.write("list.txt", basket.text()):
+    if not kept.write("list.txt", list.text()):
         say("The list could not be kept.")
-    page.element("#list").set_html(page_view.shown.text(basket))
+    page.element("#list").set_html(page_view.shown.text(list))
 ```
 
 and reads it once, when the page opens. There may be nothing kept yet, which is why `read`
@@ -644,7 +644,7 @@ answers `?str`, and the `if` is not optional:
 ```python
 let before: ?str = kept.read("list.txt")
 if before is not None:
-    basket.load(before)
+    list.read(before)
 ```
 
 ### Step 9: run it, and change it
@@ -657,7 +657,7 @@ Add milk twice to see the refusal, click it to strike it out, reload to see it k
 a change in each layer, and watch the others stay as they were:
 
 1. **The data.** Give `Item_T` a `count: int`, so that wanting milk again counts two in place
-   of refusing it. Change `want`, `text` and `load`, and the test first.
+   of refusing it. Change `add`, `text` and `read`, and the test first.
 2. **The drawing.** Show the count in `Item_View.to_html`, after the name.
 3. **The look.** Make a bought item green with a rule in `Item_View`'s style block.
 4. **The events.** A double click on an item could ask for a new name: `listen("dblclick", ...)`

@@ -12,7 +12,7 @@ make test       # check the model, natively, with no page
 
 | File | What it is |
 |---|---|
-| `shopping_model.ady` | the list: `Item_T`, `Refusal_T`, `Shopping_List` (`want`, `toggle`, `remove`, `left`, `text`, `load`). No page in it; compiles natively and to JavaScript. |
+| `shopping_model.ady` | the list: `Item_T`, `Refusal_T`, `Shopping_List` (`add`, `toggle`, `remove`, `left`, `text`, `read`). No page in it; compiles natively and to JavaScript. |
 | `tests/test_shopping.ady` | the model checked, natively (`make test`). |
 | `shopping_view.ady` | what it looks like: `Item_View`, `List_View`, `Page_View`, each with its look in a `style` block and a `to_html`. |
 | `shopping_page.ady` | the script: draws the page, listens to clicks and keys, changes the list, keeps it (`Store`). Built by `ady2nim js`. |

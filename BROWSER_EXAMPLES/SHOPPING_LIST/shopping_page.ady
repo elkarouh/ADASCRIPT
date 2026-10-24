@@ -11,7 +11,7 @@ from shopping_model import Shopping_List, Refusal_T
 from shopping_view import page_view
 
 # The list, and where it is kept between visits: the browser's storage, under "shopping".
-var basket: Shopping_List = Shopping_List()
+var list: Shopping_List = Shopping_List()
 var kept: Store = Store("shopping")
 
 # Say PROBLEM under the box, or nothing when it is "".
@@ -21,13 +21,13 @@ def say(problem: str):
 # The list changed: keep it, and draw it again.
 def changed():
     say("")
-    if not kept.write("list.txt", basket.text()):
+    if not kept.write("list.txt", list.text()):
         say("The list could not be kept.")
-    page.element("#list").set_html(page_view.shown.text(basket))
+    page.element("#list").set_html(page_view.shown.text(list))
 
 # What the reader typed, on the list.
 def add_typed():
-    let done: None | !Refusal_T = basket.want(page.field("name"))
+    let done: None | !Refusal_T = list.add(page.field("name"))
     if done is Refusal_T:
         say(done.message)
         return
@@ -42,12 +42,12 @@ def clicked(e: Event_T):
         return
     let remove: ?Element_T = c.on("button.remove")
     if remove is not None:
-        basket.remove(remove.data("name"))
+        list.remove(remove.data("name"))
         changed()
         return
     let item: ?Element_T = c.on("li.item")
     if item is not None:
-        basket.toggle(item.data("name"))
+        list.toggle(item.data("name"))
         changed()
 
 # A key: Enter in the box adds what was typed.
@@ -58,7 +58,7 @@ def pressed(e: Event_T):
 # The page as it starts: the list kept last time, drawn, and the reader listened to.
 let before: ?str = kept.read("list.txt")
 if before is not None:
-    basket.load(before)
-page.element("#app").set_html(page_view.text(basket))
+    list.read(before)
+page.element("#app").set_html(page_view.text(list))
 listen("click", clicked)
 listen("keydown", pressed)
